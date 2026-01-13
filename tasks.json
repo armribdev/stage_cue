@@ -1,0 +1,6 @@
+{
+    "label": "Sync Phone",
+    "type": "shell",
+    "command": "adb connect 192.168.1.20:5555", 
+    "presentation": { "reveal": "silent" }
+}
