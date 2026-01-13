@@ -1,0 +1,1036 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'database.dart';
+
+// ignore_for_file: type=lint
+class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SoundsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _filePathMeta = const VerificationMeta(
+    'filePath',
+  );
+  @override
+  late final GeneratedColumn<String> filePath = GeneratedColumn<String>(
+    'file_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<SoundType, int> type =
+      GeneratedColumn<int>(
+        'type',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<SoundType>($SoundsTable.$convertertype);
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, title, filePath, type, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sounds';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Sound> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('file_path')) {
+      context.handle(
+        _filePathMeta,
+        filePath.isAcceptableOrUnknown(data['file_path']!, _filePathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_filePathMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Sound map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Sound(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      filePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_path'],
+      )!,
+      type: $SoundsTable.$convertertype.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}type'],
+        )!,
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SoundsTable createAlias(String alias) {
+    return $SoundsTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<SoundType, int, int> $convertertype =
+      const EnumIndexConverter<SoundType>(SoundType.values);
+}
+
+class Sound extends DataClass implements Insertable<Sound> {
+  final int id;
+  final String title;
+  final String filePath;
+  final SoundType type;
+  final DateTime createdAt;
+  const Sound({
+    required this.id,
+    required this.title,
+    required this.filePath,
+    required this.type,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['title'] = Variable<String>(title);
+    map['file_path'] = Variable<String>(filePath);
+    {
+      map['type'] = Variable<int>($SoundsTable.$convertertype.toSql(type));
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  SoundsCompanion toCompanion(bool nullToAbsent) {
+    return SoundsCompanion(
+      id: Value(id),
+      title: Value(title),
+      filePath: Value(filePath),
+      type: Value(type),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Sound.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Sound(
+      id: serializer.fromJson<int>(json['id']),
+      title: serializer.fromJson<String>(json['title']),
+      filePath: serializer.fromJson<String>(json['filePath']),
+      type: $SoundsTable.$convertertype.fromJson(
+        serializer.fromJson<int>(json['type']),
+      ),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'title': serializer.toJson<String>(title),
+      'filePath': serializer.toJson<String>(filePath),
+      'type': serializer.toJson<int>($SoundsTable.$convertertype.toJson(type)),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  Sound copyWith({
+    int? id,
+    String? title,
+    String? filePath,
+    SoundType? type,
+    DateTime? createdAt,
+  }) => Sound(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    filePath: filePath ?? this.filePath,
+    type: type ?? this.type,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Sound copyWithCompanion(SoundsCompanion data) {
+    return Sound(
+      id: data.id.present ? data.id.value : this.id,
+      title: data.title.present ? data.title.value : this.title,
+      filePath: data.filePath.present ? data.filePath.value : this.filePath,
+      type: data.type.present ? data.type.value : this.type,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Sound(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('filePath: $filePath, ')
+          ..write('type: $type, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, title, filePath, type, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Sound &&
+          other.id == this.id &&
+          other.title == this.title &&
+          other.filePath == this.filePath &&
+          other.type == this.type &&
+          other.createdAt == this.createdAt);
+}
+
+class SoundsCompanion extends UpdateCompanion<Sound> {
+  final Value<int> id;
+  final Value<String> title;
+  final Value<String> filePath;
+  final Value<SoundType> type;
+  final Value<DateTime> createdAt;
+  const SoundsCompanion({
+    this.id = const Value.absent(),
+    this.title = const Value.absent(),
+    this.filePath = const Value.absent(),
+    this.type = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  SoundsCompanion.insert({
+    this.id = const Value.absent(),
+    required String title,
+    required String filePath,
+    required SoundType type,
+    this.createdAt = const Value.absent(),
+  }) : title = Value(title),
+       filePath = Value(filePath),
+       type = Value(type);
+  static Insertable<Sound> custom({
+    Expression<int>? id,
+    Expression<String>? title,
+    Expression<String>? filePath,
+    Expression<int>? type,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (title != null) 'title': title,
+      if (filePath != null) 'file_path': filePath,
+      if (type != null) 'type': type,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  SoundsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? title,
+    Value<String>? filePath,
+    Value<SoundType>? type,
+    Value<DateTime>? createdAt,
+  }) {
+    return SoundsCompanion(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      filePath: filePath ?? this.filePath,
+      type: type ?? this.type,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (filePath.present) {
+      map['file_path'] = Variable<String>(filePath.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<int>(
+        $SoundsTable.$convertertype.toSql(type.value),
+      );
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SoundsCompanion(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('filePath: $filePath, ')
+          ..write('type: $type, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $WatchedPathsTable extends WatchedPaths
+    with TableInfo<$WatchedPathsTable, WatchedPath> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WatchedPathsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _pathMeta = const VerificationMeta('path');
+  @override
+  late final GeneratedColumn<String> path = GeneratedColumn<String>(
+    'path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isDirectoryMeta = const VerificationMeta(
+    'isDirectory',
+  );
+  @override
+  late final GeneratedColumn<bool> isDirectory = GeneratedColumn<bool>(
+    'is_directory',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_directory" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _addedAtMeta = const VerificationMeta(
+    'addedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> addedAt = GeneratedColumn<DateTime>(
+    'added_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, path, isDirectory, addedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'watched_paths';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WatchedPath> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('path')) {
+      context.handle(
+        _pathMeta,
+        path.isAcceptableOrUnknown(data['path']!, _pathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pathMeta);
+    }
+    if (data.containsKey('is_directory')) {
+      context.handle(
+        _isDirectoryMeta,
+        isDirectory.isAcceptableOrUnknown(
+          data['is_directory']!,
+          _isDirectoryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('added_at')) {
+      context.handle(
+        _addedAtMeta,
+        addedAt.isAcceptableOrUnknown(data['added_at']!, _addedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  WatchedPath map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WatchedPath(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      path: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}path'],
+      )!,
+      isDirectory: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_directory'],
+      )!,
+      addedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}added_at'],
+      )!,
+    );
+  }
+
+  @override
+  $WatchedPathsTable createAlias(String alias) {
+    return $WatchedPathsTable(attachedDatabase, alias);
+  }
+}
+
+class WatchedPath extends DataClass implements Insertable<WatchedPath> {
+  final int id;
+  final String path;
+  final bool isDirectory;
+  final DateTime addedAt;
+  const WatchedPath({
+    required this.id,
+    required this.path,
+    required this.isDirectory,
+    required this.addedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['path'] = Variable<String>(path);
+    map['is_directory'] = Variable<bool>(isDirectory);
+    map['added_at'] = Variable<DateTime>(addedAt);
+    return map;
+  }
+
+  WatchedPathsCompanion toCompanion(bool nullToAbsent) {
+    return WatchedPathsCompanion(
+      id: Value(id),
+      path: Value(path),
+      isDirectory: Value(isDirectory),
+      addedAt: Value(addedAt),
+    );
+  }
+
+  factory WatchedPath.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WatchedPath(
+      id: serializer.fromJson<int>(json['id']),
+      path: serializer.fromJson<String>(json['path']),
+      isDirectory: serializer.fromJson<bool>(json['isDirectory']),
+      addedAt: serializer.fromJson<DateTime>(json['addedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'path': serializer.toJson<String>(path),
+      'isDirectory': serializer.toJson<bool>(isDirectory),
+      'addedAt': serializer.toJson<DateTime>(addedAt),
+    };
+  }
+
+  WatchedPath copyWith({
+    int? id,
+    String? path,
+    bool? isDirectory,
+    DateTime? addedAt,
+  }) => WatchedPath(
+    id: id ?? this.id,
+    path: path ?? this.path,
+    isDirectory: isDirectory ?? this.isDirectory,
+    addedAt: addedAt ?? this.addedAt,
+  );
+  WatchedPath copyWithCompanion(WatchedPathsCompanion data) {
+    return WatchedPath(
+      id: data.id.present ? data.id.value : this.id,
+      path: data.path.present ? data.path.value : this.path,
+      isDirectory: data.isDirectory.present
+          ? data.isDirectory.value
+          : this.isDirectory,
+      addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WatchedPath(')
+          ..write('id: $id, ')
+          ..write('path: $path, ')
+          ..write('isDirectory: $isDirectory, ')
+          ..write('addedAt: $addedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, path, isDirectory, addedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WatchedPath &&
+          other.id == this.id &&
+          other.path == this.path &&
+          other.isDirectory == this.isDirectory &&
+          other.addedAt == this.addedAt);
+}
+
+class WatchedPathsCompanion extends UpdateCompanion<WatchedPath> {
+  final Value<int> id;
+  final Value<String> path;
+  final Value<bool> isDirectory;
+  final Value<DateTime> addedAt;
+  const WatchedPathsCompanion({
+    this.id = const Value.absent(),
+    this.path = const Value.absent(),
+    this.isDirectory = const Value.absent(),
+    this.addedAt = const Value.absent(),
+  });
+  WatchedPathsCompanion.insert({
+    this.id = const Value.absent(),
+    required String path,
+    this.isDirectory = const Value.absent(),
+    this.addedAt = const Value.absent(),
+  }) : path = Value(path);
+  static Insertable<WatchedPath> custom({
+    Expression<int>? id,
+    Expression<String>? path,
+    Expression<bool>? isDirectory,
+    Expression<DateTime>? addedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (path != null) 'path': path,
+      if (isDirectory != null) 'is_directory': isDirectory,
+      if (addedAt != null) 'added_at': addedAt,
+    });
+  }
+
+  WatchedPathsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? path,
+    Value<bool>? isDirectory,
+    Value<DateTime>? addedAt,
+  }) {
+    return WatchedPathsCompanion(
+      id: id ?? this.id,
+      path: path ?? this.path,
+      isDirectory: isDirectory ?? this.isDirectory,
+      addedAt: addedAt ?? this.addedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (path.present) {
+      map['path'] = Variable<String>(path.value);
+    }
+    if (isDirectory.present) {
+      map['is_directory'] = Variable<bool>(isDirectory.value);
+    }
+    if (addedAt.present) {
+      map['added_at'] = Variable<DateTime>(addedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WatchedPathsCompanion(')
+          ..write('id: $id, ')
+          ..write('path: $path, ')
+          ..write('isDirectory: $isDirectory, ')
+          ..write('addedAt: $addedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+abstract class _$AppDatabase extends GeneratedDatabase {
+  _$AppDatabase(QueryExecutor e) : super(e);
+  $AppDatabaseManager get managers => $AppDatabaseManager(this);
+  late final $SoundsTable sounds = $SoundsTable(this);
+  late final $WatchedPathsTable watchedPaths = $WatchedPathsTable(this);
+  @override
+  Iterable<TableInfo<Table, Object?>> get allTables =>
+      allSchemaEntities.whereType<TableInfo<Table, Object?>>();
+  @override
+  List<DatabaseSchemaEntity> get allSchemaEntities => [sounds, watchedPaths];
+}
+
+typedef $$SoundsTableCreateCompanionBuilder =
+    SoundsCompanion Function({
+      Value<int> id,
+      required String title,
+      required String filePath,
+      required SoundType type,
+      Value<DateTime> createdAt,
+    });
+typedef $$SoundsTableUpdateCompanionBuilder =
+    SoundsCompanion Function({
+      Value<int> id,
+      Value<String> title,
+      Value<String> filePath,
+      Value<SoundType> type,
+      Value<DateTime> createdAt,
+    });
+
+class $$SoundsTableFilterComposer
+    extends Composer<_$AppDatabase, $SoundsTable> {
+  $$SoundsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get filePath => $composableBuilder(
+    column: $table.filePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<SoundType, SoundType, int> get type =>
+      $composableBuilder(
+        column: $table.type,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SoundsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SoundsTable> {
+  $$SoundsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get filePath => $composableBuilder(
+    column: $table.filePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SoundsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SoundsTable> {
+  $$SoundsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get filePath =>
+      $composableBuilder(column: $table.filePath, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<SoundType, int> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$SoundsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SoundsTable,
+          Sound,
+          $$SoundsTableFilterComposer,
+          $$SoundsTableOrderingComposer,
+          $$SoundsTableAnnotationComposer,
+          $$SoundsTableCreateCompanionBuilder,
+          $$SoundsTableUpdateCompanionBuilder,
+          (Sound, BaseReferences<_$AppDatabase, $SoundsTable, Sound>),
+          Sound,
+          PrefetchHooks Function()
+        > {
+  $$SoundsTableTableManager(_$AppDatabase db, $SoundsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SoundsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SoundsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SoundsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> filePath = const Value.absent(),
+                Value<SoundType> type = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => SoundsCompanion(
+                id: id,
+                title: title,
+                filePath: filePath,
+                type: type,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String title,
+                required String filePath,
+                required SoundType type,
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => SoundsCompanion.insert(
+                id: id,
+                title: title,
+                filePath: filePath,
+                type: type,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SoundsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SoundsTable,
+      Sound,
+      $$SoundsTableFilterComposer,
+      $$SoundsTableOrderingComposer,
+      $$SoundsTableAnnotationComposer,
+      $$SoundsTableCreateCompanionBuilder,
+      $$SoundsTableUpdateCompanionBuilder,
+      (Sound, BaseReferences<_$AppDatabase, $SoundsTable, Sound>),
+      Sound,
+      PrefetchHooks Function()
+    >;
+typedef $$WatchedPathsTableCreateCompanionBuilder =
+    WatchedPathsCompanion Function({
+      Value<int> id,
+      required String path,
+      Value<bool> isDirectory,
+      Value<DateTime> addedAt,
+    });
+typedef $$WatchedPathsTableUpdateCompanionBuilder =
+    WatchedPathsCompanion Function({
+      Value<int> id,
+      Value<String> path,
+      Value<bool> isDirectory,
+      Value<DateTime> addedAt,
+    });
+
+class $$WatchedPathsTableFilterComposer
+    extends Composer<_$AppDatabase, $WatchedPathsTable> {
+  $$WatchedPathsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get path => $composableBuilder(
+    column: $table.path,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDirectory => $composableBuilder(
+    column: $table.isDirectory,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WatchedPathsTableOrderingComposer
+    extends Composer<_$AppDatabase, $WatchedPathsTable> {
+  $$WatchedPathsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get path => $composableBuilder(
+    column: $table.path,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDirectory => $composableBuilder(
+    column: $table.isDirectory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WatchedPathsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WatchedPathsTable> {
+  $$WatchedPathsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get path =>
+      $composableBuilder(column: $table.path, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDirectory => $composableBuilder(
+    column: $table.isDirectory,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get addedAt =>
+      $composableBuilder(column: $table.addedAt, builder: (column) => column);
+}
+
+class $$WatchedPathsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WatchedPathsTable,
+          WatchedPath,
+          $$WatchedPathsTableFilterComposer,
+          $$WatchedPathsTableOrderingComposer,
+          $$WatchedPathsTableAnnotationComposer,
+          $$WatchedPathsTableCreateCompanionBuilder,
+          $$WatchedPathsTableUpdateCompanionBuilder,
+          (
+            WatchedPath,
+            BaseReferences<_$AppDatabase, $WatchedPathsTable, WatchedPath>,
+          ),
+          WatchedPath,
+          PrefetchHooks Function()
+        > {
+  $$WatchedPathsTableTableManager(_$AppDatabase db, $WatchedPathsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WatchedPathsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WatchedPathsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WatchedPathsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> path = const Value.absent(),
+                Value<bool> isDirectory = const Value.absent(),
+                Value<DateTime> addedAt = const Value.absent(),
+              }) => WatchedPathsCompanion(
+                id: id,
+                path: path,
+                isDirectory: isDirectory,
+                addedAt: addedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String path,
+                Value<bool> isDirectory = const Value.absent(),
+                Value<DateTime> addedAt = const Value.absent(),
+              }) => WatchedPathsCompanion.insert(
+                id: id,
+                path: path,
+                isDirectory: isDirectory,
+                addedAt: addedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WatchedPathsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WatchedPathsTable,
+      WatchedPath,
+      $$WatchedPathsTableFilterComposer,
+      $$WatchedPathsTableOrderingComposer,
+      $$WatchedPathsTableAnnotationComposer,
+      $$WatchedPathsTableCreateCompanionBuilder,
+      $$WatchedPathsTableUpdateCompanionBuilder,
+      (
+        WatchedPath,
+        BaseReferences<_$AppDatabase, $WatchedPathsTable, WatchedPath>,
+      ),
+      WatchedPath,
+      PrefetchHooks Function()
+    >;
+
+class $AppDatabaseManager {
+  final _$AppDatabase _db;
+  $AppDatabaseManager(this._db);
+  $$SoundsTableTableManager get sounds =>
+      $$SoundsTableTableManager(_db, _db.sounds);
+  $$WatchedPathsTableTableManager get watchedPaths =>
+      $$WatchedPathsTableTableManager(_db, _db.watchedPaths);
+}
