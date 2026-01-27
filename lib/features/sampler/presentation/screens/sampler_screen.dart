@@ -101,135 +101,137 @@ class _SamplerScreenState extends State<SamplerScreen> {
           ),
         ),
       ),
-      body: state.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : state.error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 64,
-                        color: Colors.red[600],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Erreur: ${state.error}',
-                        style: TextStyle(
-                          fontSize: 18,
+      body: SafeArea(
+        child: state.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : state.error != null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 64,
                           color: Colors.red[600],
                         ),
-                      ),
-                    ],
-                  ),
-                )
-              : state.sounds.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.music_note,
-                            size: 64,
-                            color: Colors.grey[600],
+                        const SizedBox(height: 16),
+                        Text(
+                          'Erreur: ${state.error}',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.red[600],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Aucun son dans la board',
-                            style: TextStyle(
-                              fontSize: 18,
+                        ),
+                      ],
+                    ),
+                  )
+                : state.sounds.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.music_note,
+                              size: 64,
                               color: Colors.grey[600],
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Ajoutez des sons depuis la bibliothèque',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => SoundLibraryScreen(database: _database),
-                                ),
-                              );
-                              _notifier.loadSounds();
-                            },
-                            icon: const Icon(Icons.library_music),
-                            label: const Text('Ouvrir la bibliothèque'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : GridView.builder(
-                      padding: const EdgeInsets.all(12),
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 200,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: 1.4,
-                      ),
-                      itemCount: state.sounds.length + 1, // +1 pour le bouton d'ajout
-                      itemBuilder: (context, index) {
-                        // Si c'est le dernier item, afficher le bouton d'ajout
-                        if (index == state.sounds.length) {
-                          return Card(
-                            elevation: 1,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              side: BorderSide(
-                                color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
-                                style: BorderStyle.solid,
-                                width: 2,
+                            const SizedBox(height: 16),
+                            Text(
+                              'Aucun son dans la board',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.grey[600],
                               ),
                             ),
-                            color: Theme.of(context).colorScheme.surface,
-                            child: InkWell(
-                              onTap: () async {
+                            const SizedBox(height: 8),
+                            Text(
+                              'Ajoutez des sons depuis la bibliothèque',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            ElevatedButton.icon(
+                              onPressed: () async {
                                 await Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => SoundLibraryScreen(database: _database),
                                   ),
                                 );
-                                // Recharger les sons après retour de la bibliothèque
                                 _notifier.loadSounds();
                               },
-                              borderRadius: BorderRadius.circular(8),
-                              child: Center(
-                                child: Icon(
-                                  Icons.add,
-                                  size: 48,
-                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.6),
+                              icon: const Icon(Icons.library_music),
+                              label: const Text('Ouvrir la bibliothèque'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : GridView.builder(
+                        padding: const EdgeInsets.all(12),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 200,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 1.4,
+                        ),
+                        itemCount: state.sounds.length + 1, // +1 pour le bouton d'ajout
+                        itemBuilder: (context, index) {
+                          // Si c'est le dernier item, afficher le bouton d'ajout
+                          if (index == state.sounds.length) {
+                            return Card(
+                              elevation: 1,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide(
+                                  color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
+                                  style: BorderStyle.solid,
+                                  width: 2,
                                 ),
                               ),
-                            ),
-                          );
-                        }
-                        
-                        // Sinon, afficher le pad button normal
-                        final soundItem = state.sounds[index];
-                        return PadButton(
-                          soundItem: soundItem,
-                          onTap: () => _notifier.toggleSound(soundItem),
-                          onLongPress: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => SoundDetailScreen(sound: soundItem.sound),
+                              color: Theme.of(context).colorScheme.surface,
+                              child: InkWell(
+                                onTap: () async {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => SoundLibraryScreen(database: _database),
+                                    ),
+                                  );
+                                  // Recharger les sons après retour de la bibliothèque
+                                  _notifier.loadSounds();
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: Center(
+                                  child: Icon(
+                                    Icons.add,
+                                    size: 48,
+                                    color: Theme.of(context).colorScheme.primary.withOpacity(0.6),
+                                  ),
+                                ),
                               ),
                             );
-                          },
-                          onRemove: () => _notifier.removeSound(soundItem),
-                        );
-                      },
-                    ),
+                          }
+
+                          // Sinon, afficher le pad button normal
+                          final soundItem = state.sounds[index];
+                          return PadButton(
+                            soundItem: soundItem,
+                            onTap: () => _notifier.toggleSound(soundItem),
+                            onLongPress: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => SoundDetailScreen(sound: soundItem.sound),
+                                ),
+                              );
+                            },
+                            onRemove: () => _notifier.removeSound(soundItem),
+                          );
+                        },
+                      ),
+      ),
     );
   }
 }
