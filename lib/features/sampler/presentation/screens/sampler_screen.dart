@@ -55,17 +55,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
     super.dispose();
   }
 
-  Future<void> _addDirectoryOrFile() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SettingsScreen(database: _database),
-      ),
-    );
-    // Recharger les sons après retour des paramètres
-    _notifier.loadSounds();
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = _notifier.state;
