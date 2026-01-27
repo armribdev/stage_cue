@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/usecases/load_sounds_usecase.dart';
+import '../../domain/usecases/remove_sound_from_board_usecase.dart';
 
 /// État du sampler
 class SamplerState {
@@ -44,11 +45,15 @@ class SoundItem {
 /// Provider/Notifier pour la gestion de l'état du sampler
 class SamplerNotifier extends ChangeNotifier {
   final LoadSoundsUseCase _loadSoundsUseCase;
+  final RemoveSoundFromBoardUseCase? _removeSoundFromBoardUseCase;
 
   SamplerState _state = SamplerState(sounds: []);
   SamplerState get state => _state;
 
-  SamplerNotifier(this._loadSoundsUseCase);
+  SamplerNotifier(
+    this._loadSoundsUseCase, [
+    this._removeSoundFromBoardUseCase,
+  ]);
 
   /// Charge tous les sons
   Future<void> loadSounds() async {
@@ -110,9 +115,20 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Retire un son
-  void removeSound(SoundItem soundItem) {
+  /// Retire un son de la board
+  Future<void> removeSound(SoundItem soundItem) async {
     soundItem.player.dispose();
+    
+    // Retirer le son de la board dans la base de données
+    if (_removeSoundFromBoardUseCase != null) {
+      try {
+        await _removeSoundFromBoardUseCase!(soundItem.sound.id);
+      } catch (e) {
+        // En cas d'erreur, on continue quand même pour retirer de l'UI
+        print('Erreur lors du retrait du son de la board: $e');
+      }
+    }
+    
     _state = _state.copyWith(
       sounds: _state.sounds.where((s) => s != soundItem).toList(),
     );

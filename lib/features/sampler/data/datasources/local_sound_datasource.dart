@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
+import 'package:drift/drift.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/database/sounds.dart' as db_sounds;
 import '../../../../core/utils/file_utils.dart' show scanDirectoryForAudioFiles, isAudioFile;
@@ -19,6 +20,60 @@ class LocalSoundDataSource {
   Future<List<domain.Sound>> getAllSounds() async {
     final sounds = await _database.select(_database.sounds).get();
     return sounds.map((s) => SoundModel.toEntity(s)).toList();
+  }
+
+  /// Récupère uniquement les sons qui sont dans la board, triés par ordre d'ajout
+  /// Utilise une jointure SQL pour de meilleures performances et éviter les problèmes de sons supprimés
+  Future<List<domain.Sound>> getBoardSounds() async {
+    // Utiliser une jointure INNER JOIN pour récupérer uniquement les sons existants
+    // et les trier par ordre d'ajout à la board
+    final query = _database.select(_database.sounds).join([
+      innerJoin(
+        _database.boardSounds,
+        _database.boardSounds.soundId.equalsExp(_database.sounds.id),
+      ),
+    ])
+      ..orderBy([OrderingTerm(expression: _database.boardSounds.addedAt)]);
+    
+    final results = await query.get();
+    
+    // Extraire les sons de la jointure
+    return results
+        .map((row) => row.readTable(_database.sounds))
+        .map((s) => SoundModel.toEntity(s))
+        .toList();
+  }
+
+  /// Ajoute un son à la board
+  Future<void> addSoundToBoard(int soundId) async {
+    // Vérifier si le son est déjà dans la board
+    final existing = await (_database.select(_database.boardSounds)
+          ..where((b) => b.soundId.equals(soundId)))
+        .getSingleOrNull();
+    
+    if (existing == null) {
+      await _database.into(_database.boardSounds).insert(
+        db.BoardSoundsCompanion.insert(
+          soundId: Value(soundId),
+          addedAt: Value(DateTime.now()),
+        ),
+      );
+    }
+  }
+
+  /// Retire un son de la board
+  Future<void> removeSoundFromBoard(int soundId) async {
+    await (_database.delete(_database.boardSounds)
+          ..where((b) => b.soundId.equals(soundId)))
+        .go();
+  }
+
+  /// Vérifie si un son est dans la board
+  Future<bool> isSoundInBoard(int soundId) async {
+    final result = await (_database.select(_database.boardSounds)
+          ..where((b) => b.soundId.equals(soundId)))
+        .getSingleOrNull();
+    return result != null;
   }
 
   /// Récupère un son par son ID

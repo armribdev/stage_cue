@@ -21,3 +21,11 @@ class WatchedPaths extends Table {
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
 }
 
+class BoardSounds extends Table {
+  IntColumn get soundId => integer().references(Sounds, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
+  
+  @override
+  Set<Column> get primaryKey => {soundId};
+}
+
