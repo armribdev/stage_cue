@@ -122,7 +122,7 @@ class SamplerNotifier extends ChangeNotifier {
     // Retirer le son de la board dans la base de données
     if (_removeSoundFromBoardUseCase != null) {
       try {
-        await _removeSoundFromBoardUseCase!(soundItem.sound.id);
+        await _removeSoundFromBoardUseCase(soundItem.sound.id);
       } catch (e) {
         // En cas d'erreur, on continue quand même pour retirer de l'UI
         print('Erreur lors du retrait du son de la board: $e');
