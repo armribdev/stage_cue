@@ -20,6 +20,7 @@ class SamplerScreen extends StatefulWidget {
 class _SamplerScreenState extends State<SamplerScreen> {
   late final SamplerNotifier _notifier;
   late final AppDatabase _database;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -60,7 +61,15 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final state = _notifier.state;
 
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          tooltip: 'Menu',
+          onPressed: () {
+            _scaffoldKey.currentState?.openDrawer();
+          },
+        ),
         title: const Text('Stage Cue - Soundboard'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
@@ -78,6 +87,19 @@ class _SamplerScreenState extends State<SamplerScreen> {
             },
           ),
         ],
+      ),
+      drawer: Drawer(
+        child: SafeArea(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.library_music),
+                title: const Text('Bibliothèque des sons'),
+              ),
+            ],
+          ),
+        ),
       ),
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
