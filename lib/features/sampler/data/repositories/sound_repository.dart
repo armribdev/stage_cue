@@ -3,6 +3,7 @@ import '../../domain/entities/sound.dart';
 import '../../domain/entities/watched_path.dart';
 import '../datasources/local_sound_datasource.dart';
 import '../models/indexing_progress.dart';
+import '../../../../core/database/database.dart' as db;
 
 /// Repository pour la gestion des sons
 class SoundRepository {
@@ -13,6 +14,14 @@ class SoundRepository {
     this._soundDataSource,
     this._watchedPathDataSource,
   );
+
+  /// Factory method pour créer un repository à partir d'une base de données
+  /// Réduit la duplication de code dans les écrans
+  factory SoundRepository.fromDatabase(db.AppDatabase database) {
+    final soundDataSource = LocalSoundDataSource(database);
+    final watchedPathDataSource = LocalWatchedPathDataSource(database);
+    return SoundRepository(soundDataSource, watchedPathDataSource);
+  }
 
   /// Récupère tous les sons
   Future<List<Sound>> getAllSounds() async {
@@ -98,6 +107,26 @@ class SoundRepository {
   /// Supprime un son
   Future<void> deleteSound(int id) async {
     await _soundDataSource.deleteSound(id);
+  }
+
+  /// Récupère uniquement les sons qui sont dans la board
+  Future<List<Sound>> getBoardSounds() async {
+    return await _soundDataSource.getBoardSounds();
+  }
+
+  /// Ajoute un son à la board
+  Future<void> addSoundToBoard(int soundId) async {
+    await _soundDataSource.addSoundToBoard(soundId);
+  }
+
+  /// Retire un son de la board
+  Future<void> removeSoundFromBoard(int soundId) async {
+    await _soundDataSource.removeSoundFromBoard(soundId);
+  }
+
+  /// Vérifie si un son est dans la board
+  Future<bool> isSoundInBoard(int soundId) async {
+    return await _soundDataSource.isSoundInBoard(soundId);
   }
 }
 

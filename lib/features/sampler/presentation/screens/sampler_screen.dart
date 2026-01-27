@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import '../providers/sampler_provider.dart';
 import '../widgets/pad_button.dart';
 import '../../data/repositories/sound_repository.dart';
-import '../../data/datasources/local_sound_datasource.dart';
 import '../../domain/usecases/load_sounds_usecase.dart';
+import '../../domain/usecases/remove_sound_from_board_usecase.dart';
 import '../../../../core/database/database.dart';
 import 'settings_screen.dart';
 import 'sound_details_screen.dart';
+import 'sound_library_screen.dart';
 
 /// Écran principal du sampler
 class SamplerScreen extends StatefulWidget {
@@ -30,13 +31,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   void _initializeNotifier() {
     // Initialiser les dépendances
-    final soundDataSource = LocalSoundDataSource(_database);
-    final watchedPathDataSource = LocalWatchedPathDataSource(_database);
-    final repository = SoundRepository(soundDataSource, watchedPathDataSource);
+    final repository = SoundRepository.fromDatabase(_database);
     
     final loadSoundsUseCase = LoadSoundsUseCase(repository);
+    final removeSoundFromBoardUseCase = RemoveSoundFromBoardUseCase(repository);
     
-    _notifier = SamplerNotifier(loadSoundsUseCase);
+    _notifier = SamplerNotifier(loadSoundsUseCase, removeSoundFromBoardUseCase);
     
     _notifier.addListener(_onStateChanged);
   }
@@ -125,7 +125,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Aucun fichier audio indexé',
+                            'Aucun son dans la board',
                             style: TextStyle(
                               fontSize: 18,
                               color: Colors.grey[600],
@@ -133,11 +133,25 @@ class _SamplerScreenState extends State<SamplerScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Ajoutez un dossier ou fichier dans les paramètres',
+                            'Ajoutez des sons depuis la bibliothèque',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[500],
                             ),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => SoundLibraryScreen(database: _database),
+                                ),
+                              );
+                              _notifier.loadSounds();
+                            },
+                            icon: const Icon(Icons.library_music),
+                            label: const Text('Ouvrir la bibliothèque'),
                           ),
                         ],
                       ),
@@ -150,8 +164,45 @@ class _SamplerScreenState extends State<SamplerScreen> {
                         mainAxisSpacing: 10,
                         childAspectRatio: 1.4,
                       ),
-                      itemCount: state.sounds.length,
+                      itemCount: state.sounds.length + 1, // +1 pour le bouton d'ajout
                       itemBuilder: (context, index) {
+                        // Si c'est le dernier item, afficher le bouton d'ajout
+                        if (index == state.sounds.length) {
+                          return Card(
+                            elevation: 1,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              side: BorderSide(
+                                color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
+                                style: BorderStyle.solid,
+                                width: 2,
+                              ),
+                            ),
+                            color: Theme.of(context).colorScheme.surface,
+                            child: InkWell(
+                              onTap: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => SoundLibraryScreen(database: _database),
+                                  ),
+                                );
+                                // Recharger les sons après retour de la bibliothèque
+                                _notifier.loadSounds();
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              child: Center(
+                                child: Icon(
+                                  Icons.add,
+                                  size: 48,
+                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.6),
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                        
+                        // Sinon, afficher le pad button normal
                         final soundItem = state.sounds[index];
                         return PadButton(
                           soundItem: soundItem,
@@ -168,12 +219,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
                         );
                       },
                     ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addDirectoryOrFile,
-        icon: const Icon(Icons.add),
-        label: const Text('Ajouter'),
-        tooltip: 'Ajouter un dossier ou fichier',
-      ),
     );
   }
 }

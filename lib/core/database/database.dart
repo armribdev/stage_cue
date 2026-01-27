@@ -8,12 +8,12 @@ import 'sounds.dart';
 
 part 'database.g.dart';
 
-@DriftDatabase(tables: [Sounds, WatchedPaths])
+@DriftDatabase(tables: [Sounds, WatchedPaths, BoardSounds])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -26,6 +26,10 @@ class AppDatabase extends _$AppDatabase {
           // 2. Pour la table Sounds
           await m.deleteTable(sounds.actualTableName);
           await m.createTable(sounds);
+        }
+        if (from < 3) {
+          // Créer la table BoardSounds pour gérer les sons dans la board
+          await m.createTable(boardSounds);
         }
       },
     );
