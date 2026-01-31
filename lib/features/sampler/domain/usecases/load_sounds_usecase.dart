@@ -7,8 +7,8 @@ class LoadSoundsUseCase {
 
   LoadSoundsUseCase(this._repository);
 
-  Future<List<Sound>> call() async {
-    return await _repository.getBoardSounds();
+  Future<List<Sound>> call(int boardId) async {
+    return await _repository.getBoardSounds(boardId);
   }
 }
 

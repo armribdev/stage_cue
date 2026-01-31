@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 
@@ -56,7 +57,7 @@ Future<List<File>> scanDirectoryForAudioFiles(Directory directory) async {
       await _scanDirectoryRecursive(directory, audioFiles);
     }
   } catch (e) {
-    print('Erreur lors du scan de ${directory.path}: $e');
+    debugPrint('Erreur lors du scan de ${directory.path}: $e');
   }
   
   return audioFiles;

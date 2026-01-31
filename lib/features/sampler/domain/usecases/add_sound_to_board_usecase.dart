@@ -6,7 +6,7 @@ class AddSoundToBoardUseCase {
 
   AddSoundToBoardUseCase(this._repository);
 
-  Future<void> call(int soundId) async {
-    await _repository.addSoundToBoard(soundId);
+  Future<void> call(int boardId, int soundId) async {
+    await _repository.addSoundToBoard(boardId, soundId);
   }
 }

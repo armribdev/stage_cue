@@ -14,6 +14,12 @@ class Sounds extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
+class SoundBoards extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
 class WatchedPaths extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get path => text()(); // Chemin du dossier ou fichier surveillé
@@ -22,10 +28,12 @@ class WatchedPaths extends Table {
 }
 
 class BoardSounds extends Table {
+  IntColumn get boardId =>
+      integer().references(SoundBoards, #id, onDelete: KeyAction.cascade)();
   IntColumn get soundId => integer().references(Sounds, #id, onDelete: KeyAction.cascade)();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
   
   @override
-  Set<Column> get primaryKey => {soundId};
+  Set<Column> get primaryKey => {boardId, soundId};
 }
 
