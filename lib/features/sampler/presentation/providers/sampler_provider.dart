@@ -46,6 +46,7 @@ class SoundItem {
 class SamplerNotifier extends ChangeNotifier {
   final LoadSoundsUseCase _loadSoundsUseCase;
   final RemoveSoundFromBoardUseCase? _removeSoundFromBoardUseCase;
+  int? _activeBoardId;
 
   SamplerState _state = SamplerState(sounds: []);
   SamplerState get state => _state;
@@ -55,13 +56,33 @@ class SamplerNotifier extends ChangeNotifier {
     this._removeSoundFromBoardUseCase,
   ]);
 
+  /// Définit la soundboard active (null pour désactiver)
+  void setActiveBoard(int? boardId) {
+    _activeBoardId = boardId;
+  }
+
+  /// Efface la soundboard active
+  void clearActiveBoard() {
+    _activeBoardId = null;
+  }
+
   /// Charge tous les sons
-  Future<void> loadSounds() async {
+  Future<void> loadSounds({int? boardId}) async {
+    if (boardId != null) {
+      _activeBoardId = boardId;
+    }
+    final currentBoardId = _activeBoardId;
+    if (currentBoardId == null) {
+      _state = _state.copyWith(sounds: [], isLoading: false);
+      notifyListeners();
+      return;
+    }
+
     _state = _state.copyWith(isLoading: true, error: null);
     notifyListeners();
 
     try {
-      final sounds = await _loadSoundsUseCase();
+      final sounds = await _loadSoundsUseCase(currentBoardId);
       
       // Créer les SoundItems avec leurs lecteurs audio
       final soundItems = sounds.map((sound) {
@@ -122,10 +143,13 @@ class SamplerNotifier extends ChangeNotifier {
     // Retirer le son de la board dans la base de données
     if (_removeSoundFromBoardUseCase != null) {
       try {
-        await _removeSoundFromBoardUseCase(soundItem.sound.id);
+        final currentBoardId = _activeBoardId;
+        if (currentBoardId != null) {
+          await _removeSoundFromBoardUseCase(currentBoardId, soundItem.sound.id);
+        }
       } catch (e) {
         // En cas d'erreur, on continue quand même pour retirer de l'UI
-        print('Erreur lors du retrait du son de la board: $e');
+        debugPrint('Erreur lors du retrait du son de la board: $e');
       }
     }
     

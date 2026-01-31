@@ -1,13 +1,16 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/database/sounds.dart' as db_sounds;
 import '../../../../core/utils/file_utils.dart' show scanDirectoryForAudioFiles, isAudioFile;
 import '../models/sound_model.dart';
+import '../models/sound_board_model.dart';
 import '../models/watched_path_model.dart';
 import '../models/indexing_progress.dart';
 import '../../domain/entities/sound.dart' as domain;
+import '../../domain/entities/sound_board.dart' as domain;
 import '../../domain/entities/watched_path.dart' as domain;
 
 /// Source de données locale pour les sons (base de données)
@@ -24,7 +27,7 @@ class LocalSoundDataSource {
 
   /// Récupère uniquement les sons qui sont dans la board, triés par ordre d'ajout
   /// Utilise une jointure SQL pour de meilleures performances et éviter les problèmes de sons supprimés
-  Future<List<domain.Sound>> getBoardSounds() async {
+  Future<List<domain.Sound>> getBoardSounds(int boardId) async {
     // Utiliser une jointure INNER JOIN pour récupérer uniquement les sons existants
     // et les trier par ordre d'ajout à la board
     final query = _database.select(_database.sounds).join([
@@ -33,6 +36,7 @@ class LocalSoundDataSource {
         _database.boardSounds.soundId.equalsExp(_database.sounds.id),
       ),
     ])
+      ..where(_database.boardSounds.boardId.equals(boardId))
       ..orderBy([OrderingTerm(expression: _database.boardSounds.addedAt)]);
     
     final results = await query.get();
@@ -45,16 +49,17 @@ class LocalSoundDataSource {
   }
 
   /// Ajoute un son à la board
-  Future<void> addSoundToBoard(int soundId) async {
+  Future<void> addSoundToBoard(int boardId, int soundId) async {
     // Vérifier si le son est déjà dans la board
     final existing = await (_database.select(_database.boardSounds)
-          ..where((b) => b.soundId.equals(soundId)))
+          ..where((b) => b.boardId.equals(boardId) & b.soundId.equals(soundId)))
         .getSingleOrNull();
     
     if (existing == null) {
       await _database.into(_database.boardSounds).insert(
         db.BoardSoundsCompanion.insert(
-          soundId: Value(soundId),
+          boardId: boardId,
+          soundId: soundId,
           addedAt: Value(DateTime.now()),
         ),
       );
@@ -62,16 +67,16 @@ class LocalSoundDataSource {
   }
 
   /// Retire un son de la board
-  Future<void> removeSoundFromBoard(int soundId) async {
+  Future<void> removeSoundFromBoard(int boardId, int soundId) async {
     await (_database.delete(_database.boardSounds)
-          ..where((b) => b.soundId.equals(soundId)))
+          ..where((b) => b.boardId.equals(boardId) & b.soundId.equals(soundId)))
         .go();
   }
 
   /// Vérifie si un son est dans la board
-  Future<bool> isSoundInBoard(int soundId) async {
+  Future<bool> isSoundInBoard(int boardId, int soundId) async {
     final result = await (_database.select(_database.boardSounds)
-          ..where((b) => b.soundId.equals(soundId)))
+          ..where((b) => b.boardId.equals(boardId) & b.soundId.equals(soundId)))
         .getSingleOrNull();
     return result != null;
   }
@@ -228,7 +233,7 @@ class LocalSoundDataSource {
       
       return indexedCount;
     } catch (e) {
-      print('Erreur lors de l\'indexation du dossier ${directory.path}: $e');
+      debugPrint('Erreur lors de l\'indexation du dossier ${directory.path}: $e');
       // Notifier l'erreur
       onProgress?.call(IndexingProgress(
         path: directory.path,
@@ -266,6 +271,45 @@ class LocalSoundDataSource {
   }
 }
 
+/// Source de données locale pour les soundboards
+class LocalSoundBoardDataSource {
+  final db.AppDatabase _database;
+
+  LocalSoundBoardDataSource(this._database);
+
+  /// Récupère toutes les soundboards
+  Future<List<domain.SoundBoard>> getAllBoards() async {
+    final boards = await (_database.select(_database.soundBoards)
+          ..orderBy([(b) => OrderingTerm(expression: b.createdAt)]))
+        .get();
+    return boards.map((b) => SoundBoardModel.toEntity(b)).toList();
+  }
+
+  /// Crée une soundboard
+  Future<int> createBoard(String name) async {
+    return await _database.into(_database.soundBoards).insert(
+          db.SoundBoardsCompanion.insert(
+            name: name,
+            createdAt: Value(DateTime.now()),
+          ),
+        );
+  }
+
+  /// Renomme une soundboard
+  Future<void> renameBoard(int boardId, String name) async {
+    await (_database.update(_database.soundBoards)
+          ..where((b) => b.id.equals(boardId)))
+        .write(db.SoundBoardsCompanion(name: Value(name)));
+  }
+
+  /// Supprime une soundboard
+  Future<void> deleteBoard(int boardId) async {
+    await (_database.delete(_database.soundBoards)
+          ..where((b) => b.id.equals(boardId)))
+        .go();
+  }
+}
+
 /// Source de données locale pour les chemins surveillés
 class LocalWatchedPathDataSource {
   final db.AppDatabase _database;
@@ -295,42 +339,42 @@ class LocalWatchedPathDataSource {
   /// Scanne tous les chemins surveillés et indexe les nouveaux fichiers
   Future<int> scanAllWatchedPaths(LocalSoundDataSource soundDataSource) async {
     final watchedPaths = await getAllWatchedPaths();
-    print('Début du scan de ${watchedPaths.length} chemin(s) surveillé(s)');
+    debugPrint('Début du scan de ${watchedPaths.length} chemin(s) surveillé(s)');
     int totalIndexed = 0;
     
     for (final watchedPath in watchedPaths) {
       try {
         if (watchedPath.isDirectory) {
-          print('Scan du dossier: ${watchedPath.path}');
+          debugPrint('Scan du dossier: ${watchedPath.path}');
           final directory = Directory(watchedPath.path);
           if (await directory.exists()) {
             final count = await soundDataSource.indexDirectory(directory);
             totalIndexed += count;
-            print('Dossier ${watchedPath.path}: $count nouveau(x) fichier(s) indexé(s)');
+            debugPrint('Dossier ${watchedPath.path}: $count nouveau(x) fichier(s) indexé(s)');
           } else {
-            print('Le dossier n\'existe pas: ${watchedPath.path}');
+            debugPrint('Le dossier n\'existe pas: ${watchedPath.path}');
           }
         } else {
-          print('Indexation du fichier: ${watchedPath.path}');
+          debugPrint('Indexation du fichier: ${watchedPath.path}');
           final file = File(watchedPath.path);
           if (await file.exists() && isAudioFile(file.path)) {
             await soundDataSource.indexAudioFile(file);
             totalIndexed++;
-            print('Fichier indexé: ${watchedPath.path}');
+            debugPrint('Fichier indexé: ${watchedPath.path}');
           } else {
             if (!await file.exists()) {
-              print('Le fichier n\'existe pas: ${watchedPath.path}');
+              debugPrint('Le fichier n\'existe pas: ${watchedPath.path}');
             } else if (!isAudioFile(file.path)) {
-              print('Le fichier n\'est pas un fichier audio: ${watchedPath.path}');
+              debugPrint('Le fichier n\'est pas un fichier audio: ${watchedPath.path}');
             }
           }
         }
       } catch (e) {
-        print('Erreur lors du scan de ${watchedPath.path}: $e');
+        debugPrint('Erreur lors du scan de ${watchedPath.path}: $e');
       }
     }
     
-    print('Scan terminé: $totalIndexed nouveau(x) fichier(s) indexé(s) au total');
+    debugPrint('Scan terminé: $totalIndexed nouveau(x) fichier(s) indexé(s) au total');
     return totalIndexed;
   }
 }

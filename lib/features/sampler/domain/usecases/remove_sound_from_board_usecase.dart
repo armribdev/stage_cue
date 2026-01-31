@@ -6,7 +6,7 @@ class RemoveSoundFromBoardUseCase {
 
   RemoveSoundFromBoardUseCase(this._repository);
 
-  Future<void> call(int soundId) async {
-    await _repository.removeSoundFromBoard(soundId);
+  Future<void> call(int boardId, int soundId) async {
+    await _repository.removeSoundFromBoard(boardId, soundId);
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 /// Service de gestion des lecteurs audio
@@ -33,7 +34,7 @@ class AudioPlayerService {
       await _player.play();
     } catch (e) {
       // Gérer les erreurs silencieusement ou les logger
-      print('Erreur lors de la lecture: $e');
+      debugPrint('Erreur lors de la lecture: $e');
     }
   }
 

@@ -345,6 +345,253 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   }
 }
 
+class $SoundBoardsTable extends SoundBoards
+    with TableInfo<$SoundBoardsTable, SoundBoard> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SoundBoardsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sound_boards';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SoundBoard> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SoundBoard map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SoundBoard(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SoundBoardsTable createAlias(String alias) {
+    return $SoundBoardsTable(attachedDatabase, alias);
+  }
+}
+
+class SoundBoard extends DataClass implements Insertable<SoundBoard> {
+  final int id;
+  final String name;
+  final DateTime createdAt;
+  const SoundBoard({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  SoundBoardsCompanion toCompanion(bool nullToAbsent) {
+    return SoundBoardsCompanion(
+      id: Value(id),
+      name: Value(name),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory SoundBoard.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SoundBoard(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  SoundBoard copyWith({int? id, String? name, DateTime? createdAt}) =>
+      SoundBoard(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  SoundBoard copyWithCompanion(SoundBoardsCompanion data) {
+    return SoundBoard(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SoundBoard(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SoundBoard &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.createdAt == this.createdAt);
+}
+
+class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<DateTime> createdAt;
+  const SoundBoardsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  SoundBoardsCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.createdAt = const Value.absent(),
+  }) : name = Value(name);
+  static Insertable<SoundBoard> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  SoundBoardsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<DateTime>? createdAt,
+  }) {
+    return SoundBoardsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SoundBoardsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $WatchedPathsTable extends WatchedPaths
     with TableInfo<$WatchedPathsTable, WatchedPath> {
   @override
@@ -653,6 +900,20 @@ class $BoardSoundsTable extends BoardSounds
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $BoardSoundsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _boardIdMeta = const VerificationMeta(
+    'boardId',
+  );
+  @override
+  late final GeneratedColumn<int> boardId = GeneratedColumn<int>(
+    'board_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES sound_boards (id) ON DELETE CASCADE',
+    ),
+  );
   static const VerificationMeta _soundIdMeta = const VerificationMeta(
     'soundId',
   );
@@ -662,7 +923,7 @@ class $BoardSoundsTable extends BoardSounds
     aliasedName,
     false,
     type: DriftSqlType.int,
-    requiredDuringInsert: false,
+    requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES sounds (id) ON DELETE CASCADE',
     ),
@@ -680,7 +941,7 @@ class $BoardSoundsTable extends BoardSounds
     defaultValue: currentDateAndTime,
   );
   @override
-  List<GeneratedColumn> get $columns => [soundId, addedAt];
+  List<GeneratedColumn> get $columns => [boardId, soundId, addedAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -693,11 +954,21 @@ class $BoardSoundsTable extends BoardSounds
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('board_id')) {
+      context.handle(
+        _boardIdMeta,
+        boardId.isAcceptableOrUnknown(data['board_id']!, _boardIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_boardIdMeta);
+    }
     if (data.containsKey('sound_id')) {
       context.handle(
         _soundIdMeta,
         soundId.isAcceptableOrUnknown(data['sound_id']!, _soundIdMeta),
       );
+    } else if (isInserting) {
+      context.missing(_soundIdMeta);
     }
     if (data.containsKey('added_at')) {
       context.handle(
@@ -709,11 +980,15 @@ class $BoardSoundsTable extends BoardSounds
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {soundId};
+  Set<GeneratedColumn> get $primaryKey => {boardId, soundId};
   @override
   BoardSound map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return BoardSound(
+      boardId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}board_id'],
+      )!,
       soundId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sound_id'],
@@ -732,12 +1007,18 @@ class $BoardSoundsTable extends BoardSounds
 }
 
 class BoardSound extends DataClass implements Insertable<BoardSound> {
+  final int boardId;
   final int soundId;
   final DateTime addedAt;
-  const BoardSound({required this.soundId, required this.addedAt});
+  const BoardSound({
+    required this.boardId,
+    required this.soundId,
+    required this.addedAt,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    map['board_id'] = Variable<int>(boardId);
     map['sound_id'] = Variable<int>(soundId);
     map['added_at'] = Variable<DateTime>(addedAt);
     return map;
@@ -745,6 +1026,7 @@ class BoardSound extends DataClass implements Insertable<BoardSound> {
 
   BoardSoundsCompanion toCompanion(bool nullToAbsent) {
     return BoardSoundsCompanion(
+      boardId: Value(boardId),
       soundId: Value(soundId),
       addedAt: Value(addedAt),
     );
@@ -756,6 +1038,7 @@ class BoardSound extends DataClass implements Insertable<BoardSound> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return BoardSound(
+      boardId: serializer.fromJson<int>(json['boardId']),
       soundId: serializer.fromJson<int>(json['soundId']),
       addedAt: serializer.fromJson<DateTime>(json['addedAt']),
     );
@@ -764,17 +1047,21 @@ class BoardSound extends DataClass implements Insertable<BoardSound> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'boardId': serializer.toJson<int>(boardId),
       'soundId': serializer.toJson<int>(soundId),
       'addedAt': serializer.toJson<DateTime>(addedAt),
     };
   }
 
-  BoardSound copyWith({int? soundId, DateTime? addedAt}) => BoardSound(
-    soundId: soundId ?? this.soundId,
-    addedAt: addedAt ?? this.addedAt,
-  );
+  BoardSound copyWith({int? boardId, int? soundId, DateTime? addedAt}) =>
+      BoardSound(
+        boardId: boardId ?? this.boardId,
+        soundId: soundId ?? this.soundId,
+        addedAt: addedAt ?? this.addedAt,
+      );
   BoardSound copyWithCompanion(BoardSoundsCompanion data) {
     return BoardSound(
+      boardId: data.boardId.present ? data.boardId.value : this.boardId,
       soundId: data.soundId.present ? data.soundId.value : this.soundId,
       addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
     );
@@ -783,6 +1070,7 @@ class BoardSound extends DataClass implements Insertable<BoardSound> {
   @override
   String toString() {
     return (StringBuffer('BoardSound(')
+          ..write('boardId: $boardId, ')
           ..write('soundId: $soundId, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
@@ -790,54 +1078,76 @@ class BoardSound extends DataClass implements Insertable<BoardSound> {
   }
 
   @override
-  int get hashCode => Object.hash(soundId, addedAt);
+  int get hashCode => Object.hash(boardId, soundId, addedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is BoardSound &&
+          other.boardId == this.boardId &&
           other.soundId == this.soundId &&
           other.addedAt == this.addedAt);
 }
 
 class BoardSoundsCompanion extends UpdateCompanion<BoardSound> {
+  final Value<int> boardId;
   final Value<int> soundId;
   final Value<DateTime> addedAt;
+  final Value<int> rowid;
   const BoardSoundsCompanion({
+    this.boardId = const Value.absent(),
     this.soundId = const Value.absent(),
     this.addedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
   });
   BoardSoundsCompanion.insert({
-    this.soundId = const Value.absent(),
+    required int boardId,
+    required int soundId,
     this.addedAt = const Value.absent(),
-  });
+    this.rowid = const Value.absent(),
+  }) : boardId = Value(boardId),
+       soundId = Value(soundId);
   static Insertable<BoardSound> custom({
+    Expression<int>? boardId,
     Expression<int>? soundId,
     Expression<DateTime>? addedAt,
+    Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (boardId != null) 'board_id': boardId,
       if (soundId != null) 'sound_id': soundId,
       if (addedAt != null) 'added_at': addedAt,
+      if (rowid != null) 'rowid': rowid,
     });
   }
 
   BoardSoundsCompanion copyWith({
+    Value<int>? boardId,
     Value<int>? soundId,
     Value<DateTime>? addedAt,
+    Value<int>? rowid,
   }) {
     return BoardSoundsCompanion(
+      boardId: boardId ?? this.boardId,
       soundId: soundId ?? this.soundId,
       addedAt: addedAt ?? this.addedAt,
+      rowid: rowid ?? this.rowid,
     );
   }
 
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (boardId.present) {
+      map['board_id'] = Variable<int>(boardId.value);
+    }
     if (soundId.present) {
       map['sound_id'] = Variable<int>(soundId.value);
     }
     if (addedAt.present) {
       map['added_at'] = Variable<DateTime>(addedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
     }
     return map;
   }
@@ -845,8 +1155,10 @@ class BoardSoundsCompanion extends UpdateCompanion<BoardSound> {
   @override
   String toString() {
     return (StringBuffer('BoardSoundsCompanion(')
+          ..write('boardId: $boardId, ')
           ..write('soundId: $soundId, ')
-          ..write('addedAt: $addedAt')
+          ..write('addedAt: $addedAt, ')
+          ..write('rowid: $rowid')
           ..write(')'))
         .toString();
   }
@@ -856,6 +1168,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $SoundsTable sounds = $SoundsTable(this);
+  late final $SoundBoardsTable soundBoards = $SoundBoardsTable(this);
   late final $WatchedPathsTable watchedPaths = $WatchedPathsTable(this);
   late final $BoardSoundsTable boardSounds = $BoardSoundsTable(this);
   @override
@@ -864,11 +1177,19 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     sounds,
+    soundBoards,
     watchedPaths,
     boardSounds,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'sound_boards',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('board_sounds', kind: UpdateKind.delete)],
+    ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'sounds',
@@ -1168,6 +1489,263 @@ typedef $$SoundsTableProcessedTableManager =
       Sound,
       PrefetchHooks Function({bool boardSoundsRefs})
     >;
+typedef $$SoundBoardsTableCreateCompanionBuilder =
+    SoundBoardsCompanion Function({
+      Value<int> id,
+      required String name,
+      Value<DateTime> createdAt,
+    });
+typedef $$SoundBoardsTableUpdateCompanionBuilder =
+    SoundBoardsCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<DateTime> createdAt,
+    });
+
+final class $$SoundBoardsTableReferences
+    extends BaseReferences<_$AppDatabase, $SoundBoardsTable, SoundBoard> {
+  $$SoundBoardsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$BoardSoundsTable, List<BoardSound>>
+  _boardSoundsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.boardSounds,
+    aliasName: $_aliasNameGenerator(db.soundBoards.id, db.boardSounds.boardId),
+  );
+
+  $$BoardSoundsTableProcessedTableManager get boardSoundsRefs {
+    final manager = $$BoardSoundsTableTableManager(
+      $_db,
+      $_db.boardSounds,
+    ).filter((f) => f.boardId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_boardSoundsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$SoundBoardsTableFilterComposer
+    extends Composer<_$AppDatabase, $SoundBoardsTable> {
+  $$SoundBoardsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> boardSoundsRefs(
+    Expression<bool> Function($$BoardSoundsTableFilterComposer f) f,
+  ) {
+    final $$BoardSoundsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.boardSounds,
+      getReferencedColumn: (t) => t.boardId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BoardSoundsTableFilterComposer(
+            $db: $db,
+            $table: $db.boardSounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SoundBoardsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SoundBoardsTable> {
+  $$SoundBoardsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SoundBoardsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SoundBoardsTable> {
+  $$SoundBoardsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> boardSoundsRefs<T extends Object>(
+    Expression<T> Function($$BoardSoundsTableAnnotationComposer a) f,
+  ) {
+    final $$BoardSoundsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.boardSounds,
+      getReferencedColumn: (t) => t.boardId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BoardSoundsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.boardSounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SoundBoardsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SoundBoardsTable,
+          SoundBoard,
+          $$SoundBoardsTableFilterComposer,
+          $$SoundBoardsTableOrderingComposer,
+          $$SoundBoardsTableAnnotationComposer,
+          $$SoundBoardsTableCreateCompanionBuilder,
+          $$SoundBoardsTableUpdateCompanionBuilder,
+          (SoundBoard, $$SoundBoardsTableReferences),
+          SoundBoard,
+          PrefetchHooks Function({bool boardSoundsRefs})
+        > {
+  $$SoundBoardsTableTableManager(_$AppDatabase db, $SoundBoardsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SoundBoardsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SoundBoardsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SoundBoardsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => SoundBoardsCompanion(
+                id: id,
+                name: name,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => SoundBoardsCompanion.insert(
+                id: id,
+                name: name,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SoundBoardsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({boardSoundsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (boardSoundsRefs) db.boardSounds],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (boardSoundsRefs)
+                    await $_getPrefetchedData<
+                      SoundBoard,
+                      $SoundBoardsTable,
+                      BoardSound
+                    >(
+                      currentTable: table,
+                      referencedTable: $$SoundBoardsTableReferences
+                          ._boardSoundsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$SoundBoardsTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).boardSoundsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.boardId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SoundBoardsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SoundBoardsTable,
+      SoundBoard,
+      $$SoundBoardsTableFilterComposer,
+      $$SoundBoardsTableOrderingComposer,
+      $$SoundBoardsTableAnnotationComposer,
+      $$SoundBoardsTableCreateCompanionBuilder,
+      $$SoundBoardsTableUpdateCompanionBuilder,
+      (SoundBoard, $$SoundBoardsTableReferences),
+      SoundBoard,
+      PrefetchHooks Function({bool boardSoundsRefs})
+    >;
 typedef $$WatchedPathsTableCreateCompanionBuilder =
     WatchedPathsCompanion Function({
       Value<int> id,
@@ -1347,18 +1925,41 @@ typedef $$WatchedPathsTableProcessedTableManager =
     >;
 typedef $$BoardSoundsTableCreateCompanionBuilder =
     BoardSoundsCompanion Function({
-      Value<int> soundId,
+      required int boardId,
+      required int soundId,
       Value<DateTime> addedAt,
+      Value<int> rowid,
     });
 typedef $$BoardSoundsTableUpdateCompanionBuilder =
     BoardSoundsCompanion Function({
+      Value<int> boardId,
       Value<int> soundId,
       Value<DateTime> addedAt,
+      Value<int> rowid,
     });
 
 final class $$BoardSoundsTableReferences
     extends BaseReferences<_$AppDatabase, $BoardSoundsTable, BoardSound> {
   $$BoardSoundsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $SoundBoardsTable _boardIdTable(_$AppDatabase db) =>
+      db.soundBoards.createAlias(
+        $_aliasNameGenerator(db.boardSounds.boardId, db.soundBoards.id),
+      );
+
+  $$SoundBoardsTableProcessedTableManager get boardId {
+    final $_column = $_itemColumn<int>('board_id')!;
+
+    final manager = $$SoundBoardsTableTableManager(
+      $_db,
+      $_db.soundBoards,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_boardIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
 
   static $SoundsTable _soundIdTable(_$AppDatabase db) => db.sounds.createAlias(
     $_aliasNameGenerator(db.boardSounds.soundId, db.sounds.id),
@@ -1392,6 +1993,29 @@ class $$BoardSoundsTableFilterComposer
     column: $table.addedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$SoundBoardsTableFilterComposer get boardId {
+    final $$SoundBoardsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.boardId,
+      referencedTable: $db.soundBoards,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundBoardsTableFilterComposer(
+            $db: $db,
+            $table: $db.soundBoards,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   $$SoundsTableFilterComposer get soundId {
     final $$SoundsTableFilterComposer composer = $composerBuilder(
@@ -1431,6 +2055,29 @@ class $$BoardSoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  $$SoundBoardsTableOrderingComposer get boardId {
+    final $$SoundBoardsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.boardId,
+      referencedTable: $db.soundBoards,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundBoardsTableOrderingComposer(
+            $db: $db,
+            $table: $db.soundBoards,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$SoundsTableOrderingComposer get soundId {
     final $$SoundsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -1466,6 +2113,29 @@ class $$BoardSoundsTableAnnotationComposer
   });
   GeneratedColumn<DateTime> get addedAt =>
       $composableBuilder(column: $table.addedAt, builder: (column) => column);
+
+  $$SoundBoardsTableAnnotationComposer get boardId {
+    final $$SoundBoardsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.boardId,
+      referencedTable: $db.soundBoards,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundBoardsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.soundBoards,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   $$SoundsTableAnnotationComposer get soundId {
     final $$SoundsTableAnnotationComposer composer = $composerBuilder(
@@ -1504,7 +2174,7 @@ class $$BoardSoundsTableTableManager
           $$BoardSoundsTableUpdateCompanionBuilder,
           (BoardSound, $$BoardSoundsTableReferences),
           BoardSound,
-          PrefetchHooks Function({bool soundId})
+          PrefetchHooks Function({bool boardId, bool soundId})
         > {
   $$BoardSoundsTableTableManager(_$AppDatabase db, $BoardSoundsTable table)
     : super(
@@ -1519,16 +2189,27 @@ class $$BoardSoundsTableTableManager
               $$BoardSoundsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
+                Value<int> boardId = const Value.absent(),
                 Value<int> soundId = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
-              }) => BoardSoundsCompanion(soundId: soundId, addedAt: addedAt),
-          createCompanionCallback:
-              ({
-                Value<int> soundId = const Value.absent(),
-                Value<DateTime> addedAt = const Value.absent(),
-              }) => BoardSoundsCompanion.insert(
+                Value<int> rowid = const Value.absent(),
+              }) => BoardSoundsCompanion(
+                boardId: boardId,
                 soundId: soundId,
                 addedAt: addedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int boardId,
+                required int soundId,
+                Value<DateTime> addedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BoardSoundsCompanion.insert(
+                boardId: boardId,
+                soundId: soundId,
+                addedAt: addedAt,
+                rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -1538,7 +2219,7 @@ class $$BoardSoundsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({soundId = false}) {
+          prefetchHooksCallback: ({boardId = false, soundId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
@@ -1558,6 +2239,19 @@ class $$BoardSoundsTableTableManager
                       dynamic
                     >
                   >(state) {
+                    if (boardId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.boardId,
+                                referencedTable: $$BoardSoundsTableReferences
+                                    ._boardIdTable(db),
+                                referencedColumn: $$BoardSoundsTableReferences
+                                    ._boardIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
                     if (soundId) {
                       state =
                           state.withJoin(
@@ -1595,7 +2289,7 @@ typedef $$BoardSoundsTableProcessedTableManager =
       $$BoardSoundsTableUpdateCompanionBuilder,
       (BoardSound, $$BoardSoundsTableReferences),
       BoardSound,
-      PrefetchHooks Function({bool soundId})
+      PrefetchHooks Function({bool boardId, bool soundId})
     >;
 
 class $AppDatabaseManager {
@@ -1603,6 +2297,8 @@ class $AppDatabaseManager {
   $AppDatabaseManager(this._db);
   $$SoundsTableTableManager get sounds =>
       $$SoundsTableTableManager(_db, _db.sounds);
+  $$SoundBoardsTableTableManager get soundBoards =>
+      $$SoundBoardsTableTableManager(_db, _db.soundBoards);
   $$WatchedPathsTableTableManager get watchedPaths =>
       $$WatchedPathsTableTableManager(_db, _db.watchedPaths);
   $$BoardSoundsTableTableManager get boardSounds =>

@@ -40,7 +40,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _initializeRepository() {
     final soundDataSource = LocalSoundDataSource(widget.database);
     final watchedPathDataSource = LocalWatchedPathDataSource(widget.database);
-    _repository = SoundRepository(soundDataSource, watchedPathDataSource);
+    final soundBoardDataSource = LocalSoundBoardDataSource(widget.database);
+    _repository = SoundRepository(soundDataSource, watchedPathDataSource, soundBoardDataSource);
   }
 
   Future<void> _loadDatabaseInfo() async {

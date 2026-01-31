@@ -8,8 +8,13 @@ import '../../domain/usecases/add_sound_to_board_usecase.dart';
 /// Affiche uniquement les bruitages qui ne sont pas déjà dans la board
 class SoundLibraryScreen extends StatefulWidget {
   final db.AppDatabase database;
+  final int boardId;
 
-  const SoundLibraryScreen({super.key, required this.database});
+  const SoundLibraryScreen({
+    super.key,
+    required this.database,
+    required this.boardId,
+  });
 
   @override
   State<SoundLibraryScreen> createState() => _SoundLibraryScreenState();
@@ -45,7 +50,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       final allSounds = await _repository.getAllSounds();
       
       // Charger les IDs des sons qui sont dans la board
-      final boardSounds = await _repository.getBoardSounds();
+      final boardSounds = await _repository.getBoardSounds(widget.boardId);
       final boardSoundIds = boardSounds.map((s) => s.id).toSet();
 
       // Filtrer : uniquement les bruitages (y compris ceux déjà dans la board)
@@ -77,7 +82,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     }
     
     try {
-      await _addSoundToBoardUseCase(sound.id);
+      await _addSoundToBoardUseCase(widget.boardId, sound.id);
       // Mettre à jour l'état local pour refléter l'ajout
       setState(() {
         _soundsInBoard.add(sound.id);

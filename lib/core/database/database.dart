@@ -8,12 +8,12 @@ import 'sounds.dart';
 
 part 'database.g.dart';
 
-@DriftDatabase(tables: [Sounds, WatchedPaths, BoardSounds])
+@DriftDatabase(tables: [Sounds, SoundBoards, WatchedPaths, BoardSounds])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration {
@@ -27,9 +27,29 @@ class AppDatabase extends _$AppDatabase {
           await m.deleteTable(sounds.actualTableName);
           await m.createTable(sounds);
         }
-        if (from < 3) {
-          // Créer la table BoardSounds pour gérer les sons dans la board
-          await m.createTable(boardSounds);
+        if (from < 4) {
+          // Créer la table des soundboards
+          await m.createTable(soundBoards);
+          final defaultBoardId = await into(soundBoards).insert(
+            SoundBoardsCompanion.insert(
+              name: 'Board 1',
+              createdAt: Value(DateTime.now()),
+            ),
+          );
+
+          if (from >= 3) {
+            // Migration vers la nouvelle structure de board_sounds
+            await customStatement('ALTER TABLE board_sounds RENAME TO board_sounds_old');
+            await m.createTable(boardSounds);
+            await customStatement('''
+              INSERT INTO board_sounds (board_id, sound_id, added_at)
+              SELECT $defaultBoardId, sound_id, added_at
+              FROM board_sounds_old
+            ''');
+            await customStatement('DROP TABLE board_sounds_old');
+          } else {
+            await m.createTable(boardSounds);
+          }
         }
       },
     );
@@ -45,6 +65,6 @@ LazyDatabase _openConnection() {
     
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'db.sqlite'));
-    return NativeDatabase(file);
+    return NativeDatabase.createInBackground(file);
   });
 }

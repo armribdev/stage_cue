@@ -51,7 +51,7 @@ class PadButton extends StatelessWidget {
                       value: value,
                       backgroundColor: Colors.transparent,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                        Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
                       ),
                       minHeight: double.infinity,
                     ),
