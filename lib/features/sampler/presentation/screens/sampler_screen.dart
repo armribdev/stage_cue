@@ -3,8 +3,7 @@ import '../providers/sampler_provider.dart';
 import '../widgets/pad_button.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound_board.dart';
-import '../../domain/usecases/load_sounds_usecase.dart';
-import '../../domain/usecases/remove_sound_from_board_usecase.dart';
+import '../../../../core/app/app_services.dart';
 import '../../../../core/database/database.dart' as db;
 import 'settings_screen.dart';
 import 'sound_details_screen.dart';
@@ -12,7 +11,12 @@ import 'sound_library_screen.dart';
 
 /// Écran principal du sampler
 class SamplerScreen extends StatefulWidget {
-  const SamplerScreen({super.key});
+  final AppServices services;
+
+  const SamplerScreen({
+    super.key,
+    required this.services,
+  });
 
   @override
   State<SamplerScreen> createState() => _SamplerScreenState();
@@ -30,20 +34,19 @@ class _SamplerScreenState extends State<SamplerScreen> {
   @override
   void initState() {
     super.initState();
-    _database = db.AppDatabase();
+    _database = widget.services.database;
     _initializeNotifier();
     _loadBoards();
   }
 
   void _initializeNotifier() {
     // Initialiser les dépendances
-    _repository = SoundRepository.fromDatabase(_database);
-    
-    final loadSoundsUseCase = LoadSoundsUseCase(_repository);
-    final removeSoundFromBoardUseCase = RemoveSoundFromBoardUseCase(_repository);
-    
-    _notifier = SamplerNotifier(loadSoundsUseCase, removeSoundFromBoardUseCase);
-    
+    _repository = widget.services.soundRepository;
+    _notifier = SamplerNotifier(
+      widget.services.loadSoundsUseCase,
+      widget.services.removeSoundFromBoardUseCase,
+    );
+
     _notifier.addListener(_onStateChanged);
   }
 
@@ -289,7 +292,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
   void dispose() {
     _notifier.removeListener(_onStateChanged);
     _notifier.dispose();
-    _database.close();
     super.dispose();
   }
 
