@@ -13,7 +13,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration {
@@ -50,6 +50,10 @@ class AppDatabase extends _$AppDatabase {
           } else {
             await m.createTable(boardSounds);
           }
+        }
+        if (from < 5) {
+          await m.addColumn(sounds, sounds.color);
+          await m.addColumn(sounds, sounds.volume);
         }
       },
     );

@@ -103,6 +103,21 @@ class LocalSoundDataSource {
         .go();
   }
 
+  /// Met à jour les réglages d'un son (couleur, volume)
+  Future<void> updateSoundSettings({
+    required int id,
+    int? colorValue,
+    bool updateColor = false,
+    double? volume,
+  }) async {
+    final companion = db.SoundsCompanion(
+      color: updateColor ? Value(colorValue) : const Value.absent(),
+      volume: volume != null ? Value(volume) : const Value.absent(),
+    );
+    await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
+        .write(companion);
+  }
+
   /// Indexe un fichier audio
   Future<void> indexAudioFile(File file) async {
     try {
