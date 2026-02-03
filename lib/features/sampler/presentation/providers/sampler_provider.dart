@@ -50,7 +50,7 @@ class SamplerState {
 
 /// Item de son avec son lecteur audio associé
 class SoundItem {
-  final Sound sound;
+  Sound sound;
   final AudioPlayerService player;
   bool isPlaying;
   Color? buttonColor;
@@ -283,16 +283,37 @@ class SamplerNotifier extends ChangeNotifier {
     SoundItem soundItem, {
     Color? buttonColor,
     bool updateColor = false,
+    String? displayName,
+    bool updateDisplayName = false,
     double? volume,
   }) async {
     var hasChanged = false;
     int? colorValueToSave;
+    String? displayNameToSave;
     double? volumeToSave;
 
     if (updateColor) {
       soundItem.buttonColor = buttonColor;
       colorValueToSave = buttonColor?.value;
       hasChanged = true;
+    }
+    if (updateDisplayName) {
+      final trimmed = displayName?.trim();
+      final normalized = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+      if (soundItem.sound.displayName != normalized) {
+        soundItem.sound = Sound(
+          id: soundItem.sound.id,
+          title: soundItem.sound.title,
+          displayName: normalized,
+          filePath: soundItem.sound.filePath,
+          type: soundItem.sound.type,
+          colorValue: soundItem.sound.colorValue,
+          volume: soundItem.sound.volume,
+          createdAt: soundItem.sound.createdAt,
+        );
+        displayNameToSave = normalized;
+        hasChanged = true;
+      }
     }
     if (volume != null) {
       final clamped = volume.clamp(0.0, 1.0);
@@ -309,6 +330,8 @@ class SamplerNotifier extends ChangeNotifier {
         id: soundItem.sound.id,
         colorValue: colorValueToSave,
         updateColor: updateColor,
+        displayName: displayNameToSave,
+        updateDisplayName: updateDisplayName,
         volume: volumeToSave,
       );
     }

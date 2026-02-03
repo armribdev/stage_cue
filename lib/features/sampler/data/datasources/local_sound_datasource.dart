@@ -108,10 +108,13 @@ class LocalSoundDataSource {
     required int id,
     int? colorValue,
     bool updateColor = false,
+    String? displayName,
+    bool updateDisplayName = false,
     double? volume,
   }) async {
     final companion = db.SoundsCompanion(
       color: updateColor ? Value(colorValue) : const Value.absent(),
+      displayName: updateDisplayName ? Value(displayName) : const Value.absent(),
       volume: volume != null ? Value(volume) : const Value.absent(),
     );
     await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))

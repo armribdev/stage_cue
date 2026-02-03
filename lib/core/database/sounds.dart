@@ -9,6 +9,7 @@ enum SoundType {
 class Sounds extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get title => text()(); // Chemin complet du fichier
+  TextColumn get displayName => text().nullable()(); // Nom affiché sur le pad
   TextColumn get filePath => text()(); // Chemin complet du fichier
   IntColumn get type => intEnum<SoundType>()();
   IntColumn get color => integer().nullable()(); // Couleur personnalisée (ARGB)
