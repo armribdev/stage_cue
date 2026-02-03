@@ -20,12 +20,22 @@ class SoundDetailScreen extends StatefulWidget {
 class _SoundDetailScreenState extends State<SoundDetailScreen> {
   late Color? _selectedColor;
   late double _volume;
+  late final TextEditingController _displayNameController;
 
   @override
   void initState() {
     super.initState();
     _selectedColor = widget.soundItem.buttonColor;
     _volume = widget.soundItem.volume.clamp(0.0, 1.0);
+    _displayNameController = TextEditingController(
+      text: widget.soundItem.sound.displayName ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _displayNameController.dispose();
+    super.dispose();
   }
 
   String _getSoundTypeLabel(SoundType type) {
@@ -60,6 +70,15 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
       volume: clamped,
     );
     widget.soundItem.player.setVolume(clamped);
+  }
+
+  Future<void> _updateDisplayName() async {
+    final trimmed = _displayNameController.text.trim();
+    await widget.notifier.updateSoundItemSettings(
+      widget.soundItem,
+      displayName: trimmed.isEmpty ? null : trimmed,
+      updateDisplayName: true,
+    );
   }
 
   @override
@@ -134,6 +153,25 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
                     Text(
                       'Réglages du pad',
                       style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _displayNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Nom affiché sur le pad',
+                        helperText: 'Laisser vide pour utiliser le titre',
+                        border: OutlineInputBorder(),
+                      ),
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _updateDisplayName(),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton(
+                        onPressed: _updateDisplayName,
+                        child: const Text('Enregistrer le nom'),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Text(

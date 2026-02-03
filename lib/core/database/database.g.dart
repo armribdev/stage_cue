@@ -30,6 +30,17 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _displayNameMeta = const VerificationMeta(
+    'displayName',
+  );
+  @override
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+    'display_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _filePathMeta = const VerificationMeta(
     'filePath',
   );
@@ -85,6 +96,7 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
   List<GeneratedColumn> get $columns => [
     id,
     title,
+    displayName,
     filePath,
     type,
     color,
@@ -113,6 +125,15 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
       );
     } else if (isInserting) {
       context.missing(_titleMeta);
+    }
+    if (data.containsKey('display_name')) {
+      context.handle(
+        _displayNameMeta,
+        displayName.isAcceptableOrUnknown(
+          data['display_name']!,
+          _displayNameMeta,
+        ),
+      );
     }
     if (data.containsKey('file_path')) {
       context.handle(
@@ -157,6 +178,10 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.string,
         data['${effectivePrefix}title'],
       )!,
+      displayName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}display_name'],
+      ),
       filePath: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}file_path'],
@@ -194,6 +219,7 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
 class Sound extends DataClass implements Insertable<Sound> {
   final int id;
   final String title;
+  final String? displayName;
   final String filePath;
   final SoundType type;
   final int? color;
@@ -202,6 +228,7 @@ class Sound extends DataClass implements Insertable<Sound> {
   const Sound({
     required this.id,
     required this.title,
+    this.displayName,
     required this.filePath,
     required this.type,
     this.color,
@@ -213,6 +240,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['title'] = Variable<String>(title);
+    if (!nullToAbsent || displayName != null) {
+      map['display_name'] = Variable<String>(displayName);
+    }
     map['file_path'] = Variable<String>(filePath);
     {
       map['type'] = Variable<int>($SoundsTable.$convertertype.toSql(type));
@@ -229,9 +259,14 @@ class Sound extends DataClass implements Insertable<Sound> {
     return SoundsCompanion(
       id: Value(id),
       title: Value(title),
+      displayName: displayName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(displayName),
       filePath: Value(filePath),
       type: Value(type),
-      color: color == null && nullToAbsent ? const Value.absent() : Value(color),
+      color: color == null && nullToAbsent
+          ? const Value.absent()
+          : Value(color),
       volume: Value(volume),
       createdAt: Value(createdAt),
     );
@@ -245,6 +280,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     return Sound(
       id: serializer.fromJson<int>(json['id']),
       title: serializer.fromJson<String>(json['title']),
+      displayName: serializer.fromJson<String?>(json['displayName']),
       filePath: serializer.fromJson<String>(json['filePath']),
       type: $SoundsTable.$convertertype.fromJson(
         serializer.fromJson<int>(json['type']),
@@ -260,6 +296,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'title': serializer.toJson<String>(title),
+      'displayName': serializer.toJson<String?>(displayName),
       'filePath': serializer.toJson<String>(filePath),
       'type': serializer.toJson<int>($SoundsTable.$convertertype.toJson(type)),
       'color': serializer.toJson<int?>(color),
@@ -271,6 +308,7 @@ class Sound extends DataClass implements Insertable<Sound> {
   Sound copyWith({
     int? id,
     String? title,
+    Value<String?> displayName = const Value.absent(),
     String? filePath,
     SoundType? type,
     Value<int?> color = const Value.absent(),
@@ -279,6 +317,7 @@ class Sound extends DataClass implements Insertable<Sound> {
   }) => Sound(
     id: id ?? this.id,
     title: title ?? this.title,
+    displayName: displayName.present ? displayName.value : this.displayName,
     filePath: filePath ?? this.filePath,
     type: type ?? this.type,
     color: color.present ? color.value : this.color,
@@ -289,6 +328,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     return Sound(
       id: data.id.present ? data.id.value : this.id,
       title: data.title.present ? data.title.value : this.title,
+      displayName: data.displayName.present
+          ? data.displayName.value
+          : this.displayName,
       filePath: data.filePath.present ? data.filePath.value : this.filePath,
       type: data.type.present ? data.type.value : this.type,
       color: data.color.present ? data.color.value : this.color,
@@ -302,6 +344,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     return (StringBuffer('Sound(')
           ..write('id: $id, ')
           ..write('title: $title, ')
+          ..write('displayName: $displayName, ')
           ..write('filePath: $filePath, ')
           ..write('type: $type, ')
           ..write('color: $color, ')
@@ -312,14 +355,23 @@ class Sound extends DataClass implements Insertable<Sound> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, title, filePath, type, color, volume, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    title,
+    displayName,
+    filePath,
+    type,
+    color,
+    volume,
+    createdAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is Sound &&
           other.id == this.id &&
           other.title == this.title &&
+          other.displayName == this.displayName &&
           other.filePath == this.filePath &&
           other.type == this.type &&
           other.color == this.color &&
@@ -330,6 +382,7 @@ class Sound extends DataClass implements Insertable<Sound> {
 class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<int> id;
   final Value<String> title;
+  final Value<String?> displayName;
   final Value<String> filePath;
   final Value<SoundType> type;
   final Value<int?> color;
@@ -338,6 +391,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   const SoundsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
+    this.displayName = const Value.absent(),
     this.filePath = const Value.absent(),
     this.type = const Value.absent(),
     this.color = const Value.absent(),
@@ -347,6 +401,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   SoundsCompanion.insert({
     this.id = const Value.absent(),
     required String title,
+    this.displayName = const Value.absent(),
     required String filePath,
     required SoundType type,
     this.color = const Value.absent(),
@@ -358,6 +413,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   static Insertable<Sound> custom({
     Expression<int>? id,
     Expression<String>? title,
+    Expression<String>? displayName,
     Expression<String>? filePath,
     Expression<int>? type,
     Expression<int>? color,
@@ -367,6 +423,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (title != null) 'title': title,
+      if (displayName != null) 'display_name': displayName,
       if (filePath != null) 'file_path': filePath,
       if (type != null) 'type': type,
       if (color != null) 'color': color,
@@ -378,6 +435,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   SoundsCompanion copyWith({
     Value<int>? id,
     Value<String>? title,
+    Value<String?>? displayName,
     Value<String>? filePath,
     Value<SoundType>? type,
     Value<int?>? color,
@@ -387,6 +445,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     return SoundsCompanion(
       id: id ?? this.id,
       title: title ?? this.title,
+      displayName: displayName ?? this.displayName,
       filePath: filePath ?? this.filePath,
       type: type ?? this.type,
       color: color ?? this.color,
@@ -403,6 +462,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
+    }
+    if (displayName.present) {
+      map['display_name'] = Variable<String>(displayName.value);
     }
     if (filePath.present) {
       map['file_path'] = Variable<String>(filePath.value);
@@ -429,8 +491,11 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     return (StringBuffer('SoundsCompanion(')
           ..write('id: $id, ')
           ..write('title: $title, ')
+          ..write('displayName: $displayName, ')
           ..write('filePath: $filePath, ')
           ..write('type: $type, ')
+          ..write('color: $color, ')
+          ..write('volume: $volume, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -1296,16 +1361,22 @@ typedef $$SoundsTableCreateCompanionBuilder =
     SoundsCompanion Function({
       Value<int> id,
       required String title,
+      Value<String?> displayName,
       required String filePath,
       required SoundType type,
+      Value<int?> color,
+      Value<double> volume,
       Value<DateTime> createdAt,
     });
 typedef $$SoundsTableUpdateCompanionBuilder =
     SoundsCompanion Function({
       Value<int> id,
       Value<String> title,
+      Value<String?> displayName,
       Value<String> filePath,
       Value<SoundType> type,
+      Value<int?> color,
+      Value<double> volume,
       Value<DateTime> createdAt,
     });
 
@@ -1351,6 +1422,11 @@ class $$SoundsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get filePath => $composableBuilder(
     column: $table.filePath,
     builder: (column) => ColumnFilters(column),
@@ -1361,6 +1437,16 @@ class $$SoundsTableFilterComposer
         column: $table.type,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
+
+  ColumnFilters<int> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get volume => $composableBuilder(
+    column: $table.volume,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
@@ -1412,6 +1498,11 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get filePath => $composableBuilder(
     column: $table.filePath,
     builder: (column) => ColumnOrderings(column),
@@ -1419,6 +1510,16 @@ class $$SoundsTableOrderingComposer
 
   ColumnOrderings<int> get type => $composableBuilder(
     column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get volume => $composableBuilder(
+    column: $table.volume,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -1443,11 +1544,22 @@ class $$SoundsTableAnnotationComposer
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
 
+  GeneratedColumn<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get filePath =>
       $composableBuilder(column: $table.filePath, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<SoundType, int> get type =>
       $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<int> get color =>
+      $composableBuilder(column: $table.color, builder: (column) => column);
+
+  GeneratedColumn<double> get volume =>
+      $composableBuilder(column: $table.volume, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -1508,28 +1620,40 @@ class $$SoundsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> title = const Value.absent(),
+                Value<String?> displayName = const Value.absent(),
                 Value<String> filePath = const Value.absent(),
                 Value<SoundType> type = const Value.absent(),
+                Value<int?> color = const Value.absent(),
+                Value<double> volume = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => SoundsCompanion(
                 id: id,
                 title: title,
+                displayName: displayName,
                 filePath: filePath,
                 type: type,
+                color: color,
+                volume: volume,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
                 required String title,
+                Value<String?> displayName = const Value.absent(),
                 required String filePath,
                 required SoundType type,
+                Value<int?> color = const Value.absent(),
+                Value<double> volume = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => SoundsCompanion.insert(
                 id: id,
                 title: title,
+                displayName: displayName,
                 filePath: filePath,
                 type: type,
+                color: color,
+                volume: volume,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0

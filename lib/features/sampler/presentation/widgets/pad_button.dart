@@ -24,6 +24,10 @@ class PadButton extends StatelessWidget {
     final playingColor = customColor != null
         ? customColor.withValues(alpha: 0.75)
         : Theme.of(context).colorScheme.primaryContainer;
+    final displayName = soundItem.sound.displayName;
+    final label = (displayName != null && displayName.trim().isNotEmpty)
+        ? displayName
+        : soundItem.sound.title;
 
     return Card(
       elevation: soundItem.isPlaying ? 8 : 2,
@@ -73,7 +77,7 @@ class PadButton extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      soundItem.sound.title,
+                      label,
                       textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,

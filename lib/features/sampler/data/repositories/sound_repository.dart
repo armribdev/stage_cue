@@ -118,12 +118,16 @@ class SoundRepository {
     required int id,
     int? colorValue,
     bool updateColor = false,
+    String? displayName,
+    bool updateDisplayName = false,
     double? volume,
   }) async {
     await _soundDataSource.updateSoundSettings(
       id: id,
       colorValue: colorValue,
       updateColor: updateColor,
+      displayName: displayName,
+      updateDisplayName: updateDisplayName,
       volume: volume,
     );
   }
