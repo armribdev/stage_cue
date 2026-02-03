@@ -18,14 +18,19 @@ class PadButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final customColor = soundItem.buttonColor;
+    final defaultColor = Theme.of(context).colorScheme.surface;
+    final baseColor = customColor ?? defaultColor;
+    final playingColor = customColor != null
+        ? customColor.withValues(alpha: 0.75)
+        : Theme.of(context).colorScheme.primaryContainer;
+
     return Card(
       elevation: soundItem.isPlaying ? 8 : 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
       ),
-      color: soundItem.isPlaying
-          ? Theme.of(context).colorScheme.primaryContainer
-          : Theme.of(context).colorScheme.surface,
+      color: soundItem.isPlaying ? playingColor : baseColor,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,

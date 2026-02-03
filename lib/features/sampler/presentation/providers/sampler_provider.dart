@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
@@ -52,11 +53,15 @@ class SoundItem {
   final Sound sound;
   final AudioPlayerService player;
   bool isPlaying;
+  Color? buttonColor;
+  double volume;
 
   SoundItem({
     required this.sound,
     required this.player,
     this.isPlaying = false,
+    this.buttonColor,
+    this.volume = 1.0,
   });
 }
 
@@ -259,11 +264,37 @@ class SamplerNotifier extends ChangeNotifier {
       await soundItem.player.stop();
       // L'état sera mis à jour automatiquement par le listener
     } else {
+      await soundItem.player.setVolume(soundItem.volume);
       await soundItem.player.play(soundItem.sound.filePath);
       // L'état sera mis à jour automatiquement par le listener
     }
     // Notifier immédiatement pour un feedback visuel rapide
     notifyListeners();
+  }
+
+  /// Met à jour les réglages d'un sound item et notifie l'UI
+  void updateSoundItemSettings(
+    SoundItem soundItem, {
+    Color? buttonColor,
+    bool updateColor = false,
+    double? volume,
+  }) {
+    var hasChanged = false;
+    if (updateColor) {
+      soundItem.buttonColor = buttonColor;
+      hasChanged = true;
+    }
+    if (volume != null) {
+      final clamped = volume.clamp(0.0, 1.0);
+      if (soundItem.volume != clamped) {
+        soundItem.volume = clamped;
+        hasChanged = true;
+      }
+    }
+
+    if (hasChanged) {
+      notifyListeners();
+    }
   }
 
   /// Arrête tous les sons
