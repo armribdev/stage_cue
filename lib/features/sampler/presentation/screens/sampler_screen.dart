@@ -447,7 +447,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
                               await Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => SoundDetailScreen(sound: soundItem.sound),
+                                  builder: (context) => SoundDetailScreen(
+                                    soundItem: soundItem,
+                                    notifier: _notifier,
+                                  ),
                                 ),
                               );
                             },

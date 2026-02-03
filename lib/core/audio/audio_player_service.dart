@@ -43,6 +43,12 @@ class AudioPlayerService {
     await _player.stop();
   }
 
+  /// Définit le volume (0.0 -> 1.0)
+  Future<void> setVolume(double volume) async {
+    final clamped = volume.clamp(0.0, 1.0);
+    await _player.setVolume(clamped);
+  }
+
   /// Écoute les changements d'état du lecteur (true = en cours, false = arrêté)
   /// Utilise playerStateStream pour détecter correctement la fin de la lecture
   Stream<bool> get onPlayerStateChanged => _player.playerStateStream.map((state) {
