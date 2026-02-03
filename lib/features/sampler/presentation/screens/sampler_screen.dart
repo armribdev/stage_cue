@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../providers/sampler_provider.dart';
 import '../widgets/pad_button.dart';
-import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/database/database.dart' as db;
@@ -23,26 +22,22 @@ class SamplerScreen extends StatefulWidget {
 }
 
 class _SamplerScreenState extends State<SamplerScreen> {
-  late final SoundRepository _repository;
   late final SamplerNotifier _notifier;
   late final db.AppDatabase _database;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  List<SoundBoard> _boards = [];
-  SoundBoard? _selectedBoard;
-  bool _isBoardsLoading = true;
 
   @override
   void initState() {
     super.initState();
     _database = widget.services.database;
     _initializeNotifier();
-    _loadBoards();
+    _notifier.loadBoards();
   }
 
   void _initializeNotifier() {
     // Initialiser les dépendances
-    _repository = widget.services.soundRepository;
     _notifier = SamplerNotifier(
+      widget.services.soundRepository,
       widget.services.loadSoundsUseCase,
       widget.services.removeSoundFromBoardUseCase,
     );
@@ -56,56 +51,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
   }
 
-  Future<void> _loadBoards({int? selectBoardId}) async {
-    if (mounted) {
-      setState(() {
-        _isBoardsLoading = true;
-      });
-    }
-
-    try {
-      var boards = await _repository.getSoundBoards();
-      if (boards.isEmpty) {
-        final newBoardId = await _repository.createSoundBoard('Board 1');
-        boards = await _repository.getSoundBoards();
-        selectBoardId = newBoardId;
-      }
-
-      final targetId = selectBoardId ?? _selectedBoard?.id ?? boards.first.id;
-      final selected = boards.firstWhere(
-        (board) => board.id == targetId,
-        orElse: () => boards.first,
-      );
-
-      if (mounted) {
-        setState(() {
-          _boards = boards;
-          _selectedBoard = selected;
-          _isBoardsLoading = false;
-        });
-      }
-
-      _notifier.setActiveBoard(selected.id);
-      await _notifier.loadSounds();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isBoardsLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors du chargement des soundboards: $e')),
-        );
-      }
-    }
-  }
-
   Future<void> _selectBoard(SoundBoard board) async {
     Navigator.pop(context);
-    setState(() {
-      _selectedBoard = board;
-    });
-    _notifier.setActiveBoard(board.id);
-    await _notifier.loadSounds();
+    await _notifier.selectBoard(board);
   }
 
   Future<void> _createBoard() async {
@@ -130,34 +78,18 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
 
-    try {
-      final newBoardId = await _repository.createSoundBoard(trimmedName);
-      if (!mounted) {
-        return;
-      }
-      final newBoard = SoundBoard(
-        id: newBoardId,
-        name: trimmedName,
-        createdAt: DateTime.now(),
+    final newBoard = await _notifier.createBoard(trimmedName);
+    if (!mounted) {
+      return;
+    }
+    if (newBoard != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Soundboard "${newBoard.name}" créée')),
       );
-      setState(() {
-        _boards = [..._boards, newBoard];
-        _selectedBoard = newBoard;
-        _isBoardsLoading = false;
-      });
-      _notifier.setActiveBoard(newBoardId);
-      _notifier.loadSounds();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Soundboard "${newBoard.name}" créée')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la création: $e')),
-        );
-      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erreur lors de la création de la soundboard')),
+      );
     }
   }
 
@@ -205,28 +137,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
 
-    try {
-      await _repository.renameSoundBoard(board.id, trimmedName);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _boards = _boards
-            .map((b) => b.id == board.id
-                ? SoundBoard(id: b.id, name: trimmedName, createdAt: b.createdAt)
-                : b)
-            .toList();
-        if (_selectedBoard?.id == board.id) {
-          _selectedBoard =
-              SoundBoard(id: board.id, name: trimmedName, createdAt: board.createdAt);
-        }
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors du renommage: $e')),
-        );
-      }
+    final ok = await _notifier.renameBoard(board, trimmedName);
+    if (!mounted) {
+      return;
+    }
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erreur lors du renommage de la soundboard')),
+      );
     }
   }
 
@@ -255,36 +173,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
 
-    try {
-      await _repository.deleteSoundBoard(board.id);
-      if (!mounted) {
-        return;
-      }
-
-      final updatedBoards = _boards.where((b) => b.id != board.id).toList();
-      SoundBoard? nextSelected = _selectedBoard;
-      if (_selectedBoard?.id == board.id) {
-        nextSelected = updatedBoards.isNotEmpty ? updatedBoards.first : null;
-      }
-
-      setState(() {
-        _boards = updatedBoards;
-        _selectedBoard = nextSelected;
-      });
-
-      if (nextSelected == null) {
-        _notifier.setActiveBoard(null);
-        await _notifier.loadSounds();
-      } else {
-        _notifier.setActiveBoard(nextSelected.id);
-        await _notifier.loadSounds();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la suppression: $e')),
-        );
-      }
+    final ok = await _notifier.deleteBoard(board);
+    if (!mounted) {
+      return;
+    }
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erreur lors de la suppression de la soundboard')),
+      );
     }
   }
 
@@ -298,7 +194,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
   @override
   Widget build(BuildContext context) {
     final state = _notifier.state;
-    final selectedBoard = _selectedBoard;
+    final selectedBoard = state.selectedBoard;
+    final boards = state.boards;
+    final isBoardsLoading = state.isBoardsLoading;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -361,7 +259,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Soundboards (${_boards.length})',
+                      'Soundboards (${boards.length})',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     IconButton(
@@ -372,12 +270,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   ],
                 ),
               ),
-              if (_isBoardsLoading)
+              if (isBoardsLoading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
                   child: Center(child: CircularProgressIndicator()),
                 )
-              else if (_boards.isEmpty)
+              else if (boards.isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -402,7 +300,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   ),
                 )
               else
-                ..._boards.map((board) {
+                ...boards.map((board) {
                   return ListTile(
                     leading: const Icon(Icons.grid_view),
                     title: Text(board.name),
@@ -418,7 +316,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       body: SafeArea(
         child: selectedBoard == null
             ? Center(
-                child: _isBoardsLoading
+                child: isBoardsLoading
                     ? const CircularProgressIndicator()
                     : const Text('Aucune soundboard disponible'),
               )
