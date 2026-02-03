@@ -113,6 +113,21 @@ class SoundRepository {
     await _soundDataSource.deleteSound(id);
   }
 
+  /// Met à jour les réglages d'un son (couleur, volume)
+  Future<void> updateSoundSettings({
+    required int id,
+    int? colorValue,
+    bool updateColor = false,
+    double? volume,
+  }) async {
+    await _soundDataSource.updateSoundSettings(
+      id: id,
+      colorValue: colorValue,
+      updateColor: updateColor,
+      volume: volume,
+    );
+  }
+
   /// Récupère uniquement les sons qui sont dans la board
   Future<List<Sound>> getBoardSounds(int boardId) async {
     return await _soundDataSource.getBoardSounds(boardId);

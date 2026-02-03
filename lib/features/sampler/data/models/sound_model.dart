@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import '../../domain/entities/sound.dart' as domain;
 import '../../../../core/database/sounds.dart' as db_types;
 import '../../../../core/database/database.dart' as db;
@@ -11,6 +12,8 @@ class SoundModel {
       title: sound.title,
       filePath: sound.filePath,
       type: _mapSoundType(sound.type),
+      colorValue: sound.color,
+      volume: sound.volume,
       createdAt: sound.createdAt,
     );
   }
@@ -21,6 +24,8 @@ class SoundModel {
       title: sound.title,
       filePath: sound.filePath,
       type: _mapSoundTypeToDb(sound.type),
+      color: Value(sound.colorValue),
+      volume: Value(sound.volume),
     );
   }
 

@@ -233,7 +233,13 @@ class SamplerNotifier extends ChangeNotifier {
       // Créer les SoundItems avec leurs lecteurs audio
       final soundItems = sounds.map((sound) {
         final player = AudioPlayerService();
-        final soundItem = SoundItem(sound: sound, player: player);
+        final color = sound.colorValue != null ? Color(sound.colorValue!) : null;
+        final soundItem = SoundItem(
+          sound: sound,
+          player: player,
+          buttonColor: color,
+          volume: sound.volume,
+        );
         
         // Écouter les changements d'état après avoir créé le SoundItem
         player.onPlayerStateChanged.listen((isPlaying) {
@@ -273,27 +279,38 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   /// Met à jour les réglages d'un sound item et notifie l'UI
-  void updateSoundItemSettings(
+  Future<void> updateSoundItemSettings(
     SoundItem soundItem, {
     Color? buttonColor,
     bool updateColor = false,
     double? volume,
-  }) {
+  }) async {
     var hasChanged = false;
+    int? colorValueToSave;
+    double? volumeToSave;
+
     if (updateColor) {
       soundItem.buttonColor = buttonColor;
+      colorValueToSave = buttonColor?.value;
       hasChanged = true;
     }
     if (volume != null) {
       final clamped = volume.clamp(0.0, 1.0);
       if (soundItem.volume != clamped) {
         soundItem.volume = clamped;
+        volumeToSave = clamped;
         hasChanged = true;
       }
     }
 
     if (hasChanged) {
       notifyListeners();
+      await _repository.updateSoundSettings(
+        id: soundItem.sound.id,
+        colorValue: colorValueToSave,
+        updateColor: updateColor,
+        volume: volumeToSave,
+      );
     }
   }
 

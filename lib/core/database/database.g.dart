@@ -50,6 +50,25 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         type: DriftSqlType.int,
         requiredDuringInsert: true,
       ).withConverter<SoundType>($SoundsTable.$convertertype);
+  static const VerificationMeta _colorMeta = const VerificationMeta('color');
+  @override
+  late final GeneratedColumn<int> color = GeneratedColumn<int>(
+    'color',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _volumeMeta = const VerificationMeta('volume');
+  @override
+  late final GeneratedColumn<double> volume = GeneratedColumn<double>(
+    'volume',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.0),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -63,7 +82,15 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     defaultValue: currentDateAndTime,
   );
   @override
-  List<GeneratedColumn> get $columns => [id, title, filePath, type, createdAt];
+  List<GeneratedColumn> get $columns => [
+    id,
+    title,
+    filePath,
+    type,
+    color,
+    volume,
+    createdAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -94,6 +121,18 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
       );
     } else if (isInserting) {
       context.missing(_filePathMeta);
+    }
+    if (data.containsKey('color')) {
+      context.handle(
+        _colorMeta,
+        color.isAcceptableOrUnknown(data['color']!, _colorMeta),
+      );
+    }
+    if (data.containsKey('volume')) {
+      context.handle(
+        _volumeMeta,
+        volume.isAcceptableOrUnknown(data['volume']!, _volumeMeta),
+      );
     }
     if (data.containsKey('created_at')) {
       context.handle(
@@ -128,6 +167,14 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
           data['${effectivePrefix}type'],
         )!,
       ),
+      color: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color'],
+      ),
+      volume: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}volume'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -149,12 +196,16 @@ class Sound extends DataClass implements Insertable<Sound> {
   final String title;
   final String filePath;
   final SoundType type;
+  final int? color;
+  final double volume;
   final DateTime createdAt;
   const Sound({
     required this.id,
     required this.title,
     required this.filePath,
     required this.type,
+    this.color,
+    required this.volume,
     required this.createdAt,
   });
   @override
@@ -166,6 +217,10 @@ class Sound extends DataClass implements Insertable<Sound> {
     {
       map['type'] = Variable<int>($SoundsTable.$convertertype.toSql(type));
     }
+    if (!nullToAbsent || color != null) {
+      map['color'] = Variable<int>(color);
+    }
+    map['volume'] = Variable<double>(volume);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -176,6 +231,8 @@ class Sound extends DataClass implements Insertable<Sound> {
       title: Value(title),
       filePath: Value(filePath),
       type: Value(type),
+      color: color == null && nullToAbsent ? const Value.absent() : Value(color),
+      volume: Value(volume),
       createdAt: Value(createdAt),
     );
   }
@@ -192,6 +249,8 @@ class Sound extends DataClass implements Insertable<Sound> {
       type: $SoundsTable.$convertertype.fromJson(
         serializer.fromJson<int>(json['type']),
       ),
+      color: serializer.fromJson<int?>(json['color']),
+      volume: serializer.fromJson<double>(json['volume']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -203,6 +262,8 @@ class Sound extends DataClass implements Insertable<Sound> {
       'title': serializer.toJson<String>(title),
       'filePath': serializer.toJson<String>(filePath),
       'type': serializer.toJson<int>($SoundsTable.$convertertype.toJson(type)),
+      'color': serializer.toJson<int?>(color),
+      'volume': serializer.toJson<double>(volume),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -212,12 +273,16 @@ class Sound extends DataClass implements Insertable<Sound> {
     String? title,
     String? filePath,
     SoundType? type,
+    Value<int?> color = const Value.absent(),
+    double? volume,
     DateTime? createdAt,
   }) => Sound(
     id: id ?? this.id,
     title: title ?? this.title,
     filePath: filePath ?? this.filePath,
     type: type ?? this.type,
+    color: color.present ? color.value : this.color,
+    volume: volume ?? this.volume,
     createdAt: createdAt ?? this.createdAt,
   );
   Sound copyWithCompanion(SoundsCompanion data) {
@@ -226,6 +291,8 @@ class Sound extends DataClass implements Insertable<Sound> {
       title: data.title.present ? data.title.value : this.title,
       filePath: data.filePath.present ? data.filePath.value : this.filePath,
       type: data.type.present ? data.type.value : this.type,
+      color: data.color.present ? data.color.value : this.color,
+      volume: data.volume.present ? data.volume.value : this.volume,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -237,13 +304,16 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('title: $title, ')
           ..write('filePath: $filePath, ')
           ..write('type: $type, ')
+          ..write('color: $color, ')
+          ..write('volume: $volume, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, title, filePath, type, createdAt);
+  int get hashCode =>
+      Object.hash(id, title, filePath, type, color, volume, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -252,6 +322,8 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.title == this.title &&
           other.filePath == this.filePath &&
           other.type == this.type &&
+          other.color == this.color &&
+          other.volume == this.volume &&
           other.createdAt == this.createdAt);
 }
 
@@ -260,12 +332,16 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<String> title;
   final Value<String> filePath;
   final Value<SoundType> type;
+  final Value<int?> color;
+  final Value<double> volume;
   final Value<DateTime> createdAt;
   const SoundsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
     this.filePath = const Value.absent(),
     this.type = const Value.absent(),
+    this.color = const Value.absent(),
+    this.volume = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   SoundsCompanion.insert({
@@ -273,6 +349,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     required String title,
     required String filePath,
     required SoundType type,
+    this.color = const Value.absent(),
+    this.volume = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : title = Value(title),
        filePath = Value(filePath),
@@ -282,6 +360,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<String>? title,
     Expression<String>? filePath,
     Expression<int>? type,
+    Expression<int>? color,
+    Expression<double>? volume,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -289,6 +369,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (title != null) 'title': title,
       if (filePath != null) 'file_path': filePath,
       if (type != null) 'type': type,
+      if (color != null) 'color': color,
+      if (volume != null) 'volume': volume,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -298,6 +380,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<String>? title,
     Value<String>? filePath,
     Value<SoundType>? type,
+    Value<int?>? color,
+    Value<double>? volume,
     Value<DateTime>? createdAt,
   }) {
     return SoundsCompanion(
@@ -305,6 +389,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       title: title ?? this.title,
       filePath: filePath ?? this.filePath,
       type: type ?? this.type,
+      color: color ?? this.color,
+      volume: volume ?? this.volume,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -325,6 +411,12 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       map['type'] = Variable<int>(
         $SoundsTable.$convertertype.toSql(type.value),
       );
+    }
+    if (color.present) {
+      map['color'] = Variable<int>(color.value);
+    }
+    if (volume.present) {
+      map['volume'] = Variable<double>(volume.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);

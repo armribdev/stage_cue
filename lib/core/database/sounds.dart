@@ -11,6 +11,8 @@ class Sounds extends Table {
   TextColumn get title => text()(); // Chemin complet du fichier
   TextColumn get filePath => text()(); // Chemin complet du fichier
   IntColumn get type => intEnum<SoundType>()();
+  IntColumn get color => integer().nullable()(); // Couleur personnalisée (ARGB)
+  RealColumn get volume => real().withDefault(const Constant(1.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 

@@ -4,6 +4,8 @@ class Sound {
   final String title;
   final String filePath;
   final SoundType type;
+  final int? colorValue;
+  final double volume;
   final DateTime createdAt;
 
   Sound({
@@ -11,6 +13,8 @@ class Sound {
     required this.title,
     required this.filePath,
     required this.type,
+    this.colorValue,
+    this.volume = 1.0,
     required this.createdAt,
   });
 }
