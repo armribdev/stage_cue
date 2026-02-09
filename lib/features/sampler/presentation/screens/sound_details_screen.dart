@@ -180,23 +180,12 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
                     ),
                     const SizedBox(height: 8),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: 12,
+                      runSpacing: 12,
                       children: [
-                        ChoiceChip(
-                          label: const Text('Par défaut'),
-                          selected: _selectedColor == null,
-                          onSelected: (_) => _updateColor(null),
-                        ),
+                        _buildDefaultColorOption(context),
                         for (final color in colorChoices)
-                          ChoiceChip(
-                            label: const Text(''),
-                            selected: _selectedColor == color,
-                            onSelected: (_) => _updateColor(color),
-                            avatar: CircleAvatar(
-                              backgroundColor: color,
-                            ),
-                          ),
+                          _buildColorDot(context, color),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -253,6 +242,99 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildDefaultColorOption(BuildContext context) {
+    final isSelected = _selectedColor == null;
+    final scheme = Theme.of(context).colorScheme;
+    final borderColor =
+        isSelected ? scheme.primary : scheme.outlineVariant;
+    final onSurface = scheme.onSurfaceVariant;
+    return Tooltip(
+      message: 'Couleur par défaut',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: () => _updateColor(null),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: scheme.surfaceVariant,
+            border: Border.all(
+              color: borderColor,
+              width: isSelected ? 3 : 1,
+            ),
+            boxShadow: [
+              if (isSelected)
+                BoxShadow(
+                  color: scheme.primary.withOpacity(0.25),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+            ],
+          ),
+          child: isSelected
+              ? Icon(
+                  Icons.check,
+                  color: onSurface,
+                  size: 20,
+                )
+              : Text(
+                  'D',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: onSurface,
+                      ),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildColorDot(BuildContext context, Color color) {
+    final isSelected = _selectedColor == color;
+    final scheme = Theme.of(context).colorScheme;
+    final borderColor =
+        isSelected ? scheme.primary : scheme.outlineVariant;
+    return InkWell(
+      borderRadius: BorderRadius.circular(24),
+      onTap: () => _updateColor(color),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color,
+          border: Border.all(
+            color: borderColor,
+            width: isSelected ? 3 : 1,
+          ),
+          boxShadow: [
+            if (isSelected)
+              BoxShadow(
+                color: scheme.primary.withOpacity(0.25),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+          ],
+        ),
+        child: isSelected
+            ? Icon(
+                Icons.check,
+                color: _getCheckmarkColor(color),
+                size: 20,
+              )
+            : null,
+      ),
+    );
+  }
+
+  Color _getCheckmarkColor(Color color) {
+    return color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
   }
 }
 
