@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../data/repositories/sound_repository.dart';
@@ -71,9 +70,11 @@ class SamplerNotifier extends ChangeNotifier {
   final LoadSoundsUseCase _loadSoundsUseCase;
   final RemoveSoundFromBoardUseCase? _removeSoundFromBoardUseCase;
   int? _activeBoardId;
+  double _masterVolume = 1.0;
 
   SamplerState _state = SamplerState(sounds: []);
   SamplerState get state => _state;
+  double get masterVolume => _masterVolume;
 
   SamplerNotifier(
     this._repository,
@@ -270,7 +271,7 @@ class SamplerNotifier extends ChangeNotifier {
       await soundItem.player.stop();
       // L'état sera mis à jour automatiquement par le listener
     } else {
-      await soundItem.player.setVolume(soundItem.volume);
+      await soundItem.player.setVolume(soundItem.volume * _masterVolume);
       await soundItem.player.play(soundItem.sound.filePath);
       // L'état sera mis à jour automatiquement par le listener
     }
@@ -294,7 +295,7 @@ class SamplerNotifier extends ChangeNotifier {
 
     if (updateColor) {
       soundItem.buttonColor = buttonColor;
-      colorValueToSave = buttonColor?.value;
+      colorValueToSave = buttonColor?.toARGB32();
       hasChanged = true;
     }
     if (updateDisplayName) {
@@ -321,6 +322,9 @@ class SamplerNotifier extends ChangeNotifier {
         soundItem.volume = clamped;
         volumeToSave = clamped;
         hasChanged = true;
+        if (soundItem.isPlaying) {
+          await soundItem.player.setVolume(soundItem.volume * _masterVolume);
+        }
       }
     }
 
@@ -335,6 +339,21 @@ class SamplerNotifier extends ChangeNotifier {
         volume: volumeToSave,
       );
     }
+  }
+
+  /// Met à jour le volume général
+  Future<void> setMasterVolume(double value) async {
+    final clamped = value.clamp(0.0, 1.0);
+    if (_masterVolume == clamped) {
+      return;
+    }
+    _masterVolume = clamped;
+    for (final soundItem in _state.sounds) {
+      if (soundItem.isPlaying) {
+        await soundItem.player.setVolume(soundItem.volume * _masterVolume);
+      }
+    }
+    notifyListeners();
   }
 
   /// Arrête tous les sons

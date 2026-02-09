@@ -197,6 +197,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final selectedBoard = state.selectedBoard;
     final boards = state.boards;
     final isBoardsLoading = state.isBoardsLoading;
+    final masterVolume = _notifier.masterVolume;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -458,6 +459,36 @@ class _SamplerScreenState extends State<SamplerScreen> {
                           );
                         },
                       ),
+      ),
+      bottomNavigationBar: BottomAppBar(
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.volume_up,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Slider(
+                    value: masterVolume,
+                    min: 0.0,
+                    max: 1.0,
+                    label: '${(masterVolume * 100).round()}%',
+                    onChanged: (value) {
+                      _notifier.setMasterVolume(value);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text('${(masterVolume * 100).round()}%'),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
