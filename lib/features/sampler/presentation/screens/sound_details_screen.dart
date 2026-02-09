@@ -215,7 +215,6 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
                       value: _volume,
                       min: 0.0,
                       max: 1.0,
-                      divisions: 20,
                       label: '${(_volume * 100).round()}%',
                       onChanged: _updateVolume,
                     ),
