@@ -40,3 +40,49 @@ class BoardSounds extends Table {
   Set<Column> get primaryKey => {boardId, soundId};
 }
 
+class TagCategories extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  IntColumn get color => integer()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  TextColumn get description => text().nullable()();
+}
+
+class TagItems extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get categoryId =>
+      integer().references(TagCategories, #id, onDelete: KeyAction.cascade)();
+  TextColumn get name => text()();
+  TextColumn get normalizedName => text()();
+  TextColumn get description => text().nullable()();
+
+  @override
+  String get tableName => 'tags';
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {categoryId, normalizedName},
+      ];
+}
+
+class SoundTags extends Table {
+  IntColumn get soundId => integer().references(Sounds, #id, onDelete: KeyAction.cascade)();
+  IntColumn get tagId => integer().references(TagItems, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {soundId, tagId};
+}
+
+class TagAliases extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get tagId =>
+      integer().references(TagItems, #id, onDelete: KeyAction.cascade)();
+  TextColumn get alias => text()();
+  TextColumn get normalizedAlias => text()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {normalizedAlias},
+      ];
+}

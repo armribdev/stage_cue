@@ -1321,6 +1321,1303 @@ class BoardSoundsCompanion extends UpdateCompanion<BoardSound> {
   }
 }
 
+class $TagCategoriesTable extends TagCategories
+    with TableInfo<$TagCategoriesTable, TagCategory> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TagCategoriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _colorMeta = const VerificationMeta('color');
+  @override
+  late final GeneratedColumn<int> color = GeneratedColumn<int>(
+    'color',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    color,
+    sortOrder,
+    description,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'tag_categories';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TagCategory> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('color')) {
+      context.handle(
+        _colorMeta,
+        color.isAcceptableOrUnknown(data['color']!, _colorMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_colorMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TagCategory map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TagCategory(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      color: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+    );
+  }
+
+  @override
+  $TagCategoriesTable createAlias(String alias) {
+    return $TagCategoriesTable(attachedDatabase, alias);
+  }
+}
+
+class TagCategory extends DataClass implements Insertable<TagCategory> {
+  final int id;
+  final String name;
+  final int color;
+  final int sortOrder;
+  final String? description;
+  const TagCategory({
+    required this.id,
+    required this.name,
+    required this.color,
+    required this.sortOrder,
+    this.description,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['color'] = Variable<int>(color);
+    map['sort_order'] = Variable<int>(sortOrder);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    return map;
+  }
+
+  TagCategoriesCompanion toCompanion(bool nullToAbsent) {
+    return TagCategoriesCompanion(
+      id: Value(id),
+      name: Value(name),
+      color: Value(color),
+      sortOrder: Value(sortOrder),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+    );
+  }
+
+  factory TagCategory.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TagCategory(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      color: serializer.fromJson<int>(json['color']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      description: serializer.fromJson<String?>(json['description']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'color': serializer.toJson<int>(color),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'description': serializer.toJson<String?>(description),
+    };
+  }
+
+  TagCategory copyWith({
+    int? id,
+    String? name,
+    int? color,
+    int? sortOrder,
+    Value<String?> description = const Value.absent(),
+  }) => TagCategory(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    color: color ?? this.color,
+    sortOrder: sortOrder ?? this.sortOrder,
+    description: description.present ? description.value : this.description,
+  );
+  TagCategory copyWithCompanion(TagCategoriesCompanion data) {
+    return TagCategory(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      color: data.color.present ? data.color.value : this.color,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagCategory(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('color: $color, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('description: $description')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, color, sortOrder, description);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TagCategory &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.color == this.color &&
+          other.sortOrder == this.sortOrder &&
+          other.description == this.description);
+}
+
+class TagCategoriesCompanion extends UpdateCompanion<TagCategory> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<int> color;
+  final Value<int> sortOrder;
+  final Value<String?> description;
+  const TagCategoriesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.color = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.description = const Value.absent(),
+  });
+  TagCategoriesCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    required int color,
+    this.sortOrder = const Value.absent(),
+    this.description = const Value.absent(),
+  }) : name = Value(name),
+       color = Value(color);
+  static Insertable<TagCategory> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<int>? color,
+    Expression<int>? sortOrder,
+    Expression<String>? description,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (color != null) 'color': color,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (description != null) 'description': description,
+    });
+  }
+
+  TagCategoriesCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<int>? color,
+    Value<int>? sortOrder,
+    Value<String?>? description,
+  }) {
+    return TagCategoriesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      color: color ?? this.color,
+      sortOrder: sortOrder ?? this.sortOrder,
+      description: description ?? this.description,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (color.present) {
+      map['color'] = Variable<int>(color.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagCategoriesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('color: $color, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('description: $description')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $TagItemsTable extends TagItems with TableInfo<$TagItemsTable, TagItem> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TagItemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _categoryIdMeta = const VerificationMeta(
+    'categoryId',
+  );
+  @override
+  late final GeneratedColumn<int> categoryId = GeneratedColumn<int>(
+    'category_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES tag_categories (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _normalizedNameMeta = const VerificationMeta(
+    'normalizedName',
+  );
+  @override
+  late final GeneratedColumn<String> normalizedName = GeneratedColumn<String>(
+    'normalized_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    categoryId,
+    name,
+    normalizedName,
+    description,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'tags';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TagItem> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('category_id')) {
+      context.handle(
+        _categoryIdMeta,
+        categoryId.isAcceptableOrUnknown(data['category_id']!, _categoryIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_categoryIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('normalized_name')) {
+      context.handle(
+        _normalizedNameMeta,
+        normalizedName.isAcceptableOrUnknown(
+          data['normalized_name']!,
+          _normalizedNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_normalizedNameMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {categoryId, normalizedName},
+  ];
+  @override
+  TagItem map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TagItem(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      categoryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}category_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      normalizedName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}normalized_name'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+    );
+  }
+
+  @override
+  $TagItemsTable createAlias(String alias) {
+    return $TagItemsTable(attachedDatabase, alias);
+  }
+}
+
+class TagItem extends DataClass implements Insertable<TagItem> {
+  final int id;
+  final int categoryId;
+  final String name;
+  final String normalizedName;
+  final String? description;
+  const TagItem({
+    required this.id,
+    required this.categoryId,
+    required this.name,
+    required this.normalizedName,
+    this.description,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['category_id'] = Variable<int>(categoryId);
+    map['name'] = Variable<String>(name);
+    map['normalized_name'] = Variable<String>(normalizedName);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    return map;
+  }
+
+  TagItemsCompanion toCompanion(bool nullToAbsent) {
+    return TagItemsCompanion(
+      id: Value(id),
+      categoryId: Value(categoryId),
+      name: Value(name),
+      normalizedName: Value(normalizedName),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+    );
+  }
+
+  factory TagItem.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TagItem(
+      id: serializer.fromJson<int>(json['id']),
+      categoryId: serializer.fromJson<int>(json['categoryId']),
+      name: serializer.fromJson<String>(json['name']),
+      normalizedName: serializer.fromJson<String>(json['normalizedName']),
+      description: serializer.fromJson<String?>(json['description']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'categoryId': serializer.toJson<int>(categoryId),
+      'name': serializer.toJson<String>(name),
+      'normalizedName': serializer.toJson<String>(normalizedName),
+      'description': serializer.toJson<String?>(description),
+    };
+  }
+
+  TagItem copyWith({
+    int? id,
+    int? categoryId,
+    String? name,
+    String? normalizedName,
+    Value<String?> description = const Value.absent(),
+  }) => TagItem(
+    id: id ?? this.id,
+    categoryId: categoryId ?? this.categoryId,
+    name: name ?? this.name,
+    normalizedName: normalizedName ?? this.normalizedName,
+    description: description.present ? description.value : this.description,
+  );
+  TagItem copyWithCompanion(TagItemsCompanion data) {
+    return TagItem(
+      id: data.id.present ? data.id.value : this.id,
+      categoryId: data.categoryId.present
+          ? data.categoryId.value
+          : this.categoryId,
+      name: data.name.present ? data.name.value : this.name,
+      normalizedName: data.normalizedName.present
+          ? data.normalizedName.value
+          : this.normalizedName,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagItem(')
+          ..write('id: $id, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('name: $name, ')
+          ..write('normalizedName: $normalizedName, ')
+          ..write('description: $description')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, categoryId, name, normalizedName, description);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TagItem &&
+          other.id == this.id &&
+          other.categoryId == this.categoryId &&
+          other.name == this.name &&
+          other.normalizedName == this.normalizedName &&
+          other.description == this.description);
+}
+
+class TagItemsCompanion extends UpdateCompanion<TagItem> {
+  final Value<int> id;
+  final Value<int> categoryId;
+  final Value<String> name;
+  final Value<String> normalizedName;
+  final Value<String?> description;
+  const TagItemsCompanion({
+    this.id = const Value.absent(),
+    this.categoryId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.normalizedName = const Value.absent(),
+    this.description = const Value.absent(),
+  });
+  TagItemsCompanion.insert({
+    this.id = const Value.absent(),
+    required int categoryId,
+    required String name,
+    required String normalizedName,
+    this.description = const Value.absent(),
+  }) : categoryId = Value(categoryId),
+       name = Value(name),
+       normalizedName = Value(normalizedName);
+  static Insertable<TagItem> custom({
+    Expression<int>? id,
+    Expression<int>? categoryId,
+    Expression<String>? name,
+    Expression<String>? normalizedName,
+    Expression<String>? description,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (categoryId != null) 'category_id': categoryId,
+      if (name != null) 'name': name,
+      if (normalizedName != null) 'normalized_name': normalizedName,
+      if (description != null) 'description': description,
+    });
+  }
+
+  TagItemsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? categoryId,
+    Value<String>? name,
+    Value<String>? normalizedName,
+    Value<String?>? description,
+  }) {
+    return TagItemsCompanion(
+      id: id ?? this.id,
+      categoryId: categoryId ?? this.categoryId,
+      name: name ?? this.name,
+      normalizedName: normalizedName ?? this.normalizedName,
+      description: description ?? this.description,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (categoryId.present) {
+      map['category_id'] = Variable<int>(categoryId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (normalizedName.present) {
+      map['normalized_name'] = Variable<String>(normalizedName.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagItemsCompanion(')
+          ..write('id: $id, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('name: $name, ')
+          ..write('normalizedName: $normalizedName, ')
+          ..write('description: $description')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SoundTagsTable extends SoundTags
+    with TableInfo<$SoundTagsTable, SoundTag> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SoundTagsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _soundIdMeta = const VerificationMeta(
+    'soundId',
+  );
+  @override
+  late final GeneratedColumn<int> soundId = GeneratedColumn<int>(
+    'sound_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES sounds (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _tagIdMeta = const VerificationMeta('tagId');
+  @override
+  late final GeneratedColumn<int> tagId = GeneratedColumn<int>(
+    'tag_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES tags (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _addedAtMeta = const VerificationMeta(
+    'addedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> addedAt = GeneratedColumn<DateTime>(
+    'added_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [soundId, tagId, addedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sound_tags';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SoundTag> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('sound_id')) {
+      context.handle(
+        _soundIdMeta,
+        soundId.isAcceptableOrUnknown(data['sound_id']!, _soundIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_soundIdMeta);
+    }
+    if (data.containsKey('tag_id')) {
+      context.handle(
+        _tagIdMeta,
+        tagId.isAcceptableOrUnknown(data['tag_id']!, _tagIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tagIdMeta);
+    }
+    if (data.containsKey('added_at')) {
+      context.handle(
+        _addedAtMeta,
+        addedAt.isAcceptableOrUnknown(data['added_at']!, _addedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {soundId, tagId};
+  @override
+  SoundTag map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SoundTag(
+      soundId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sound_id'],
+      )!,
+      tagId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tag_id'],
+      )!,
+      addedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}added_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SoundTagsTable createAlias(String alias) {
+    return $SoundTagsTable(attachedDatabase, alias);
+  }
+}
+
+class SoundTag extends DataClass implements Insertable<SoundTag> {
+  final int soundId;
+  final int tagId;
+  final DateTime addedAt;
+  const SoundTag({
+    required this.soundId,
+    required this.tagId,
+    required this.addedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['sound_id'] = Variable<int>(soundId);
+    map['tag_id'] = Variable<int>(tagId);
+    map['added_at'] = Variable<DateTime>(addedAt);
+    return map;
+  }
+
+  SoundTagsCompanion toCompanion(bool nullToAbsent) {
+    return SoundTagsCompanion(
+      soundId: Value(soundId),
+      tagId: Value(tagId),
+      addedAt: Value(addedAt),
+    );
+  }
+
+  factory SoundTag.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SoundTag(
+      soundId: serializer.fromJson<int>(json['soundId']),
+      tagId: serializer.fromJson<int>(json['tagId']),
+      addedAt: serializer.fromJson<DateTime>(json['addedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'soundId': serializer.toJson<int>(soundId),
+      'tagId': serializer.toJson<int>(tagId),
+      'addedAt': serializer.toJson<DateTime>(addedAt),
+    };
+  }
+
+  SoundTag copyWith({int? soundId, int? tagId, DateTime? addedAt}) => SoundTag(
+    soundId: soundId ?? this.soundId,
+    tagId: tagId ?? this.tagId,
+    addedAt: addedAt ?? this.addedAt,
+  );
+  SoundTag copyWithCompanion(SoundTagsCompanion data) {
+    return SoundTag(
+      soundId: data.soundId.present ? data.soundId.value : this.soundId,
+      tagId: data.tagId.present ? data.tagId.value : this.tagId,
+      addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SoundTag(')
+          ..write('soundId: $soundId, ')
+          ..write('tagId: $tagId, ')
+          ..write('addedAt: $addedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(soundId, tagId, addedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SoundTag &&
+          other.soundId == this.soundId &&
+          other.tagId == this.tagId &&
+          other.addedAt == this.addedAt);
+}
+
+class SoundTagsCompanion extends UpdateCompanion<SoundTag> {
+  final Value<int> soundId;
+  final Value<int> tagId;
+  final Value<DateTime> addedAt;
+  final Value<int> rowid;
+  const SoundTagsCompanion({
+    this.soundId = const Value.absent(),
+    this.tagId = const Value.absent(),
+    this.addedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SoundTagsCompanion.insert({
+    required int soundId,
+    required int tagId,
+    this.addedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : soundId = Value(soundId),
+       tagId = Value(tagId);
+  static Insertable<SoundTag> custom({
+    Expression<int>? soundId,
+    Expression<int>? tagId,
+    Expression<DateTime>? addedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (soundId != null) 'sound_id': soundId,
+      if (tagId != null) 'tag_id': tagId,
+      if (addedAt != null) 'added_at': addedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SoundTagsCompanion copyWith({
+    Value<int>? soundId,
+    Value<int>? tagId,
+    Value<DateTime>? addedAt,
+    Value<int>? rowid,
+  }) {
+    return SoundTagsCompanion(
+      soundId: soundId ?? this.soundId,
+      tagId: tagId ?? this.tagId,
+      addedAt: addedAt ?? this.addedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (soundId.present) {
+      map['sound_id'] = Variable<int>(soundId.value);
+    }
+    if (tagId.present) {
+      map['tag_id'] = Variable<int>(tagId.value);
+    }
+    if (addedAt.present) {
+      map['added_at'] = Variable<DateTime>(addedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SoundTagsCompanion(')
+          ..write('soundId: $soundId, ')
+          ..write('tagId: $tagId, ')
+          ..write('addedAt: $addedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $TagAliasesTable extends TagAliases
+    with TableInfo<$TagAliasesTable, TagAliase> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TagAliasesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _tagIdMeta = const VerificationMeta('tagId');
+  @override
+  late final GeneratedColumn<int> tagId = GeneratedColumn<int>(
+    'tag_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES tags (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _aliasMeta = const VerificationMeta('alias');
+  @override
+  late final GeneratedColumn<String> alias = GeneratedColumn<String>(
+    'alias',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _normalizedAliasMeta = const VerificationMeta(
+    'normalizedAlias',
+  );
+  @override
+  late final GeneratedColumn<String> normalizedAlias = GeneratedColumn<String>(
+    'normalized_alias',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, tagId, alias, normalizedAlias];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'tag_aliases';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TagAliase> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('tag_id')) {
+      context.handle(
+        _tagIdMeta,
+        tagId.isAcceptableOrUnknown(data['tag_id']!, _tagIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tagIdMeta);
+    }
+    if (data.containsKey('alias')) {
+      context.handle(
+        _aliasMeta,
+        alias.isAcceptableOrUnknown(data['alias']!, _aliasMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_aliasMeta);
+    }
+    if (data.containsKey('normalized_alias')) {
+      context.handle(
+        _normalizedAliasMeta,
+        normalizedAlias.isAcceptableOrUnknown(
+          data['normalized_alias']!,
+          _normalizedAliasMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_normalizedAliasMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {normalizedAlias},
+  ];
+  @override
+  TagAliase map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TagAliase(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      tagId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tag_id'],
+      )!,
+      alias: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}alias'],
+      )!,
+      normalizedAlias: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}normalized_alias'],
+      )!,
+    );
+  }
+
+  @override
+  $TagAliasesTable createAlias(String alias) {
+    return $TagAliasesTable(attachedDatabase, alias);
+  }
+}
+
+class TagAliase extends DataClass implements Insertable<TagAliase> {
+  final int id;
+  final int tagId;
+  final String alias;
+  final String normalizedAlias;
+  const TagAliase({
+    required this.id,
+    required this.tagId,
+    required this.alias,
+    required this.normalizedAlias,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['tag_id'] = Variable<int>(tagId);
+    map['alias'] = Variable<String>(alias);
+    map['normalized_alias'] = Variable<String>(normalizedAlias);
+    return map;
+  }
+
+  TagAliasesCompanion toCompanion(bool nullToAbsent) {
+    return TagAliasesCompanion(
+      id: Value(id),
+      tagId: Value(tagId),
+      alias: Value(alias),
+      normalizedAlias: Value(normalizedAlias),
+    );
+  }
+
+  factory TagAliase.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TagAliase(
+      id: serializer.fromJson<int>(json['id']),
+      tagId: serializer.fromJson<int>(json['tagId']),
+      alias: serializer.fromJson<String>(json['alias']),
+      normalizedAlias: serializer.fromJson<String>(json['normalizedAlias']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'tagId': serializer.toJson<int>(tagId),
+      'alias': serializer.toJson<String>(alias),
+      'normalizedAlias': serializer.toJson<String>(normalizedAlias),
+    };
+  }
+
+  TagAliase copyWith({
+    int? id,
+    int? tagId,
+    String? alias,
+    String? normalizedAlias,
+  }) => TagAliase(
+    id: id ?? this.id,
+    tagId: tagId ?? this.tagId,
+    alias: alias ?? this.alias,
+    normalizedAlias: normalizedAlias ?? this.normalizedAlias,
+  );
+  TagAliase copyWithCompanion(TagAliasesCompanion data) {
+    return TagAliase(
+      id: data.id.present ? data.id.value : this.id,
+      tagId: data.tagId.present ? data.tagId.value : this.tagId,
+      alias: data.alias.present ? data.alias.value : this.alias,
+      normalizedAlias: data.normalizedAlias.present
+          ? data.normalizedAlias.value
+          : this.normalizedAlias,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagAliase(')
+          ..write('id: $id, ')
+          ..write('tagId: $tagId, ')
+          ..write('alias: $alias, ')
+          ..write('normalizedAlias: $normalizedAlias')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, tagId, alias, normalizedAlias);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TagAliase &&
+          other.id == this.id &&
+          other.tagId == this.tagId &&
+          other.alias == this.alias &&
+          other.normalizedAlias == this.normalizedAlias);
+}
+
+class TagAliasesCompanion extends UpdateCompanion<TagAliase> {
+  final Value<int> id;
+  final Value<int> tagId;
+  final Value<String> alias;
+  final Value<String> normalizedAlias;
+  const TagAliasesCompanion({
+    this.id = const Value.absent(),
+    this.tagId = const Value.absent(),
+    this.alias = const Value.absent(),
+    this.normalizedAlias = const Value.absent(),
+  });
+  TagAliasesCompanion.insert({
+    this.id = const Value.absent(),
+    required int tagId,
+    required String alias,
+    required String normalizedAlias,
+  }) : tagId = Value(tagId),
+       alias = Value(alias),
+       normalizedAlias = Value(normalizedAlias);
+  static Insertable<TagAliase> custom({
+    Expression<int>? id,
+    Expression<int>? tagId,
+    Expression<String>? alias,
+    Expression<String>? normalizedAlias,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (tagId != null) 'tag_id': tagId,
+      if (alias != null) 'alias': alias,
+      if (normalizedAlias != null) 'normalized_alias': normalizedAlias,
+    });
+  }
+
+  TagAliasesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? tagId,
+    Value<String>? alias,
+    Value<String>? normalizedAlias,
+  }) {
+    return TagAliasesCompanion(
+      id: id ?? this.id,
+      tagId: tagId ?? this.tagId,
+      alias: alias ?? this.alias,
+      normalizedAlias: normalizedAlias ?? this.normalizedAlias,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (tagId.present) {
+      map['tag_id'] = Variable<int>(tagId.value);
+    }
+    if (alias.present) {
+      map['alias'] = Variable<String>(alias.value);
+    }
+    if (normalizedAlias.present) {
+      map['normalized_alias'] = Variable<String>(normalizedAlias.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagAliasesCompanion(')
+          ..write('id: $id, ')
+          ..write('tagId: $tagId, ')
+          ..write('alias: $alias, ')
+          ..write('normalizedAlias: $normalizedAlias')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1328,6 +2625,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SoundBoardsTable soundBoards = $SoundBoardsTable(this);
   late final $WatchedPathsTable watchedPaths = $WatchedPathsTable(this);
   late final $BoardSoundsTable boardSounds = $BoardSoundsTable(this);
+  late final $TagCategoriesTable tagCategories = $TagCategoriesTable(this);
+  late final $TagItemsTable tagItems = $TagItemsTable(this);
+  late final $SoundTagsTable soundTags = $SoundTagsTable(this);
+  late final $TagAliasesTable tagAliases = $TagAliasesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1337,6 +2638,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     soundBoards,
     watchedPaths,
     boardSounds,
+    tagCategories,
+    tagItems,
+    soundTags,
+    tagAliases,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -1353,6 +2658,34 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('board_sounds', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'tag_categories',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('tags', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'sounds',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('sound_tags', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'tags',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('sound_tags', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'tags',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('tag_aliases', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -1397,6 +2730,24 @@ final class $$SoundsTableReferences
     ).filter((f) => f.soundId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_boardSoundsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SoundTagsTable, List<SoundTag>>
+  _soundTagsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.soundTags,
+    aliasName: $_aliasNameGenerator(db.sounds.id, db.soundTags.soundId),
+  );
+
+  $$SoundTagsTableProcessedTableManager get soundTagsRefs {
+    final manager = $$SoundTagsTableTableManager(
+      $_db,
+      $_db.soundTags,
+    ).filter((f) => f.soundId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_soundTagsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -1469,6 +2820,31 @@ class $$SoundsTableFilterComposer
           }) => $$BoardSoundsTableFilterComposer(
             $db: $db,
             $table: $db.boardSounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> soundTagsRefs(
+    Expression<bool> Function($$SoundTagsTableFilterComposer f) f,
+  ) {
+    final $$SoundTagsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.soundTags,
+      getReferencedColumn: (t) => t.soundId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundTagsTableFilterComposer(
+            $db: $db,
+            $table: $db.soundTags,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -1588,6 +2964,31 @@ class $$SoundsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> soundTagsRefs<T extends Object>(
+    Expression<T> Function($$SoundTagsTableAnnotationComposer a) f,
+  ) {
+    final $$SoundTagsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.soundTags,
+      getReferencedColumn: (t) => t.soundId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundTagsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.soundTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$SoundsTableTableManager
@@ -1603,7 +3004,7 @@ class $$SoundsTableTableManager
           $$SoundsTableUpdateCompanionBuilder,
           (Sound, $$SoundsTableReferences),
           Sound,
-          PrefetchHooks Function({bool boardSoundsRefs})
+          PrefetchHooks Function({bool boardSoundsRefs, bool soundTagsRefs})
         > {
   $$SoundsTableTableManager(_$AppDatabase db, $SoundsTable table)
     : super(
@@ -1662,31 +3063,63 @@ class $$SoundsTableTableManager
                     (e.readTable(table), $$SoundsTableReferences(db, table, e)),
               )
               .toList(),
-          prefetchHooksCallback: ({boardSoundsRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [if (boardSoundsRefs) db.boardSounds],
-              addJoins: null,
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (boardSoundsRefs)
-                    await $_getPrefetchedData<Sound, $SoundsTable, BoardSound>(
-                      currentTable: table,
-                      referencedTable: $$SoundsTableReferences
-                          ._boardSoundsRefsTable(db),
-                      managerFromTypedResult: (p0) => $$SoundsTableReferences(
-                        db,
-                        table,
-                        p0,
-                      ).boardSoundsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.soundId == item.id),
-                      typedResults: items,
-                    ),
-                ];
+          prefetchHooksCallback:
+              ({boardSoundsRefs = false, soundTagsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (boardSoundsRefs) db.boardSounds,
+                    if (soundTagsRefs) db.soundTags,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (boardSoundsRefs)
+                        await $_getPrefetchedData<
+                          Sound,
+                          $SoundsTable,
+                          BoardSound
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SoundsTableReferences
+                              ._boardSoundsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SoundsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).boardSoundsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.soundId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (soundTagsRefs)
+                        await $_getPrefetchedData<
+                          Sound,
+                          $SoundsTable,
+                          SoundTag
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SoundsTableReferences
+                              ._soundTagsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SoundsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).soundTagsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.soundId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -1703,7 +3136,7 @@ typedef $$SoundsTableProcessedTableManager =
       $$SoundsTableUpdateCompanionBuilder,
       (Sound, $$SoundsTableReferences),
       Sound,
-      PrefetchHooks Function({bool boardSoundsRefs})
+      PrefetchHooks Function({bool boardSoundsRefs, bool soundTagsRefs})
     >;
 typedef $$SoundBoardsTableCreateCompanionBuilder =
     SoundBoardsCompanion Function({
@@ -2507,6 +3940,1483 @@ typedef $$BoardSoundsTableProcessedTableManager =
       BoardSound,
       PrefetchHooks Function({bool boardId, bool soundId})
     >;
+typedef $$TagCategoriesTableCreateCompanionBuilder =
+    TagCategoriesCompanion Function({
+      Value<int> id,
+      required String name,
+      required int color,
+      Value<int> sortOrder,
+      Value<String?> description,
+    });
+typedef $$TagCategoriesTableUpdateCompanionBuilder =
+    TagCategoriesCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<int> color,
+      Value<int> sortOrder,
+      Value<String?> description,
+    });
+
+final class $$TagCategoriesTableReferences
+    extends BaseReferences<_$AppDatabase, $TagCategoriesTable, TagCategory> {
+  $$TagCategoriesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<$TagItemsTable, List<TagItem>> _tagItemsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.tagItems,
+    aliasName: $_aliasNameGenerator(
+      db.tagCategories.id,
+      db.tagItems.categoryId,
+    ),
+  );
+
+  $$TagItemsTableProcessedTableManager get tagItemsRefs {
+    final manager = $$TagItemsTableTableManager(
+      $_db,
+      $_db.tagItems,
+    ).filter((f) => f.categoryId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_tagItemsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$TagCategoriesTableFilterComposer
+    extends Composer<_$AppDatabase, $TagCategoriesTable> {
+  $$TagCategoriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> tagItemsRefs(
+    Expression<bool> Function($$TagItemsTableFilterComposer f) f,
+  ) {
+    final $$TagItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.tagItems,
+      getReferencedColumn: (t) => t.categoryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.tagItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TagCategoriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $TagCategoriesTable> {
+  $$TagCategoriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$TagCategoriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TagCategoriesTable> {
+  $$TagCategoriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get color =>
+      $composableBuilder(column: $table.color, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  Expression<T> tagItemsRefs<T extends Object>(
+    Expression<T> Function($$TagItemsTableAnnotationComposer a) f,
+  ) {
+    final $$TagItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.tagItems,
+      getReferencedColumn: (t) => t.categoryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.tagItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TagCategoriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TagCategoriesTable,
+          TagCategory,
+          $$TagCategoriesTableFilterComposer,
+          $$TagCategoriesTableOrderingComposer,
+          $$TagCategoriesTableAnnotationComposer,
+          $$TagCategoriesTableCreateCompanionBuilder,
+          $$TagCategoriesTableUpdateCompanionBuilder,
+          (TagCategory, $$TagCategoriesTableReferences),
+          TagCategory,
+          PrefetchHooks Function({bool tagItemsRefs})
+        > {
+  $$TagCategoriesTableTableManager(_$AppDatabase db, $TagCategoriesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TagCategoriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TagCategoriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TagCategoriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> color = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+              }) => TagCategoriesCompanion(
+                id: id,
+                name: name,
+                color: color,
+                sortOrder: sortOrder,
+                description: description,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                required int color,
+                Value<int> sortOrder = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+              }) => TagCategoriesCompanion.insert(
+                id: id,
+                name: name,
+                color: color,
+                sortOrder: sortOrder,
+                description: description,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TagCategoriesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({tagItemsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (tagItemsRefs) db.tagItems],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (tagItemsRefs)
+                    await $_getPrefetchedData<
+                      TagCategory,
+                      $TagCategoriesTable,
+                      TagItem
+                    >(
+                      currentTable: table,
+                      referencedTable: $$TagCategoriesTableReferences
+                          ._tagItemsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$TagCategoriesTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).tagItemsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.categoryId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$TagCategoriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TagCategoriesTable,
+      TagCategory,
+      $$TagCategoriesTableFilterComposer,
+      $$TagCategoriesTableOrderingComposer,
+      $$TagCategoriesTableAnnotationComposer,
+      $$TagCategoriesTableCreateCompanionBuilder,
+      $$TagCategoriesTableUpdateCompanionBuilder,
+      (TagCategory, $$TagCategoriesTableReferences),
+      TagCategory,
+      PrefetchHooks Function({bool tagItemsRefs})
+    >;
+typedef $$TagItemsTableCreateCompanionBuilder =
+    TagItemsCompanion Function({
+      Value<int> id,
+      required int categoryId,
+      required String name,
+      required String normalizedName,
+      Value<String?> description,
+    });
+typedef $$TagItemsTableUpdateCompanionBuilder =
+    TagItemsCompanion Function({
+      Value<int> id,
+      Value<int> categoryId,
+      Value<String> name,
+      Value<String> normalizedName,
+      Value<String?> description,
+    });
+
+final class $$TagItemsTableReferences
+    extends BaseReferences<_$AppDatabase, $TagItemsTable, TagItem> {
+  $$TagItemsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $TagCategoriesTable _categoryIdTable(_$AppDatabase db) =>
+      db.tagCategories.createAlias(
+        $_aliasNameGenerator(db.tagItems.categoryId, db.tagCategories.id),
+      );
+
+  $$TagCategoriesTableProcessedTableManager get categoryId {
+    final $_column = $_itemColumn<int>('category_id')!;
+
+    final manager = $$TagCategoriesTableTableManager(
+      $_db,
+      $_db.tagCategories,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_categoryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$SoundTagsTable, List<SoundTag>>
+  _soundTagsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.soundTags,
+    aliasName: $_aliasNameGenerator(db.tagItems.id, db.soundTags.tagId),
+  );
+
+  $$SoundTagsTableProcessedTableManager get soundTagsRefs {
+    final manager = $$SoundTagsTableTableManager(
+      $_db,
+      $_db.soundTags,
+    ).filter((f) => f.tagId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_soundTagsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TagAliasesTable, List<TagAliase>>
+  _tagAliasesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.tagAliases,
+    aliasName: $_aliasNameGenerator(db.tagItems.id, db.tagAliases.tagId),
+  );
+
+  $$TagAliasesTableProcessedTableManager get tagAliasesRefs {
+    final manager = $$TagAliasesTableTableManager(
+      $_db,
+      $_db.tagAliases,
+    ).filter((f) => f.tagId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_tagAliasesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$TagItemsTableFilterComposer
+    extends Composer<_$AppDatabase, $TagItemsTable> {
+  $$TagItemsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$TagCategoriesTableFilterComposer get categoryId {
+    final $$TagCategoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.tagCategories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagCategoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.tagCategories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> soundTagsRefs(
+    Expression<bool> Function($$SoundTagsTableFilterComposer f) f,
+  ) {
+    final $$SoundTagsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.soundTags,
+      getReferencedColumn: (t) => t.tagId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundTagsTableFilterComposer(
+            $db: $db,
+            $table: $db.soundTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> tagAliasesRefs(
+    Expression<bool> Function($$TagAliasesTableFilterComposer f) f,
+  ) {
+    final $$TagAliasesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.tagAliases,
+      getReferencedColumn: (t) => t.tagId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagAliasesTableFilterComposer(
+            $db: $db,
+            $table: $db.tagAliases,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TagItemsTableOrderingComposer
+    extends Composer<_$AppDatabase, $TagItemsTable> {
+  $$TagItemsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$TagCategoriesTableOrderingComposer get categoryId {
+    final $$TagCategoriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.tagCategories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagCategoriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.tagCategories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TagItemsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TagItemsTable> {
+  $$TagItemsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  $$TagCategoriesTableAnnotationComposer get categoryId {
+    final $$TagCategoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.tagCategories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagCategoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.tagCategories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> soundTagsRefs<T extends Object>(
+    Expression<T> Function($$SoundTagsTableAnnotationComposer a) f,
+  ) {
+    final $$SoundTagsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.soundTags,
+      getReferencedColumn: (t) => t.tagId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundTagsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.soundTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> tagAliasesRefs<T extends Object>(
+    Expression<T> Function($$TagAliasesTableAnnotationComposer a) f,
+  ) {
+    final $$TagAliasesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.tagAliases,
+      getReferencedColumn: (t) => t.tagId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagAliasesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.tagAliases,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TagItemsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TagItemsTable,
+          TagItem,
+          $$TagItemsTableFilterComposer,
+          $$TagItemsTableOrderingComposer,
+          $$TagItemsTableAnnotationComposer,
+          $$TagItemsTableCreateCompanionBuilder,
+          $$TagItemsTableUpdateCompanionBuilder,
+          (TagItem, $$TagItemsTableReferences),
+          TagItem,
+          PrefetchHooks Function({
+            bool categoryId,
+            bool soundTagsRefs,
+            bool tagAliasesRefs,
+          })
+        > {
+  $$TagItemsTableTableManager(_$AppDatabase db, $TagItemsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TagItemsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TagItemsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TagItemsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> categoryId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> normalizedName = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+              }) => TagItemsCompanion(
+                id: id,
+                categoryId: categoryId,
+                name: name,
+                normalizedName: normalizedName,
+                description: description,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int categoryId,
+                required String name,
+                required String normalizedName,
+                Value<String?> description = const Value.absent(),
+              }) => TagItemsCompanion.insert(
+                id: id,
+                categoryId: categoryId,
+                name: name,
+                normalizedName: normalizedName,
+                description: description,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TagItemsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                categoryId = false,
+                soundTagsRefs = false,
+                tagAliasesRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (soundTagsRefs) db.soundTags,
+                    if (tagAliasesRefs) db.tagAliases,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (categoryId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.categoryId,
+                                    referencedTable: $$TagItemsTableReferences
+                                        ._categoryIdTable(db),
+                                    referencedColumn: $$TagItemsTableReferences
+                                        ._categoryIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (soundTagsRefs)
+                        await $_getPrefetchedData<
+                          TagItem,
+                          $TagItemsTable,
+                          SoundTag
+                        >(
+                          currentTable: table,
+                          referencedTable: $$TagItemsTableReferences
+                              ._soundTagsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$TagItemsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).soundTagsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.tagId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (tagAliasesRefs)
+                        await $_getPrefetchedData<
+                          TagItem,
+                          $TagItemsTable,
+                          TagAliase
+                        >(
+                          currentTable: table,
+                          referencedTable: $$TagItemsTableReferences
+                              ._tagAliasesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$TagItemsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).tagAliasesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.tagId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$TagItemsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TagItemsTable,
+      TagItem,
+      $$TagItemsTableFilterComposer,
+      $$TagItemsTableOrderingComposer,
+      $$TagItemsTableAnnotationComposer,
+      $$TagItemsTableCreateCompanionBuilder,
+      $$TagItemsTableUpdateCompanionBuilder,
+      (TagItem, $$TagItemsTableReferences),
+      TagItem,
+      PrefetchHooks Function({
+        bool categoryId,
+        bool soundTagsRefs,
+        bool tagAliasesRefs,
+      })
+    >;
+typedef $$SoundTagsTableCreateCompanionBuilder =
+    SoundTagsCompanion Function({
+      required int soundId,
+      required int tagId,
+      Value<DateTime> addedAt,
+      Value<int> rowid,
+    });
+typedef $$SoundTagsTableUpdateCompanionBuilder =
+    SoundTagsCompanion Function({
+      Value<int> soundId,
+      Value<int> tagId,
+      Value<DateTime> addedAt,
+      Value<int> rowid,
+    });
+
+final class $$SoundTagsTableReferences
+    extends BaseReferences<_$AppDatabase, $SoundTagsTable, SoundTag> {
+  $$SoundTagsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $SoundsTable _soundIdTable(_$AppDatabase db) => db.sounds.createAlias(
+    $_aliasNameGenerator(db.soundTags.soundId, db.sounds.id),
+  );
+
+  $$SoundsTableProcessedTableManager get soundId {
+    final $_column = $_itemColumn<int>('sound_id')!;
+
+    final manager = $$SoundsTableTableManager(
+      $_db,
+      $_db.sounds,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_soundIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $TagItemsTable _tagIdTable(_$AppDatabase db) => db.tagItems
+      .createAlias($_aliasNameGenerator(db.soundTags.tagId, db.tagItems.id));
+
+  $$TagItemsTableProcessedTableManager get tagId {
+    final $_column = $_itemColumn<int>('tag_id')!;
+
+    final manager = $$TagItemsTableTableManager(
+      $_db,
+      $_db.tagItems,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tagIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SoundTagsTableFilterComposer
+    extends Composer<_$AppDatabase, $SoundTagsTable> {
+  $$SoundTagsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$SoundsTableFilterComposer get soundId {
+    final $$SoundsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.soundId,
+      referencedTable: $db.sounds,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundsTableFilterComposer(
+            $db: $db,
+            $table: $db.sounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagItemsTableFilterComposer get tagId {
+    final $$TagItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.tagItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SoundTagsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SoundTagsTable> {
+  $$SoundTagsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$SoundsTableOrderingComposer get soundId {
+    final $$SoundsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.soundId,
+      referencedTable: $db.sounds,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundsTableOrderingComposer(
+            $db: $db,
+            $table: $db.sounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagItemsTableOrderingComposer get tagId {
+    final $$TagItemsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagItemsTableOrderingComposer(
+            $db: $db,
+            $table: $db.tagItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SoundTagsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SoundTagsTable> {
+  $$SoundTagsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<DateTime> get addedAt =>
+      $composableBuilder(column: $table.addedAt, builder: (column) => column);
+
+  $$SoundsTableAnnotationComposer get soundId {
+    final $$SoundsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.soundId,
+      referencedTable: $db.sounds,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.sounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagItemsTableAnnotationComposer get tagId {
+    final $$TagItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.tagItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SoundTagsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SoundTagsTable,
+          SoundTag,
+          $$SoundTagsTableFilterComposer,
+          $$SoundTagsTableOrderingComposer,
+          $$SoundTagsTableAnnotationComposer,
+          $$SoundTagsTableCreateCompanionBuilder,
+          $$SoundTagsTableUpdateCompanionBuilder,
+          (SoundTag, $$SoundTagsTableReferences),
+          SoundTag,
+          PrefetchHooks Function({bool soundId, bool tagId})
+        > {
+  $$SoundTagsTableTableManager(_$AppDatabase db, $SoundTagsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SoundTagsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SoundTagsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SoundTagsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> soundId = const Value.absent(),
+                Value<int> tagId = const Value.absent(),
+                Value<DateTime> addedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SoundTagsCompanion(
+                soundId: soundId,
+                tagId: tagId,
+                addedAt: addedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int soundId,
+                required int tagId,
+                Value<DateTime> addedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SoundTagsCompanion.insert(
+                soundId: soundId,
+                tagId: tagId,
+                addedAt: addedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SoundTagsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({soundId = false, tagId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (soundId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.soundId,
+                                referencedTable: $$SoundTagsTableReferences
+                                    ._soundIdTable(db),
+                                referencedColumn: $$SoundTagsTableReferences
+                                    ._soundIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+                    if (tagId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.tagId,
+                                referencedTable: $$SoundTagsTableReferences
+                                    ._tagIdTable(db),
+                                referencedColumn: $$SoundTagsTableReferences
+                                    ._tagIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SoundTagsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SoundTagsTable,
+      SoundTag,
+      $$SoundTagsTableFilterComposer,
+      $$SoundTagsTableOrderingComposer,
+      $$SoundTagsTableAnnotationComposer,
+      $$SoundTagsTableCreateCompanionBuilder,
+      $$SoundTagsTableUpdateCompanionBuilder,
+      (SoundTag, $$SoundTagsTableReferences),
+      SoundTag,
+      PrefetchHooks Function({bool soundId, bool tagId})
+    >;
+typedef $$TagAliasesTableCreateCompanionBuilder =
+    TagAliasesCompanion Function({
+      Value<int> id,
+      required int tagId,
+      required String alias,
+      required String normalizedAlias,
+    });
+typedef $$TagAliasesTableUpdateCompanionBuilder =
+    TagAliasesCompanion Function({
+      Value<int> id,
+      Value<int> tagId,
+      Value<String> alias,
+      Value<String> normalizedAlias,
+    });
+
+final class $$TagAliasesTableReferences
+    extends BaseReferences<_$AppDatabase, $TagAliasesTable, TagAliase> {
+  $$TagAliasesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $TagItemsTable _tagIdTable(_$AppDatabase db) => db.tagItems
+      .createAlias($_aliasNameGenerator(db.tagAliases.tagId, db.tagItems.id));
+
+  $$TagItemsTableProcessedTableManager get tagId {
+    final $_column = $_itemColumn<int>('tag_id')!;
+
+    final manager = $$TagItemsTableTableManager(
+      $_db,
+      $_db.tagItems,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tagIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$TagAliasesTableFilterComposer
+    extends Composer<_$AppDatabase, $TagAliasesTable> {
+  $$TagAliasesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get alias => $composableBuilder(
+    column: $table.alias,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get normalizedAlias => $composableBuilder(
+    column: $table.normalizedAlias,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$TagItemsTableFilterComposer get tagId {
+    final $$TagItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.tagItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TagAliasesTableOrderingComposer
+    extends Composer<_$AppDatabase, $TagAliasesTable> {
+  $$TagAliasesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get alias => $composableBuilder(
+    column: $table.alias,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get normalizedAlias => $composableBuilder(
+    column: $table.normalizedAlias,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$TagItemsTableOrderingComposer get tagId {
+    final $$TagItemsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagItemsTableOrderingComposer(
+            $db: $db,
+            $table: $db.tagItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TagAliasesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TagAliasesTable> {
+  $$TagAliasesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get alias =>
+      $composableBuilder(column: $table.alias, builder: (column) => column);
+
+  GeneratedColumn<String> get normalizedAlias => $composableBuilder(
+    column: $table.normalizedAlias,
+    builder: (column) => column,
+  );
+
+  $$TagItemsTableAnnotationComposer get tagId {
+    final $$TagItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.tagItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TagAliasesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TagAliasesTable,
+          TagAliase,
+          $$TagAliasesTableFilterComposer,
+          $$TagAliasesTableOrderingComposer,
+          $$TagAliasesTableAnnotationComposer,
+          $$TagAliasesTableCreateCompanionBuilder,
+          $$TagAliasesTableUpdateCompanionBuilder,
+          (TagAliase, $$TagAliasesTableReferences),
+          TagAliase,
+          PrefetchHooks Function({bool tagId})
+        > {
+  $$TagAliasesTableTableManager(_$AppDatabase db, $TagAliasesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TagAliasesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TagAliasesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TagAliasesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> tagId = const Value.absent(),
+                Value<String> alias = const Value.absent(),
+                Value<String> normalizedAlias = const Value.absent(),
+              }) => TagAliasesCompanion(
+                id: id,
+                tagId: tagId,
+                alias: alias,
+                normalizedAlias: normalizedAlias,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int tagId,
+                required String alias,
+                required String normalizedAlias,
+              }) => TagAliasesCompanion.insert(
+                id: id,
+                tagId: tagId,
+                alias: alias,
+                normalizedAlias: normalizedAlias,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TagAliasesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({tagId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (tagId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.tagId,
+                                referencedTable: $$TagAliasesTableReferences
+                                    ._tagIdTable(db),
+                                referencedColumn: $$TagAliasesTableReferences
+                                    ._tagIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$TagAliasesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TagAliasesTable,
+      TagAliase,
+      $$TagAliasesTableFilterComposer,
+      $$TagAliasesTableOrderingComposer,
+      $$TagAliasesTableAnnotationComposer,
+      $$TagAliasesTableCreateCompanionBuilder,
+      $$TagAliasesTableUpdateCompanionBuilder,
+      (TagAliase, $$TagAliasesTableReferences),
+      TagAliase,
+      PrefetchHooks Function({bool tagId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2519,4 +5429,12 @@ class $AppDatabaseManager {
       $$WatchedPathsTableTableManager(_db, _db.watchedPaths);
   $$BoardSoundsTableTableManager get boardSounds =>
       $$BoardSoundsTableTableManager(_db, _db.boardSounds);
+  $$TagCategoriesTableTableManager get tagCategories =>
+      $$TagCategoriesTableTableManager(_db, _db.tagCategories);
+  $$TagItemsTableTableManager get tagItems =>
+      $$TagItemsTableTableManager(_db, _db.tagItems);
+  $$SoundTagsTableTableManager get soundTags =>
+      $$SoundTagsTableTableManager(_db, _db.soundTags);
+  $$TagAliasesTableTableManager get tagAliases =>
+      $$TagAliasesTableTableManager(_db, _db.tagAliases);
 }
