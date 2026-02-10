@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
@@ -21,6 +23,7 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
   late Color? _selectedColor;
   late double _volume;
   late final TextEditingController _displayNameController;
+  Timer? _displayNameDebounce;
 
   @override
   void initState() {
@@ -34,6 +37,7 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
 
   @override
   void dispose() {
+    _displayNameDebounce?.cancel();
     _displayNameController.dispose();
     super.dispose();
   }
@@ -79,6 +83,13 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
       displayName: trimmed.isEmpty ? null : trimmed,
       updateDisplayName: true,
     );
+  }
+
+  void _scheduleDisplayNameUpdate(String _) {
+    _displayNameDebounce?.cancel();
+    _displayNameDebounce = Timer(const Duration(milliseconds: 400), () {
+      _updateDisplayName();
+    });
   }
 
   @override
@@ -157,21 +168,33 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
                     const SizedBox(height: 16),
                     TextField(
                       controller: _displayNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nom affiché sur le pad',
-                        helperText: 'Laisser vide pour utiliser le titre',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        labelText: 'Nom affiché :',
+                        hintText: sound.title,
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                        ),
+                        suffixIcon: _displayNameController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  setState(() {
+                                    _displayNameController.clear();
+                                  });
+                                  _updateDisplayName();
+                                },
+                              )
+                            : null,
                       ),
                       textInputAction: TextInputAction.done,
+                      onChanged: (value) {
+                        setState(() {});
+                        _scheduleDisplayNameUpdate(value);
+                      },
                       onSubmitted: (_) => _updateDisplayName(),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: OutlinedButton(
-                        onPressed: _updateDisplayName,
-                        child: const Text('Enregistrer le nom'),
-                      ),
                     ),
                     const SizedBox(height: 16),
                     Text(
