@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/database/database.dart' as db;
+import '../../../../core/utils/string_utils.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -28,7 +29,9 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   late final AddSoundToBoardUseCase _addSoundToBoardUseCase;
   List<Sound> _availableSounds = [];
   Set<int> _soundsInBoard = {};
-  Set<int> _tagMatchedSoundIds = {};
+  /// IDs des sons correspondant à la recherche (AND entre tokens, tag ou titre par token).
+  /// null = pas de filtre (requête vide ou tokens vides).
+  Set<int>? _searchMatchedSoundIds;
   final Map<int, List<TagItem>> _soundTags = {};
   List<TagCategoryWithTags> _tagCatalog = [];
   bool _isLoading = true;
@@ -174,34 +177,75 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     }
   }
 
-  List<Sound> get _filteredSounds {
-    if (_searchQuery.isEmpty) {
-      return _availableSounds;
-    }
-    final query = _searchQuery.toLowerCase();
-    return _availableSounds.where((sound) {
-      final matchesText = sound.title.toLowerCase().contains(query) ||
-          sound.filePath.toLowerCase().contains(query);
-      final matchesTag = _tagMatchedSoundIds.contains(sound.id);
-      return matchesText || matchesTag;
-    }).toList();
+  /// Extrait les tokens de recherche (séparateurs: espaces, virgules).
+  /// Exclut les chaînes vides et les tokens de moins de 2 caractères.
+  List<String> _parseSearchTokens(String query) {
+    return query
+        .split(RegExp(r'[\s,]+'))
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty && t.length >= 2)
+        .toList();
   }
 
-  void _scheduleTagSearch(String query) {
+  /// Vérifie si un son correspond à un token (tag/alias ou titre/displayName/filePath).
+  bool _soundMatchesToken(Sound sound, String token) {
+    final normalizedToken = normalizeForSearch(token);
+    final matchInTitle = normalizeForSearch(sound.title).contains(normalizedToken);
+    final matchInDisplayName = sound.displayName != null &&
+        normalizeForSearch(sound.displayName!).contains(normalizedToken);
+    final matchInPath = normalizeForSearch(sound.filePath).contains(normalizedToken);
+    return matchInTitle || matchInDisplayName || matchInPath;
+  }
+
+  List<Sound> get _filteredSounds {
+    if (_searchQuery.trim().isEmpty) {
+      return _availableSounds;
+    }
+    if (_searchMatchedSoundIds == null) {
+      return _availableSounds;
+    }
+    return _availableSounds
+        .where((s) => _searchMatchedSoundIds!.contains(s.id))
+        .toList();
+  }
+
+  void _scheduleSearch(String query) {
     _searchDebounce?.cancel();
     if (query.trim().isEmpty) {
       setState(() {
-        _tagMatchedSoundIds = {};
+        _searchMatchedSoundIds = null;
       });
       return;
     }
     _searchDebounce = Timer(const Duration(milliseconds: 250), () async {
-      final results = await _repository.findSoundIdsByTagQuery(query);
-      if (!mounted) {
+      final tokens = _parseSearchTokens(query);
+      if (tokens.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _searchMatchedSoundIds = null;
+        });
         return;
       }
+
+      Set<int>? intersection;
+      for (final token in tokens) {
+        final tagIds = await _repository.findSoundIdsByTagQuery(token);
+        final titleIds = _availableSounds
+            .where((s) => _soundMatchesToken(s, token))
+            .map((s) => s.id)
+            .toSet();
+        final tokenMatchIds = tagIds.union(titleIds);
+
+        if (intersection == null) {
+          intersection = tokenMatchIds;
+        } else {
+          intersection = intersection.intersection(tokenMatchIds);
+        }
+      }
+
+      if (!mounted) return;
       setState(() {
-        _tagMatchedSoundIds = results;
+        _searchMatchedSoundIds = intersection ?? {};
       });
     });
   }
@@ -236,7 +280,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                 setState(() {
                   _searchQuery = value;
                 });
-                _scheduleTagSearch(value);
+                _scheduleSearch(value);
               },
             ),
           ),
