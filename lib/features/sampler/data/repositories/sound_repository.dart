@@ -3,19 +3,24 @@ import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../domain/entities/watched_path.dart';
 import '../datasources/local_sound_datasource.dart';
+import '../datasources/local_tag_datasource.dart';
 import '../models/indexing_progress.dart';
 import '../../../../core/database/database.dart' as db;
+import '../../domain/entities/tag_category_with_tags.dart';
+import '../../domain/entities/tag_item.dart';
 
 /// Repository pour la gestion des sons
 class SoundRepository {
   final LocalSoundDataSource _soundDataSource;
   final LocalWatchedPathDataSource _watchedPathDataSource;
   final LocalSoundBoardDataSource _soundBoardDataSource;
+  final LocalTagDataSource _tagDataSource;
 
   SoundRepository(
     this._soundDataSource,
     this._watchedPathDataSource,
     this._soundBoardDataSource,
+    this._tagDataSource,
   );
 
   /// Factory method pour créer un repository à partir d'une base de données
@@ -24,7 +29,13 @@ class SoundRepository {
     final soundDataSource = LocalSoundDataSource(database);
     final watchedPathDataSource = LocalWatchedPathDataSource(database);
     final soundBoardDataSource = LocalSoundBoardDataSource(database);
-    return SoundRepository(soundDataSource, watchedPathDataSource, soundBoardDataSource);
+    final tagDataSource = LocalTagDataSource(database);
+    return SoundRepository(
+      soundDataSource,
+      watchedPathDataSource,
+      soundBoardDataSource,
+      tagDataSource,
+    );
   }
 
   /// Récupère tous les sons
@@ -170,6 +181,26 @@ class SoundRepository {
   /// Supprime une soundboard
   Future<void> deleteSoundBoard(int boardId) async {
     await _soundBoardDataSource.deleteBoard(boardId);
+  }
+
+  /// Récupère le catalogue des tags (catégories + tags)
+  Future<List<TagCategoryWithTags>> getTagCatalog() async {
+    return await _tagDataSource.getCatalog();
+  }
+
+  /// Récupère les tags associés à un son
+  Future<List<TagItem>> getTagsForSound(int soundId) async {
+    return await _tagDataSource.getTagsForSound(soundId);
+  }
+
+  /// Met à jour les tags d'un son
+  Future<void> setTagsForSound(int soundId, List<int> tagIds) async {
+    await _tagDataSource.setTagsForSound(soundId, tagIds);
+  }
+
+  /// Recherche des sons par tags/synonymes
+  Future<Set<int>> findSoundIdsByTagQuery(String query) async {
+    return await _tagDataSource.findSoundIdsByTagQuery(query);
   }
 }
 

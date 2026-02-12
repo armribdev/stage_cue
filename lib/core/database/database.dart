@@ -128,7 +128,7 @@ class AppDatabase extends _$AppDatabase {
         name: 'AMBIANCE',
         color: 0xFF7E57C2,
         sortOrder: 4,
-        description: 'Décors sonores ou boucles longues.',
+        description: 'Décors sonores.',
       );
       await insertCategory(
         name: 'EMOTION_STYLE',
@@ -160,14 +160,23 @@ class AppDatabase extends _$AppDatabase {
       }
 
       // ACTION
-      await insertTag('Casser / Briser', 'ACTION');
+      await insertTag('Casser', 'ACTION');
       await insertTag('Claquer', 'ACTION');
-      await insertTag('Ouvrir / Fermer', 'ACTION');
+      await insertTag('Ouvrir', 'ACTION');
+      await insertTag('Fermer', 'ACTION');
       await insertTag('Impact', 'ACTION');
       await insertTag('Glisser', 'ACTION');
-      await insertTag('Frapper / Toquer', 'ACTION');
+      await insertTag('Frapper', 'ACTION');
       await insertTag('Exploser', 'ACTION');
       await insertTag('Actionner', 'ACTION');
+      await insertTag('Marcher', 'ACTION');
+      await insertTag('Courir', 'ACTION');
+      await insertTag('Rire', 'ACTION');
+      await insertTag('Pleurer', 'ACTION');
+      await insertTag('Crier', 'ACTION');
+      await insertTag('Chuchoter', 'ACTION');
+      await insertTag('Siffler', 'ACTION');
+      await insertTag('Applaudir', 'ACTION');
       // OBJET
       await insertTag('Porte', 'OBJET');
       await insertTag('Téléphone', 'OBJET');
@@ -177,26 +186,62 @@ class AppDatabase extends _$AppDatabase {
       await insertTag('Clés', 'OBJET');
       await insertTag('Outil', 'OBJET');
       await insertTag('Cuisine', 'OBJET');
+      await insertTag('Chaise', 'OBJET');
+      await insertTag('Table', 'OBJET');
+      await insertTag('Fenêtre', 'OBJET');
+      await insertTag('Livre', 'OBJET');
+      await insertTag('Lit', 'OBJET');
       // MATIERE
       await insertTag('Bois', 'MATIERE');
       await insertTag('Métal', 'MATIERE');
       await insertTag('Verre', 'MATIERE');
-      await insertTag('Eau / Liquide', 'MATIERE');
-      await insertTag('Papier / Plastique', 'MATIERE');
-      await insertTag('Gravier / Terre', 'MATIERE');
-      await insertTag('Électronique / Synthétique', 'MATIERE');
+      await insertTag('Eau', 'MATIERE');
+      await insertTag('Papier', 'MATIERE');
+      await insertTag('Gravier', 'MATIERE');
+      await insertTag('Électronique', 'MATIERE');
+      await insertTag('Plastique', 'MATIERE');
+      await insertTag('Tissu', 'MATIERE');
+      await insertTag('Pierre', 'MATIERE');
+      await insertTag('Caoutchouc', 'MATIERE');
       // AMBIANCE
       await insertTag('Nature', 'AMBIANCE');
       await insertTag('Urbain', 'AMBIANCE');
       await insertTag('Public', 'AMBIANCE');
-      await insertTag('Horreur / Mystère', 'AMBIANCE');
+      await insertTag('Horreur', 'AMBIANCE');
       await insertTag('Transport', 'AMBIANCE');
-      await insertTag('Médiéval / Fantastique', 'AMBIANCE');
+      await insertTag('Médiéval', 'AMBIANCE');
+      await insertTag('Fantastique', 'AMBIANCE');
+      await insertTag('Antiquité', 'AMBIANCE');
+      await insertTag('Renaissance', 'AMBIANCE');
+      await insertTag('Époque victorienne', 'AMBIANCE');
+      await insertTag('Années 20', 'AMBIANCE');
+      await insertTag('Années 50', 'AMBIANCE');
+      await insertTag('Années 80', 'AMBIANCE');
+      await insertTag('Futuriste', 'AMBIANCE');
+      await insertTag('Intérieur', 'AMBIANCE');
+      await insertTag('Extérieur', 'AMBIANCE');
+      await insertTag('Foule', 'AMBIANCE');
+      await insertTag('Silence', 'AMBIANCE');
+      await insertTag('Pluie', 'AMBIANCE');
+      await insertTag('Orage', 'AMBIANCE');
+      await insertTag('Mer', 'AMBIANCE');
+      await insertTag('Forêt', 'AMBIANCE');
+      await insertTag('Nuit', 'AMBIANCE');
+      await insertTag('Jour', 'AMBIANCE');
       // EMOTION_STYLE
-      await insertTag('Comédie / Cartoon', 'EMOTION_STYLE');
-      await insertTag('Tension / Suspense', 'EMOTION_STYLE');
-      await insertTag('Magie / Féerie', 'EMOTION_STYLE');
+      await insertTag('Comédie', 'EMOTION_STYLE');
+      await insertTag('Tension', 'EMOTION_STYLE');
+      await insertTag('Magie', 'EMOTION_STYLE');
       await insertTag('Urgence', 'EMOTION_STYLE');
+      await insertTag('Romantique', 'EMOTION_STYLE');
+      await insertTag('Triste', 'EMOTION_STYLE');
+      await insertTag('Épique', 'EMOTION_STYLE');
+      await insertTag('Drame', 'EMOTION_STYLE');
+      await insertTag('Mystérieux', 'EMOTION_STYLE');
+      await insertTag('Oppressant', 'EMOTION_STYLE');
+      await insertTag('Sombre', 'EMOTION_STYLE');
+      await insertTag('Léger', 'EMOTION_STYLE');
+      await insertTag('Poétique', 'EMOTION_STYLE');
 
       Future<void> insertAlias(String alias, String tagName) async {
         final tagId = tagByName[tagName]!;
@@ -210,16 +255,64 @@ class AppDatabase extends _$AppDatabase {
       await insertAlias('chute', 'Impact');
       await insertAlias('heurter', 'Impact');
       await insertAlias('impact', 'Impact');
+      await insertAlias('briser', 'Casser');
       await insertAlias('coup de feu', 'Exploser');
       await insertAlias('tir', 'Exploser');
       await insertAlias('détonation', 'Exploser');
       await insertAlias('explosion', 'Exploser');
       await insertAlias('déraper', 'Glisser');
       await insertAlias('glissement', 'Glisser');
+      await insertAlias('toquer', 'Frapper');
       await insertAlias('gifle', 'Claquer');
       await insertAlias('porte qui claque', 'Claquer');
-      await insertAlias('bris de verre', 'Casser / Briser');
-      await insertAlias('verre cassé', 'Casser / Briser');
+      await insertAlias('bris de verre', 'Casser');
+      await insertAlias('verre cassé', 'Casser');
+      await insertAlias('liquide', 'Eau');
+      await insertAlias('plastique', 'Plastique');
+      await insertAlias('synthétique', 'Plastique');
+      await insertAlias('terre', 'Gravier');
+      await insertAlias('cailloux', 'Gravier');
+      await insertAlias('caoutchouc', 'Caoutchouc');
+      await insertAlias('mystère', 'Mystérieux');
+      await insertAlias('fantasy', 'Fantastique');
+      await insertAlias('ville', 'Urbain');
+      await insertAlias('rue', 'Urbain');
+      await insertAlias('extérieur', 'Extérieur');
+      await insertAlias('intérieur', 'Intérieur');
+      await insertAlias('applaudissements', 'Applaudir');
+      await insertAlias('rire', 'Rire');
+      await insertAlias('rires', 'Rire');
+      await insertAlias('pleurs', 'Pleurer');
+      await insertAlias('crier', 'Crier');
+      await insertAlias('hurler', 'Crier');
+      await insertAlias('chuchotement', 'Chuchoter');
+      await insertAlias('sifflement', 'Siffler');
+      await insertAlias('pas', 'Marcher');
+      await insertAlias('course', 'Courir');
+      await insertAlias('auto', 'Voiture');
+      await insertAlias('bagnole', 'Voiture');
+      await insertAlias('portable', 'Téléphone');
+      await insertAlias('téléphone portable', 'Téléphone');
+      await insertAlias('clef', 'Clés');
+      await insertAlias('clé', 'Clés');
+      await insertAlias('forêt', 'Forêt');
+      await insertAlias('pluie', 'Pluie');
+      await insertAlias('orage', 'Orage');
+      await insertAlias('mer', 'Mer');
+      await insertAlias('nuit', 'Nuit');
+      await insertAlias('jour', 'Jour');
+      await insertAlias('sf', 'Futuriste');
+      await insertAlias('science fiction', 'Futuriste');
+      await insertAlias('science-fiction', 'Futuriste');
+      await insertAlias('cartoon', 'Comédie');
+      await insertAlias('burlesque', 'Comédie');
+      await insertAlias('suspense', 'Tension');
+      await insertAlias('féerie', 'Magie');
+      await insertAlias('mélancolique', 'Triste');
+      await insertAlias('héroïque', 'Épique');
+      await insertAlias('dramatique', 'Drame');
+      await insertAlias('tragique', 'Drame');
+      await insertAlias('enjoué', 'Léger');
     });
   }
 

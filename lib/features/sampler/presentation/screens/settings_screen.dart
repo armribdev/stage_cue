@@ -7,7 +7,10 @@ import '../../../../core/database/database.dart' as db;
 import '../../../../core/database/sounds.dart' as db_sounds;
 import '../../data/repositories/sound_repository.dart';
 import '../../data/datasources/local_sound_datasource.dart';
+import '../../data/datasources/local_tag_datasource.dart';
 import '../../data/models/indexing_progress.dart';
+import '../../domain/entities/tag_category_with_tags.dart';
+import '../../domain/entities/tag_item.dart';
 import '../../domain/entities/watched_path.dart' as domain;
 
 /// Écran des paramètres
@@ -29,11 +32,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final SoundRepository _repository;
   // Suivi de la progression d'indexation par chemin
   final Map<String, IndexingProgress> _indexingProgress = {};
+  List<TagCategoryWithTags> _tagCatalog = [];
+  bool _isTagCatalogLoading = true;
+  final Map<int, List<TagItem>> _soundTags = {};
 
   @override
   void initState() {
     super.initState();
     _initializeRepository();
+    _loadTagCatalog();
     _loadDatabaseInfo();
   }
 
@@ -41,7 +48,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final soundDataSource = LocalSoundDataSource(widget.database);
     final watchedPathDataSource = LocalWatchedPathDataSource(widget.database);
     final soundBoardDataSource = LocalSoundBoardDataSource(widget.database);
-    _repository = SoundRepository(soundDataSource, watchedPathDataSource, soundBoardDataSource);
+    final tagDataSource = LocalTagDataSource(widget.database);
+    _repository = SoundRepository(
+      soundDataSource,
+      watchedPathDataSource,
+      soundBoardDataSource,
+      tagDataSource,
+    );
   }
 
   Future<void> _loadDatabaseInfo() async {
@@ -72,6 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _dbSize = dbSize;
         _isLoading = false;
       });
+      await _loadSoundTags();
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -82,6 +96,177 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     }
+  }
+
+  Future<void> _loadTagCatalog() async {
+    setState(() {
+      _isTagCatalogLoading = true;
+    });
+    final catalog = await _repository.getTagCatalog();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _tagCatalog = catalog;
+      _isTagCatalogLoading = false;
+    });
+  }
+
+  Future<void> _loadSoundTags() async {
+    if (_sounds.isEmpty) {
+      setState(() {
+        _soundTags.clear();
+      });
+      return;
+    }
+    final entries = await Future.wait(
+      _sounds.map((sound) async {
+        final tags = await _repository.getTagsForSound(sound.id);
+        return MapEntry(sound.id, tags);
+      }),
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _soundTags
+        ..clear()
+        ..addEntries(entries);
+    });
+  }
+
+  Future<void> _editSoundTags(db.Sound sound) async {
+    if (_isTagCatalogLoading) {
+      return;
+    }
+    final initialTags = _soundTags[sound.id] ?? [];
+    final selected = initialTags.map((t) => t.id).toSet();
+    final updated = await showModalBottomSheet<Set<int>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (dialogContext) {
+        return DraggableScrollableSheet(
+          expand: false,
+          maxChildSize: 0.9,
+          minChildSize: 0.4,
+          initialChildSize: 0.6,
+          builder: (context, scrollController) {
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: StatefulBuilder(
+                        builder: (context, setDialogState) {
+                          if (_tagCatalog.isEmpty) {
+                            return const Center(child: Text('Aucun tag disponible'));
+                          }
+                          return SingleChildScrollView(
+                            controller: scrollController,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (final category in _tagCatalog) ...[
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8.0, bottom: 4),
+                                    child: Text(
+                                      category.category.name,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 0,
+                                    children: [
+                                      for (final tag in category.tags)
+                                        FilterChip(
+                                          label: Text(tag.name),
+                                          selected: selected.contains(tag.id),
+                                          backgroundColor:
+                                              Color(category.category.color).withAlpha(24),
+                                          selectedColor:
+                                              Color(category.category.color).withAlpha(64),
+                                          checkmarkColor: Color(category.category.color),
+                                          side: BorderSide(
+                                            color: Color(category.category.color),
+                                          ),
+                                          onSelected: (value) {
+                                            setDialogState(() {
+                                              if (value) {
+                                                selected.add(tag.id);
+                                              } else {
+                                                selected.remove(tag.id);
+                                              }
+                                            });
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          child: const Text('Annuler'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(selected),
+                          child: const Text('Enregistrer'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (updated == null) {
+      return;
+    }
+    await _repository.setTagsForSound(sound.id, updated.toList());
+    await _loadSoundTags();
+  }
+
+  Color? _getCategoryColor(int categoryId) {
+    for (final category in _tagCatalog) {
+      if (category.category.id == categoryId) {
+        return Color(category.category.color);
+      }
+    }
+    return null;
+  }
+
+  Widget _buildTagChip(TagItem tag) {
+    final color = _getCategoryColor(tag.categoryId);
+    return Chip(
+      label: Text(
+        tag.name,
+        style: const TextStyle(fontSize: 11),
+      ),
+      visualDensity: VisualDensity.compact,
+      backgroundColor: color?.withAlpha(24),
+      side: color == null ? null : BorderSide(color: color),
+    );
   }
 
   Future<void> _addDirectory() async {
@@ -563,6 +748,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             itemCount: _sounds.length,
                             itemBuilder: (context, index) {
                               final sound = _sounds[index];
+                              final tags = _soundTags[sound.id] ?? [];
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 8),
                                 child: ListTile(
@@ -585,6 +771,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                       ),
+                                      if (tags.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: -6,
+                                          children: [
+                                            for (final tag in tags) _buildTagChip(tag),
+                                          ],
+                                        ),
+                                      ],
                                       const SizedBox(height: 2),
                                       Text('Type: ${_getSoundTypeName(sound.type)}'),
                                       const SizedBox(height: 2),
@@ -596,6 +792,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         ),
                                       ),
                                     ],
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.label),
+                                    tooltip: 'Gérer les tags',
+                                    onPressed: _isTagCatalogLoading
+                                        ? null
+                                        : () => _editSoundTags(sound),
                                   ),
                                   isThreeLine: true,
                                 ),
