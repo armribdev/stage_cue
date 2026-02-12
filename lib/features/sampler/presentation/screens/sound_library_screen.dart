@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
+import '../../domain/entities/tag_category_with_tags.dart';
+import '../../domain/entities/tag_item.dart';
 import '../../domain/usecases/add_sound_to_board_usecase.dart';
 
 /// Écran pour ajouter un bruitage à la board
@@ -25,13 +28,18 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   late final AddSoundToBoardUseCase _addSoundToBoardUseCase;
   List<Sound> _availableSounds = [];
   Set<int> _soundsInBoard = {};
+  Set<int> _tagMatchedSoundIds = {};
+  final Map<int, List<TagItem>> _soundTags = {};
+  List<TagCategoryWithTags> _tagCatalog = [];
   bool _isLoading = true;
   String _searchQuery = '';
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
     _initializeRepository();
+    _loadTagCatalog();
     _loadSounds();
   }
 
@@ -63,6 +71,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
         _soundsInBoard = boardSoundIds;
         _isLoading = false;
       });
+      await _loadTagsForSounds(availableSounds);
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -99,6 +108,61 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     }
   }
 
+  Future<void> _loadTagsForSounds(List<Sound> sounds) async {
+    if (sounds.isEmpty) {
+      setState(() {
+        _soundTags.clear();
+      });
+      return;
+    }
+    final entries = await Future.wait(
+      sounds.map((sound) async {
+        final tags = await _repository.getTagsForSound(sound.id);
+        return MapEntry(sound.id, tags);
+      }),
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _soundTags
+        ..clear()
+        ..addEntries(entries);
+    });
+  }
+
+  Future<void> _loadTagCatalog() async {
+    final catalog = await _repository.getTagCatalog();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _tagCatalog = catalog;
+    });
+  }
+
+  Color? _getCategoryColor(int categoryId) {
+    for (final category in _tagCatalog) {
+      if (category.category.id == categoryId) {
+        return Color(category.category.color);
+      }
+    }
+    return null;
+  }
+
+  Widget _buildTagChip(TagItem tag) {
+    final color = _getCategoryColor(tag.categoryId);
+    return Chip(
+      label: Text(
+        tag.name,
+        style: const TextStyle(fontSize: 11),
+      ),
+      visualDensity: VisualDensity.compact,
+      backgroundColor: color?.withAlpha(24),
+      side: color == null ? null : BorderSide(color: color),
+    );
+  }
+
   String _getSoundTypeName(SoundType type) {
     switch (type) {
       case SoundType.soundEffect:
@@ -116,9 +180,36 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     }
     final query = _searchQuery.toLowerCase();
     return _availableSounds.where((sound) {
-      return sound.title.toLowerCase().contains(query) ||
+      final matchesText = sound.title.toLowerCase().contains(query) ||
           sound.filePath.toLowerCase().contains(query);
+      final matchesTag = _tagMatchedSoundIds.contains(sound.id);
+      return matchesText || matchesTag;
     }).toList();
+  }
+
+  void _scheduleTagSearch(String query) {
+    _searchDebounce?.cancel();
+    if (query.trim().isEmpty) {
+      setState(() {
+        _tagMatchedSoundIds = {};
+      });
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () async {
+      final results = await _repository.findSoundIdsByTagQuery(query);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _tagMatchedSoundIds = results;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
   }
 
   @override
@@ -145,6 +236,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                 setState(() {
                   _searchQuery = value;
                 });
+                _scheduleTagSearch(value);
               },
             ),
           ),
@@ -180,6 +272,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                         itemBuilder: (context, index) {
                           final sound = _filteredSounds[index];
                           final isInBoard = _soundsInBoard.contains(sound.id);
+                          final tags = _soundTags[sound.id] ?? [];
 
                           return Card(
                             margin: const EdgeInsets.symmetric(
@@ -216,6 +309,16 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
+                                    if (tags.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: -6,
+                                        children: [
+                                          for (final tag in tags) _buildTagChip(tag),
+                                        ],
+                                      ),
+                                    ],
                                     const SizedBox(height: 2),
                                     Row(
                                       children: [

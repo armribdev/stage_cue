@@ -3,6 +3,8 @@ import '../../../../core/audio/audio_player_service.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
+import '../../domain/entities/tag_category_with_tags.dart';
+import '../../domain/entities/tag_item.dart';
 import '../../domain/usecases/load_sounds_usecase.dart';
 import '../../domain/usecases/remove_sound_from_board_usecase.dart';
 
@@ -396,6 +398,21 @@ class SamplerNotifier extends ChangeNotifier {
       soundItem.player.dispose();
     }
     super.dispose();
+  }
+
+  /// Charge le catalogue des tags (catégories + tags)
+  Future<List<TagCategoryWithTags>> loadTagCatalog() async {
+    return await _repository.getTagCatalog();
+  }
+
+  /// Récupère les tags d'un son
+  Future<List<TagItem>> getTagsForSound(int soundId) async {
+    return await _repository.getTagsForSound(soundId);
+  }
+
+  /// Met à jour les tags d'un son
+  Future<void> updateSoundTags(int soundId, Set<int> tagIds) async {
+    await _repository.setTagsForSound(soundId, tagIds.toList());
   }
 }
 
