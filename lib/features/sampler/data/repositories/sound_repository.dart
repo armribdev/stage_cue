@@ -158,6 +158,11 @@ class SoundRepository {
     await _soundDataSource.removeSoundFromBoard(boardId, soundId);
   }
 
+  /// Réordonne les sons de la board selon la liste fournie
+  Future<void> reorderBoardSounds(int boardId, List<int> soundIdsInOrder) async {
+    await _soundDataSource.reorderBoardSounds(boardId, soundIdsInOrder);
+  }
+
   /// Vérifie si un son est dans la board
   Future<bool> isSoundInBoard(int boardId, int soundId) async {
     return await _soundDataSource.isSoundInBoard(boardId, soundId);

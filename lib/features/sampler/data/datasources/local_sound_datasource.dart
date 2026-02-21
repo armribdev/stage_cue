@@ -25,11 +25,11 @@ class LocalSoundDataSource {
     return sounds.map((s) => SoundModel.toEntity(s)).toList();
   }
 
-  /// Récupère uniquement les sons qui sont dans la board, triés par ordre d'ajout
+  /// Récupère uniquement les sons qui sont dans la board, triés par sort_order puis added_at
   /// Utilise une jointure SQL pour de meilleures performances et éviter les problèmes de sons supprimés
   Future<List<domain.Sound>> getBoardSounds(int boardId) async {
     // Utiliser une jointure INNER JOIN pour récupérer uniquement les sons existants
-    // et les trier par ordre d'ajout à la board
+    // et les trier par ordre personnalisé (sort_order) puis date d'ajout
     final query = _database.select(_database.sounds).join([
       innerJoin(
         _database.boardSounds,
@@ -37,7 +37,10 @@ class LocalSoundDataSource {
       ),
     ])
       ..where(_database.boardSounds.boardId.equals(boardId))
-      ..orderBy([OrderingTerm(expression: _database.boardSounds.addedAt)]);
+      ..orderBy([
+        OrderingTerm(expression: _database.boardSounds.sortOrder),
+        OrderingTerm(expression: _database.boardSounds.addedAt),
+      ]);
     
     final results = await query.get();
     
@@ -56,11 +59,18 @@ class LocalSoundDataSource {
         .getSingleOrNull();
     
     if (existing == null) {
+      // Calculer le prochain sort_order (compte des sons déjà dans la board)
+      final boardSoundsList = await (_database.select(_database.boardSounds)
+            ..where((b) => b.boardId.equals(boardId)))
+          .get();
+      final nextOrder = boardSoundsList.length;
+
       await _database.into(_database.boardSounds).insert(
         db.BoardSoundsCompanion.insert(
           boardId: boardId,
           soundId: soundId,
           addedAt: Value(DateTime.now()),
+          sortOrder: Value(nextOrder),
         ),
       );
     }
@@ -71,6 +81,16 @@ class LocalSoundDataSource {
     await (_database.delete(_database.boardSounds)
           ..where((b) => b.boardId.equals(boardId) & b.soundId.equals(soundId)))
         .go();
+  }
+
+  /// Réordonne les sons de la board selon la liste fournie (soundIds dans l'ordre voulu)
+  Future<void> reorderBoardSounds(int boardId, List<int> soundIdsInOrder) async {
+    for (var i = 0; i < soundIdsInOrder.length; i++) {
+      await (_database.update(_database.boardSounds)
+            ..where((b) =>
+                b.boardId.equals(boardId) & b.soundId.equals(soundIdsInOrder[i])))
+          .write(db.BoardSoundsCompanion(sortOrder: Value(i)));
+    }
   }
 
   /// Vérifie si un son est dans la board

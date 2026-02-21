@@ -369,6 +369,22 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Réordonne les sons de la board selon la liste fournie
+  Future<void> reorderSoundsFromList(List<SoundItem> newOrder) async {
+    if (_activeBoardId == null) return;
+    _state = _state.copyWith(sounds: newOrder);
+    notifyListeners();
+    try {
+      await _repository.reorderBoardSounds(
+        _activeBoardId!,
+        newOrder.map((s) => s.sound.id).toList(),
+      );
+    } catch (e) {
+      debugPrint('Erreur lors du réordonnancement: $e');
+      await loadSounds(); // Restaurer l'ordre précédent
+    }
+  }
+
   /// Retire un son de la board
   Future<void> removeSound(SoundItem soundItem) async {
     soundItem.player.dispose();
