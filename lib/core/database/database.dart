@@ -22,7 +22,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration {
@@ -80,6 +80,20 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(soundTags);
           await m.createTable(tagAliases);
           await _seedDefaultTagsIfEmpty();
+        }
+        if (from < 8) {
+          await m.addColumn(
+            boardSounds,
+            boardSounds.sortOrder as GeneratedColumn<Object>,
+          );
+          // Attribuer sort_order aux lignes existantes (ordre par added_at)
+          await customStatement('''
+            UPDATE board_sounds SET sort_order = (
+              SELECT COUNT(*) FROM board_sounds bs2
+              WHERE bs2.board_id = board_sounds.board_id
+              AND bs2.added_at < board_sounds.added_at
+            )
+          ''');
         }
       },
     );

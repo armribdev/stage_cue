@@ -60,7 +60,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       // Charger tous les sons indexés
       final allSounds = await _repository.getAllSounds();
       
-      // Charger les IDs des sons qui sont dans la board
+      // Charger les sons qui sont dans la board (ordre conservé)
       final boardSounds = await _repository.getBoardSounds(widget.boardId);
       final boardSoundIds = boardSounds.map((s) => s.id).toSet();
 
@@ -265,30 +265,30 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       ),
       body: Column(
         children: [
-          // Barre de recherche
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Rechercher un bruitage...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+        // Barre de recherche
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            decoration: InputDecoration(
+              hintText: 'Rechercher un bruitage...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-                _scheduleSearch(value);
-              },
             ),
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value;
+              });
+              _scheduleSearch(value);
+            },
           ),
-          // Liste des sons
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredSounds.isEmpty
+        ),
+        // Liste des sons
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _filteredSounds.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -395,7 +395,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                           );
                         },
                       ),
-          ),
+        ),
         ],
       ),
     );

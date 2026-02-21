@@ -1097,8 +1097,20 @@ class $BoardSoundsTable extends BoardSounds
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
   @override
-  List<GeneratedColumn> get $columns => [boardId, soundId, addedAt];
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [boardId, soundId, addedAt, sortOrder];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1133,6 +1145,12 @@ class $BoardSoundsTable extends BoardSounds
         addedAt.isAcceptableOrUnknown(data['added_at']!, _addedAtMeta),
       );
     }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
     return context;
   }
 
@@ -1154,6 +1172,10 @@ class $BoardSoundsTable extends BoardSounds
         DriftSqlType.dateTime,
         data['${effectivePrefix}added_at'],
       )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
     );
   }
 
@@ -1167,10 +1189,12 @@ class BoardSound extends DataClass implements Insertable<BoardSound> {
   final int boardId;
   final int soundId;
   final DateTime addedAt;
+  final int sortOrder;
   const BoardSound({
     required this.boardId,
     required this.soundId,
     required this.addedAt,
+    required this.sortOrder,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1178,6 +1202,7 @@ class BoardSound extends DataClass implements Insertable<BoardSound> {
     map['board_id'] = Variable<int>(boardId);
     map['sound_id'] = Variable<int>(soundId);
     map['added_at'] = Variable<DateTime>(addedAt);
+    map['sort_order'] = Variable<int>(sortOrder);
     return map;
   }
 
@@ -1186,6 +1211,7 @@ class BoardSound extends DataClass implements Insertable<BoardSound> {
       boardId: Value(boardId),
       soundId: Value(soundId),
       addedAt: Value(addedAt),
+      sortOrder: Value(sortOrder),
     );
   }
 
@@ -1198,6 +1224,7 @@ class BoardSound extends DataClass implements Insertable<BoardSound> {
       boardId: serializer.fromJson<int>(json['boardId']),
       soundId: serializer.fromJson<int>(json['soundId']),
       addedAt: serializer.fromJson<DateTime>(json['addedAt']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
     );
   }
   @override
@@ -1207,20 +1234,27 @@ class BoardSound extends DataClass implements Insertable<BoardSound> {
       'boardId': serializer.toJson<int>(boardId),
       'soundId': serializer.toJson<int>(soundId),
       'addedAt': serializer.toJson<DateTime>(addedAt),
+      'sortOrder': serializer.toJson<int>(sortOrder),
     };
   }
 
-  BoardSound copyWith({int? boardId, int? soundId, DateTime? addedAt}) =>
-      BoardSound(
-        boardId: boardId ?? this.boardId,
-        soundId: soundId ?? this.soundId,
-        addedAt: addedAt ?? this.addedAt,
-      );
+  BoardSound copyWith({
+    int? boardId,
+    int? soundId,
+    DateTime? addedAt,
+    int? sortOrder,
+  }) => BoardSound(
+    boardId: boardId ?? this.boardId,
+    soundId: soundId ?? this.soundId,
+    addedAt: addedAt ?? this.addedAt,
+    sortOrder: sortOrder ?? this.sortOrder,
+  );
   BoardSound copyWithCompanion(BoardSoundsCompanion data) {
     return BoardSound(
       boardId: data.boardId.present ? data.boardId.value : this.boardId,
       soundId: data.soundId.present ? data.soundId.value : this.soundId,
       addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
     );
   }
 
@@ -1229,37 +1263,42 @@ class BoardSound extends DataClass implements Insertable<BoardSound> {
     return (StringBuffer('BoardSound(')
           ..write('boardId: $boardId, ')
           ..write('soundId: $soundId, ')
-          ..write('addedAt: $addedAt')
+          ..write('addedAt: $addedAt, ')
+          ..write('sortOrder: $sortOrder')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(boardId, soundId, addedAt);
+  int get hashCode => Object.hash(boardId, soundId, addedAt, sortOrder);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is BoardSound &&
           other.boardId == this.boardId &&
           other.soundId == this.soundId &&
-          other.addedAt == this.addedAt);
+          other.addedAt == this.addedAt &&
+          other.sortOrder == this.sortOrder);
 }
 
 class BoardSoundsCompanion extends UpdateCompanion<BoardSound> {
   final Value<int> boardId;
   final Value<int> soundId;
   final Value<DateTime> addedAt;
+  final Value<int> sortOrder;
   final Value<int> rowid;
   const BoardSoundsCompanion({
     this.boardId = const Value.absent(),
     this.soundId = const Value.absent(),
     this.addedAt = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BoardSoundsCompanion.insert({
     required int boardId,
     required int soundId,
     this.addedAt = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : boardId = Value(boardId),
        soundId = Value(soundId);
@@ -1267,12 +1306,14 @@ class BoardSoundsCompanion extends UpdateCompanion<BoardSound> {
     Expression<int>? boardId,
     Expression<int>? soundId,
     Expression<DateTime>? addedAt,
+    Expression<int>? sortOrder,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (boardId != null) 'board_id': boardId,
       if (soundId != null) 'sound_id': soundId,
       if (addedAt != null) 'added_at': addedAt,
+      if (sortOrder != null) 'sort_order': sortOrder,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1281,12 +1322,14 @@ class BoardSoundsCompanion extends UpdateCompanion<BoardSound> {
     Value<int>? boardId,
     Value<int>? soundId,
     Value<DateTime>? addedAt,
+    Value<int>? sortOrder,
     Value<int>? rowid,
   }) {
     return BoardSoundsCompanion(
       boardId: boardId ?? this.boardId,
       soundId: soundId ?? this.soundId,
       addedAt: addedAt ?? this.addedAt,
+      sortOrder: sortOrder ?? this.sortOrder,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1303,6 +1346,9 @@ class BoardSoundsCompanion extends UpdateCompanion<BoardSound> {
     if (addedAt.present) {
       map['added_at'] = Variable<DateTime>(addedAt.value);
     }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1315,6 +1361,7 @@ class BoardSoundsCompanion extends UpdateCompanion<BoardSound> {
           ..write('boardId: $boardId, ')
           ..write('soundId: $soundId, ')
           ..write('addedAt: $addedAt, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3577,6 +3624,7 @@ typedef $$BoardSoundsTableCreateCompanionBuilder =
       required int boardId,
       required int soundId,
       Value<DateTime> addedAt,
+      Value<int> sortOrder,
       Value<int> rowid,
     });
 typedef $$BoardSoundsTableUpdateCompanionBuilder =
@@ -3584,6 +3632,7 @@ typedef $$BoardSoundsTableUpdateCompanionBuilder =
       Value<int> boardId,
       Value<int> soundId,
       Value<DateTime> addedAt,
+      Value<int> sortOrder,
       Value<int> rowid,
     });
 
@@ -3640,6 +3689,11 @@ class $$BoardSoundsTableFilterComposer
   });
   ColumnFilters<DateTime> get addedAt => $composableBuilder(
     column: $table.addedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3704,6 +3758,11 @@ class $$BoardSoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$SoundBoardsTableOrderingComposer get boardId {
     final $$SoundBoardsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -3762,6 +3821,9 @@ class $$BoardSoundsTableAnnotationComposer
   });
   GeneratedColumn<DateTime> get addedAt =>
       $composableBuilder(column: $table.addedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 
   $$SoundBoardsTableAnnotationComposer get boardId {
     final $$SoundBoardsTableAnnotationComposer composer = $composerBuilder(
@@ -3841,11 +3903,13 @@ class $$BoardSoundsTableTableManager
                 Value<int> boardId = const Value.absent(),
                 Value<int> soundId = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardSoundsCompanion(
                 boardId: boardId,
                 soundId: soundId,
                 addedAt: addedAt,
+                sortOrder: sortOrder,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3853,11 +3917,13 @@ class $$BoardSoundsTableTableManager
                 required int boardId,
                 required int soundId,
                 Value<DateTime> addedAt = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardSoundsCompanion.insert(
                 boardId: boardId,
                 soundId: soundId,
                 addedAt: addedAt,
+                sortOrder: sortOrder,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

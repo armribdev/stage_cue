@@ -35,6 +35,7 @@ class BoardSounds extends Table {
       integer().references(SoundBoards, #id, onDelete: KeyAction.cascade)();
   IntColumn get soundId => integer().references(Sounds, #id, onDelete: KeyAction.cascade)();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   
   @override
   Set<Column> get primaryKey => {boardId, soundId};

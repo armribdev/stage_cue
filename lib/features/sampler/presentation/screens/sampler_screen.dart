@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
 import '../providers/sampler_provider.dart';
 import '../widgets/pad_button.dart';
 import '../../domain/entities/sound_board.dart';
@@ -7,6 +8,13 @@ import '../../../../core/database/database.dart' as db;
 import 'settings_screen.dart';
 import 'sound_details_screen.dart';
 import 'sound_library_screen.dart';
+
+/// Marqueur pour le bouton d'ajout dans la grille
+const _addButtonMarker = _AddButtonMarker();
+
+class _AddButtonMarker {
+  const _AddButtonMarker();
+}
 
 /// Écran principal du sampler
 class SamplerScreen extends StatefulWidget {
@@ -25,6 +33,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
   late final SamplerNotifier _notifier;
   late final db.AppDatabase _database;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final ScrollController _gridScrollController = ScrollController();
+  bool _isReorderMode = false;
 
   @override
   void initState() {
@@ -184,8 +194,191 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
   }
 
+  Future<void> _showRemovePadConfirm(BuildContext context, SoundItem soundItem) async {
+    final label = soundItem.sound.displayName?.trim().isNotEmpty == true
+        ? soundItem.sound.displayName!
+        : soundItem.sound.title;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Supprimer le pad'),
+          content: Text('Retirer « $label » de la board ?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Supprimer'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true && mounted) {
+      await _notifier.removeSound(soundItem);
+    }
+  }
+
+  static const _gridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
+    maxCrossAxisExtent: 200,
+    crossAxisSpacing: 10,
+    mainAxisSpacing: 10,
+    childAspectRatio: 1.4,
+  );
+
+  Widget _buildAddButtonCard(BuildContext context, SoundBoard selectedBoard) {
+    return Card(
+      key: const ValueKey('add_button'),
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+          style: BorderStyle.solid,
+          width: 2,
+        ),
+      ),
+      color: Theme.of(context).colorScheme.surface,
+      child: InkWell(
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SoundLibraryScreen(
+                database: _database,
+                boardId: selectedBoard.id,
+              ),
+            ),
+          );
+          _notifier.loadSounds();
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Center(
+          child: Icon(
+            Icons.add,
+            size: 48,
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPadsGrid(
+    BuildContext context,
+    SamplerState state,
+    SoundBoard selectedBoard,
+  ) {
+    final gridItems = <Object>[...state.sounds, _addButtonMarker];
+    final addButtonIndex = state.sounds.length;
+
+    final children = gridItems.map((item) {
+      if (item == _addButtonMarker) {
+        return _buildAddButtonCard(context, selectedBoard);
+      }
+      final soundItem = item as SoundItem;
+      return _buildPadCard(context, state, soundItem);
+    }).toList();
+
+    if (_isReorderMode) {
+      return ReorderableBuilder(
+        scrollController: _gridScrollController,
+        enableDraggable: true,
+        lockedIndices: [addButtonIndex],
+        children: children,
+        onReorder: (reorderedListFunction) {
+          final reordered = reorderedListFunction(children);
+          final newSoundOrder = <SoundItem>[];
+          for (final w in reordered) {
+            final key = w.key;
+            if (key is ValueKey<int>) {
+              final id = key.value;
+              final matches = state.sounds.where((s) => s.sound.id == id);
+              final soundItem = matches.isEmpty ? null : matches.first;
+              if (soundItem != null) {
+                newSoundOrder.add(soundItem);
+              }
+            }
+          }
+          if (newSoundOrder.length == state.sounds.length) {
+            _notifier.reorderSoundsFromList(newSoundOrder);
+          }
+        },
+        builder: (children) {
+          return GridView(
+            controller: _gridScrollController,
+            padding: const EdgeInsets.all(12),
+            gridDelegate: _gridDelegate,
+            children: children,
+          );
+        },
+      );
+    }
+
+    return GridView(
+      controller: _gridScrollController,
+      padding: const EdgeInsets.all(12),
+      gridDelegate: _gridDelegate,
+      children: children,
+    );
+  }
+
+  Widget _buildPadCard(
+    BuildContext context,
+    SamplerState state,
+    SoundItem soundItem,
+  ) {
+    final padWidget = PadButton(
+      key: ValueKey(soundItem.sound.id),
+      soundItem: soundItem,
+      onTap: () => _notifier.toggleSound(soundItem),
+      onLongPress: _isReorderMode
+          ? null
+          : () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SoundDetailScreen(
+                    soundItem: soundItem,
+                    notifier: _notifier,
+                  ),
+                ),
+              );
+            },
+      onRemove: () => _notifier.removeSound(soundItem),
+    );
+
+    if (_isReorderMode) {
+      return Stack(
+        key: ValueKey(soundItem.sound.id),
+        children: [
+          padWidget,
+          Positioned(
+            top: 4,
+            right: 4,
+            child: IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+              tooltip: 'Supprimer de la board',
+              onPressed: () => _showRemovePadConfirm(context, soundItem),
+              style: IconButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                padding: const EdgeInsets.all(4),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return padWidget;
+  }
+
   @override
   void dispose() {
+    _gridScrollController.dispose();
     _notifier.removeListener(_onStateChanged);
     _notifier.dispose();
     super.dispose();
@@ -214,6 +407,20 @@ class _SamplerScreenState extends State<SamplerScreen> {
         ),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: Icon(
+              _isReorderMode ? Icons.check : Icons.drag_indicator,
+              color: _isReorderMode ? Theme.of(context).colorScheme.primary : null,
+            ),
+            tooltip: _isReorderMode ? 'Terminer la réorganisation' : 'Réorganiser les pads',
+            onPressed: state.sounds.isEmpty
+                ? null
+                : () {
+                    setState(() {
+                      _isReorderMode = !_isReorderMode;
+                    });
+                  },
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: 'Paramètres',
@@ -390,75 +597,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                           ],
                         ),
                       )
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(12),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 200,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                          childAspectRatio: 1.4,
-                        ),
-                        itemCount: state.sounds.length + 1, // +1 pour le bouton d'ajout
-                        itemBuilder: (context, index) {
-                          // Si c'est le dernier item, afficher le bouton d'ajout
-                          if (index == state.sounds.length) {
-                            return Card(
-                              elevation: 1,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: BorderSide(
-                                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
-                                  style: BorderStyle.solid,
-                                  width: 2,
-                                ),
-                              ),
-                              color: Theme.of(context).colorScheme.surface,
-                              child: InkWell(
-                                onTap: () async {
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => SoundLibraryScreen(
-                                        database: _database,
-                                        boardId: selectedBoard.id,
-                                      ),
-                                    ),
-                                  );
-                                  // Recharger les sons après retour de la bibliothèque
-                                  _notifier.loadSounds();
-                                },
-                                borderRadius: BorderRadius.circular(8),
-                                child: Center(
-                                  child: Icon(
-                                    Icons.add,
-                                    size: 48,
-                                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }
-
-                          // Sinon, afficher le pad button normal
-                          final soundItem = state.sounds[index];
-                          return PadButton(
-                            soundItem: soundItem,
-                            onTap: () => _notifier.toggleSound(soundItem),
-                            onLongPress: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => SoundDetailScreen(
-                                    soundItem: soundItem,
-                                    notifier: _notifier,
-                                  ),
-                                ),
-                              );
-                            },
-                            onRemove: () => _notifier.removeSound(soundItem),
-                          );
-                        },
-                      ),
+                    : _buildPadsGrid(context, state, selectedBoard),
       ),
       bottomNavigationBar: BottomAppBar(
         child: SafeArea(
