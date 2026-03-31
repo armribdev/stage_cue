@@ -284,7 +284,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }).toList();
 
     if (_isReorderMode) {
-      return ReorderableBuilder(
+      return ReorderableBuilder<Widget>(
         scrollController: _gridScrollController,
         enableDraggable: true,
         lockedIndices: [addButtonIndex],
@@ -293,6 +293,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
           final reordered = reorderedListFunction(children);
           final newSoundOrder = <SoundItem>[];
           for (final w in reordered) {
+            if (w is! Widget) continue;
             final key = w.key;
             if (key is ValueKey<int>) {
               final id = key.value;

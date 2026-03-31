@@ -1,67 +1,82 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:flutter_soloud/flutter_soloud.dart';
 
-/// Service de gestion des lecteurs audio
+/// Service de gestion des lecteurs audio (basé sur flutter_soloud)
+/// Préchargement des sources pour une latence minimale au déclenchement
 class AudioPlayerService {
-  final AudioPlayer _player;
+  final AudioSource _source;
+  SoundHandle? _currentHandle;
+  final _stateController = StreamController<bool>.broadcast();
+  StreamSubscription? _soundEventsSubscription;
 
-  AudioPlayerService() : _player = AudioPlayer() {
-    // just_audio permet naturellement la lecture simultanée
-    // Chaque instance peut jouer indépendamment
+  AudioPlayerService._(this._source) {
+    _soundEventsSubscription = _source.soundEvents.listen((event) {
+      if (event.event == SoundEventType.handleIsNoMoreValid &&
+          event.handle == _currentHandle) {
+        _currentHandle = null;
+        _stateController.add(false);
+      }
+    });
   }
 
-  /// Joue un fichier audio
-  Future<void> play(String filePath) async {
+  /// Crée un service en préchargeant le fichier audio (latence minimale au play)
+  static Future<AudioPlayerService> create(String filePath) async {
+    final source = await SoLoud.instance.loadFile(
+      filePath,
+      mode: LoadMode.memory,
+    );
+    return AudioPlayerService._(source);
+  }
+
+  /// Joue le son (quasi instantané car préchargé)
+  Future<void> play() async {
     try {
-      // Si un son est déjà en cours, on le relance depuis le début
-      if (_player.playing) {
-        await _player.stop();
+      if (_currentHandle != null && SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
+        await SoLoud.instance.stop(_currentHandle!);
       }
-      await _player.setFilePath(filePath);
-      // Attendre que la durée soit disponible (avec un timeout de sécurité)
-      try {
-        await _player.durationStream
-            .where((d) => d != null && d.inMilliseconds > 0)
-            .timeout(const Duration(seconds: 2))
-            .first;
-      } catch (e) {
-        // Si le timeout est atteint, continuer quand même (la durée sera disponible plus tard)
-        // C'est juste pour éviter d'attendre indéfiniment
-      }
-      // S'assurer que la position est à zéro avant de jouer
-      await _player.seek(Duration.zero);
-      await _player.play();
+      _currentHandle = await SoLoud.instance.play(_source);
+      _stateController.add(true);
     } catch (e) {
-      // Gérer les erreurs silencieusement ou les logger
       debugPrint('Erreur lors de la lecture: $e');
     }
   }
 
   /// Arrête la lecture
   Future<void> stop() async {
-    await _player.stop();
+    if (_currentHandle != null && SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
+      await SoLoud.instance.stop(_currentHandle!);
+    }
+    _currentHandle = null;
+    _stateController.add(false);
   }
 
   /// Définit le volume (0.0 -> 1.0)
-  Future<void> setVolume(double volume) async {
+  void setVolume(double volume) {
     final clamped = volume.clamp(0.0, 1.0);
-    await _player.setVolume(clamped);
+    if (_currentHandle != null && SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
+      SoLoud.instance.setVolume(_currentHandle!, clamped);
+    }
   }
 
   /// Écoute les changements d'état du lecteur (true = en cours, false = arrêté)
-  /// Utilise playerStateStream pour détecter correctement la fin de la lecture
-  Stream<bool> get onPlayerStateChanged => _player.playerStateStream.map((state) {
-    return state.playing && state.processingState != ProcessingState.completed;
-  });
+  Stream<bool> get onPlayerStateChanged => _stateController.stream;
 
-  /// Obtient la durée du fichier audio (peut être null si pas encore chargé)
-  Duration? get duration => _player.duration;
+  /// Obtient la durée du fichier audio
+  Duration get duration => SoLoud.instance.getLength(_source);
+
+  /// Indique si le son est actuellement en cours de lecture
+  bool get isPlaying =>
+      _currentHandle != null &&
+      SoLoud.instance.getIsValidVoiceHandle(_currentHandle!);
 
   /// Dispose les ressources
   void dispose() {
-    _player.dispose();
+    _soundEventsSubscription?.cancel();
+    if (_currentHandle != null && SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
+      SoLoud.instance.stop(_currentHandle!);
+    }
+    SoLoud.instance.disposeSource(_source);
+    _stateController.close();
   }
 }
-
-
