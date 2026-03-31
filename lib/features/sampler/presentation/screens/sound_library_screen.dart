@@ -261,6 +261,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Ajouter un bruitage')),
       body: Column(
@@ -286,117 +287,242 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
           ),
           // Liste des sons
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredSounds.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.music_off,
-                          size: 64,
-                          color: Colors.grey[600],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _searchQuery.isEmpty
-                              ? 'Aucun bruitage disponible'
-                              : 'Aucun bruitage trouvé',
-                          style: TextStyle(
-                            fontSize: 18,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              child: _isLoading
+                  ? const _LibraryLoadingList(key: ValueKey('loading'))
+                  : _filteredSounds.isEmpty
+                  ? Center(
+                      key: const ValueKey('empty'),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.music_off,
+                            size: 64,
                             color: Colors.grey[600],
                           ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: _filteredSounds.length,
-                    itemBuilder: (context, index) {
-                      final sound = _filteredSounds[index];
-                      final isInBoard = _soundsInBoard.contains(sound.id);
-                      final tags = _soundTags[sound.id] ?? [];
+                          const SizedBox(height: 16),
+                          Text(
+                            _searchQuery.isEmpty
+                                ? 'Aucun bruitage disponible'
+                                : 'Aucun bruitage trouvé',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      key: const ValueKey('list'),
+                      itemCount: _filteredSounds.length,
+                      itemBuilder: (context, index) {
+                        final sound = _filteredSounds[index];
+                        final isInBoard = _soundsInBoard.contains(sound.id);
+                        final tags = _soundTags[sound.id] ?? [];
 
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 4,
-                        ),
-                        child: Opacity(
-                          opacity: isInBoard ? 0.6 : 1.0,
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: Theme.of(
-                                context,
-                              ).colorScheme.primaryContainer,
-                              child: Icon(
-                                Icons.music_note,
-                                color: Theme.of(context).colorScheme.primary,
+                        return TweenAnimationBuilder<double>(
+                          duration: Duration(milliseconds: 160 + (index * 22)),
+                          curve: Curves.easeOutCubic,
+                          tween: Tween(begin: 0, end: 1),
+                          builder: (context, value, child) {
+                            return Opacity(
+                              opacity: value,
+                              child: Transform.translate(
+                                offset: Offset(0, (1 - value) * 10),
+                                child: child,
                               ),
+                            );
+                          },
+                          child: Card(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 4,
                             ),
-                            title: Text(
-                              sound.title,
-                              style: TextStyle(
-                                fontWeight: isInBoard
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 4),
-                                Text(
-                                  sound.filePath,
-                                  style: const TextStyle(fontSize: 11),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (tags.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: -6,
-                                    children: [
-                                      for (final tag in tags)
-                                        _buildTagChip(tag),
-                                    ],
+                            child: Opacity(
+                              opacity: isInBoard ? 0.6 : 1.0,
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: scheme.primaryContainer,
+                                  child: Icon(
+                                    Icons.music_note,
+                                    color: scheme.primary,
                                   ),
-                                ],
-                                const SizedBox(height: 2),
-                                Row(
+                                ),
+                                title: Text(
+                                  sound.title,
+                                  style: TextStyle(
+                                    fontWeight: isInBoard
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    const SizedBox(height: 4),
                                     Text(
-                                      'Type: ${_getSoundTypeName(sound.type)}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[600],
+                                      sound.filePath,
+                                      style: const TextStyle(fontSize: 11),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (tags.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: -6,
+                                        children: [
+                                          for (final tag in tags)
+                                            _buildTagChip(tag),
+                                        ],
                                       ),
+                                    ],
+                                    const SizedBox(height: 2),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          'Type: ${_getSoundTypeName(sound.type)}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                              ],
+                                trailing: isInBoard
+                                    ? Icon(
+                                        Icons.check_circle,
+                                        color: scheme.primary,
+                                      )
+                                    : Icon(
+                                        Icons.add_circle,
+                                        color: Colors.green.shade400,
+                                      ),
+                                onTap: isInBoard
+                                    ? null
+                                    : () => _addSoundToBoard(sound),
+                              ),
                             ),
-                            trailing: isInBoard
-                                ? Icon(
-                                    Icons.check_circle,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                  )
-                                : Icon(Icons.add_circle, color: Colors.green),
-                            onTap: isInBoard
-                                ? null
-                                : () => _addSoundToBoard(sound),
                           ),
-                        ),
-                      );
-                    },
-                  ),
+                        );
+                      },
+                    ),
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LibraryLoadingList extends StatelessWidget {
+  const _LibraryLoadingList({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: 6,
+      itemBuilder: (context, index) {
+        return const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: _SkeletonCard(),
+        );
+      },
+    );
+  }
+}
+
+class _SkeletonCard extends StatefulWidget {
+  const _SkeletonCard();
+
+  @override
+  State<_SkeletonCard> createState() => _SkeletonCardState();
+}
+
+class _SkeletonCardState extends State<_SkeletonCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 950),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final titleHeight = textScaler.scale(12).clamp(12, 20).toDouble();
+    final subtitleHeight = textScaler.scale(10).clamp(10, 18).toDouble();
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final alpha = 0.14 + (_controller.value * 0.1);
+        return Card(
+          child: ListTile(
+            isThreeLine: true,
+            leading: CircleAvatar(
+              backgroundColor: scheme.onSurface.withValues(alpha: alpha),
+            ),
+            title: Container(
+              height: titleHeight,
+              decoration: BoxDecoration(
+                color: scheme.onSurface.withValues(alpha: alpha),
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 6),
+                Container(
+                  height: subtitleHeight,
+                  decoration: BoxDecoration(
+                    color: scheme.onSurface.withValues(alpha: alpha * 0.9),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                FractionallySizedBox(
+                  widthFactor: 0.45,
+                  child: Container(
+                    height: subtitleHeight,
+                    decoration: BoxDecoration(
+                      color: scheme.onSurface.withValues(alpha: alpha * 0.75),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            trailing: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: scheme.onSurface.withValues(alpha: alpha * 0.8),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

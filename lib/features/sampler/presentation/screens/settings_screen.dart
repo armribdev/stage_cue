@@ -495,416 +495,431 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Paramètres')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadDatabaseInfo,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.storage,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'État de la base de données',
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                              ],
-                            ),
-                            const Divider(),
-                            _buildInfoRow(
-                              'Nombre total de sons',
-                              '${_sounds.length}',
-                            ),
-                            const SizedBox(height: 8),
-                            _buildInfoRow(
-                              'Taille de la base de données',
-                              _formatBytes(_dbSize),
-                            ),
-                            const SizedBox(height: 8),
-                            _buildInfoRow(
-                              'Chemin de la base de données',
-                              _dbPath,
-                              isPath: true,
-                            ),
-                          ],
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 240),
+        child: _isLoading
+            ? const _SettingsLoadingView(key: ValueKey('settings-loading'))
+            : RefreshIndicator(
+                key: const ValueKey('settings-content'),
+                onRefresh: _loadDatabaseInfo,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.storage,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'État de la base de données',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleLarge,
+                                  ),
+                                ],
+                              ),
+                              const Divider(),
+                              _buildInfoRow(
+                                'Nombre total de sons',
+                                '${_sounds.length}',
+                              ),
+                              const SizedBox(height: 8),
+                              _buildInfoRow(
+                                'Taille de la base de données',
+                                _formatBytes(_dbSize),
+                              ),
+                              const SizedBox(height: 8),
+                              _buildInfoRow(
+                                'Chemin de la base de données',
+                                _dbPath,
+                                isPath: true,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Éléments indexés',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.folder),
-                              tooltip: 'Ajouter un dossier',
-                              onPressed: _addDirectory,
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.audio_file),
-                              tooltip:
-                                  'Ajouter des fichiers audio (sélection multiple)',
-                              onPressed: _addFile,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _watchedPaths.isEmpty
-                        ? Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Center(
-                                child: Column(
-                                  children: [
-                                    Icon(
-                                      Icons.folder_off,
-                                      size: 48,
-                                      color: Colors.grey[600],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'Aucun dossier ou fichier surveillé',
-                                      style: TextStyle(
-                                        fontSize: 16,
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Éléments indexés',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.folder),
+                                tooltip: 'Ajouter un dossier',
+                                onPressed: _addDirectory,
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.audio_file),
+                                tooltip:
+                                    'Ajouter des fichiers audio (sélection multiple)',
+                                onPressed: _addFile,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _watchedPaths.isEmpty
+                          ? Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Center(
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        Icons.folder_off,
+                                        size: 48,
                                         color: Colors.grey[600],
                                       ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Ajoutez un dossier ou un fichier pour commencer',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[500],
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Aucun dossier ou fichier surveillé',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          color: Colors.grey[600],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Ajoutez un dossier ou un fichier pour commencer',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[500],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          )
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _watchedPaths.length,
-                            itemBuilder: (context, index) {
-                              final watchedPath = _watchedPaths[index];
-                              final progress =
-                                  _indexingProgress[watchedPath.path];
-                              final isIndexing =
-                                  progress != null && !progress.isComplete;
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _watchedPaths.length,
+                              itemBuilder: (context, index) {
+                                final watchedPath = _watchedPaths[index];
+                                final progress =
+                                    _indexingProgress[watchedPath.path];
+                                final isIndexing =
+                                    progress != null && !progress.isComplete;
 
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                child: Column(
-                                  children: [
-                                    ListTile(
-                                      leading: CircleAvatar(
-                                        backgroundColor: Theme.of(
-                                          context,
-                                        ).colorScheme.primaryContainer,
-                                        child: Icon(
-                                          watchedPath.isDirectory
-                                              ? Icons.folder
-                                              : Icons.audio_file,
-                                          color: Theme.of(
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: Column(
+                                    children: [
+                                      ListTile(
+                                        leading: CircleAvatar(
+                                          backgroundColor: Theme.of(
                                             context,
-                                          ).colorScheme.primary,
-                                        ),
-                                      ),
-                                      title: Text(
-                                        p.basename(watchedPath.path),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      subtitle: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            watchedPath.path,
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                            ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
+                                          ).colorScheme.primaryContainer,
+                                          child: Icon(
                                             watchedPath.isDirectory
-                                                ? 'Dossier'
-                                                : 'Fichier',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey[600],
-                                            ),
+                                                ? Icons.folder
+                                                : Icons.audio_file,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
                                           ),
-                                        ],
-                                      ),
-                                      trailing: IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
-                                          color: Colors.red,
                                         ),
-                                        onPressed: () =>
-                                            _removeWatchedPath(watchedPath),
-                                        tooltip: 'Retirer',
-                                      ),
-                                      isThreeLine: true,
-                                    ),
-                                    // Barre de progression pour les dossiers en cours d'indexation
-                                    if (watchedPath.isDirectory &&
-                                        progress != null)
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                          16,
-                                          0,
-                                          16,
-                                          16,
+                                        title: Text(
+                                          p.basename(watchedPath.path),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
-                                        child: Column(
+                                        subtitle: Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            if (isIndexing)
-                                              LinearProgressIndicator(
-                                                value: progress.progress,
-                                                backgroundColor:
-                                                    Colors.grey[300],
-                                                valueColor:
-                                                    AlwaysStoppedAnimation<
-                                                      Color
-                                                    >(
-                                                      Theme.of(
-                                                        context,
-                                                      ).colorScheme.primary,
-                                                    ),
-                                              )
-                                            else if (progress.error != null)
-                                              Container(
-                                                padding: const EdgeInsets.all(
-                                                  8,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.red[50],
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons.error_outline,
-                                                      color: Colors.red[700],
-                                                      size: 16,
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Expanded(
-                                                      child: Text(
-                                                        'Erreur: ${progress.error}',
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          color:
-                                                              Colors.red[700],
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              )
-                                            else
-                                              Container(
-                                                padding: const EdgeInsets.all(
-                                                  8,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: progress.total == 0
-                                                      ? Colors.orange[50]
-                                                      : Colors.green[50],
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    Icon(
-                                                      progress.total == 0
-                                                          ? Icons
-                                                                .warning_amber_rounded
-                                                          : Icons.check_circle,
-                                                      color: progress.total == 0
-                                                          ? Colors.orange[700]
-                                                          : Colors.green[700],
-                                                      size: 16,
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Expanded(
-                                                      child: Text(
-                                                        progress.total == 0
-                                                            ? 'Aucun fichier audio trouvé dans ce dossier'
-                                                            : 'Indexation terminée: ${progress.current}/${progress.total} fichier(s)',
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          color:
-                                                              progress.total ==
-                                                                  0
-                                                              ? Colors
-                                                                    .orange[700]
-                                                              : Colors
-                                                                    .green[700],
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              watchedPath.path,
+                                              style: const TextStyle(
+                                                fontSize: 11,
                                               ),
-                                            if (isIndexing &&
-                                                progress.total > 0)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 4,
-                                                ),
-                                                child: Text(
-                                                  'Indexation en cours: ${progress.current}/${progress.total} fichier(s)',
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: Colors.grey[600],
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              watchedPath.isDirectory
+                                                  ? 'Dossier'
+                                                  : 'Fichier',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        trailing: IconButton(
+                                          icon: const Icon(
+                                            Icons.delete,
+                                            color: Colors.red,
+                                          ),
+                                          onPressed: () =>
+                                              _removeWatchedPath(watchedPath),
+                                          tooltip: 'Retirer',
+                                        ),
+                                        isThreeLine: true,
+                                      ),
+                                      // Barre de progression pour les dossiers en cours d'indexation
+                                      if (watchedPath.isDirectory &&
+                                          progress != null)
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            16,
+                                            0,
+                                            16,
+                                            16,
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              if (isIndexing)
+                                                LinearProgressIndicator(
+                                                  value: progress.progress,
+                                                  backgroundColor:
+                                                      Colors.grey[300],
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation<
+                                                        Color
+                                                      >(
+                                                        Theme.of(
+                                                          context,
+                                                        ).colorScheme.primary,
+                                                      ),
+                                                )
+                                              else if (progress.error != null)
+                                                Container(
+                                                  padding: const EdgeInsets.all(
+                                                    8,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.red[50],
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.error_outline,
+                                                        color: Colors.red[700],
+                                                        size: 16,
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: Text(
+                                                          'Erreur: ${progress.error}',
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            color:
+                                                                Colors.red[700],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                )
+                                              else
+                                                Container(
+                                                  padding: const EdgeInsets.all(
+                                                    8,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: progress.total == 0
+                                                        ? Colors.orange[50]
+                                                        : Colors.green[50],
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        progress.total == 0
+                                                            ? Icons
+                                                                  .warning_amber_rounded
+                                                            : Icons
+                                                                  .check_circle,
+                                                        color:
+                                                            progress.total == 0
+                                                            ? Colors.orange[700]
+                                                            : Colors.green[700],
+                                                        size: 16,
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: Text(
+                                                          progress.total == 0
+                                                              ? 'Aucun fichier audio trouvé dans ce dossier'
+                                                              : 'Indexation terminée: ${progress.current}/${progress.total} fichier(s)',
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            color:
+                                                                progress.total ==
+                                                                    0
+                                                                ? Colors
+                                                                      .orange[700]
+                                                                : Colors
+                                                                      .green[700],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
-                                              ),
-                                          ],
+                                              if (isIndexing &&
+                                                  progress.total > 0)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 4,
+                                                      ),
+                                                  child: Text(
+                                                    'Indexation en cours: ${progress.current}/${progress.total} fichier(s)',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: Colors.grey[600],
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Sons indexés (${_sounds.length})',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    _sounds.isEmpty
-                        ? Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Center(
-                                child: Column(
-                                  children: [
-                                    Icon(
-                                      Icons.music_off,
-                                      size: 48,
-                                      color: Colors.grey[600],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'Aucun son enregistré',
-                                      style: TextStyle(
-                                        fontSize: 16,
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Sons indexés (${_sounds.length})',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      _sounds.isEmpty
+                          ? Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Center(
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        Icons.music_off,
+                                        size: 48,
                                         color: Colors.grey[600],
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          )
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _sounds.length,
-                            itemBuilder: (context, index) {
-                              final sound = _sounds[index];
-                              final tags = _soundTags[sound.id] ?? [];
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                child: ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: Theme.of(
-                                      context,
-                                    ).colorScheme.primaryContainer,
-                                    child: Icon(
-                                      Icons.music_note,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                    ),
-                                  ),
-                                  title: Text(sound.title),
-                                  subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const SizedBox(height: 4),
+                                      const SizedBox(height: 16),
                                       Text(
-                                        'Chemin: ${sound.filePath}',
-                                        style: const TextStyle(fontSize: 11),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      if (tags.isNotEmpty) ...[
-                                        const SizedBox(height: 6),
-                                        Wrap(
-                                          spacing: 6,
-                                          runSpacing: -6,
-                                          children: [
-                                            for (final tag in tags)
-                                              _buildTagChip(tag),
-                                          ],
-                                        ),
-                                      ],
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'Type: ${_getSoundTypeName(sound.type)}',
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'Créé le: ${sound.createdAt.toString().substring(0, 19)}',
+                                        'Aucun son enregistré',
                                         style: TextStyle(
-                                          fontSize: 12,
+                                          fontSize: 16,
                                           color: Colors.grey[600],
                                         ),
                                       ),
                                     ],
                                   ),
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.label),
-                                    tooltip: 'Gérer les tags',
-                                    onPressed: _isTagCatalogLoading
-                                        ? null
-                                        : () => _editSoundTags(sound),
-                                  ),
-                                  isThreeLine: true,
                                 ),
-                              );
-                            },
-                          ),
-                  ],
+                              ),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _sounds.length,
+                              itemBuilder: (context, index) {
+                                final sound = _sounds[index];
+                                final tags = _soundTags[sound.id] ?? [];
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    leading: CircleAvatar(
+                                      backgroundColor: Theme.of(
+                                        context,
+                                      ).colorScheme.primaryContainer,
+                                      child: Icon(
+                                        Icons.music_note,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                      ),
+                                    ),
+                                    title: Text(sound.title),
+                                    subtitle: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Chemin: ${sound.filePath}',
+                                          style: const TextStyle(fontSize: 11),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (tags.isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: -6,
+                                            children: [
+                                              for (final tag in tags)
+                                                _buildTagChip(tag),
+                                            ],
+                                          ),
+                                        ],
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Type: ${_getSoundTypeName(sound.type)}',
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Créé le: ${sound.createdAt.toString().substring(0, 19)}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.label),
+                                      tooltip: 'Gérer les tags',
+                                      onPressed: _isTagCatalogLoading
+                                          ? null
+                                          : () => _editSoundTags(sound),
+                                    ),
+                                    isThreeLine: true,
+                                  ),
+                                );
+                              },
+                            ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+      ),
     );
   }
 
@@ -929,6 +944,160 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SettingsLoadingView extends StatefulWidget {
+  const _SettingsLoadingView({super.key});
+
+  @override
+  State<_SettingsLoadingView> createState() => _SettingsLoadingViewState();
+}
+
+class _SettingsLoadingViewState extends State<_SettingsLoadingView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 980),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Widget _bar(
+    Color color, {
+    double width = double.infinity,
+    double height = 12,
+  }) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
+    );
+  }
+
+  Widget _databaseCard(Color color) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _bar(color, width: 20, height: 20),
+                const SizedBox(width: 8),
+                _bar(color, width: 210, height: 18),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _bar(color, height: 1),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _bar(color, width: 180),
+                const SizedBox(width: 12),
+                Expanded(child: _bar(color)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _bar(color, width: 180),
+                const SizedBox(width: 12),
+                Expanded(child: _bar(color, width: 120)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _bar(color, width: 180),
+                const SizedBox(width: 12),
+                Expanded(child: _bar(color)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _listHeader(Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _bar(color, width: 170, height: 20),
+        Row(
+          children: [
+            _bar(color, width: 28, height: 28),
+            const SizedBox(width: 8),
+            _bar(color, width: 28, height: 28),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _itemCard(Color color) {
+    return Card(
+      child: ListTile(
+        isThreeLine: true,
+        leading: CircleAvatar(backgroundColor: color),
+        title: _bar(color, width: 180),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _bar(color),
+              const SizedBox(height: 6),
+              _bar(color, width: 120),
+            ],
+          ),
+        ),
+        trailing: _bar(color, width: 20, height: 20),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final alpha = 0.12 + (_controller.value * 0.08);
+        final color = scheme.onSurface.withValues(alpha: alpha);
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _databaseCard(color),
+            const SizedBox(height: 16),
+            _listHeader(color),
+            const SizedBox(height: 8),
+            _itemCard(color),
+            const SizedBox(height: 8),
+            _itemCard(color),
+            const SizedBox(height: 16),
+            _bar(color, width: 160, height: 20),
+            const SizedBox(height: 8),
+            _itemCard(color),
+          ],
+        );
+      },
     );
   }
 }

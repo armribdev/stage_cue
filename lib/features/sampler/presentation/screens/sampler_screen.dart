@@ -244,12 +244,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: scheme.primary.withValues(alpha: 0.45),
+          color: scheme.outlineVariant.withValues(alpha: 0.55),
           style: BorderStyle.solid,
-          width: 1.4,
+          width: 1.0,
         ),
       ),
-      color: scheme.primaryContainer.withValues(alpha: 0.15),
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.22),
       child: InkWell(
         onTap: () async {
           await Navigator.push(
@@ -268,13 +268,18 @@ class _SamplerScreenState extends State<SamplerScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add, size: 42, color: scheme.primary),
-              const SizedBox(height: 10),
+              Icon(
+                Icons.add_circle_outline_rounded,
+                size: 28,
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
+              ),
+              const SizedBox(height: 8),
               Text(
                 'Ajouter un son',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -469,41 +474,74 @@ class _SamplerScreenState extends State<SamplerScreen> {
               },
             ),
             body: SafeArea(
-              child: selectedBoard == null
-                  ? Center(
-                      child: isBoardsLoading
-                          ? const CircularProgressIndicator()
-                          : const Text('Aucune scène disponible'),
-                    )
-                  : state.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : state.error != null
-                  ? Center(
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.error_outline_rounded,
-                                size: 48,
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Erreur: ${state.error}',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                            ],
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 260),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.02),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  );
+                },
+                child: Builder(
+                  key: ValueKey<String>(
+                    selectedBoard == null
+                        ? (isBoardsLoading ? 'boards_loading' : 'boards_empty')
+                        : state.isLoading
+                        ? 'sounds_loading'
+                        : state.error != null
+                        ? 'sounds_error'
+                        : state.sounds.isEmpty
+                        ? 'sounds_empty'
+                        : 'sounds_grid',
+                  ),
+                  builder: (context) {
+                    if (selectedBoard == null) {
+                      return Center(
+                        child: isBoardsLoading
+                            ? const CircularProgressIndicator()
+                            : const Text('Aucune scène disponible'),
+                      );
+                    }
+                    if (state.isLoading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (state.error != null) {
+                      return Center(
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.error_outline_rounded,
+                                  size: 48,
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Erreur: ${state.error}',
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    )
-                  : state.sounds.isEmpty
-                  ? Center(
-                      child: Card(
+                      );
+                    }
+                    if (state.sounds.isEmpty) {
+                      return Center(
                         child: Padding(
                           padding: const EdgeInsets.all(24),
                           child: Column(
@@ -544,9 +582,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
                             ],
                           ),
                         ),
-                      ),
-                    )
-                  : _buildPadsGrid(context, state, selectedBoard),
+                      );
+                    }
+                    return _buildPadsGrid(context, state, selectedBoard);
+                  },
+                ),
+              ),
             ),
             bottomNavigationBar: _MasterVolumeBar(
               masterVolume: masterVolume,
