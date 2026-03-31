@@ -178,6 +178,25 @@ class _SamplerScreenState extends State<SamplerScreen> {
     return 'Scène $index';
   }
 
+  String _buildSuggestedDuplicateBoardName(
+    String sourceName,
+    List<SoundBoard> boards,
+  ) {
+    final existingNames = boards
+        .map((b) => b.name.trim().toLowerCase())
+        .where((n) => n.isNotEmpty)
+        .toSet();
+    final baseName = '$sourceName (copie)';
+    if (!existingNames.contains(baseName.toLowerCase())) {
+      return baseName;
+    }
+    var index = 2;
+    while (existingNames.contains('$baseName $index'.toLowerCase())) {
+      index++;
+    }
+    return '$baseName $index';
+  }
+
   Future<void> _showBoardActions(SoundBoard board) async {
     await showModalBottomSheet<void>(
       context: context,
@@ -192,6 +211,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 onTap: () {
                   Navigator.pop(context);
                   _renameBoard(board);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy_rounded),
+                title: const Text('Dupliquer'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _duplicateBoard(board);
                 },
               ),
               ListTile(
@@ -280,6 +307,85 @@ class _SamplerScreenState extends State<SamplerScreen> {
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Erreur lors du renommage de la scène')),
+      );
+    }
+  }
+
+  Future<void> _duplicateBoard(SoundBoard board) async {
+    final suggestedName = _buildSuggestedDuplicateBoardName(
+      board.name,
+      _notifier.state.boards,
+    );
+    final nameController = TextEditingController(text: suggestedName);
+    final nameFocusNode = FocusNode();
+    final dialogWidth = min(560.0, MediaQuery.of(context).size.width - 48);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        final scheme = Theme.of(dialogContext).colorScheme;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (nameFocusNode.canRequestFocus && !nameFocusNode.hasFocus) {
+            nameFocusNode.requestFocus();
+          }
+        });
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 10),
+          contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 10),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+          buttonPadding: const EdgeInsets.symmetric(horizontal: 8),
+          title: const Text('Dupliquer la scène'),
+          content: SizedBox(
+            width: dialogWidth,
+            child: TextField(
+              controller: nameController,
+              focusNode: nameFocusNode,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) =>
+                  Navigator.of(dialogContext).pop(nameController.text.trim()),
+              decoration: InputDecoration(
+                labelText: 'Nom de la nouvelle scène',
+                prefixIcon: Icon(
+                  Icons.copy_rounded,
+                  color: scheme.primary.withValues(alpha: 0.9),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(nameController.text.trim()),
+              child: const Text('Dupliquer'),
+            ),
+          ],
+        );
+      },
+    );
+    nameController.dispose();
+    nameFocusNode.dispose();
+
+    final trimmedName = name?.trim();
+    if (trimmedName == null || trimmedName.isEmpty) {
+      return;
+    }
+
+    final duplicated = await _notifier.duplicateBoard(board, trimmedName);
+    if (!mounted) {
+      return;
+    }
+    if (duplicated == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Erreur lors de la duplication de la scène'),
+        ),
       );
     }
   }
