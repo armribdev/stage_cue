@@ -72,6 +72,18 @@ class SoundItem {
   });
 }
 
+class _RemovedSoundSnapshot {
+  final int boardId;
+  final Sound sound;
+  final int index;
+
+  const _RemovedSoundSnapshot({
+    required this.boardId,
+    required this.sound,
+    required this.index,
+  });
+}
+
 /// Provider/Notifier pour la gestion de l'état du sampler
 class SamplerNotifier extends ChangeNotifier {
   final SoundRepository _repository;
@@ -79,10 +91,14 @@ class SamplerNotifier extends ChangeNotifier {
   final RemoveSoundFromBoardUseCase? _removeSoundFromBoardUseCase;
   int? _activeBoardId;
   double _masterVolume = 1.0;
+  _RemovedSoundSnapshot? _lastRemovedSound;
 
   SamplerState _state = SamplerState(sounds: []);
   SamplerState get state => _state;
   double get masterVolume => _masterVolume;
+  bool get canUndoLastRemoval =>
+      _lastRemovedSound != null &&
+      _lastRemovedSound!.boardId == _activeBoardId;
 
   SamplerNotifier(
     this._repository,
@@ -151,6 +167,7 @@ class SamplerNotifier extends ChangeNotifier {
     }
 
     await stopAllSounds();
+    _lastRemovedSound = null;
     _state = _state.copyWith(selectedBoard: board);
     _activeBoardId = board.id;
     notifyListeners();
@@ -237,6 +254,7 @@ class SamplerNotifier extends ChangeNotifier {
     if (boardId != null) {
       _activeBoardId = boardId;
     }
+    _lastRemovedSound = null;
     final currentBoardId = _activeBoardId;
     if (currentBoardId == null) {
       _disposeSoundItems(_state.sounds);
@@ -432,29 +450,75 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   /// Retire un son de la board
-  Future<void> removeSound(SoundItem soundItem) async {
+  Future<bool> removeSound(SoundItem soundItem) async {
+    final currentBoardId = _activeBoardId;
+    if (currentBoardId == null) {
+      return false;
+    }
+    final previousIndex = _state.sounds.indexOf(soundItem);
+    if (previousIndex < 0) {
+      return false;
+    }
+
     // Retirer d'abord le son de la board dans la base de données pour éviter
     // une désynchronisation UI/DB en cas d'erreur.
     if (_removeSoundFromBoardUseCase != null) {
       try {
-        final currentBoardId = _activeBoardId;
-        if (currentBoardId != null) {
-          await _removeSoundFromBoardUseCase(currentBoardId, soundItem.sound.id);
-        }
+        await _removeSoundFromBoardUseCase(currentBoardId, soundItem.sound.id);
       } catch (e) {
         debugPrint('Erreur lors du retrait du son de la board: $e');
         _state = _state.copyWith(error: 'Impossible de retirer ce son de la board.');
         notifyListeners();
-        return;
+        return false;
       }
     }
 
+    _lastRemovedSound = _RemovedSoundSnapshot(
+      boardId: currentBoardId,
+      sound: soundItem.sound,
+      index: previousIndex,
+    );
     soundItem.player.dispose();
     _state = _state.copyWith(
       sounds: _state.sounds.where((s) => s != soundItem).toList(),
       error: null,
     );
     notifyListeners();
+    return true;
+  }
+
+  /// Annule la dernière suppression de pad sur la board active.
+  Future<bool> undoLastRemoval() async {
+    final snapshot = _lastRemovedSound;
+    final currentBoardId = _activeBoardId;
+    if (snapshot == null || currentBoardId == null) {
+      return false;
+    }
+    if (snapshot.boardId != currentBoardId) {
+      return false;
+    }
+
+    try {
+      await _repository.addSoundToBoard(snapshot.boardId, snapshot.sound.id);
+
+      final currentIds = _state.sounds.map((s) => s.sound.id).toList();
+      if (!currentIds.contains(snapshot.sound.id)) {
+        final insertionIndex = snapshot.index.clamp(0, currentIds.length);
+        currentIds.insert(insertionIndex, snapshot.sound.id);
+        await _repository.reorderBoardSounds(snapshot.boardId, currentIds);
+      }
+
+      _lastRemovedSound = null;
+      await loadSounds(boardId: snapshot.boardId);
+      _state = _state.copyWith(error: null);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Erreur lors de l\'annulation de suppression: $e');
+      _state = _state.copyWith(error: 'Impossible d\'annuler la suppression du pad.');
+      notifyListeners();
+      return false;
+    }
   }
 
   @override
