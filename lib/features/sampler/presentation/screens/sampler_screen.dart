@@ -1,5 +1,9 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
+import 'package:flutter/services.dart';
 import '../providers/sampler_provider.dart';
 import '../widgets/pad_button.dart';
 import '../../domain/entities/sound_board.dart';
@@ -14,6 +18,10 @@ const _addButtonMarker = _AddButtonMarker();
 
 class _AddButtonMarker {
   const _AddButtonMarker();
+}
+
+class _UndoPadIntent extends Intent {
+  const _UndoPadIntent();
 }
 
 /// Écran principal du sampler
@@ -35,6 +43,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _gridScrollController = ScrollController();
   bool _isReorderMode = false;
+  bool get _isDesktopPlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.macOS);
 
   @override
   void initState() {
@@ -218,8 +231,37 @@ class _SamplerScreenState extends State<SamplerScreen> {
       },
     );
     if (confirmed == true && mounted) {
-      await _notifier.removeSound(soundItem);
+      final removed = await _notifier.removeSound(soundItem);
+      if (!mounted || !removed || !_isDesktopPlatform) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Pad supprimé. Ctrl+Z pour annuler.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
     }
+  }
+
+  Future<void> _handleUndoShortcut() async {
+    if (!_isDesktopPlatform || !mounted) {
+      return;
+    }
+    final restored = await _notifier.undoLastRemoval();
+    if (!mounted || !restored) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Suppression annulée.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
   }
 
   static const _gridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
@@ -392,9 +434,26 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final isBoardsLoading = state.isBoardsLoading;
     final masterVolume = _notifier.masterVolume;
 
-    return Scaffold(
-      key: _scaffoldKey,
-      appBar: _SamplerAppBar(
+    return Shortcuts(
+      shortcuts: _isDesktopPlatform
+          ? const <ShortcutActivator, Intent>{
+              SingleActivator(LogicalKeyboardKey.keyZ, control: true): _UndoPadIntent(),
+            }
+          : const <ShortcutActivator, Intent>{},
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _UndoPadIntent: CallbackAction<_UndoPadIntent>(
+            onInvoke: (intent) {
+              unawaited(_handleUndoShortcut());
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            key: _scaffoldKey,
+            appBar: _SamplerAppBar(
         title: selectedBoard == null ? 'Soundboard' : selectedBoard.name,
         isReorderMode: _isReorderMode,
         canToggleReorder: state.sounds.isNotEmpty,
@@ -414,7 +473,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
           _notifier.loadSounds();
         },
       ),
-      drawer: _BoardsDrawer(
+            drawer: _BoardsDrawer(
         boards: boards,
         selectedBoard: selectedBoard,
         isBoardsLoading: isBoardsLoading,
@@ -437,7 +496,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 _notifier.loadSounds();
               },
       ),
-      body: SafeArea(
+            body: SafeArea(
         child: selectedBoard == null
             ? Center(
                 child: isBoardsLoading
@@ -515,9 +574,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
                       )
                     : _buildPadsGrid(context, state, selectedBoard),
       ),
-      bottomNavigationBar: _MasterVolumeBar(
-        masterVolume: masterVolume,
-        onChanged: (value) => _notifier.setMasterVolume(value),
+            bottomNavigationBar: _MasterVolumeBar(
+              masterVolume: masterVolume,
+              onChanged: (value) => _notifier.setMasterVolume(value),
+            ),
+          ),
+        ),
       ),
     );
   }
