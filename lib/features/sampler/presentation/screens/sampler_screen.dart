@@ -13,6 +13,7 @@ import '../../../../core/database/database.dart' as db;
 import 'settings_screen.dart';
 import 'sound_details_screen.dart';
 import 'sound_library_screen.dart';
+import 'sound_library_manage_screen.dart';
 
 /// Marqueur pour le bouton d'ajout dans la grille
 const _addButtonMarker = _AddButtonMarker();
@@ -686,10 +687,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
                       await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => SoundLibraryScreen(
-                            database: _database,
-                            boardId: selectedBoard.id,
-                          ),
+                          builder: (context) =>
+                              SoundLibraryManageScreen(database: _database),
                         ),
                       );
                       await _notifier.loadSounds();

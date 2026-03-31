@@ -392,30 +392,30 @@ class SamplerNotifier extends ChangeNotifier {
     bool updateDisplayName = false,
     double? volume,
   }) async {
+    final currentBoardId = _activeBoardId;
+    if (currentBoardId == null) {
+      return;
+    }
+
     var hasChanged = false;
     int? colorValueToSave;
     String? displayNameToSave;
     double? volumeToSave;
+    var nextDisplayName = soundItem.sound.displayName;
+    var nextColorValue = soundItem.sound.colorValue;
+    var nextVolume = soundItem.sound.volume;
 
     if (updateColor) {
       soundItem.buttonColor = buttonColor;
       colorValueToSave = buttonColor?.toARGB32();
+      nextColorValue = colorValueToSave;
       hasChanged = true;
     }
     if (updateDisplayName) {
       final trimmed = displayName?.trim();
       final normalized = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
       if (soundItem.sound.displayName != normalized) {
-        soundItem.sound = Sound(
-          id: soundItem.sound.id,
-          title: soundItem.sound.title,
-          displayName: normalized,
-          filePath: soundItem.sound.filePath,
-          type: soundItem.sound.type,
-          colorValue: soundItem.sound.colorValue,
-          volume: soundItem.sound.volume,
-          createdAt: soundItem.sound.createdAt,
-        );
+        nextDisplayName = normalized;
         displayNameToSave = normalized;
         hasChanged = true;
       }
@@ -424,6 +424,7 @@ class SamplerNotifier extends ChangeNotifier {
       final clamped = volume.clamp(0.0, 1.0);
       if (soundItem.volume != clamped) {
         soundItem.volume = clamped;
+        nextVolume = clamped;
         volumeToSave = clamped;
         hasChanged = true;
         if (soundItem.isPlaying) {
@@ -433,9 +434,20 @@ class SamplerNotifier extends ChangeNotifier {
     }
 
     if (hasChanged) {
-      notifyListeners();
-      await _repository.updateSoundSettings(
+      soundItem.sound = Sound(
         id: soundItem.sound.id,
+        title: soundItem.sound.title,
+        displayName: nextDisplayName,
+        filePath: soundItem.sound.filePath,
+        type: soundItem.sound.type,
+        colorValue: nextColorValue,
+        volume: nextVolume,
+        createdAt: soundItem.sound.createdAt,
+      );
+      notifyListeners();
+      await _repository.updateBoardSoundSettings(
+        boardId: currentBoardId,
+        soundId: soundItem.sound.id,
         colorValue: colorValueToSave,
         updateColor: updateColor,
         displayName: displayNameToSave,
