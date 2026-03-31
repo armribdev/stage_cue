@@ -299,6 +299,9 @@ class SamplerNotifier extends ChangeNotifier {
           );
 
           player.onPlayerStateChanged.listen((isPlaying) {
+            if (soundItem.isPlaying == isPlaying) {
+              return;
+            }
             soundItem.isPlaying = isPlaying;
             notifyListeners();
           });
