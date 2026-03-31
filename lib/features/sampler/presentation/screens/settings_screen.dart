@@ -77,15 +77,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       // Charger tous les dossiers/fichiers surveillés
-      final watchedPaths = await widget.database.select(widget.database.watchedPaths).get();
-      
+      final watchedPaths = await widget.database
+          .select(widget.database.watchedPaths)
+          .get();
+
       // Charger tous les sons de la base de données
       final sounds = await widget.database.select(widget.database.sounds).get();
-      
+
       // Obtenir le chemin de la base de données
       final directory = await getApplicationDocumentsDirectory();
       final dbFile = File('${directory.path}/db.sqlite');
-      
+
       int dbSize = 0;
       if (await dbFile.exists()) {
         dbSize = await dbFile.length();
@@ -171,14 +173,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             return SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Column(
                   children: [
                     Expanded(
                       child: StatefulBuilder(
                         builder: (context, setDialogState) {
                           if (_tagCatalog.isEmpty) {
-                            return const Center(child: Text('Aucun tag disponible'));
+                            return const Center(
+                              child: Text('Aucun tag disponible'),
+                            );
                           }
                           return SingleChildScrollView(
                             controller: scrollController,
@@ -187,13 +194,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               children: [
                                 for (final category in _tagCatalog) ...[
                                   Padding(
-                                    padding: const EdgeInsets.only(top: 8.0, bottom: 4),
+                                    padding: const EdgeInsets.only(
+                                      top: 8.0,
+                                      bottom: 4,
+                                    ),
                                     child: Text(
                                       category.category.name,
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodyMedium
-                                          ?.copyWith(fontWeight: FontWeight.bold),
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                     ),
                                   ),
                                   Wrap(
@@ -204,13 +216,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         FilterChip(
                                           label: Text(tag.name),
                                           selected: selected.contains(tag.id),
-                                          backgroundColor:
-                                              Color(category.category.color).withAlpha(24),
-                                          selectedColor:
-                                              Color(category.category.color).withAlpha(64),
-                                          checkmarkColor: Color(category.category.color),
+                                          backgroundColor: Color(
+                                            category.category.color,
+                                          ).withAlpha(24),
+                                          selectedColor: Color(
+                                            category.category.color,
+                                          ).withAlpha(64),
+                                          checkmarkColor: Color(
+                                            category.category.color,
+                                          ),
                                           side: BorderSide(
-                                            color: Color(category.category.color),
+                                            color: Color(
+                                              category.category.color,
+                                            ),
                                           ),
                                           onSelected: (value) {
                                             setDialogState(() {
@@ -240,7 +258,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(width: 12),
                         ElevatedButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(selected),
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(selected),
                           child: const Text('Enregistrer'),
                         ),
                       ],
@@ -272,10 +291,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildTagChip(TagItem tag) {
     final color = _getCategoryColor(tag.categoryId);
     return Chip(
-      label: Text(
-        tag.name,
-        style: const TextStyle(fontSize: 11),
-      ),
+      label: Text(tag.name, style: const TextStyle(fontSize: 11)),
       visualDensity: VisualDensity.compact,
       backgroundColor: color?.withAlpha(24),
       side: color == null ? null : BorderSide(color: color),
@@ -284,16 +300,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _addDirectory() async {
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
-    
+
     if (selectedDirectory != null) {
       try {
         final directory = Directory(selectedDirectory);
         if (await directory.exists()) {
           // Vérifier si le dossier n'est pas déjà surveillé
-          final existing = await (widget.database.select(widget.database.watchedPaths)
-            ..where((w) => w.path.equals(selectedDirectory)))
-            .get();
-          
+          final existing = await (widget.database.select(
+            widget.database.watchedPaths,
+          )..where((w) => w.path.equals(selectedDirectory))).get();
+
           if (existing.isNotEmpty) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -310,7 +326,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             isDirectory: true,
             addedAt: DateTime.now(),
           );
-          
+
           // Ajouter le dossier avec suivi de progression
           await _repository.addWatchedPath(
             watchedPath,
@@ -322,7 +338,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               }
             },
           );
-          
+
           // Nettoyer la progression après un court délai
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) {
@@ -331,7 +347,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               });
             }
           });
-          
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -356,7 +372,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _addFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'wma', 'opus'],
+      allowedExtensions: [
+        'mp3',
+        'wav',
+        'm4a',
+        'aac',
+        'ogg',
+        'flac',
+        'wma',
+        'opus',
+      ],
       allowMultiple: true, // Permettre la sélection multiple
     );
 
@@ -364,19 +389,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       try {
         int addedCount = 0;
         int skippedCount = 0;
-        
+
         for (final pickedFile in result.files) {
           if (pickedFile.path == null) continue;
-          
+
           final filePath = pickedFile.path!;
           final file = File(filePath);
-          
+
           if (await file.exists()) {
             // Vérifier si le fichier n'est pas déjà surveillé
-            final existing = await (widget.database.select(widget.database.watchedPaths)
-              ..where((w) => w.path.equals(filePath)))
-              .get();
-            
+            final existing = await (widget.database.select(
+              widget.database.watchedPaths,
+            )..where((w) => w.path.equals(filePath))).get();
+
             if (existing.isNotEmpty) {
               skippedCount++;
               continue;
@@ -389,12 +414,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               isDirectory: false,
               addedAt: DateTime.now(),
             );
-            
+
             await _repository.addWatchedPath(watchedPath);
             addedCount++;
           }
         }
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -427,7 +452,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         isDirectory: watchedPath.isDirectory,
         addedAt: watchedPath.addedAt,
       );
-      
+
       await _repository.removeWatchedPath(watchedPathEntity);
 
       if (mounted) {
@@ -469,10 +494,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Paramètres'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
+      appBar: AppBar(title: const Text('Paramètres')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -503,11 +525,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ],
                             ),
                             const Divider(),
-                            _buildInfoRow('Nombre total de sons', '${_sounds.length}'),
+                            _buildInfoRow(
+                              'Nombre total de sons',
+                              '${_sounds.length}',
+                            ),
                             const SizedBox(height: 8),
-                            _buildInfoRow('Taille de la base de données', _formatBytes(_dbSize)),
+                            _buildInfoRow(
+                              'Taille de la base de données',
+                              _formatBytes(_dbSize),
+                            ),
                             const SizedBox(height: 8),
-                            _buildInfoRow('Chemin de la base de données', _dbPath, isPath: true),
+                            _buildInfoRow(
+                              'Chemin de la base de données',
+                              _dbPath,
+                              isPath: true,
+                            ),
                           ],
                         ),
                       ),
@@ -529,7 +561,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.audio_file),
-                              tooltip: 'Ajouter des fichiers audio (sélection multiple)',
+                              tooltip:
+                                  'Ajouter des fichiers audio (sélection multiple)',
                               onPressed: _addFile,
                             ),
                           ],
@@ -576,35 +609,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             itemCount: _watchedPaths.length,
                             itemBuilder: (context, index) {
                               final watchedPath = _watchedPaths[index];
-                              final progress = _indexingProgress[watchedPath.path];
-                              final isIndexing = progress != null && !progress.isComplete;
-                              
+                              final progress =
+                                  _indexingProgress[watchedPath.path];
+                              final isIndexing =
+                                  progress != null && !progress.isComplete;
+
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 8),
                                 child: Column(
                                   children: [
                                     ListTile(
                                       leading: CircleAvatar(
-                                        backgroundColor:
-                                            Theme.of(context).colorScheme.primaryContainer,
+                                        backgroundColor: Theme.of(
+                                          context,
+                                        ).colorScheme.primaryContainer,
                                         child: Icon(
                                           watchedPath.isDirectory
                                               ? Icons.folder
                                               : Icons.audio_file,
-                                          color: Theme.of(context).colorScheme.primary,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
                                         ),
                                       ),
                                       title: Text(
                                         p.basename(watchedPath.path),
-                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                       subtitle: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const SizedBox(height: 4),
                                           Text(
                                             watchedPath.path,
-                                            style: const TextStyle(fontSize: 11),
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                            ),
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -621,38 +664,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         ],
                                       ),
                                       trailing: IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red),
-                                        onPressed: () => _removeWatchedPath(watchedPath),
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          color: Colors.red,
+                                        ),
+                                        onPressed: () =>
+                                            _removeWatchedPath(watchedPath),
                                         tooltip: 'Retirer',
                                       ),
                                       isThreeLine: true,
                                     ),
                                     // Barre de progression pour les dossiers en cours d'indexation
-                                    if (watchedPath.isDirectory && progress != null)
+                                    if (watchedPath.isDirectory &&
+                                        progress != null)
                                       Padding(
-                                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          0,
+                                          16,
+                                          16,
+                                        ),
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             if (isIndexing)
                                               LinearProgressIndicator(
                                                 value: progress.progress,
-                                                backgroundColor: Colors.grey[300],
-                                                valueColor: AlwaysStoppedAnimation<Color>(
-                                                  Theme.of(context).colorScheme.primary,
-                                                ),
+                                                backgroundColor:
+                                                    Colors.grey[300],
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                      Color
+                                                    >(
+                                                      Theme.of(
+                                                        context,
+                                                      ).colorScheme.primary,
+                                                    ),
                                               )
                                             else if (progress.error != null)
                                               Container(
-                                                padding: const EdgeInsets.all(8),
+                                                padding: const EdgeInsets.all(
+                                                  8,
+                                                ),
                                                 decoration: BoxDecoration(
                                                   color: Colors.red[50],
-                                                  borderRadius: BorderRadius.circular(4),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
                                                 ),
                                                 child: Row(
                                                   children: [
-                                                    Icon(Icons.error_outline, 
-                                                      color: Colors.red[700], 
+                                                    Icon(
+                                                      Icons.error_outline,
+                                                      color: Colors.red[700],
                                                       size: 16,
                                                     ),
                                                     const SizedBox(width: 8),
@@ -661,7 +725,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                                         'Erreur: ${progress.error}',
                                                         style: TextStyle(
                                                           fontSize: 12,
-                                                          color: Colors.red[700],
+                                                          color:
+                                                              Colors.red[700],
                                                         ),
                                                       ),
                                                     ),
@@ -670,22 +735,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                               )
                                             else
                                               Container(
-                                                padding: const EdgeInsets.all(8),
+                                                padding: const EdgeInsets.all(
+                                                  8,
+                                                ),
                                                 decoration: BoxDecoration(
-                                                  color: progress.total == 0 
-                                                      ? Colors.orange[50] 
+                                                  color: progress.total == 0
+                                                      ? Colors.orange[50]
                                                       : Colors.green[50],
-                                                  borderRadius: BorderRadius.circular(4),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
                                                 ),
                                                 child: Row(
                                                   children: [
                                                     Icon(
-                                                      progress.total == 0 
-                                                          ? Icons.warning_amber_rounded
-                                                          : Icons.check_circle, 
-                                                      color: progress.total == 0 
-                                                          ? Colors.orange[700] 
-                                                          : Colors.green[700], 
+                                                      progress.total == 0
+                                                          ? Icons
+                                                                .warning_amber_rounded
+                                                          : Icons.check_circle,
+                                                      color: progress.total == 0
+                                                          ? Colors.orange[700]
+                                                          : Colors.green[700],
                                                       size: 16,
                                                     ),
                                                     const SizedBox(width: 8),
@@ -696,18 +765,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                                             : 'Indexation terminée: ${progress.current}/${progress.total} fichier(s)',
                                                         style: TextStyle(
                                                           fontSize: 12,
-                                                          color: progress.total == 0 
-                                                              ? Colors.orange[700] 
-                                                              : Colors.green[700],
+                                                          color:
+                                                              progress.total ==
+                                                                  0
+                                                              ? Colors
+                                                                    .orange[700]
+                                                              : Colors
+                                                                    .green[700],
                                                         ),
                                                       ),
                                                     ),
                                                   ],
                                                 ),
                                               ),
-                                            if (isIndexing && progress.total > 0)
+                                            if (isIndexing &&
+                                                progress.total > 0)
                                               Padding(
-                                                padding: const EdgeInsets.only(top: 4),
+                                                padding: const EdgeInsets.only(
+                                                  top: 4,
+                                                ),
                                                 child: Text(
                                                   'Indexation en cours: ${progress.current}/${progress.total} fichier(s)',
                                                   style: TextStyle(
@@ -766,16 +842,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 margin: const EdgeInsets.only(bottom: 8),
                                 child: ListTile(
                                   leading: CircleAvatar(
-                                    backgroundColor:
-                                        Theme.of(context).colorScheme.primaryContainer,
+                                    backgroundColor: Theme.of(
+                                      context,
+                                    ).colorScheme.primaryContainer,
                                     child: Icon(
                                       Icons.music_note,
-                                      color: Theme.of(context).colorScheme.primary,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
                                     ),
                                   ),
                                   title: Text(sound.title),
                                   subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const SizedBox(height: 4),
                                       Text(
@@ -790,12 +870,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                           spacing: 6,
                                           runSpacing: -6,
                                           children: [
-                                            for (final tag in tags) _buildTagChip(tag),
+                                            for (final tag in tags)
+                                              _buildTagChip(tag),
                                           ],
                                         ),
                                       ],
                                       const SizedBox(height: 2),
-                                      Text('Type: ${_getSoundTypeName(sound.type)}'),
+                                      Text(
+                                        'Type: ${_getSoundTypeName(sound.type)}',
+                                      ),
                                       const SizedBox(height: 2),
                                       Text(
                                         'Créé le: ${sound.createdAt.toString().substring(0, 19)}',
@@ -849,4 +932,3 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
-

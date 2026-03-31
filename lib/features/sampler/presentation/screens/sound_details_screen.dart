@@ -52,7 +52,9 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
       _isTagsLoading = true;
     });
     final catalog = await widget.notifier.loadTagCatalog();
-    final selected = await widget.notifier.getTagsForSound(widget.soundItem.sound.id);
+    final selected = await widget.notifier.getTagsForSound(
+      widget.soundItem.sound.id,
+    );
     if (!mounted) {
       return;
     }
@@ -90,10 +92,7 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
     setState(() {
       _volume = clamped;
     });
-    widget.notifier.updateSoundItemSettings(
-      widget.soundItem,
-      volume: clamped,
-    );
+    widget.notifier.updateSoundItemSettings(widget.soundItem, volume: clamped);
     widget.soundItem.player.setVolume(clamped);
   }
 
@@ -128,10 +127,7 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
     ];
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Détails du son'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
+      appBar: AppBar(title: const Text('Détails du son')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -154,11 +150,7 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
                       _getSoundTypeLabel(sound.type),
                     ),
                     const SizedBox(height: 8),
-                    _buildInfoRow(
-                      context,
-                      'Chemin',
-                      sound.filePath,
-                    ),
+                    _buildInfoRow(context, 'Chemin', sound.filePath),
                     const SizedBox(height: 8),
                     _buildInfoRow(
                       context,
@@ -166,11 +158,7 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
                       _formatDate(sound.createdAt),
                     ),
                     const SizedBox(height: 8),
-                    _buildInfoRow(
-                      context,
-                      'ID',
-                      sound.id.toString(),
-                    ),
+                    _buildInfoRow(context, 'ID', sound.id.toString()),
                     const SizedBox(height: 8),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,9 +167,8 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
                           width: 120,
                           child: Text(
                             'Tags:',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
@@ -193,43 +180,48 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
                           child: _isTagsLoading
                               ? const Center(child: CircularProgressIndicator())
                               : (_tagCatalog.isEmpty || _selectedTagIds.isEmpty)
-                                  ? Text(
-                                      'Aucun tag disponible',
-                                      style: Theme.of(context).textTheme.bodyMedium,
-                                    )
-                                  : LayoutBuilder(
-                                      builder: (context, constraints) {
-                                        return Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          clipBehavior: Clip.none,
-                                          alignment: WrapAlignment.start,
-                                          children: [
-                                            for (final category in _tagCatalog)
-                                              ...category.tags
-                                                  .where(
-                                                    (tag) => _selectedTagIds.contains(tag.id),
-                                                  )
-                                                  .map(
-                                                    (tag) => Chip(
-                                                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                                        padding: EdgeInsets.zero,
-                                                        label: Text(
-                                                          tag.name,
-                                                          style: Theme.of(context).textTheme.labelSmall,
-                                                        ),
-                                                        backgroundColor: Color(
-                                                          category.category.color,
-                                                        ).withAlpha(40),
-                                                      ),
+                              ? Text(
+                                  'Aucun tag disponible',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                )
+                              : LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      clipBehavior: Clip.none,
+                                      alignment: WrapAlignment.start,
+                                      children: [
+                                        for (final category in _tagCatalog)
+                                          ...category.tags
+                                              .where(
+                                                (tag) => _selectedTagIds
+                                                    .contains(tag.id),
+                                              )
+                                              .map(
+                                                (tag) => Chip(
+                                                  materialTapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                  padding: EdgeInsets.zero,
+                                                  label: Text(
+                                                    tag.name,
+                                                    style: Theme.of(
+                                                      context,
+                                                    ).textTheme.labelSmall,
                                                   ),
-                                          ],
-                                        );
-                                      },
-                                    ),
+                                                  backgroundColor: Color(
+                                                    category.category.color,
+                                                  ).withAlpha(40),
+                                                ),
+                                              ),
+                                      ],
+                                    );
+                                  },
+                                ),
                         ),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),
@@ -328,16 +320,13 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
           width: 120,
           child: Text(
             '$label:',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
         ),
         Expanded(
-          child: Text(
-            value,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
+          child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
         ),
       ],
     );
@@ -350,13 +339,12 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
   Widget _buildDefaultColorOption(BuildContext context) {
     final isSelected = _selectedColor == null;
     final scheme = Theme.of(context).colorScheme;
-    final borderColor =
-        isSelected ? scheme.primary : scheme.outlineVariant;
+    final borderColor = isSelected ? scheme.primary : scheme.outlineVariant;
     final onSurface = scheme.onSurfaceVariant;
     return Tooltip(
       message: 'Couleur par défaut',
       child: InkWell(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         onTap: () => _updateColor(null),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
@@ -365,11 +353,8 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: scheme.surfaceContainerHighest ,
-            border: Border.all(
-              color: borderColor,
-              width: isSelected ? 3 : 1,
-            ),
+            color: scheme.surfaceContainerHighest,
+            border: Border.all(color: borderColor, width: isSelected ? 3 : 1),
             boxShadow: [
               if (isSelected)
                 BoxShadow(
@@ -380,17 +365,13 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
             ],
           ),
           child: isSelected
-              ? Icon(
-                  Icons.check,
-                  color: onSurface,
-                  size: 20,
-                )
+              ? Icon(Icons.check, color: onSurface, size: 20)
               : Text(
                   'D',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: onSurface,
-                      ),
+                    fontWeight: FontWeight.bold,
+                    color: onSurface,
+                  ),
                 ),
         ),
       ),
@@ -400,10 +381,9 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
   Widget _buildColorDot(BuildContext context, Color color) {
     final isSelected = _selectedColor == color;
     final scheme = Theme.of(context).colorScheme;
-    final borderColor =
-        isSelected ? scheme.primary : scheme.outlineVariant;
+    final borderColor = isSelected ? scheme.primary : scheme.outlineVariant;
     return InkWell(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(16),
       onTap: () => _updateColor(color),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
@@ -412,10 +392,7 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: color,
-          border: Border.all(
-            color: borderColor,
-            width: isSelected ? 3 : 1,
-          ),
+          border: Border.all(color: borderColor, width: isSelected ? 3 : 1),
           boxShadow: [
             if (isSelected)
               BoxShadow(
@@ -426,11 +403,7 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
           ],
         ),
         child: isSelected
-            ? Icon(
-                Icons.check,
-                color: _getCheckmarkColor(color),
-                size: 20,
-              )
+            ? Icon(Icons.check, color: _getCheckmarkColor(color), size: 20)
             : null,
       ),
     );
@@ -440,4 +413,3 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
     return color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
   }
 }
-

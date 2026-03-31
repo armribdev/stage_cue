@@ -238,18 +238,18 @@ class _SamplerScreenState extends State<SamplerScreen> {
   static const double _itemWidth = 180;
 
   Widget _buildAddButtonCard(BuildContext context, SoundBoard selectedBoard) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       key: const ValueKey('add_button'),
-      elevation: 1,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+          color: scheme.primary.withValues(alpha: 0.45),
           style: BorderStyle.solid,
-          width: 2,
+          width: 1.4,
         ),
       ),
-      color: Theme.of(context).colorScheme.surface,
+      color: scheme.primaryContainer.withValues(alpha: 0.15),
       child: InkWell(
         onTap: () async {
           await Navigator.push(
@@ -263,12 +263,20 @@ class _SamplerScreenState extends State<SamplerScreen> {
           );
           await _notifier.loadSounds();
         },
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
         child: Center(
-          child: Icon(
-            Icons.add,
-            size: 48,
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add, size: 42, color: scheme.primary),
+              const SizedBox(height: 10),
+              Text(
+                'Ajouter un son',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
           ),
         ),
       ),
@@ -287,8 +295,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
         crossAxisCount = max(2, crossAxisCount);
         final gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: crossAxisCount,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
+          crossAxisSpacing: 14,
+          mainAxisSpacing: 14,
           childAspectRatio: 1.4,
         );
 
@@ -296,7 +304,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
           return ReorderableGridView.builder(
             key: const ValueKey('pads_reorder_grid'),
             controller: _gridScrollController,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             gridDelegate: gridDelegate,
             itemCount: state.sounds.length,
             dragEnabled: true,
@@ -330,7 +338,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
         final gridItems = <Object>[...state.sounds, _addButtonMarker];
         return GridView.builder(
           controller: _gridScrollController,
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
           gridDelegate: gridDelegate,
           itemCount: gridItems.length,
           itemBuilder: (context, index) {
@@ -471,69 +479,71 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   ? const Center(child: CircularProgressIndicator())
                   : state.error != null
                   ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            size: 64,
-                            color: Colors.red[600],
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.error_outline_rounded,
+                                size: 48,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Erreur: ${state.error}',
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Erreur: ${state.error}',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.red[600],
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     )
                   : state.sounds.isEmpty
                   ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.music_note,
-                            size: 64,
-                            color: Colors.grey[600],
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.graphic_eq_rounded,
+                                size: 48,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(height: 14),
+                              Text(
+                                'Aucun son dans la scène',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Ajoutez des sons depuis la bibliothèque',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                              const SizedBox(height: 20),
+                              ElevatedButton.icon(
+                                onPressed: () async {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => SoundLibraryScreen(
+                                        database: _database,
+                                        boardId: selectedBoard.id,
+                                      ),
+                                    ),
+                                  );
+                                  await _notifier.loadSounds();
+                                },
+                                icon: const Icon(Icons.library_music_rounded),
+                                label: const Text('Ouvrir la bibliothèque'),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Aucun son dans la scène',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Ajoutez des sons depuis la bibliothèque',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => SoundLibraryScreen(
-                                    database: _database,
-                                    boardId: selectedBoard.id,
-                                  ),
-                                ),
-                              );
-                              await _notifier.loadSounds();
-                            },
-                            icon: const Icon(Icons.library_music),
-                            label: const Text('Ouvrir la bibliothèque'),
-                          ),
-                        ],
+                        ),
                       ),
                     )
                   : _buildPadsGrid(context, state, selectedBoard),
@@ -566,19 +576,31 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return AppBar(
       leading: IconButton(
-        icon: const Icon(Icons.menu),
+        icon: const Icon(Icons.menu_rounded),
         tooltip: 'Menu',
         onPressed: onOpenMenu,
       ),
-      title: Text(title),
-      backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      title: Text(
+        title,
+        style: Theme.of(
+          context,
+        ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+      ),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(
+          color: scheme.outlineVariant.withValues(alpha: 0.35),
+          height: 1,
+        ),
+      ),
       actions: [
         IconButton(
           icon: Icon(
-            isEditMode ? Icons.check : Icons.edit,
-            color: isEditMode ? Theme.of(context).colorScheme.primary : null,
+            isEditMode ? Icons.done_rounded : Icons.grid_view_rounded,
+            color: isEditMode ? scheme.primary : null,
           ),
           tooltip: isEditMode ? 'Terminer l’édition' : 'Modifier la grille',
           onPressed: canToggleEditMode ? onToggleEditMode : null,
@@ -614,10 +636,26 @@ class _BoardsDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Drawer(
       child: SafeArea(
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
+                children: [
+                  Icon(Icons.theater_comedy_rounded, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Scènes',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
@@ -684,17 +722,16 @@ class _MasterVolumeBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return BottomAppBar(
+      shape: const CircularNotchedRectangle(),
       child: SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              Icon(
-                Icons.volume_up,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+              Icon(Icons.volume_up, color: scheme.primary),
               const SizedBox(width: 12),
               Expanded(
                 child: Slider(
@@ -706,7 +743,12 @@ class _MasterVolumeBar extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Text('${(masterVolume * 100).round()}%'),
+              Text(
+                '${(masterVolume * 100).round()}%',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
             ],
           ),
         ),
@@ -750,11 +792,9 @@ class _RenameSoundBoardScreenState extends State<_RenameSoundBoardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Renommer la scène'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
+      appBar: AppBar(title: const Text('Renommer la scène')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -762,9 +802,12 @@ class _RenameSoundBoardScreenState extends State<_RenameSoundBoardScreen> {
           children: [
             TextField(
               controller: _controller,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Nom de la scène',
-                border: OutlineInputBorder(),
+                prefixIcon: Icon(
+                  Icons.text_fields_rounded,
+                  color: scheme.primary.withValues(alpha: 0.9),
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -803,11 +846,9 @@ class _CreateSoundBoardScreenState extends State<_CreateSoundBoardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Nouvelle scène'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
+      appBar: AppBar(title: const Text('Nouvelle scène')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -815,9 +856,12 @@ class _CreateSoundBoardScreenState extends State<_CreateSoundBoardScreen> {
           children: [
             TextField(
               controller: _controller,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Nom de la scène',
-                border: OutlineInputBorder(),
+                prefixIcon: Icon(
+                  Icons.auto_awesome_rounded,
+                  color: scheme.primary.withValues(alpha: 0.9),
+                ),
               ),
             ),
             const SizedBox(height: 16),
