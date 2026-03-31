@@ -258,7 +258,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
               ),
             ),
           );
-          _notifier.loadSounds();
+          await _notifier.loadSounds();
         },
         borderRadius: BorderRadius.circular(8),
         child: Center(
@@ -432,7 +432,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
               builder: (context) => SettingsScreen(database: _database),
             ),
           );
-          _notifier.loadSounds();
+          await _notifier.loadSounds();
         },
       ),
             drawer: _BoardsDrawer(
@@ -455,7 +455,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     ),
                   ),
                 );
-                _notifier.loadSounds();
+                await _notifier.loadSounds();
               },
       ),
             body: SafeArea(
@@ -526,7 +526,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                                     ),
                                   ),
                                 );
-                                _notifier.loadSounds();
+                                await _notifier.loadSounds();
                               },
                               icon: const Icon(Icons.library_music),
                               label: const Text('Ouvrir la bibliothèque'),
