@@ -488,14 +488,14 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   /// Annule la dernière suppression de pad sur la board active.
-  Future<bool> undoLastRemoval() async {
+  Future<int?> undoLastRemoval() async {
     final snapshot = _lastRemovedSound;
     final currentBoardId = _activeBoardId;
     if (snapshot == null || currentBoardId == null) {
-      return false;
+      return null;
     }
     if (snapshot.boardId != currentBoardId) {
-      return false;
+      return null;
     }
 
     try {
@@ -512,12 +512,12 @@ class SamplerNotifier extends ChangeNotifier {
       await loadSounds(boardId: snapshot.boardId);
       _state = _state.copyWith(error: null);
       notifyListeners();
-      return true;
+      return snapshot.sound.id;
     } catch (e) {
       debugPrint('Erreur lors de l\'annulation de suppression: $e');
       _state = _state.copyWith(error: 'Impossible d\'annuler la suppression du pad.');
       notifyListeners();
-      return false;
+      return null;
     }
   }
 

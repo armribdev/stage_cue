@@ -1,11 +1,12 @@
 import 'dart:async';
+import 'dart:math' show max;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
 import 'package:flutter/services.dart';
+import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import '../providers/sampler_provider.dart';
-import '../widgets/pad_button.dart';
+import '../widgets/pad_item.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/database/database.dart' as db;
@@ -42,7 +43,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
   late final db.AppDatabase _database;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _gridScrollController = ScrollController();
-  bool _isReorderMode = false;
+  bool _isEditMode = false;
+  int? _recentlyRestoredSoundId;
   bool get _isDesktopPlatform =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.windows ||
@@ -207,69 +209,30 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
   }
 
-  Future<void> _showRemovePadConfirm(BuildContext context, SoundItem soundItem) async {
-    final label = soundItem.sound.displayName?.trim().isNotEmpty == true
-        ? soundItem.sound.displayName!
-        : soundItem.sound.title;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Supprimer le pad'),
-          content: Text('Retirer « $label » de la board ?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Annuler'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Supprimer'),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed == true && mounted) {
-      final removed = await _notifier.removeSound(soundItem);
-      if (!mounted || !removed || !_isDesktopPlatform) {
-        return;
-      }
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('Pad supprimé. Ctrl+Z pour annuler.'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-    }
-  }
-
   Future<void> _handleUndoShortcut() async {
     if (!_isDesktopPlatform || !mounted) {
       return;
     }
-    final restored = await _notifier.undoLastRemoval();
-    if (!mounted || !restored) {
+    final restoredSoundId = await _notifier.undoLastRemoval();
+    if (!mounted || restoredSoundId == null) {
       return;
     }
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Suppression annulée.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+    setState(() {
+      _recentlyRestoredSoundId = restoredSoundId;
+    });
+    unawaited(
+      Future<void>.delayed(const Duration(milliseconds: 650), () {
+        if (!mounted || _recentlyRestoredSoundId != restoredSoundId) {
+          return;
+        }
+        setState(() {
+          _recentlyRestoredSoundId = null;
+        });
+      }),
+    );
   }
 
-  static const _gridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
-    maxCrossAxisExtent: 200,
-    crossAxisSpacing: 10,
-    mainAxisSpacing: 10,
-    childAspectRatio: 1.4,
-  );
+  static const double _itemWidth = 180;
 
   Widget _buildAddButtonCard(BuildContext context, SoundBoard selectedBoard) {
     return Card(
@@ -314,57 +277,71 @@ class _SamplerScreenState extends State<SamplerScreen> {
     SamplerState state,
     SoundBoard selectedBoard,
   ) {
-    final gridItems = <Object>[...state.sounds, _addButtonMarker];
-    final addButtonIndex = state.sounds.length;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
+        int crossAxisCount = (screenWidth / _itemWidth).floor();
+        crossAxisCount = max(2, crossAxisCount);
+        final gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 1.4,
+        );
 
-    final children = gridItems.map((item) {
-      if (item == _addButtonMarker) {
-        return _buildAddButtonCard(context, selectedBoard);
-      }
-      final soundItem = item as SoundItem;
-      return _buildPadCard(context, state, soundItem);
-    }).toList();
-
-    if (_isReorderMode) {
-      return ReorderableBuilder<Widget>(
-        scrollController: _gridScrollController,
-        enableDraggable: true,
-        lockedIndices: [addButtonIndex],
-        children: children,
-        onReorder: (reorderedListFunction) {
-          final reordered = reorderedListFunction(children);
-          final newSoundOrder = <SoundItem>[];
-          for (final w in reordered) {
-            final key = w.key;
-            if (key is ValueKey<int>) {
-              final id = key.value;
-              final matches = state.sounds.where((s) => s.sound.id == id);
-              final soundItem = matches.isEmpty ? null : matches.first;
-              if (soundItem != null) {
-                newSoundOrder.add(soundItem);
-              }
-            }
-          }
-          if (newSoundOrder.length == state.sounds.length) {
-            _notifier.reorderSoundsFromList(newSoundOrder);
-          }
-        },
-        builder: (children) {
-          return GridView(
+        if (_isEditMode) {
+          return ReorderableGridView.builder(
+            key: const ValueKey('pads_reorder_grid'),
             controller: _gridScrollController,
             padding: const EdgeInsets.all(12),
-            gridDelegate: _gridDelegate,
-            children: children,
+            gridDelegate: gridDelegate,
+            itemCount: state.sounds.length,
+            dragEnabled: true,
+            // Desktop (souris) a besoin d'un démarrage immédiat pour un drag fiable.
+            dragStartDelay: Duration.zero,
+            dragWidgetBuilder: (index, child) {
+              return Material(
+                type: MaterialType.transparency,
+                child: Opacity(
+                  opacity: 0.95,
+                  child: child,
+                ),
+              );
+            },
+            onDragStart: (index) {
+              HapticFeedback.selectionClick();
+            },
+            onReorder: (oldIndex, newIndex) {
+              if (oldIndex == newIndex) {
+                return;
+              }
+              final reordered = List<SoundItem>.from(state.sounds);
+              final moved = reordered.removeAt(oldIndex);
+              reordered.insert(newIndex, moved);
+              _notifier.reorderSoundsFromList(reordered);
+            },
+            itemBuilder: (context, index) {
+              final soundItem = state.sounds[index];
+              return _buildPadCard(context, state, soundItem);
+            },
           );
-        },
-      );
-    }
+        }
 
-    return GridView(
-      controller: _gridScrollController,
-      padding: const EdgeInsets.all(12),
-      gridDelegate: _gridDelegate,
-      children: children,
+        final gridItems = <Object>[...state.sounds, _addButtonMarker];
+        return GridView.builder(
+          controller: _gridScrollController,
+          padding: const EdgeInsets.all(12),
+          gridDelegate: gridDelegate,
+          itemCount: gridItems.length,
+          itemBuilder: (context, index) {
+            final item = gridItems[index];
+            if (item == _addButtonMarker) {
+              return _buildAddButtonCard(context, selectedBoard);
+            }
+            return _buildPadCard(context, state, item as SoundItem);
+          },
+        );
+      },
     );
   }
 
@@ -373,11 +350,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
     SamplerState state,
     SoundItem soundItem,
   ) {
-    final padWidget = PadButton(
-      key: ValueKey(soundItem.sound.id),
+    return PadItem(
+      key: ValueKey<int>(soundItem.sound.id),
       soundItem: soundItem,
-      onTap: () => _notifier.toggleSound(soundItem),
-      onLongPress: _isReorderMode
+      isEditMode: _isEditMode,
+      animateOnRestore: _recentlyRestoredSoundId == soundItem.sound.id,
+      onTap: _isEditMode ? null : () => _notifier.toggleSound(soundItem),
+      onLongPress: _isEditMode
           ? null
           : () async {
               await Navigator.push(
@@ -390,32 +369,15 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 ),
               );
             },
-      onRemove: () => _notifier.removeSound(soundItem),
+      onRemove: _isEditMode
+          ? () async {
+              final removed = await _notifier.removeSound(soundItem);
+              if (!mounted || !removed) {
+                return;
+              }
+            }
+          : null,
     );
-
-    if (_isReorderMode) {
-      return Stack(
-        key: ValueKey(soundItem.sound.id),
-        children: [
-          padWidget,
-          Positioned(
-            top: 4,
-            right: 4,
-            child: IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-              tooltip: 'Supprimer de la board',
-              onPressed: () => _showRemovePadConfirm(context, soundItem),
-              style: IconButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.surface,
-                padding: const EdgeInsets.all(4),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return padWidget;
   }
 
   @override
@@ -455,12 +417,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
             key: _scaffoldKey,
             appBar: _SamplerAppBar(
         title: selectedBoard == null ? 'Soundboard' : selectedBoard.name,
-        isReorderMode: _isReorderMode,
-        canToggleReorder: state.sounds.isNotEmpty,
+        isEditMode: _isEditMode,
+        canToggleEditMode: state.sounds.isNotEmpty,
         onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
-        onToggleReorder: () {
+        onToggleEditMode: () {
           setState(() {
-            _isReorderMode = !_isReorderMode;
+            _isEditMode = !_isEditMode;
           });
         },
         onOpenSettings: () async {
@@ -587,18 +549,18 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
 class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
-  final bool isReorderMode;
-  final bool canToggleReorder;
+  final bool isEditMode;
+  final bool canToggleEditMode;
   final VoidCallback onOpenMenu;
-  final VoidCallback onToggleReorder;
+  final VoidCallback onToggleEditMode;
   final VoidCallback onOpenSettings;
 
   const _SamplerAppBar({
     required this.title,
-    required this.isReorderMode,
-    required this.canToggleReorder,
+    required this.isEditMode,
+    required this.canToggleEditMode,
     required this.onOpenMenu,
-    required this.onToggleReorder,
+    required this.onToggleEditMode,
     required this.onOpenSettings,
   });
 
@@ -615,11 +577,11 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
       actions: [
         IconButton(
           icon: Icon(
-            isReorderMode ? Icons.check : Icons.drag_indicator,
-            color: isReorderMode ? Theme.of(context).colorScheme.primary : null,
+            isEditMode ? Icons.check : Icons.edit,
+            color: isEditMode ? Theme.of(context).colorScheme.primary : null,
           ),
-          tooltip: isReorderMode ? 'Terminer la réorganisation' : 'Réorganiser les pads',
-          onPressed: canToggleReorder ? onToggleReorder : null,
+          tooltip: isEditMode ? 'Terminer l’édition' : 'Modifier la grille',
+          onPressed: canToggleEditMode ? onToggleEditMode : null,
         ),
         IconButton(
           icon: const Icon(Icons.settings),
