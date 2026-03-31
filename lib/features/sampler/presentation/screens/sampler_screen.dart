@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' show max;
+import 'dart:math' show max, min;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +42,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   final ScrollController _gridScrollController = ScrollController();
   bool _isEditMode = false;
   int? _recentlyRestoredSoundId;
+  bool _didAutoOpenCreateForCurrentEmptyState = false;
   bool get _isDesktopPlatform =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.windows ||
@@ -79,40 +80,102 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   Future<void> _createBoard() async {
-    final scaffoldState = _scaffoldKey.currentState;
-    if (scaffoldState?.isDrawerOpen ?? false) {
-      Navigator.of(
-        context,
-      ).pop(); // Ferme le drawer avant d'ouvrir la boîte de dialogue
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    }
     if (!mounted) {
       return;
     }
 
-    final name = await Navigator.push<String>(
-      context,
-      MaterialPageRoute(builder: (context) => const _CreateSoundBoardScreen()),
+    final suggestedName = _buildSuggestedBoardName(_notifier.state.boards);
+    final nameController = TextEditingController();
+    final nameFocusNode = FocusNode();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        final scheme = Theme.of(dialogContext).colorScheme;
+        final dialogWidth = min(
+          560.0,
+          MediaQuery.of(dialogContext).size.width - 48,
+        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (nameFocusNode.canRequestFocus && !nameFocusNode.hasFocus) {
+            nameFocusNode.requestFocus();
+          }
+        });
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 10),
+          contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 10),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+          buttonPadding: const EdgeInsets.symmetric(horizontal: 8),
+          title: const Text('Nouvelle scène'),
+          content: SizedBox(
+            width: dialogWidth,
+            child: TextField(
+              controller: nameController,
+              focusNode: nameFocusNode,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) =>
+                  Navigator.of(dialogContext).pop(nameController.text.trim()),
+              decoration: InputDecoration(
+                labelText: 'Nom de la scène',
+                hintText: suggestedName,
+                prefixIcon: Icon(
+                  Icons.auto_awesome_rounded,
+                  color: scheme.primary.withValues(alpha: 0.9),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(nameController.text.trim()),
+              child: const Text('Créer'),
+            ),
+          ],
+        );
+      },
     );
+    nameController.dispose();
+    nameFocusNode.dispose();
 
     final trimmedName = name?.trim();
-    if (trimmedName == null || trimmedName.isEmpty) {
+    if (trimmedName == null) {
       return;
     }
+    final scaffoldState = _scaffoldKey.currentState;
+    if (scaffoldState?.isDrawerOpen ?? false) {
+      Navigator.of(context).pop();
+    }
 
-    final newBoard = await _notifier.createBoard(trimmedName);
+    final finalName = trimmedName.isEmpty ? suggestedName : trimmedName;
+    final newBoard = await _notifier.createBoard(finalName);
     if (!mounted) {
       return;
     }
-    if (newBoard != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Scène "${newBoard.name}" créée')));
-    } else {
+    if (newBoard == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Erreur lors de la création de la scène')),
       );
     }
+  }
+
+  String _buildSuggestedBoardName(List<SoundBoard> boards) {
+    final existingNames = boards
+        .map((b) => b.name.trim().toLowerCase())
+        .where((n) => n.isNotEmpty)
+        .toSet();
+    var index = 1;
+    while (existingNames.contains('scène $index')) {
+      index++;
+    }
+    return 'Scène $index';
   }
 
   Future<void> _showBoardActions(SoundBoard board) async {
@@ -147,12 +210,61 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   Future<void> _renameBoard(SoundBoard board) async {
-    final name = await Navigator.push<String>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => _RenameSoundBoardScreen(initialName: board.name),
-      ),
+    final nameController = TextEditingController(text: board.name);
+    final nameFocusNode = FocusNode();
+    final dialogWidth = min(560.0, MediaQuery.of(context).size.width - 48);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        final scheme = Theme.of(dialogContext).colorScheme;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (nameFocusNode.canRequestFocus && !nameFocusNode.hasFocus) {
+            nameFocusNode.requestFocus();
+          }
+        });
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 10),
+          contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 10),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+          buttonPadding: const EdgeInsets.symmetric(horizontal: 8),
+          title: const Text('Renommer la scène'),
+          content: SizedBox(
+            width: dialogWidth,
+            child: TextField(
+              controller: nameController,
+              focusNode: nameFocusNode,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) =>
+                  Navigator.of(dialogContext).pop(nameController.text.trim()),
+              decoration: InputDecoration(
+                labelText: 'Nom de la scène',
+                prefixIcon: Icon(
+                  Icons.text_fields_rounded,
+                  color: scheme.primary.withValues(alpha: 0.9),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(nameController.text.trim()),
+              child: const Text('Renommer'),
+            ),
+          ],
+        );
+      },
     );
+    nameController.dispose();
+    nameFocusNode.dispose();
 
     final trimmedName = name?.trim();
     if (trimmedName == null ||
@@ -408,6 +520,20 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final boards = state.boards;
     final isBoardsLoading = state.isBoardsLoading;
     final masterVolume = _notifier.masterVolume;
+
+    if (!isBoardsLoading &&
+        boards.isEmpty &&
+        !_didAutoOpenCreateForCurrentEmptyState) {
+      _didAutoOpenCreateForCurrentEmptyState = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        unawaited(_createBoard());
+      });
+    } else if (boards.isNotEmpty && _didAutoOpenCreateForCurrentEmptyState) {
+      _didAutoOpenCreateForCurrentEmptyState = false;
+    }
 
     return Shortcuts(
       shortcuts: _isDesktopPlatform
@@ -792,138 +918,6 @@ class _MasterVolumeBar extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CreateSoundBoardScreen extends StatefulWidget {
-  const _CreateSoundBoardScreen();
-
-  @override
-  State<_CreateSoundBoardScreen> createState() =>
-      _CreateSoundBoardScreenState();
-}
-
-class _RenameSoundBoardScreen extends StatefulWidget {
-  final String initialName;
-
-  const _RenameSoundBoardScreen({required this.initialName});
-
-  @override
-  State<_RenameSoundBoardScreen> createState() =>
-      _RenameSoundBoardScreenState();
-}
-
-class _RenameSoundBoardScreenState extends State<_RenameSoundBoardScreen> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialName);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Renommer la scène')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _controller,
-              decoration: InputDecoration(
-                labelText: 'Nom de la scène',
-                prefixIcon: Icon(
-                  Icons.text_fields_rounded,
-                  color: scheme.primary.withValues(alpha: 0.9),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Annuler'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context, _controller.text),
-                    child: const Text('Renommer'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CreateSoundBoardScreenState extends State<_CreateSoundBoardScreen> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Nouvelle scène')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _controller,
-              decoration: InputDecoration(
-                labelText: 'Nom de la scène',
-                prefixIcon: Icon(
-                  Icons.auto_awesome_rounded,
-                  color: scheme.primary.withValues(alpha: 0.9),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Annuler'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context, _controller.text),
-                    child: const Text('Créer'),
-                  ),
-                ),
-              ],
-            ),
-          ],
         ),
       ),
     );
