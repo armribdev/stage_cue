@@ -29,6 +29,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   late final AddSoundToBoardUseCase _addSoundToBoardUseCase;
   List<Sound> _availableSounds = [];
   Set<int> _soundsInBoard = {};
+
   /// IDs des sons correspondant à la recherche (AND entre tokens, tag ou titre par token).
   /// null = pas de filtre (requête vide ou tokens vides).
   Set<int>? _searchMatchedSoundIds;
@@ -59,7 +60,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     try {
       // Charger tous les sons indexés
       final allSounds = await _repository.getAllSounds();
-      
+
       // Charger les sons qui sont dans la board (ordre conservé)
       final boardSounds = await _repository.getBoardSounds(widget.boardId);
       final boardSoundIds = boardSounds.map((s) => s.id).toSet();
@@ -92,7 +93,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     if (_soundsInBoard.contains(sound.id)) {
       return;
     }
-    
+
     try {
       await _addSoundToBoardUseCase(widget.boardId, sound.id);
       // Mettre à jour l'état local pour refléter l'ajout
@@ -104,9 +105,9 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de l\'ajout: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erreur lors de l\'ajout: $e')));
       }
     }
   }
@@ -156,10 +157,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   Widget _buildTagChip(TagItem tag) {
     final color = _getCategoryColor(tag.categoryId);
     return Chip(
-      label: Text(
-        tag.name,
-        style: const TextStyle(fontSize: 11),
-      ),
+      label: Text(tag.name, style: const TextStyle(fontSize: 11)),
       visualDensity: VisualDensity.compact,
       backgroundColor: color?.withAlpha(24),
       side: color == null ? null : BorderSide(color: color),
@@ -190,10 +188,15 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   /// Vérifie si un son correspond à un token (tag/alias ou titre/displayName/filePath).
   bool _soundMatchesToken(Sound sound, String token) {
     final normalizedToken = normalizeForSearch(token);
-    final matchInTitle = normalizeForSearch(sound.title).contains(normalizedToken);
-    final matchInDisplayName = sound.displayName != null &&
+    final matchInTitle = normalizeForSearch(
+      sound.title,
+    ).contains(normalizedToken);
+    final matchInDisplayName =
+        sound.displayName != null &&
         normalizeForSearch(sound.displayName!).contains(normalizedToken);
-    final matchInPath = normalizeForSearch(sound.filePath).contains(normalizedToken);
+    final matchInPath = normalizeForSearch(
+      sound.filePath,
+    ).contains(normalizedToken);
     return matchInTitle || matchInDisplayName || matchInPath;
   }
 
@@ -259,143 +262,139 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Ajouter un bruitage'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
+      appBar: AppBar(title: const Text('Ajouter un bruitage')),
       body: Column(
         children: [
-        // Barre de recherche
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: TextField(
-            decoration: InputDecoration(
-              hintText: 'Rechercher un bruitage...',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+          // Barre de recherche
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Rechercher un bruitage...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+                _scheduleSearch(value);
+              },
             ),
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-              });
-              _scheduleSearch(value);
-            },
           ),
-        ),
-        // Liste des sons
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _filteredSounds.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.music_off,
-                              size: 64,
-                              color: Colors.grey[600],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _searchQuery.isEmpty
-                                  ? 'Aucun bruitage disponible'
-                                  : 'Aucun bruitage trouvé',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[600],
+          // Liste des sons
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredSounds.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.music_off,
+                          size: 64,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _searchQuery.isEmpty
+                              ? 'Aucun bruitage disponible'
+                              : 'Aucun bruitage trouvé',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _filteredSounds.length,
+                    itemBuilder: (context, index) {
+                      final sound = _filteredSounds[index];
+                      final isInBoard = _soundsInBoard.contains(sound.id);
+                      final tags = _soundTags[sound.id] ?? [];
+
+                      return Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 4,
+                        ),
+                        child: Opacity(
+                          opacity: isInBoard ? 0.6 : 1.0,
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer,
+                              child: Icon(
+                                Icons.music_note,
+                                color: Theme.of(context).colorScheme.primary,
                               ),
                             ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: _filteredSounds.length,
-                        itemBuilder: (context, index) {
-                          final sound = _filteredSounds[index];
-                          final isInBoard = _soundsInBoard.contains(sound.id);
-                          final tags = _soundTags[sound.id] ?? [];
-
-                          return Card(
-                            margin: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 4,
+                            title: Text(
+                              sound.title,
+                              style: TextStyle(
+                                fontWeight: isInBoard
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
                             ),
-                            child: Opacity(
-                              opacity: isInBoard ? 0.6 : 1.0,
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: Theme.of(context)
-                                          .colorScheme
-                                          .primaryContainer,
-                                  child: Icon(
-                                    Icons.music_note,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                Text(
+                                  sound.filePath,
+                                  style: const TextStyle(fontSize: 11),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                title: Text(
-                                  sound.title,
-                                  style: TextStyle(
-                                    fontWeight: isInBoard
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      sound.filePath,
-                                      style: const TextStyle(fontSize: 11),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    if (tags.isNotEmpty) ...[
-                                      const SizedBox(height: 6),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: -6,
-                                        children: [
-                                          for (final tag in tags) _buildTagChip(tag),
-                                        ],
-                                      ),
+                                if (tags.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: -6,
+                                    children: [
+                                      for (final tag in tags)
+                                        _buildTagChip(tag),
                                     ],
-                                    const SizedBox(height: 2),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          'Type: ${_getSoundTypeName(sound.type)}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      ],
+                                  ),
+                                ],
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Type: ${_getSoundTypeName(sound.type)}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
                                     ),
                                   ],
                                 ),
-                                trailing: isInBoard
-                                    ? Icon(
-                                        Icons.check_circle,
-                                        color: Theme.of(context).colorScheme.primary,
-                                      )
-                                    : Icon(
-                                        Icons.add_circle,
-                                        color: Colors.green,
-                                      ),
-                                onTap: isInBoard
-                                    ? null
-                                    : () => _addSoundToBoard(sound),
-                                
-                              ),
+                              ],
                             ),
-                          );
-                        },
-                      ),
-        ),
+                            trailing: isInBoard
+                                ? Icon(
+                                    Icons.check_circle,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  )
+                                : Icon(Icons.add_circle, color: Colors.green),
+                            onTap: isInBoard
+                                ? null
+                                : () => _addSoundToBoard(sound),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
         ],
       ),
     );
