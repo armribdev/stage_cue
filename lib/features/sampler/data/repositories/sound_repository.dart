@@ -58,7 +58,10 @@ class SoundRepository {
     Directory directory, {
     void Function(IndexingProgress)? onProgress,
   }) async {
-    return await _soundDataSource.indexDirectory(directory, onProgress: onProgress);
+    return await _soundDataSource.indexDirectory(
+      directory,
+      onProgress: onProgress,
+    );
   }
 
   /// Scanne tous les chemins surveillés
@@ -77,7 +80,7 @@ class SoundRepository {
     void Function(IndexingProgress)? onProgress,
   }) async {
     final id = await _watchedPathDataSource.insertWatchedPath(watchedPath);
-    
+
     // Indexer automatiquement les fichiers
     try {
       if (watchedPath.isDirectory) {
@@ -88,25 +91,29 @@ class SoundRepository {
       } else {
         await _soundDataSource.indexAudioFile(File(watchedPath.path));
         // Notifier la progression pour les fichiers (instantané)
-        onProgress?.call(IndexingProgress(
-          path: watchedPath.path,
-          current: 1,
-          total: 1,
-          isComplete: true,
-        ));
+        onProgress?.call(
+          IndexingProgress(
+            path: watchedPath.path,
+            current: 1,
+            total: 1,
+            isComplete: true,
+          ),
+        );
       }
     } catch (e) {
       // Notifier l'erreur
-      onProgress?.call(IndexingProgress(
-        path: watchedPath.path,
-        current: 0,
-        total: 0,
-        isComplete: true,
-        error: e.toString(),
-      ));
+      onProgress?.call(
+        IndexingProgress(
+          path: watchedPath.path,
+          current: 0,
+          total: 0,
+          isComplete: true,
+          error: e.toString(),
+        ),
+      );
       // Ne pas rethrow pour permettre l'ajout du chemin même si l'indexation échoue
     }
-    
+
     return id;
   }
 
@@ -143,6 +150,27 @@ class SoundRepository {
     );
   }
 
+  /// Met à jour les réglages d'un pad pour une scène spécifique.
+  Future<void> updateBoardSoundSettings({
+    required int boardId,
+    required int soundId,
+    int? colorValue,
+    bool updateColor = false,
+    String? displayName,
+    bool updateDisplayName = false,
+    double? volume,
+  }) async {
+    await _soundDataSource.upsertBoardSoundSettings(
+      boardId: boardId,
+      soundId: soundId,
+      colorValue: colorValue,
+      updateColor: updateColor,
+      displayName: displayName,
+      updateDisplayName: updateDisplayName,
+      volume: volume,
+    );
+  }
+
   /// Récupère uniquement les sons qui sont dans la board
   Future<List<Sound>> getBoardSounds(int boardId) async {
     return await _soundDataSource.getBoardSounds(boardId);
@@ -159,7 +187,10 @@ class SoundRepository {
   }
 
   /// Réordonne les sons de la board selon la liste fournie
-  Future<void> reorderBoardSounds(int boardId, List<int> soundIdsInOrder) async {
+  Future<void> reorderBoardSounds(
+    int boardId,
+    List<int> soundIdsInOrder,
+  ) async {
     await _soundDataSource.reorderBoardSounds(boardId, soundIdsInOrder);
   }
 
@@ -208,4 +239,3 @@ class SoundRepository {
     return await _tagDataSource.findSoundIdsByTagQuery(query);
   }
 }
-

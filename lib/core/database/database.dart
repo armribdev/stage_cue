@@ -8,21 +8,23 @@ import 'sounds.dart';
 
 part 'database.g.dart';
 
-@DriftDatabase(tables: [
-  Sounds,
-  SoundBoards,
-  WatchedPaths,
-  BoardSounds,
-  TagCategories,
-  TagItems,
-  SoundTags,
-  TagAliases,
-])
+@DriftDatabase(
+  tables: [
+    Sounds,
+    SoundBoards,
+    WatchedPaths,
+    BoardSounds,
+    TagCategories,
+    TagItems,
+    SoundTags,
+    TagAliases,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration {
@@ -34,7 +36,7 @@ class AppDatabase extends _$AppDatabase {
       onUpgrade: (m, from, to) async {
         if (from < 2) {
           // 1. Créer la nouvelle table WatchedPaths
-          await m.createTable(watchedPaths); 
+          await m.createTable(watchedPaths);
 
           // 2. Pour la table Sounds
           await m.deleteTable(sounds.actualTableName);
@@ -52,7 +54,9 @@ class AppDatabase extends _$AppDatabase {
 
           if (from >= 3) {
             // Migration vers la nouvelle structure de board_sounds
-            await customStatement('ALTER TABLE board_sounds RENAME TO board_sounds_old');
+            await customStatement(
+              'ALTER TABLE board_sounds RENAME TO board_sounds_old',
+            );
             await m.createTable(boardSounds);
             await customStatement('''
               INSERT INTO board_sounds (board_id, sound_id, added_at)
@@ -92,6 +96,20 @@ class AppDatabase extends _$AppDatabase {
               SELECT COUNT(*) FROM board_sounds bs2
               WHERE bs2.board_id = board_sounds.board_id
               AND bs2.added_at < board_sounds.added_at
+            )
+          ''');
+        }
+        if (from < 9) {
+          await customStatement('''
+            CREATE TABLE IF NOT EXISTS board_sound_settings (
+              board_id INTEGER NOT NULL,
+              sound_id INTEGER NOT NULL,
+              display_name TEXT NULL,
+              color INTEGER NULL,
+              volume REAL NULL,
+              PRIMARY KEY (board_id, sound_id),
+              FOREIGN KEY (board_id) REFERENCES sound_boards(id) ON DELETE CASCADE,
+              FOREIGN KEY (sound_id) REFERENCES sounds(id) ON DELETE CASCADE
             )
           ''');
         }
@@ -373,7 +391,7 @@ LazyDatabase _openConnection() {
     if (Platform.isAndroid || Platform.isIOS) {
       await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
     }
-    
+
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'db.sqlite'));
     return NativeDatabase.createInBackground(file);
