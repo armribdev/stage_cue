@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart';
+import 'package:flutter_soloud/flutter_soloud.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/database/sounds.dart' as db_sounds;
 import '../../../../core/utils/file_utils.dart' show scanDirectoryForAudioFiles, isAudioFile;
@@ -16,8 +17,29 @@ import '../../domain/entities/watched_path.dart' as domain;
 /// Source de données locale pour les sons (base de données)
 class LocalSoundDataSource {
   final db.AppDatabase _database;
+  static const Duration _musicThreshold = Duration(seconds: 30);
 
   LocalSoundDataSource(this._database);
+
+  Future<db_sounds.SoundType> _resolveSoundTypeFromDuration(File file) async {
+    AudioSource? source;
+    try {
+      source = await SoLoud.instance.loadFile(file.path, mode: LoadMode.memory);
+      final duration = SoLoud.instance.getLength(source);
+      if (duration > _musicThreshold) {
+        return db_sounds.SoundType.music;
+      }
+    } catch (e) {
+      debugPrint(
+        'Impossible de lire la durée de ${file.path}, type par défaut appliqué: $e',
+      );
+    } finally {
+      if (source != null) {
+        SoLoud.instance.disposeSource(source);
+      }
+    }
+    return db_sounds.SoundType.soundEffect;
+  }
 
   /// Récupère tous les sons
   Future<List<domain.Sound>> getAllSounds() async {
@@ -160,13 +182,14 @@ class LocalSoundDataSource {
 
       // Extraire le nom du fichier sans extension pour le titre
       final title = p.basenameWithoutExtension(file.path);
+      final soundType = await _resolveSoundTypeFromDuration(file);
       
       // Ajouter le fichier à la base de données
       await _database.into(_database.sounds).insert(
         db.SoundsCompanion.insert(
           title: title,
           filePath: file.path,
-          type: db_sounds.SoundType.soundEffect,
+          type: soundType,
         ),
       );
     } catch (e) {
@@ -234,13 +257,14 @@ class LocalSoundDataSource {
 
           // Extraire le nom du fichier sans extension pour le titre
           final title = p.basenameWithoutExtension(file.path);
+          final soundType = await _resolveSoundTypeFromDuration(file);
           
           // Ajouter le fichier à la base de données
           await _database.into(_database.sounds).insert(
             db.SoundsCompanion.insert(
               title: title,
               filePath: file.path,
-              type: db_sounds.SoundType.soundEffect,
+              type: soundType,
             ),
           );
           indexedCount++;
