@@ -97,8 +97,7 @@ class SamplerNotifier extends ChangeNotifier {
   SamplerState get state => _state;
   double get masterVolume => _masterVolume;
   bool get canUndoLastRemoval =>
-      _lastRemovedSound != null &&
-      _lastRemovedSound!.boardId == _activeBoardId;
+      _lastRemovedSound != null && _lastRemovedSound!.boardId == _activeBoardId;
 
   SamplerNotifier(
     this._repository,
@@ -135,7 +134,8 @@ class SamplerNotifier extends ChangeNotifier {
         selectBoardId = newBoardId;
       }
 
-      final targetId = selectBoardId ?? _state.selectedBoard?.id ?? boards.first.id;
+      final targetId =
+          selectBoardId ?? _state.selectedBoard?.id ?? boards.first.id;
       final selected = boards.firstWhere(
         (board) => board.id == targetId,
         orElse: () => boards.first,
@@ -206,9 +206,11 @@ class SamplerNotifier extends ChangeNotifier {
     try {
       await _repository.renameSoundBoard(board.id, name);
       final updatedBoards = _state.boards
-          .map((b) => b.id == board.id
-              ? SoundBoard(id: b.id, name: name, createdAt: b.createdAt)
-              : b)
+          .map(
+            (b) => b.id == board.id
+                ? SoundBoard(id: b.id, name: name, createdAt: b.createdAt)
+                : b,
+          )
           .toList();
       final selected = _state.selectedBoard?.id == board.id
           ? SoundBoard(id: board.id, name: name, createdAt: board.createdAt)
@@ -228,7 +230,9 @@ class SamplerNotifier extends ChangeNotifier {
   Future<bool> deleteBoard(SoundBoard board) async {
     try {
       await _repository.deleteSoundBoard(board.id);
-      final updatedBoards = _state.boards.where((b) => b.id != board.id).toList();
+      final updatedBoards = _state.boards
+          .where((b) => b.id != board.id)
+          .toList();
       SoundBoard? nextSelected = _state.selectedBoard;
       if (_state.selectedBoard?.id == board.id) {
         nextSelected = updatedBoards.isNotEmpty ? updatedBoards.first : null;
@@ -246,6 +250,41 @@ class SamplerNotifier extends ChangeNotifier {
       _state = _state.copyWith(boardsError: e.toString());
       notifyListeners();
       return false;
+    }
+  }
+
+  /// Duplique une soundboard (sons et ordre) puis sélectionne la copie
+  Future<SoundBoard?> duplicateBoard(
+    SoundBoard sourceBoard,
+    String newName,
+  ) async {
+    try {
+      final sourceSounds = await _repository.getBoardSounds(sourceBoard.id);
+      final newBoardId = await _repository.createSoundBoard(newName);
+
+      for (final sound in sourceSounds) {
+        await _repository.addSoundToBoard(newBoardId, sound.id);
+      }
+
+      final newBoard = SoundBoard(
+        id: newBoardId,
+        name: newName,
+        createdAt: DateTime.now(),
+      );
+      _state = _state.copyWith(
+        boards: [..._state.boards, newBoard],
+        selectedBoard: newBoard,
+        isBoardsLoading: false,
+        boardsError: null,
+      );
+      _activeBoardId = newBoardId;
+      notifyListeners();
+      await loadSounds(boardId: newBoardId);
+      return newBoard;
+    } catch (e) {
+      _state = _state.copyWith(boardsError: e.toString());
+      notifyListeners();
+      return null;
     }
   }
 
@@ -278,8 +317,9 @@ class SamplerNotifier extends ChangeNotifier {
         final existingItem = previousItemsById[sound.id];
         if (existingItem != null) {
           existingItem.sound = sound;
-          existingItem.buttonColor =
-              sound.colorValue != null ? Color(sound.colorValue!) : null;
+          existingItem.buttonColor = sound.colorValue != null
+              ? Color(sound.colorValue!)
+              : null;
           existingItem.volume = sound.volume;
           if (existingItem.isPlaying) {
             existingItem.player.setVolume(existingItem.volume * _masterVolume);
@@ -289,8 +329,9 @@ class SamplerNotifier extends ChangeNotifier {
 
         try {
           final player = await AudioPlayerService.create(sound.filePath);
-          final color =
-              sound.colorValue != null ? Color(sound.colorValue!) : null;
+          final color = sound.colorValue != null
+              ? Color(sound.colorValue!)
+              : null;
           final soundItem = SoundItem(
             sound: sound,
             player: player,
@@ -316,20 +357,14 @@ class SamplerNotifier extends ChangeNotifier {
       final items = await Future.wait(loadFutures);
       final soundItems = items.whereType<SoundItem>().toList();
 
-      _state = _state.copyWith(
-        sounds: soundItems,
-        isLoading: false,
-      );
+      _state = _state.copyWith(sounds: soundItems, isLoading: false);
       final keptIds = soundItems.map((item) => item.sound.id).toSet();
       final removedItems = previousItems
           .where((item) => !keptIds.contains(item.sound.id))
           .toList();
       _disposeSoundItems(removedItems);
     } catch (e) {
-      _state = _state.copyWith(
-        isLoading: false,
-        error: e.toString(),
-      );
+      _state = _state.copyWith(isLoading: false, error: e.toString());
     }
     notifyListeners();
   }
@@ -470,7 +505,9 @@ class SamplerNotifier extends ChangeNotifier {
         await _removeSoundFromBoardUseCase(currentBoardId, soundItem.sound.id);
       } catch (e) {
         debugPrint('Erreur lors du retrait du son de la board: $e');
-        _state = _state.copyWith(error: 'Impossible de retirer ce son de la board.');
+        _state = _state.copyWith(
+          error: 'Impossible de retirer ce son de la board.',
+        );
         notifyListeners();
         return false;
       }
@@ -525,7 +562,9 @@ class SamplerNotifier extends ChangeNotifier {
       return snapshot.sound.id;
     } catch (e) {
       debugPrint('Erreur lors de l\'annulation de suppression: $e');
-      _state = _state.copyWith(error: 'Impossible d\'annuler la suppression du pad.');
+      _state = _state.copyWith(
+        error: 'Impossible d\'annuler la suppression du pad.',
+      );
       notifyListeners();
       return null;
     }
@@ -554,4 +593,3 @@ class SamplerNotifier extends ChangeNotifier {
     await _repository.setTagsForSound(soundId, tagIds.toList());
   }
 }
-
