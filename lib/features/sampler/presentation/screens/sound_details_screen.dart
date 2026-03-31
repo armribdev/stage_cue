@@ -97,6 +97,9 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
   }
 
   Future<void> _updateDisplayName() async {
+    if (!mounted) {
+      return;
+    }
     final trimmed = _displayNameController.text.trim();
     await widget.notifier.updateSoundItemSettings(
       widget.soundItem,
@@ -108,6 +111,9 @@ class _SoundDetailScreenState extends State<SoundDetailScreen> {
   void _scheduleDisplayNameUpdate(String _) {
     _displayNameDebounce?.cancel();
     _displayNameDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) {
+        return;
+      }
       _updateDisplayName();
     });
   }
