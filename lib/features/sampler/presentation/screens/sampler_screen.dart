@@ -109,11 +109,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
     if (newBoard != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Soundboard "${newBoard.name}" créée')),
+        SnackBar(content: Text('Scène "${newBoard.name}" créée')),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erreur lors de la création de la soundboard')),
+        const SnackBar(content: Text('Erreur lors de la création de la scène')),
       );
     }
   }
@@ -168,7 +168,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erreur lors du renommage de la soundboard')),
+        const SnackBar(content: Text('Erreur lors du renommage de la scène')),
       );
     }
   }
@@ -178,7 +178,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Supprimer la soundboard'),
+          title: const Text('Supprimer la scène'),
           content: Text('Supprimer "${board.name}" ? Cette action est irréversible.'),
           actions: [
             TextButton(
@@ -204,7 +204,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erreur lors de la suppression de la soundboard')),
+        const SnackBar(content: Text('Erreur lors de la suppression de la scène')),
       );
     }
   }
@@ -416,7 +416,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
           child: Scaffold(
             key: _scaffoldKey,
             appBar: _SamplerAppBar(
-        title: selectedBoard == null ? 'Soundboard' : selectedBoard.name,
+        title: selectedBoard == null ? 'Scène' : selectedBoard.name,
         isEditMode: _isEditMode,
         canToggleEditMode: state.sounds.isNotEmpty,
         onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
@@ -463,7 +463,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
             ? Center(
                 child: isBoardsLoading
                     ? const CircularProgressIndicator()
-                    : const Text('Aucune soundboard disponible'),
+                    : const Text('Aucune scène disponible'),
               )
             : state.isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -500,7 +500,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'Aucun son dans la board',
+                              'Aucun son dans la scène',
                               style: TextStyle(
                                 fontSize: 18,
                                 color: Colors.grey[600],
@@ -638,12 +638,12 @@ class _BoardsDrawer extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Soundboards (${boards.length})',
+                    'Scènes (${boards.length})',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   IconButton(
                     icon: const Icon(Icons.add),
-                    tooltip: 'Créer une soundboard',
+                    tooltip: 'Créer une scène',
                     onPressed: () => onCreateBoard(),
                   ),
                 ],
@@ -666,14 +666,14 @@ class _BoardsDrawer extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Aucune soundboard',
+                      'Aucune scène',
                       style: TextStyle(color: Colors.grey[700]),
                     ),
                     const SizedBox(height: 8),
                     TextButton.icon(
                       onPressed: () => onCreateBoard(),
                       icon: const Icon(Icons.add),
-                      label: const Text('Créer une soundboard'),
+                      label: const Text('Créer une scène'),
                     ),
                   ],
                 ),
@@ -772,7 +772,7 @@ class _RenameSoundBoardScreenState extends State<_RenameSoundBoardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Renommer la soundboard'),
+        title: const Text('Renommer la scène'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Padding(
@@ -783,7 +783,7 @@ class _RenameSoundBoardScreenState extends State<_RenameSoundBoardScreen> {
             TextField(
               controller: _controller,
               decoration: const InputDecoration(
-                labelText: 'Nom de la soundboard',
+                labelText: 'Nom de la scène',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -825,7 +825,7 @@ class _CreateSoundBoardScreenState extends State<_CreateSoundBoardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Nouvelle soundboard'),
+        title: const Text('Nouvelle scène'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Padding(
@@ -836,7 +836,7 @@ class _CreateSoundBoardScreenState extends State<_CreateSoundBoardScreen> {
             TextField(
               controller: _controller,
               decoration: const InputDecoration(
-                labelText: 'Nom de la soundboard',
+                labelText: 'Nom de la scène',
                 border: OutlineInputBorder(),
               ),
             ),

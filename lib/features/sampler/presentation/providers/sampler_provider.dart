@@ -130,7 +130,7 @@ class SamplerNotifier extends ChangeNotifier {
     try {
       var boards = await _repository.getSoundBoards();
       if (boards.isEmpty) {
-        final newBoardId = await _repository.createSoundBoard('Board 1');
+        final newBoardId = await _repository.createSoundBoard('Scène 1');
         boards = await _repository.getSoundBoards();
         selectBoardId = newBoardId;
       }
