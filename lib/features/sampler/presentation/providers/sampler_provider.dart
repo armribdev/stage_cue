@@ -10,6 +10,8 @@ import '../../domain/usecases/remove_sound_from_board_usecase.dart';
 
 /// État du sampler
 class SamplerState {
+  static const Object _unset = Object();
+
   final List<SoundItem> sounds;
   final bool isLoading;
   final String? error;
@@ -31,20 +33,24 @@ class SamplerState {
   SamplerState copyWith({
     List<SoundItem>? sounds,
     bool? isLoading,
-    String? error,
+    Object? error = _unset,
     List<SoundBoard>? boards,
-    SoundBoard? selectedBoard,
+    Object? selectedBoard = _unset,
     bool? isBoardsLoading,
-    String? boardsError,
+    Object? boardsError = _unset,
   }) {
     return SamplerState(
       sounds: sounds ?? this.sounds,
       isLoading: isLoading ?? this.isLoading,
-      error: error ?? this.error,
+      error: identical(error, _unset) ? this.error : error as String?,
       boards: boards ?? this.boards,
-      selectedBoard: selectedBoard ?? this.selectedBoard,
+      selectedBoard: identical(selectedBoard, _unset)
+          ? this.selectedBoard
+          : selectedBoard as SoundBoard?,
       isBoardsLoading: isBoardsLoading ?? this.isBoardsLoading,
-      boardsError: boardsError ?? this.boardsError,
+      boardsError: identical(boardsError, _unset)
+          ? this.boardsError
+          : boardsError as String?,
     );
   }
 }
@@ -83,6 +89,12 @@ class SamplerNotifier extends ChangeNotifier {
     this._loadSoundsUseCase, [
     this._removeSoundFromBoardUseCase,
   ]);
+
+  void _disposeSoundItems(List<SoundItem> items) {
+    for (final item in items) {
+      item.player.dispose();
+    }
+  }
 
   /// Définit la soundboard active (null pour désactiver)
   void setActiveBoard(int? boardId) {
@@ -134,6 +146,11 @@ class SamplerNotifier extends ChangeNotifier {
 
   /// Sélectionne une soundboard
   Future<void> selectBoard(SoundBoard board) async {
+    if (_state.selectedBoard?.id == board.id) {
+      return;
+    }
+
+    await stopAllSounds();
     _state = _state.copyWith(selectedBoard: board);
     _activeBoardId = board.id;
     notifyListeners();
@@ -222,6 +239,7 @@ class SamplerNotifier extends ChangeNotifier {
     }
     final currentBoardId = _activeBoardId;
     if (currentBoardId == null) {
+      _disposeSoundItems(_state.sounds);
       _state = _state.copyWith(sounds: [], isLoading: false);
       notifyListeners();
       return;
@@ -232,9 +250,25 @@ class SamplerNotifier extends ChangeNotifier {
 
     try {
       final sounds = await _loadSoundsUseCase(currentBoardId);
+      final previousItems = _state.sounds;
+      final previousItemsById = <int, SoundItem>{
+        for (final item in previousItems) item.sound.id: item,
+      };
 
       // Précharger les sons en parallèle pour une latence minimale
       final loadFutures = sounds.map((sound) async {
+        final existingItem = previousItemsById[sound.id];
+        if (existingItem != null) {
+          existingItem.sound = sound;
+          existingItem.buttonColor =
+              sound.colorValue != null ? Color(sound.colorValue!) : null;
+          existingItem.volume = sound.volume;
+          if (existingItem.isPlaying) {
+            existingItem.player.setVolume(existingItem.volume * _masterVolume);
+          }
+          return existingItem;
+        }
+
         try {
           final player = await AudioPlayerService.create(sound.filePath);
           final color =
@@ -265,6 +299,11 @@ class SamplerNotifier extends ChangeNotifier {
         sounds: soundItems,
         isLoading: false,
       );
+      final keptIds = soundItems.map((item) => item.sound.id).toSet();
+      final removedItems = previousItems
+          .where((item) => !keptIds.contains(item.sound.id))
+          .toList();
+      _disposeSoundItems(removedItems);
     } catch (e) {
       _state = _state.copyWith(
         isLoading: false,
@@ -394,9 +433,8 @@ class SamplerNotifier extends ChangeNotifier {
 
   /// Retire un son de la board
   Future<void> removeSound(SoundItem soundItem) async {
-    soundItem.player.dispose();
-    
-    // Retirer le son de la board dans la base de données
+    // Retirer d'abord le son de la board dans la base de données pour éviter
+    // une désynchronisation UI/DB en cas d'erreur.
     if (_removeSoundFromBoardUseCase != null) {
       try {
         final currentBoardId = _activeBoardId;
@@ -404,13 +442,17 @@ class SamplerNotifier extends ChangeNotifier {
           await _removeSoundFromBoardUseCase(currentBoardId, soundItem.sound.id);
         }
       } catch (e) {
-        // En cas d'erreur, on continue quand même pour retirer de l'UI
         debugPrint('Erreur lors du retrait du son de la board: $e');
+        _state = _state.copyWith(error: 'Impossible de retirer ce son de la board.');
+        notifyListeners();
+        return;
       }
     }
-    
+
+    soundItem.player.dispose();
     _state = _state.copyWith(
       sounds: _state.sounds.where((s) => s != soundItem).toList(),
+      error: null,
     );
     notifyListeners();
   }
