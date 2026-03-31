@@ -190,12 +190,10 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
   }
 
   Future<void> _openEditDialog(Sound sound) async {
-    final displayNameController = TextEditingController(
-      text: sound.displayName ?? '',
-    );
     final initialTags = await _repository.getTagsForSound(sound.id);
     var selectedColorValue = sound.colorValue;
     var selectedVolume = sound.volume.clamp(0.0, 1.0);
+    var displayNameValue = sound.displayName ?? '';
     final selectedTagIds = initialTags.map((t) => t.id).toSet();
 
     final didSave = await showDialog<bool>(
@@ -212,8 +210,14 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextField(
-                        controller: displayNameController,
+                      TextFormField(
+                        initialValue: displayNameValue,
+                        onChanged: (value) {
+                          displayNameValue = value;
+                        },
+                        onFieldSubmitted: (value) {
+                          displayNameValue = value;
+                        },
                         decoration: InputDecoration(
                           labelText: 'Nom affiché',
                           hintText: sound.title,
@@ -331,7 +335,7 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    final trimmed = displayNameController.text.trim();
+                    final trimmed = displayNameValue.trim();
                     await _repository.updateSoundSettings(
                       id: sound.id,
                       colorValue: selectedColorValue,
@@ -357,7 +361,6 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
         );
       },
     );
-    displayNameController.dispose();
 
     if (didSave != true) {
       return;
