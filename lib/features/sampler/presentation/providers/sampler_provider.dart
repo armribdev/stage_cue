@@ -481,6 +481,13 @@ class SamplerNotifier extends ChangeNotifier {
       sound: soundItem.sound,
       index: previousIndex,
     );
+    if (soundItem.isPlaying) {
+      try {
+        await soundItem.player.stop();
+      } catch (_) {
+        // Un échec d'arrêt ne doit pas empêcher la suppression du pad.
+      }
+    }
     soundItem.player.dispose();
     _state = _state.copyWith(
       sounds: _state.sounds.where((s) => s != soundItem).toList(),
