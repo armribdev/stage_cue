@@ -214,9 +214,8 @@ class LocalSoundDataSource {
       int processedCount = 0;
       
       for (final file in audioFiles) {
+        processedCount++;
         try {
-          processedCount++;
-          
           // Vérifier si le fichier existe déjà dans la base de données
           final existingSounds = await (_database.select(_database.sounds)
                 ..where((s) => s.filePath.equals(file.path)))
@@ -255,7 +254,6 @@ class LocalSoundDataSource {
           ));
         } catch (e) {
           // Continuer avec les autres fichiers même en cas d'erreur
-          processedCount++;
           onProgress?.call(IndexingProgress(
             path: directory.path,
             current: processedCount,
