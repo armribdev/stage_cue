@@ -29,10 +29,7 @@ class _UndoPadIntent extends Intent {
 class SamplerScreen extends StatefulWidget {
   final AppServices services;
 
-  const SamplerScreen({
-    super.key,
-    required this.services,
-  });
+  const SamplerScreen({super.key, required this.services});
 
   @override
   State<SamplerScreen> createState() => _SamplerScreenState();
@@ -84,7 +81,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
   Future<void> _createBoard() async {
     final scaffoldState = _scaffoldKey.currentState;
     if (scaffoldState?.isDrawerOpen ?? false) {
-      Navigator.of(context).pop(); // Ferme le drawer avant d'ouvrir la boîte de dialogue
+      Navigator.of(
+        context,
+      ).pop(); // Ferme le drawer avant d'ouvrir la boîte de dialogue
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
     if (!mounted) {
@@ -93,9 +92,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     final name = await Navigator.push<String>(
       context,
-      MaterialPageRoute(
-        builder: (context) => const _CreateSoundBoardScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const _CreateSoundBoardScreen()),
     );
 
     final trimmedName = name?.trim();
@@ -108,9 +105,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
     if (newBoard != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Scène "${newBoard.name}" créée')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Scène "${newBoard.name}" créée')));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Erreur lors de la création de la scène')),
@@ -158,7 +155,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
 
     final trimmedName = name?.trim();
-    if (trimmedName == null || trimmedName.isEmpty || trimmedName == board.name) {
+    if (trimmedName == null ||
+        trimmedName.isEmpty ||
+        trimmedName == board.name) {
       return;
     }
 
@@ -179,7 +178,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Supprimer la scène'),
-          content: Text('Supprimer "${board.name}" ? Cette action est irréversible.'),
+          content: Text(
+            'Supprimer "${board.name}" ? Cette action est irréversible.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -204,7 +205,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erreur lors de la suppression de la scène')),
+        const SnackBar(
+          content: Text('Erreur lors de la suppression de la scène'),
+        ),
       );
     }
   }
@@ -302,10 +305,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
             dragWidgetBuilder: (index, child) {
               return Material(
                 type: MaterialType.transparency,
-                child: Opacity(
-                  opacity: 0.95,
-                  child: child,
-                ),
+                child: Opacity(opacity: 0.95, child: child),
               );
             },
             onDragStart: (index) {
@@ -399,7 +399,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
     return Shortcuts(
       shortcuts: _isDesktopPlatform
           ? const <ShortcutActivator, Intent>{
-              SingleActivator(LogicalKeyboardKey.keyZ, control: true): _UndoPadIntent(),
+              SingleActivator(LogicalKeyboardKey.keyZ, control: true):
+                  _UndoPadIntent(),
             }
           : const <ShortcutActivator, Intent>{},
       child: Actions(
@@ -416,126 +417,127 @@ class _SamplerScreenState extends State<SamplerScreen> {
           child: Scaffold(
             key: _scaffoldKey,
             appBar: _SamplerAppBar(
-        title: selectedBoard == null ? 'Scène' : selectedBoard.name,
-        isEditMode: _isEditMode,
-        canToggleEditMode: state.sounds.isNotEmpty,
-        onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
-        onToggleEditMode: () {
-          setState(() {
-            _isEditMode = !_isEditMode;
-          });
-        },
-        onOpenSettings: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SettingsScreen(database: _database),
+              title: selectedBoard == null ? 'Scène' : selectedBoard.name,
+              isEditMode: _isEditMode,
+              canToggleEditMode: state.sounds.isNotEmpty,
+              onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+              onToggleEditMode: () {
+                setState(() {
+                  _isEditMode = !_isEditMode;
+                });
+              },
             ),
-          );
-          await _notifier.loadSounds();
-        },
-      ),
             drawer: _BoardsDrawer(
-        boards: boards,
-        selectedBoard: selectedBoard,
-        isBoardsLoading: isBoardsLoading,
-        onCreateBoard: _createBoard,
-        onSelectBoard: _selectBoard,
-        onBoardLongPress: _showBoardActions,
-        onOpenLibrary: selectedBoard == null
-            ? null
-            : () async {
+              boards: boards,
+              selectedBoard: selectedBoard,
+              isBoardsLoading: isBoardsLoading,
+              onCreateBoard: _createBoard,
+              onSelectBoard: _selectBoard,
+              onBoardLongPress: _showBoardActions,
+              onOpenLibrary: selectedBoard == null
+                  ? null
+                  : () async {
+                      Navigator.pop(context);
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SoundLibraryScreen(
+                            database: _database,
+                            boardId: selectedBoard.id,
+                          ),
+                        ),
+                      );
+                      await _notifier.loadSounds();
+                    },
+              onOpenSettings: () async {
                 Navigator.pop(context);
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => SoundLibraryScreen(
-                      database: _database,
-                      boardId: selectedBoard.id,
-                    ),
+                    builder: (context) => SettingsScreen(database: _database),
                   ),
                 );
                 await _notifier.loadSounds();
               },
-      ),
+            ),
             body: SafeArea(
-        child: selectedBoard == null
-            ? Center(
-                child: isBoardsLoading
-                    ? const CircularProgressIndicator()
-                    : const Text('Aucune scène disponible'),
-              )
-            : state.isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : state.error != null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Colors.red[600],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Erreur: ${state.error}',
-                          style: TextStyle(
-                            fontSize: 18,
+              child: selectedBoard == null
+                  ? Center(
+                      child: isBoardsLoading
+                          ? const CircularProgressIndicator()
+                          : const Text('Aucune scène disponible'),
+                    )
+                  : state.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : state.error != null
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 64,
                             color: Colors.red[600],
                           ),
-                        ),
-                      ],
-                    ),
-                  )
-                : state.sounds.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.music_note,
-                              size: 64,
+                          const SizedBox(height: 16),
+                          Text(
+                            'Erreur: ${state.error}',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.red[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : state.sounds.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.music_note,
+                            size: 64,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Aucun son dans la scène',
+                            style: TextStyle(
+                              fontSize: 18,
                               color: Colors.grey[600],
                             ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Aucun son dans la scène',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[600],
-                              ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Ajoutez des sons depuis la bibliothèque',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[500],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Ajoutez des sons depuis la bibliothèque',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton.icon(
-                              onPressed: () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => SoundLibraryScreen(
-                                      database: _database,
-                                      boardId: selectedBoard.id,
-                                    ),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => SoundLibraryScreen(
+                                    database: _database,
+                                    boardId: selectedBoard.id,
                                   ),
-                                );
-                                await _notifier.loadSounds();
-                              },
-                              icon: const Icon(Icons.library_music),
-                              label: const Text('Ouvrir la bibliothèque'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : _buildPadsGrid(context, state, selectedBoard),
-      ),
+                                ),
+                              );
+                              await _notifier.loadSounds();
+                            },
+                            icon: const Icon(Icons.library_music),
+                            label: const Text('Ouvrir la bibliothèque'),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _buildPadsGrid(context, state, selectedBoard),
+            ),
             bottomNavigationBar: _MasterVolumeBar(
               masterVolume: masterVolume,
               onChanged: (value) => _notifier.setMasterVolume(value),
@@ -553,7 +555,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool canToggleEditMode;
   final VoidCallback onOpenMenu;
   final VoidCallback onToggleEditMode;
-  final VoidCallback onOpenSettings;
 
   const _SamplerAppBar({
     required this.title,
@@ -561,7 +562,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.canToggleEditMode,
     required this.onOpenMenu,
     required this.onToggleEditMode,
-    required this.onOpenSettings,
   });
 
   @override
@@ -583,11 +583,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: isEditMode ? 'Terminer l’édition' : 'Modifier la grille',
           onPressed: canToggleEditMode ? onToggleEditMode : null,
         ),
-        IconButton(
-          icon: const Icon(Icons.settings),
-          tooltip: 'Paramètres',
-          onPressed: onOpenSettings,
-        ),
       ],
     );
   }
@@ -604,6 +599,7 @@ class _BoardsDrawer extends StatelessWidget {
   final Future<void> Function(SoundBoard board) onSelectBoard;
   final Future<void> Function(SoundBoard board) onBoardLongPress;
   final Future<void> Function()? onOpenLibrary;
+  final Future<void> Function() onOpenSettings;
 
   const _BoardsDrawer({
     required this.boards,
@@ -613,15 +609,50 @@ class _BoardsDrawer extends StatelessWidget {
     required this.onSelectBoard,
     required this.onBoardLongPress,
     required this.onOpenLibrary,
+    required this.onOpenSettings,
   });
 
   @override
   Widget build(BuildContext context) {
     return Drawer(
       child: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.zero,
+        child: Column(
           children: [
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  if (isBoardsLoading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (boards.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'Aucune scène',
+                        style: TextStyle(color: Colors.grey[700]),
+                      ),
+                    )
+                  else
+                    ...boards.map((board) {
+                      return ListTile(
+                        title: Text(board.name),
+                        selected: selectedBoard?.id == board.id,
+                        onLongPress: () => onBoardLongPress(board),
+                        onTap: () => onSelectBoard(board),
+                      );
+                    }),
+                  ListTile(
+                    leading: const Icon(Icons.add),
+                    title: const Text('Nouvelle scène'),
+                    onTap: () => onCreateBoard(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.library_music),
               title: const Text('Bibliothèque des sons'),
@@ -631,63 +662,13 @@ class _BoardsDrawer extends StatelessWidget {
                       await onOpenLibrary!();
                     },
             ),
-            const Divider(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Scènes (${boards.length})',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    tooltip: 'Créer une scène',
-                    onPressed: () => onCreateBoard(),
-                  ),
-                ],
-              ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Paramètres'),
+              onTap: () async {
+                await onOpenSettings();
+              },
             ),
-            if (isBoardsLoading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (boards.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.library_music_outlined,
-                      size: 36,
-                      color: Colors.grey[600],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Aucune scène',
-                      style: TextStyle(color: Colors.grey[700]),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: () => onCreateBoard(),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Créer une scène'),
-                    ),
-                  ],
-                ),
-              )
-            else
-              ...boards.map((board) {
-                return ListTile(
-                  leading: const Icon(Icons.grid_view),
-                  title: Text(board.name),
-                  selected: selectedBoard?.id == board.id,
-                  onLongPress: () => onBoardLongPress(board),
-                  onTap: () => onSelectBoard(board),
-                );
-              }),
           ],
         ),
       ),
@@ -699,10 +680,7 @@ class _MasterVolumeBar extends StatelessWidget {
   final double masterVolume;
   final ValueChanged<double> onChanged;
 
-  const _MasterVolumeBar({
-    required this.masterVolume,
-    required this.onChanged,
-  });
+  const _MasterVolumeBar({required this.masterVolume, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -741,7 +719,8 @@ class _CreateSoundBoardScreen extends StatefulWidget {
   const _CreateSoundBoardScreen();
 
   @override
-  State<_CreateSoundBoardScreen> createState() => _CreateSoundBoardScreenState();
+  State<_CreateSoundBoardScreen> createState() =>
+      _CreateSoundBoardScreenState();
 }
 
 class _RenameSoundBoardScreen extends StatefulWidget {
@@ -750,7 +729,8 @@ class _RenameSoundBoardScreen extends StatefulWidget {
   const _RenameSoundBoardScreen({required this.initialName});
 
   @override
-  State<_RenameSoundBoardScreen> createState() => _RenameSoundBoardScreenState();
+  State<_RenameSoundBoardScreen> createState() =>
+      _RenameSoundBoardScreenState();
 }
 
 class _RenameSoundBoardScreenState extends State<_RenameSoundBoardScreen> {
