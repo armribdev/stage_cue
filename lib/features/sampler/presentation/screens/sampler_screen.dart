@@ -293,7 +293,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
           final reordered = reorderedListFunction(children);
           final newSoundOrder = <SoundItem>[];
           for (final w in reordered) {
-            if (w is! Widget) continue;
             final key = w.key;
             if (key is ValueKey<int>) {
               final id = key.value;
@@ -395,132 +394,48 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     return Scaffold(
       key: _scaffoldKey,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          tooltip: 'Menu',
-          onPressed: () {
-            _scaffoldKey.currentState?.openDrawer();
-          },
-        ),
-        title: Text(
-          selectedBoard == null ? 'Soundboard' : selectedBoard.name,
-        ),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          IconButton(
-            icon: Icon(
-              _isReorderMode ? Icons.check : Icons.drag_indicator,
-              color: _isReorderMode ? Theme.of(context).colorScheme.primary : null,
+      appBar: _SamplerAppBar(
+        title: selectedBoard == null ? 'Soundboard' : selectedBoard.name,
+        isReorderMode: _isReorderMode,
+        canToggleReorder: state.sounds.isNotEmpty,
+        onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+        onToggleReorder: () {
+          setState(() {
+            _isReorderMode = !_isReorderMode;
+          });
+        },
+        onOpenSettings: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SettingsScreen(database: _database),
             ),
-            tooltip: _isReorderMode ? 'Terminer la réorganisation' : 'Réorganiser les pads',
-            onPressed: state.sounds.isEmpty
-                ? null
-                : () {
-                    setState(() {
-                      _isReorderMode = !_isReorderMode;
-                    });
-                  },
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Paramètres',
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SettingsScreen(database: _database),
-                ),
-              );
-              _notifier.loadSounds();
-            },
-          ),
-        ],
+          );
+          _notifier.loadSounds();
+        },
       ),
-      drawer: Drawer(
-        child: SafeArea(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.library_music),
-                title: const Text('Bibliothèque des sons'),
-                onTap: selectedBoard == null
-                    ? null
-                    : () async {
-                        Navigator.pop(context);
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => SoundLibraryScreen(
-                              database: _database,
-                              boardId: selectedBoard.id,
-                            ),
-                          ),
-                        );
-                        _notifier.loadSounds();
-                      },
-              ),
-              const Divider(),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Soundboards (${boards.length})',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+      drawer: _BoardsDrawer(
+        boards: boards,
+        selectedBoard: selectedBoard,
+        isBoardsLoading: isBoardsLoading,
+        onCreateBoard: _createBoard,
+        onSelectBoard: _selectBoard,
+        onBoardLongPress: _showBoardActions,
+        onOpenLibrary: selectedBoard == null
+            ? null
+            : () async {
+                Navigator.pop(context);
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SoundLibraryScreen(
+                      database: _database,
+                      boardId: selectedBoard.id,
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.add),
-                      tooltip: 'Créer une soundboard',
-                      onPressed: _createBoard,
-                    ),
-                  ],
-                ),
-              ),
-              if (isBoardsLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (boards.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.library_music_outlined,
-                        size: 36,
-                        color: Colors.grey[600],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Aucune soundboard',
-                        style: TextStyle(color: Colors.grey[700]),
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton.icon(
-                        onPressed: _createBoard,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Créer une soundboard'),
-                      ),
-                    ],
                   ),
-                )
-              else
-                ...boards.map((board) {
-                  return ListTile(
-                    leading: const Icon(Icons.grid_view),
-                    title: Text(board.name),
-                    selected: selectedBoard?.id == board.id,
-                    onLongPress: () => _showBoardActions(board),
-                    onTap: () => _selectBoard(board),
-                  );
-                }),
-            ],
-          ),
-        ),
+                );
+                _notifier.loadSounds();
+              },
       ),
       body: SafeArea(
         child: selectedBoard == null
@@ -600,33 +515,197 @@ class _SamplerScreenState extends State<SamplerScreen> {
                       )
                     : _buildPadsGrid(context, state, selectedBoard),
       ),
-      bottomNavigationBar: BottomAppBar(
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.volume_up,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Slider(
-                    value: masterVolume,
-                    min: 0.0,
-                    max: 1.0,
-                    label: '${(masterVolume * 100).round()}%',
-                    onChanged: (value) {
-                      _notifier.setMasterVolume(value);
+      bottomNavigationBar: _MasterVolumeBar(
+        masterVolume: masterVolume,
+        onChanged: (value) => _notifier.setMasterVolume(value),
+      ),
+    );
+  }
+}
+
+class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
+  final String title;
+  final bool isReorderMode;
+  final bool canToggleReorder;
+  final VoidCallback onOpenMenu;
+  final VoidCallback onToggleReorder;
+  final VoidCallback onOpenSettings;
+
+  const _SamplerAppBar({
+    required this.title,
+    required this.isReorderMode,
+    required this.canToggleReorder,
+    required this.onOpenMenu,
+    required this.onToggleReorder,
+    required this.onOpenSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.menu),
+        tooltip: 'Menu',
+        onPressed: onOpenMenu,
+      ),
+      title: Text(title),
+      backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      actions: [
+        IconButton(
+          icon: Icon(
+            isReorderMode ? Icons.check : Icons.drag_indicator,
+            color: isReorderMode ? Theme.of(context).colorScheme.primary : null,
+          ),
+          tooltip: isReorderMode ? 'Terminer la réorganisation' : 'Réorganiser les pads',
+          onPressed: canToggleReorder ? onToggleReorder : null,
+        ),
+        IconButton(
+          icon: const Icon(Icons.settings),
+          tooltip: 'Paramètres',
+          onPressed: onOpenSettings,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+}
+
+class _BoardsDrawer extends StatelessWidget {
+  final List<SoundBoard> boards;
+  final SoundBoard? selectedBoard;
+  final bool isBoardsLoading;
+  final Future<void> Function() onCreateBoard;
+  final Future<void> Function(SoundBoard board) onSelectBoard;
+  final Future<void> Function(SoundBoard board) onBoardLongPress;
+  final Future<void> Function()? onOpenLibrary;
+
+  const _BoardsDrawer({
+    required this.boards,
+    required this.selectedBoard,
+    required this.isBoardsLoading,
+    required this.onCreateBoard,
+    required this.onSelectBoard,
+    required this.onBoardLongPress,
+    required this.onOpenLibrary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      child: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.library_music),
+              title: const Text('Bibliothèque des sons'),
+              onTap: onOpenLibrary == null
+                  ? null
+                  : () async {
+                      await onOpenLibrary!();
                     },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text('${(masterVolume * 100).round()}%'),
-              ],
             ),
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Soundboards (${boards.length})',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Créer une soundboard',
+                    onPressed: () => onCreateBoard(),
+                  ),
+                ],
+              ),
+            ),
+            if (isBoardsLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (boards.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.library_music_outlined,
+                      size: 36,
+                      color: Colors.grey[600],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Aucune soundboard',
+                      style: TextStyle(color: Colors.grey[700]),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => onCreateBoard(),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Créer une soundboard'),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ...boards.map((board) {
+                return ListTile(
+                  leading: const Icon(Icons.grid_view),
+                  title: Text(board.name),
+                  selected: selectedBoard?.id == board.id,
+                  onLongPress: () => onBoardLongPress(board),
+                  onTap: () => onSelectBoard(board),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MasterVolumeBar extends StatelessWidget {
+  final double masterVolume;
+  final ValueChanged<double> onChanged;
+
+  const _MasterVolumeBar({
+    required this.masterVolume,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BottomAppBar(
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                Icons.volume_up,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Slider(
+                  value: masterVolume,
+                  min: 0.0,
+                  max: 1.0,
+                  label: '${(masterVolume * 100).round()}%',
+                  onChanged: onChanged,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text('${(masterVolume * 100).round()}%'),
+            ],
           ),
         ),
       ),

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -40,8 +41,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _initializeRepository();
-    _loadTagCatalog();
-    _loadDatabaseInfo();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Laisse la transition de navigation se terminer avant de lancer
+      // les lectures DB pour éviter les à-coups à l'ouverture.
+      unawaited(_startInitialLoad());
+    });
+  }
+
+  Future<void> _startInitialLoad() async {
+    await Future<void>.delayed(const Duration(milliseconds: 280));
+    if (!mounted) {
+      return;
+    }
+    unawaited(_loadTagCatalog());
+    unawaited(_loadDatabaseInfo());
   }
 
   void _initializeRepository() {
@@ -85,7 +98,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _dbSize = dbSize;
         _isLoading = false;
       });
-      await _loadSoundTags();
+      unawaited(_loadSoundTags());
     } catch (e) {
       setState(() {
         _isLoading = false;
