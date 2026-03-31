@@ -85,12 +85,16 @@ class LocalSoundDataSource {
 
   /// Réordonne les sons de la board selon la liste fournie (soundIds dans l'ordre voulu)
   Future<void> reorderBoardSounds(int boardId, List<int> soundIdsInOrder) async {
-    for (var i = 0; i < soundIdsInOrder.length; i++) {
-      await (_database.update(_database.boardSounds)
-            ..where((b) =>
-                b.boardId.equals(boardId) & b.soundId.equals(soundIdsInOrder[i])))
-          .write(db.BoardSoundsCompanion(sortOrder: Value(i)));
-    }
+    // Applique l'ordre en une transaction pour éviter les états partiels
+    // si une écriture échoue au milieu de la séquence.
+    await _database.transaction(() async {
+      for (var i = 0; i < soundIdsInOrder.length; i++) {
+        await (_database.update(_database.boardSounds)
+              ..where((b) =>
+                  b.boardId.equals(boardId) & b.soundId.equals(soundIdsInOrder[i])))
+            .write(db.BoardSoundsCompanion(sortOrder: Value(i)));
+      }
+    });
   }
 
   /// Vérifie si un son est dans la board
