@@ -232,27 +232,34 @@ class SamplerNotifier extends ChangeNotifier {
 
     try {
       final sounds = await _loadSoundsUseCase(currentBoardId);
-      
-      // Créer les SoundItems avec leurs lecteurs audio
-      final soundItems = sounds.map((sound) {
-        final player = AudioPlayerService();
-        final color = sound.colorValue != null ? Color(sound.colorValue!) : null;
-        final soundItem = SoundItem(
-          sound: sound,
-          player: player,
-          buttonColor: color,
-          volume: sound.volume,
-        );
-        
-        // Écouter les changements d'état après avoir créé le SoundItem
-        player.onPlayerStateChanged.listen((isPlaying) {
-          // Utiliser directement la référence au soundItem
-          soundItem.isPlaying = isPlaying;
-          notifyListeners();
-        });
-        
-        return soundItem;
-      }).toList();
+
+      // Précharger les sons en parallèle pour une latence minimale
+      final loadFutures = sounds.map((sound) async {
+        try {
+          final player = await AudioPlayerService.create(sound.filePath);
+          final color =
+              sound.colorValue != null ? Color(sound.colorValue!) : null;
+          final soundItem = SoundItem(
+            sound: sound,
+            player: player,
+            buttonColor: color,
+            volume: sound.volume,
+          );
+
+          player.onPlayerStateChanged.listen((isPlaying) {
+            soundItem.isPlaying = isPlaying;
+            notifyListeners();
+          });
+
+          return soundItem;
+        } catch (e) {
+          debugPrint('Échec du chargement de ${sound.filePath}: $e');
+          return null;
+        }
+      });
+
+      final items = await Future.wait(loadFutures);
+      final soundItems = items.whereType<SoundItem>().toList();
 
       _state = _state.copyWith(
         sounds: soundItems,
@@ -273,8 +280,8 @@ class SamplerNotifier extends ChangeNotifier {
       await soundItem.player.stop();
       // L'état sera mis à jour automatiquement par le listener
     } else {
-      await soundItem.player.setVolume(soundItem.volume * _masterVolume);
-      await soundItem.player.play(soundItem.sound.filePath);
+      soundItem.player.setVolume(soundItem.volume * _masterVolume);
+      await soundItem.player.play();
       // L'état sera mis à jour automatiquement par le listener
     }
     // Notifier immédiatement pour un feedback visuel rapide
@@ -325,7 +332,7 @@ class SamplerNotifier extends ChangeNotifier {
         volumeToSave = clamped;
         hasChanged = true;
         if (soundItem.isPlaying) {
-          await soundItem.player.setVolume(soundItem.volume * _masterVolume);
+          soundItem.player.setVolume(soundItem.volume * _masterVolume);
         }
       }
     }
@@ -352,7 +359,7 @@ class SamplerNotifier extends ChangeNotifier {
     _masterVolume = clamped;
     for (final soundItem in _state.sounds) {
       if (soundItem.isPlaying) {
-        await soundItem.player.setVolume(soundItem.volume * _masterVolume);
+        soundItem.player.setVolume(soundItem.volume * _masterVolume);
       }
     }
     notifyListeners();

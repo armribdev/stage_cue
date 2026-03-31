@@ -6,8 +6,8 @@ class PlaySoundUseCase {
 
   PlaySoundUseCase(this._audioPlayer);
 
-  Future<void> call(String filePath) async {
-    await _audioPlayer.play(filePath);
+  Future<void> call() async {
+    await _audioPlayer.play();
   }
 }
 

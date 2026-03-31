@@ -45,8 +45,8 @@ class PadButton extends StatelessWidget {
             TweenAnimationBuilder<double>(
               key: ValueKey('progress_${soundItem.sound.id}_${soundItem.isPlaying}'),
               tween: Tween(begin: 0.0, end: soundItem.isPlaying ? 1.0 : 0.0),
-              duration: soundItem.isPlaying 
-                  ? (soundItem.player.duration ?? const Duration(seconds: 5))
+              duration: soundItem.isPlaying
+                  ? soundItem.player.duration
                   : const Duration(milliseconds: 200),
               curve: Curves.linear,
               builder: (context, value, child) {
