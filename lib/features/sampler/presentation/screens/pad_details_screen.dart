@@ -166,68 +166,47 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                     const SizedBox(height: 8),
                     _buildInfoRow(context, 'ID', sound.id.toString()),
                     const SizedBox(height: 8),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 120,
-                          child: Text(
-                            'Tags:',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      'Tags',
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _isTagsLoading
-                              ? const Center(child: CircularProgressIndicator())
-                              : (_tagCatalog.isEmpty || _selectedTagIds.isEmpty)
-                              ? Text(
-                                  'Aucun tag disponible',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                )
-                              : LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    return Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      clipBehavior: Clip.none,
-                                      alignment: WrapAlignment.start,
-                                      children: [
-                                        for (final category in _tagCatalog)
-                                          ...category.tags
-                                              .where(
-                                                (tag) => _selectedTagIds
-                                                    .contains(tag.id),
-                                              )
-                                              .map(
-                                                (tag) => Chip(
-                                                  materialTapTargetSize:
-                                                      MaterialTapTargetSize
-                                                          .shrinkWrap,
-                                                  padding: EdgeInsets.zero,
-                                                  label: Text(
-                                                    tag.name,
-                                                    style: Theme.of(
-                                                      context,
-                                                    ).textTheme.labelSmall,
-                                                  ),
-                                                  backgroundColor: Color(
-                                                    category.category.color,
-                                                  ).withAlpha(40),
-                                                ),
-                                              ),
-                                      ],
-                                    );
-                                  },
+                    if (_isTagsLoading)
+                      const LinearProgressIndicator()
+                    else if (_tagCatalog.isEmpty)
+                      Text(
+                        'Aucun tag disponible',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      )
+                    else if (_selectedTagIds.isEmpty)
+                      Text(
+                        'Aucun tag',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      )
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          for (final category in _tagCatalog)
+                            ...category.tags
+                                .where((tag) => _selectedTagIds.contains(tag.id))
+                                .map(
+                                  (tag) => Chip(
+                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    padding: EdgeInsets.zero,
+                                    label: Text(
+                                      tag.name,
+                                      style: Theme.of(context).textTheme.labelSmall,
+                                    ),
+                                    backgroundColor: Color(
+                                      category.category.color,
+                                    ).withAlpha(40),
+                                  ),
                                 ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
                   ],
                 ),
               ),
