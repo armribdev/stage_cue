@@ -71,7 +71,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   void _onStateChanged() {
     if (mounted) {
-      setState(() {});
+      setState(() {
+        if (_isEditMode && _notifier.state.sounds.isEmpty) {
+          _isEditMode = false;
+        }
+      });
     }
   }
 
@@ -146,7 +150,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     nameFocusNode.dispose();
 
     final trimmedName = name?.trim();
-    if (trimmedName == null) {
+    if (trimmedName == null || !mounted) {
       return;
     }
     final scaffoldState = _scaffoldKey.currentState;
