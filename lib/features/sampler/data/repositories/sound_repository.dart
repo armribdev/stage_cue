@@ -186,6 +186,11 @@ class SoundRepository {
     await _soundDataSource.removeSoundFromBoard(boardId, soundId);
   }
 
+  /// Copie les réglages par-board d'une scène source vers une scène cible.
+  Future<void> copyBoardSoundSettings(int sourceBoardId, int targetBoardId) async {
+    await _soundDataSource.copyBoardSoundSettings(sourceBoardId, targetBoardId);
+  }
+
   /// Réordonne les sons de la board selon la liste fournie
   Future<void> reorderBoardSounds(
     int boardId,
