@@ -33,8 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final SoundRepository _repository;
   // Suivi de la progression d'indexation par chemin
   final Map<String, IndexingProgress> _indexingProgress = {};
-  List<TagCategoryWithTags> _tagCatalog = [];
-  bool _isTagCatalogLoading = true;
+  final List<TagCategoryWithTags> _tagCatalog = [];
   final Map<int, List<TagItem>> _soundTags = {};
 
   @override
@@ -53,7 +52,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) {
       return;
     }
-    unawaited(_loadTagCatalog());
     unawaited(_loadDatabaseInfo());
   }
 
@@ -113,20 +111,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _loadTagCatalog() async {
-    setState(() {
-      _isTagCatalogLoading = true;
-    });
-    final catalog = await _repository.getTagCatalog();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _tagCatalog = catalog;
-      _isTagCatalogLoading = false;
-    });
-  }
-
   Future<void> _loadSoundTags() async {
     if (_sounds.isEmpty) {
       setState(() {
@@ -148,135 +132,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ..clear()
         ..addEntries(entries);
     });
-  }
-
-  Future<void> _editSoundTags(db.Sound sound) async {
-    if (_isTagCatalogLoading) {
-      return;
-    }
-    final initialTags = _soundTags[sound.id] ?? [];
-    final selected = initialTags.map((t) => t.id).toSet();
-    final updated = await showModalBottomSheet<Set<int>>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (dialogContext) {
-        return DraggableScrollableSheet(
-          expand: false,
-          maxChildSize: 0.9,
-          minChildSize: 0.4,
-          initialChildSize: 0.6,
-          builder: (context, scrollController) {
-            return SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: StatefulBuilder(
-                        builder: (context, setDialogState) {
-                          if (_tagCatalog.isEmpty) {
-                            return const Center(
-                              child: Text('Aucun tag disponible'),
-                            );
-                          }
-                          return SingleChildScrollView(
-                            controller: scrollController,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                for (final category in _tagCatalog) ...[
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: 8.0,
-                                      bottom: 4,
-                                    ),
-                                    child: Text(
-                                      category.category.name,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                    ),
-                                  ),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 0,
-                                    children: [
-                                      for (final tag in category.tags)
-                                        FilterChip(
-                                          label: Text(tag.name),
-                                          selected: selected.contains(tag.id),
-                                          backgroundColor: Color(
-                                            category.category.color,
-                                          ).withAlpha(24),
-                                          selectedColor: Color(
-                                            category.category.color,
-                                          ).withAlpha(64),
-                                          checkmarkColor: Color(
-                                            category.category.color,
-                                          ),
-                                          side: BorderSide(
-                                            color: Color(
-                                              category.category.color,
-                                            ),
-                                          ),
-                                          onSelected: (value) {
-                                            setDialogState(() {
-                                              if (value) {
-                                                selected.add(tag.id);
-                                              } else {
-                                                selected.remove(tag.id);
-                                              }
-                                            });
-                                          },
-                                        ),
-                                    ],
-                                  ),
-                                ],
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                          child: const Text('Annuler'),
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          onPressed: () =>
-                              Navigator.of(dialogContext).pop(selected),
-                          child: const Text('Enregistrer'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-    if (updated == null) {
-      return;
-    }
-    await _repository.setTagsForSound(sound.id, updated.toList());
-    await _loadSoundTags();
   }
 
   Color? _getCategoryColor(int categoryId) {
@@ -814,108 +669,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 );
                               },
                             ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Sons indexés (${_sounds.length})',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      _sounds.isEmpty
-                          ? Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(24),
-                                child: Center(
-                                  child: Column(
-                                    children: [
-                                      Icon(
-                                        Icons.music_off,
-                                        size: 48,
-                                        color: Colors.grey[600],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        'Aucun son enregistré',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _sounds.length,
-                              itemBuilder: (context, index) {
-                                final sound = _sounds[index];
-                                final tags = _soundTags[sound.id] ?? [];
-                                return Card(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: ListTile(
-                                    leading: CircleAvatar(
-                                      backgroundColor: Theme.of(
-                                        context,
-                                      ).colorScheme.primaryContainer,
-                                      child: Icon(
-                                        Icons.music_note,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                      ),
-                                    ),
-                                    title: Text(sound.title),
-                                    subtitle: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Chemin: ${sound.filePath}',
-                                          style: const TextStyle(fontSize: 11),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        if (tags.isNotEmpty) ...[
-                                          const SizedBox(height: 6),
-                                          Wrap(
-                                            spacing: 6,
-                                            runSpacing: -6,
-                                            children: [
-                                              for (final tag in tags)
-                                                _buildTagChip(tag),
-                                            ],
-                                          ),
-                                        ],
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Type: ${_getSoundTypeName(sound.type)}',
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Créé le: ${sound.createdAt.toString().substring(0, 19)}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.label),
-                                      tooltip: 'Gérer les tags',
-                                      onPressed: _isTagCatalogLoading
-                                          ? null
-                                          : () => _editSoundTags(sound),
-                                    ),
-                                    isThreeLine: true,
-                                  ),
-                                );
-                              },
-                            ),
-                    ],
+                            ],
                   ),
                 ),
               ),
