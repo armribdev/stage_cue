@@ -1,416 +1,273 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
-import '../providers/sampler_provider.dart';
+import '../../domain/entities/tag_item.dart';
 
-/// Écran de détails d'un son
-class SoundDetailScreen extends StatefulWidget {
-  final SoundItem soundItem;
-  final SamplerNotifier notifier;
+/// Écran d'édition d'un son dans la bibliothèque.
+class SoundDetailsScreen extends StatefulWidget {
+  final Sound sound;
+  final List<TagCategoryWithTags> tagCatalog;
+  final List<TagItem> initialTags;
+  final SoundRepository repository;
 
-  const SoundDetailScreen({
+  const SoundDetailsScreen({
     super.key,
-    required this.soundItem,
-    required this.notifier,
+    required this.sound,
+    required this.tagCatalog,
+    required this.initialTags,
+    required this.repository,
   });
 
   @override
-  State<SoundDetailScreen> createState() => _SoundDetailScreenState();
+  State<SoundDetailsScreen> createState() => _SoundDetailsScreenState();
 }
 
-class _SoundDetailScreenState extends State<SoundDetailScreen> {
-  late Color? _selectedColor;
-  late double _volume;
-  late final TextEditingController _displayNameController;
-  Timer? _displayNameDebounce;
-  List<TagCategoryWithTags> _tagCatalog = [];
-  Set<int> _selectedTagIds = {};
-  bool _isTagsLoading = true;
+class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
+  late String _displayNameValue;
+  late int? _selectedColorValue;
+  late double _selectedVolume;
+  late Set<int> _selectedTagIds;
+  bool _isSaving = false;
+
+  static const List<Color> _defaultColorChoices = <Color>[
+    Colors.blue,
+    Colors.green,
+    Colors.orange,
+    Colors.purple,
+    Colors.red,
+    Colors.teal,
+    Colors.brown,
+    Colors.grey,
+  ];
 
   @override
   void initState() {
     super.initState();
-    _selectedColor = widget.soundItem.buttonColor;
-    _volume = widget.soundItem.volume.clamp(0.0, 1.0);
-    _displayNameController = TextEditingController(
-      text: widget.soundItem.sound.displayName ?? '',
-    );
-    _loadTags();
+    _displayNameValue = widget.sound.displayName ?? '';
+    _selectedColorValue = widget.sound.colorValue;
+    _selectedVolume = widget.sound.volume.clamp(0.0, 1.0);
+    _selectedTagIds = widget.initialTags.map((t) => t.id).toSet();
   }
 
-  @override
-  void dispose() {
-    _displayNameDebounce?.cancel();
-    _displayNameController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadTags() async {
-    setState(() {
-      _isTagsLoading = true;
-    });
-    final catalog = await widget.notifier.loadTagCatalog();
-    final selected = await widget.notifier.getTagsForSound(
-      widget.soundItem.sound.id,
-    );
-    if (!mounted) {
+  Future<void> _save() async {
+    if (_isSaving) {
       return;
     }
     setState(() {
-      _tagCatalog = catalog;
-      _selectedTagIds = selected.map((t) => t.id).toSet();
-      _isTagsLoading = false;
+      _isSaving = true;
     });
-  }
-
-  String _getSoundTypeLabel(SoundType type) {
-    switch (type) {
-      case SoundType.soundEffect:
-        return 'Bruitage';
-      case SoundType.music:
-        return 'Musique';
-      case SoundType.ambiance:
-        return 'Son d\'ambiance';
-    }
-  }
-
-  void _updateColor(Color? color) {
-    setState(() {
-      _selectedColor = color;
-    });
-    widget.notifier.updateSoundItemSettings(
-      widget.soundItem,
-      buttonColor: color,
-      updateColor: true,
-    );
-  }
-
-  void _updateVolume(double value) {
-    final clamped = value.clamp(0.0, 1.0);
-    setState(() {
-      _volume = clamped;
-    });
-    widget.notifier.updateSoundItemSettings(widget.soundItem, volume: clamped);
-    widget.soundItem.player.setVolume(clamped);
-  }
-
-  Future<void> _updateDisplayName() async {
-    if (!mounted) {
-      return;
-    }
-    final trimmed = _displayNameController.text.trim();
-    await widget.notifier.updateSoundItemSettings(
-      widget.soundItem,
-      displayName: trimmed.isEmpty ? null : trimmed,
-      updateDisplayName: true,
-    );
-  }
-
-  void _scheduleDisplayNameUpdate(String _) {
-    _displayNameDebounce?.cancel();
-    _displayNameDebounce = Timer(const Duration(milliseconds: 400), () {
+    try {
+      final trimmed = _displayNameValue.trim();
+      await widget.repository.updateSoundSettings(
+        id: widget.sound.id,
+        colorValue: _selectedColorValue,
+        updateColor: true,
+        displayName: trimmed.isEmpty ? null : trimmed,
+        updateDisplayName: true,
+        volume: _selectedVolume,
+      );
+      await widget.repository.setTagsForSound(
+        widget.sound.id,
+        _selectedTagIds.toList(),
+      );
       if (!mounted) {
         return;
       }
-      _updateDisplayName();
-    });
+      Navigator.of(context).pop(true);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erreur lors de la sauvegarde')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final sound = widget.soundItem.sound;
-    final colorChoices = <Color>[
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.red,
-      Colors.teal,
-      Colors.brown,
-      Colors.grey,
-    ];
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Détails du son')),
+      appBar: AppBar(
+        title: Text('Édition du son "${widget.sound.title}"'),
+        actions: [
+          TextButton(
+            onPressed: _isSaving ? null : _save,
+            child: _isSaving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Enregistrer'),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      sound.title,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildInfoRow(
-                      context,
-                      'Type',
-                      _getSoundTypeLabel(sound.type),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildInfoRow(context, 'Chemin', sound.filePath),
-                    const SizedBox(height: 8),
-                    _buildInfoRow(
-                      context,
-                      'Date de création',
-                      _formatDate(sound.createdAt),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildInfoRow(context, 'ID', sound.id.toString()),
-                    const SizedBox(height: 8),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 120,
-                          child: Text(
-                            'Tags:',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _isTagsLoading
-                              ? const Center(child: CircularProgressIndicator())
-                              : (_tagCatalog.isEmpty || _selectedTagIds.isEmpty)
-                              ? Text(
-                                  'Aucun tag disponible',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                )
-                              : LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    return Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      clipBehavior: Clip.none,
-                                      alignment: WrapAlignment.start,
-                                      children: [
-                                        for (final category in _tagCatalog)
-                                          ...category.tags
-                                              .where(
-                                                (tag) => _selectedTagIds
-                                                    .contains(tag.id),
-                                              )
-                                              .map(
-                                                (tag) => Chip(
-                                                  materialTapTargetSize:
-                                                      MaterialTapTargetSize
-                                                          .shrinkWrap,
-                                                  padding: EdgeInsets.zero,
-                                                  label: Text(
-                                                    tag.name,
-                                                    style: Theme.of(
-                                                      context,
-                                                    ).textTheme.labelSmall,
-                                                  ),
-                                                  backgroundColor: Color(
-                                                    category.category.color,
-                                                  ).withAlpha(40),
-                                                ),
-                                              ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                        ),
-                      ],
-                    ),
-                  ],
+            Text(
+              'Nom affiché',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              initialValue: _displayNameValue,
+              onChanged: (value) {
+                _displayNameValue = value;
+              },
+              decoration: InputDecoration(
+                hintText: widget.sound.title,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Réglages du pad',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _displayNameController,
-                      decoration: InputDecoration(
-                        floatingLabelBehavior: FloatingLabelBehavior.always,
-                        labelText: 'Nom affiché :',
-                        hintText: sound.title,
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                        ),
-                        suffixIcon: _displayNameController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  setState(() {
-                                    _displayNameController.clear();
-                                  });
-                                  _updateDisplayName();
-                                },
-                              )
-                            : null,
-                      ),
-                      textInputAction: TextInputAction.done,
-                      onChanged: (value) {
-                        setState(() {});
-                        _scheduleDisplayNameUpdate(value);
-                      },
-                      onSubmitted: (_) => _updateDisplayName(),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Couleur du bouton',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        _buildDefaultColorOption(context),
-                        for (final color in colorChoices)
-                          _buildColorDot(context, color),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Volume',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                        Text('${(_volume * 100).round()}%'),
-                      ],
-                    ),
-                    Slider(
-                      value: _volume,
-                      min: 0.0,
-                      max: 1.0,
-                      label: '${(_volume * 100).round()}%',
-                      onChanged: _updateVolume,
-                    ),
-                  ],
-                ),
-              ),
+            Text(
+              'Couleur par défaut',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(BuildContext context, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 120,
-          child: Text(
-            '$label:',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-        Expanded(
-          child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
-        ),
-      ],
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
-  }
-
-  Widget _buildDefaultColorOption(BuildContext context) {
-    final isSelected = _selectedColor == null;
-    final scheme = Theme.of(context).colorScheme;
-    final borderColor = isSelected ? scheme.primary : scheme.outlineVariant;
-    final onSurface = scheme.onSurfaceVariant;
-    return Tooltip(
-      message: 'Couleur par défaut',
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => _updateColor(null),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: 40,
-          height: 40,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: scheme.surfaceContainerHighest,
-            border: Border.all(color: borderColor, width: isSelected ? 3 : 1),
-            boxShadow: [
-              if (isSelected)
-                BoxShadow(
-                  color: scheme.primary.withValues(alpha: 0.25),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _buildColorChoice(
+                  context: context,
+                  label: 'D',
+                  color: null,
+                  isSelected: _selectedColorValue == null,
+                  onTap: () {
+                    setState(() {
+                      _selectedColorValue = null;
+                    });
+                  },
                 ),
-            ],
-          ),
-          child: isSelected
-              ? Icon(Icons.check, color: onSurface, size: 20)
-              : Text(
-                  'D',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: onSurface,
+                for (final color in _defaultColorChoices)
+                  _buildColorChoice(
+                    context: context,
+                    color: color,
+                    isSelected: _selectedColorValue == color.toARGB32(),
+                    onTap: () {
+                      setState(() {
+                        _selectedColorValue = color.toARGB32();
+                      });
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Volume par défaut',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
+                Text('${(_selectedVolume * 100).round()}%'),
+              ],
+            ),
+            Slider(
+              value: _selectedVolume,
+              min: 0.0,
+              max: 1.0,
+              label: '${(_selectedVolume * 100).round()}%',
+              onChanged: (value) {
+                setState(() {
+                  _selectedVolume = value.clamp(0.0, 1.0);
+                });
+              },
+            ),
+            const SizedBox(height: 8),
+            Text('Tags', style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 8),
+            for (final category in widget.tagCatalog) ...[
+              Text(
+                category.category.name,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final tag in category.tags)
+                    FilterChip(
+                      label: Text(tag.name),
+                      selected: _selectedTagIds.contains(tag.id),
+                      backgroundColor: Color(category.category.color).withAlpha(
+                        25,
+                      ),
+                      selectedColor: Color(category.category.color).withAlpha(70),
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedTagIds.add(tag.id);
+                          } else {
+                            _selectedTagIds.remove(tag.id);
+                          }
+                        });
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildColorDot(BuildContext context, Color color) {
-    final isSelected = _selectedColor == color;
+  Widget _buildColorChoice({
+    required BuildContext context,
+    Color? color,
+    required bool isSelected,
+    required VoidCallback onTap,
+    String? label,
+  }) {
     final scheme = Theme.of(context).colorScheme;
     final borderColor = isSelected ? scheme.primary : scheme.outlineVariant;
+    final effectiveColor = color ?? scheme.surfaceContainerHighest;
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () => _updateColor(color),
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 40,
-        height: 40,
+        duration: const Duration(milliseconds: 150),
+        width: 38,
+        height: 38,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: color,
+          color: effectiveColor,
           border: Border.all(color: borderColor, width: isSelected ? 3 : 1),
-          boxShadow: [
-            if (isSelected)
-              BoxShadow(
-                color: scheme.primary.withValues(alpha: 0.25),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-          ],
         ),
         child: isSelected
-            ? Icon(Icons.check, color: _getCheckmarkColor(color), size: 20)
-            : null,
+            ? Icon(
+                Icons.check,
+                size: 18,
+                color: color == null
+                    ? scheme.onSurfaceVariant
+                    : _getCheckmarkColor(effectiveColor),
+              )
+            : (label != null
+                  ? Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null),
       ),
     );
   }
