@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/utils/string_utils.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -28,6 +29,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
   late int? _selectedColorValue;
   late double _selectedVolume;
   late Set<int> _selectedTagIds;
+  String _tagSearchQuery = '';
   bool _isSaving = false;
 
   static const List<Color> _defaultColorChoices = <Color>[
@@ -50,6 +52,11 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
     _selectedTagIds = widget.initialTags.map((t) => t.id).toSet();
   }
 
+  String? _normalizedDisplayNameOrNull(String value) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
   Future<void> _save() async {
     if (_isSaving) {
       return;
@@ -58,12 +65,11 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
       _isSaving = true;
     });
     try {
-      final trimmed = _displayNameValue.trim();
       await widget.repository.updateSoundSettings(
         id: widget.sound.id,
         colorValue: _selectedColorValue,
         updateColor: true,
-        displayName: trimmed.isEmpty ? null : trimmed,
+        displayName: _normalizedDisplayNameOrNull(_displayNameValue),
         updateDisplayName: true,
         volume: _selectedVolume,
       );
@@ -75,13 +81,13 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
         return;
       }
       Navigator.of(context).pop(true);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erreur lors de la sauvegarde')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erreur de sauvegarde: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -91,8 +97,60 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
     }
   }
 
+  List<TagItem> get _allTags {
+    final tagsById = <int, TagItem>{};
+    for (final category in widget.tagCatalog) {
+      for (final tag in category.tags) {
+        tagsById[tag.id] = tag;
+      }
+    }
+    final tags = tagsById.values.toList()
+      ..sort(
+        (a, b) => normalizeForSearch(a.name).compareTo(normalizeForSearch(b.name)),
+      );
+    return tags;
+  }
+
+  List<TagItem> get _selectedTags {
+    final selected = _allTags.where((tag) => _selectedTagIds.contains(tag.id)).toList();
+    selected.sort((a, b) => a.name.compareTo(b.name));
+    return selected;
+  }
+
+  List<TagItem> get _filteredTags {
+    final normalizedQuery = normalizeForSearch(_tagSearchQuery);
+    final matching = _allTags.where((tag) {
+      if (normalizedQuery.isEmpty) {
+        return true;
+      }
+      return normalizeForSearch(tag.name).contains(normalizedQuery);
+    }).toList();
+    matching.sort((a, b) {
+      final aSelected = _selectedTagIds.contains(a.id);
+      final bSelected = _selectedTagIds.contains(b.id);
+      if (aSelected != bSelected) {
+        return aSelected ? -1 : 1;
+      }
+      return a.name.compareTo(b.name);
+    });
+    return matching;
+  }
+
+  void _toggleTagSelection(TagItem tag, bool isSelected) {
+    setState(() {
+      if (isSelected) {
+        _selectedTagIds.add(tag.id);
+      } else {
+        _selectedTagIds.remove(tag.id);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final selectedTags = _selectedTags;
+    final filteredTags = _filteredTags;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Édition du son "${widget.sound.title}"'),
@@ -114,6 +172,8 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildSoundTypeHeader(context),
+            const SizedBox(height: 24),
             Text(
               'Nom affiché',
               style: Theme.of(context).textTheme.bodyMedium,
@@ -191,37 +251,54 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
             const SizedBox(height: 8),
             Text('Tags', style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 8),
-            for (final category in widget.tagCatalog) ...[
-              Text(
-                category.category.name,
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final tag in category.tags)
-                    FilterChip(
-                      label: Text(tag.name),
-                      selected: _selectedTagIds.contains(tag.id),
-                      backgroundColor: Color(category.category.color).withAlpha(
-                        25,
+            if (_allTags.isEmpty)
+              const Text('Aucun tag disponible')
+            else ...[
+              if (selectedTags.isNotEmpty) ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final tag in selectedTags)
+                      InputChip(
+                        label: Text(tag.name),
+                        onDeleted: () => _toggleTagSelection(tag, false),
                       ),
-                      selectedColor: Color(category.category.color).withAlpha(70),
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _selectedTagIds.add(tag.id);
-                          } else {
-                            _selectedTagIds.remove(tag.id);
-                          }
-                        });
-                      },
-                    ),
-                ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
+              TextField(
+                decoration: InputDecoration(
+                  hintText: 'Rechercher un tag...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _tagSearchQuery = value;
+                  });
+                },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+              if (filteredTags.isEmpty)
+                const Text('Aucun tag trouvé')
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final tag in filteredTags)
+                      FilterChip(
+                        label: Text(tag.name),
+                        selected: _selectedTagIds.contains(tag.id),
+                        onSelected: (selected) =>
+                            _toggleTagSelection(tag, selected),
+                      ),
+                  ],
+                ),
             ],
           ],
         ),
@@ -274,5 +351,89 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
 
   Color _getCheckmarkColor(Color color) {
     return color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
+  }
+
+  String _soundTypeLabel(SoundType type) {
+    switch (type) {
+      case SoundType.soundEffect:
+        return 'Bruitage';
+      case SoundType.music:
+        return 'Musique';
+      case SoundType.ambiance:
+        return 'Son d\'ambiance';
+    }
+  }
+
+  IconData _soundTypeIcon(SoundType type) {
+    switch (type) {
+      case SoundType.soundEffect:
+        return Icons.graphic_eq_rounded;
+      case SoundType.music:
+        return Icons.music_note_rounded;
+      case SoundType.ambiance:
+        return Icons.waves_rounded;
+    }
+  }
+
+  ({Color background, Color foreground}) _soundTypeAvatarColors(
+    BuildContext context,
+    SoundType type,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    switch (type) {
+      case SoundType.soundEffect:
+        return (
+          background: scheme.tertiaryContainer,
+          foreground: scheme.onTertiaryContainer,
+        );
+      case SoundType.music:
+        return (
+          background: scheme.primaryContainer,
+          foreground: scheme.onPrimaryContainer,
+        );
+      case SoundType.ambiance:
+        return (
+          background: scheme.secondaryContainer,
+          foreground: scheme.onSecondaryContainer,
+        );
+    }
+  }
+
+  Widget _buildSoundTypeHeader(BuildContext context) {
+    final type = widget.sound.type;
+    final colors = _soundTypeAvatarColors(context, type);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        CircleAvatar(
+          radius: 32,
+          backgroundColor: colors.background,
+          child: Icon(
+            _soundTypeIcon(type),
+            size: 32,
+            color: colors.foreground,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.sound.title,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _soundTypeLabel(type),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }

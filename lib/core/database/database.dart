@@ -31,6 +31,7 @@ class AppDatabase extends _$AppDatabase {
     return MigrationStrategy(
       onCreate: (m) async {
         await m.createAll();
+        await _ensureBoardSoundSettingsTableExists();
         await _seedDefaultTagsIfEmpty();
       },
       onUpgrade: (m, from, to) async {
@@ -100,21 +101,28 @@ class AppDatabase extends _$AppDatabase {
           ''');
         }
         if (from < 9) {
-          await customStatement('''
-            CREATE TABLE IF NOT EXISTS board_sound_settings (
-              board_id INTEGER NOT NULL,
-              sound_id INTEGER NOT NULL,
-              display_name TEXT NULL,
-              color INTEGER NULL,
-              volume REAL NULL,
-              PRIMARY KEY (board_id, sound_id),
-              FOREIGN KEY (board_id) REFERENCES sound_boards(id) ON DELETE CASCADE,
-              FOREIGN KEY (sound_id) REFERENCES sounds(id) ON DELETE CASCADE
-            )
-          ''');
+          await _ensureBoardSoundSettingsTableExists();
         }
       },
+      beforeOpen: (details) async {
+        await _ensureBoardSoundSettingsTableExists();
+      },
     );
+  }
+
+  Future<void> _ensureBoardSoundSettingsTableExists() async {
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS board_sound_settings (
+        board_id INTEGER NOT NULL,
+        sound_id INTEGER NOT NULL,
+        display_name TEXT NULL,
+        color INTEGER NULL,
+        volume REAL NULL,
+        PRIMARY KEY (board_id, sound_id),
+        FOREIGN KEY (board_id) REFERENCES sound_boards(id) ON DELETE CASCADE,
+        FOREIGN KEY (sound_id) REFERENCES sounds(id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   Future<void> _seedDefaultTagsIfEmpty() async {

@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/utils/string_utils.dart';
 import 'sound_details_screen.dart';
+import '../widgets/app_form_dialog.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -181,6 +183,16 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
     );
   }
 
+  Widget _buildDialogTagInputChip(TagItem tag, VoidCallback onDeleted) {
+    final color = _getCategoryColor(tag.categoryId);
+    return InputChip(
+      label: Text(tag.name),
+      backgroundColor: color?.withAlpha(24),
+      side: color == null ? null : BorderSide(color: color),
+      onDeleted: onDeleted,
+    );
+  }
+
   List<Sound> get _filteredSounds {
     if (_searchQuery.trim().isEmpty || _searchMatchedSoundIds == null) {
       return _availableSounds;
@@ -192,155 +204,343 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
 
   Future<void> _openEditDialog(Sound sound) async {
     final initialTags = await _repository.getTagsForSound(sound.id);
+    if (!mounted) {
+      return;
+    }
+    final dialogScrollController = ScrollController();
     var selectedColorValue = sound.colorValue;
     var selectedVolume = sound.volume.clamp(0.0, 1.0);
     var displayNameValue = sound.displayName ?? '';
     final selectedTagIds = initialTags.map((t) => t.id).toSet();
+    var hasPersistedChanges = false;
+    var tagAutocompleteText = '';
+    TextEditingController? tagAutocompleteFieldController;
+
+    String? normalizedDisplayNameOrNull(String value) {
+      final trimmed = value.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    }
+
+    List<TagItem> buildAllTags() {
+      final tagsById = <int, TagItem>{};
+      for (final category in _tagCatalog) {
+        for (final tag in category.tags) {
+          tagsById[tag.id] = tag;
+        }
+      }
+      final tags = tagsById.values.toList()
+        ..sort(
+          (a, b) =>
+              normalizeForSearch(a.name).compareTo(normalizeForSearch(b.name)),
+        );
+      return tags;
+    }
+
+    List<TagItem> buildSelectedTags(List<TagItem> allTags) {
+      final selected = allTags
+          .where((tag) => selectedTagIds.contains(tag.id))
+          .toList();
+      selected.sort((a, b) => a.name.compareTo(b.name));
+      return selected;
+    }
+
+    List<TagItem> buildAvailableTags(List<TagItem> allTags, String query) {
+      final normalizedQuery = normalizeForSearch(query);
+      final available = allTags.where((tag) {
+        if (selectedTagIds.contains(tag.id)) {
+          return false;
+        }
+        if (normalizedQuery.isEmpty) {
+          return true;
+        }
+        return normalizeForSearch(tag.name).contains(normalizedQuery);
+      }).toList();
+      available.sort((a, b) => a.name.compareTo(b.name));
+      return available;
+    }
 
     final didSave = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text('Modifier "${sound.title}"'),
-              content: SizedBox(
-                width: 620,
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        initialValue: displayNameValue,
-                        onChanged: (value) {
-                          displayNameValue = value;
-                        },
-                        onFieldSubmitted: (value) {
-                          displayNameValue = value;
-                        },
-                        decoration: InputDecoration(
-                          hintText: sound.title,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+            const dialogSectionSpacing = 16.0;
+
+            return AppFormDialog(
+              title: 'Modifier "${sound.title}"',
+              onClose: () => Navigator.of(dialogContext).pop(false),
+              content: Scrollbar(
+                  controller: dialogScrollController,
+                  thumbVisibility: true,
+                  thickness: 8,
+                  radius: const Radius.circular(8),
+                  child: SingleChildScrollView(
+                    controller: dialogScrollController,
+                    padding: const EdgeInsets.only(right: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          initialValue: displayNameValue,
+                          onChanged: (value) {
+                            displayNameValue = value;
+                          },
+                          onFieldSubmitted: (value) {
+                            displayNameValue = value;
+                          },
+                          decoration: InputDecoration(
+                            hintText: sound.title,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Couleur par défaut',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _buildColorChoice(
-                            context: context,
-                            label: 'D',
-                            color: null,
-                            isSelected: selectedColorValue == null,
-                            onTap: () {
-                              setDialogState(() {
-                                selectedColorValue = null;
-                              });
-                            },
-                          ),
-                          for (final color in _defaultColorChoices)
+                        const SizedBox(height: dialogSectionSpacing),
+                        Text(
+                          'Couleur par défaut',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
                             _buildColorChoice(
                               context: context,
-                              color: color,
-                              isSelected:
-                                  selectedColorValue == color.toARGB32(),
+                              label: 'D',
+                              color: null,
+                              isSelected: selectedColorValue == null,
                               onTap: () {
                                 setDialogState(() {
-                                  selectedColorValue = color.toARGB32();
+                                  selectedColorValue = null;
                                 });
                               },
                             ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Volume par défaut',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ),
-                          Text('${(selectedVolume * 100).round()}%'),
-                        ],
-                      ),
-                      Slider(
-                        value: selectedVolume,
-                        min: 0.0,
-                        max: 1.0,
-                        label: '${(selectedVolume * 100).round()}%',
-                        onChanged: (value) {
-                          setDialogState(() {
-                            selectedVolume = value.clamp(0.0, 1.0);
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tags',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      for (final category in _tagCatalog) ...[
-                        Text(
-                          category.category.name,
-                          style: Theme.of(context).textTheme.labelLarge,
-                        ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final tag in category.tags)
-                              FilterChip(
-                                label: Text(tag.name),
-                                selected: selectedTagIds.contains(tag.id),
-                                backgroundColor: Color(
-                                  category.category.color,
-                                ).withAlpha(25),
-                                selectedColor: Color(
-                                  category.category.color,
-                                ).withAlpha(70),
-                                onSelected: (selected) {
+                            for (final color in _defaultColorChoices)
+                              _buildColorChoice(
+                                context: context,
+                                color: color,
+                                isSelected:
+                                    selectedColorValue == color.toARGB32(),
+                                onTap: () {
                                   setDialogState(() {
-                                    if (selected) {
-                                      selectedTagIds.add(tag.id);
-                                    } else {
-                                      selectedTagIds.remove(tag.id);
-                                    }
+                                    selectedColorValue = color.toARGB32();
                                   });
                                 },
                               ),
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: dialogSectionSpacing),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Volume par défaut',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ),
+                            Text('${(selectedVolume * 100).round()}%'),
+                          ],
+                        ),
+                        Slider(
+                          value: selectedVolume,
+                          min: 0.0,
+                          max: 1.0,
+                          label: '${(selectedVolume * 100).round()}%',
+                          onChanged: (value) {
+                            setDialogState(() {
+                              selectedVolume = value.clamp(0.0, 1.0);
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tags',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        if (_tagCatalog
+                            .where((category) => category.tags.isNotEmpty)
+                            .isEmpty)
+                          const Text('Aucun tag disponible')
+                        else ...[
+                          Builder(
+                            builder: (context) {
+                              final allTags = buildAllTags();
+                              final selectedTags = buildSelectedTags(allTags);
+                              final availableTags =
+                                  buildAvailableTags(allTags, tagAutocompleteText);
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (selectedTags.isNotEmpty) ...[
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        for (final tag in selectedTags)
+                                          _buildDialogTagInputChip(tag, () {
+                                            setDialogState(() {
+                                              selectedTagIds.remove(tag.id);
+                                            });
+                                          }),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                  ],
+                                  Autocomplete<TagItem>(
+                                    displayStringForOption: (TagItem option) =>
+                                        option.name,
+                                    optionsBuilder:
+                                        (TextEditingValue textEditingValue) {
+                                      final all = buildAllTags();
+                                      return buildAvailableTags(
+                                        all,
+                                        textEditingValue.text,
+                                      );
+                                    },
+                                    onSelected: (TagItem selection) {
+                                      setDialogState(() {
+                                        selectedTagIds.add(selection.id);
+                                        tagAutocompleteText = '';
+                                      });
+                                      tagAutocompleteFieldController?.clear();
+                                    },
+                                    optionsViewBuilder: (
+                                      BuildContext context,
+                                      AutocompleteOnSelected<TagItem> onSelected,
+                                      Iterable<TagItem> options,
+                                    ) {
+                                      final scheme = Theme.of(context).colorScheme;
+                                      return Align(
+                                        alignment: Alignment.topLeft,
+                                        child: Material(
+                                          elevation: 4,
+                                          borderRadius: BorderRadius.circular(8),
+                                          clipBehavior: Clip.antiAlias,
+                                          child: ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                              maxHeight: 280,
+                                            ),
+                                            child: ListView.builder(
+                                              padding: EdgeInsets.zero,
+                                              shrinkWrap: true,
+                                              itemCount: options.length,
+                                              itemBuilder: (context, index) {
+                                                final tag = options.elementAt(
+                                                  index,
+                                                );
+                                                final color = _getCategoryColor(
+                                                  tag.categoryId,
+                                                );
+                                                return InkWell(
+                                                  onTap: () => onSelected(tag),
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 10,
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        Container(
+                                                          width: 10,
+                                                          height: 10,
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: color ??
+                                                                scheme
+                                                                    .outlineVariant,
+                                                            shape:
+                                                                BoxShape.circle,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 10,
+                                                        ),
+                                                        Expanded(
+                                                          child: Text(
+                                                            tag.name,
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    fieldViewBuilder: (
+                                      BuildContext context,
+                                      TextEditingController textEditingController,
+                                      FocusNode focusNode,
+                                      VoidCallback onFieldSubmitted,
+                                    ) {
+                                      tagAutocompleteFieldController =
+                                          textEditingController;
+                                      return TextField(
+                                        controller: textEditingController,
+                                        focusNode: focusNode,
+                                        decoration: InputDecoration(
+                                          labelText: 'Ajouter un tag',
+                                          hintText: 'Taper pour filtrer...',
+                                          prefixIcon: const Icon(Icons.search),
+                                          border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                        ),
+                                        onChanged: (value) {
+                                          setDialogState(() {
+                                            tagAutocompleteText = value;
+                                          });
+                                        },
+                                        onSubmitted: (_) =>
+                                            onFieldSubmitted(),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (allTags.isEmpty)
+                                    const Text('Aucun tag disponible')
+                                  else if (availableTags.isEmpty)
+                                    Text(
+                                      tagAutocompleteText.trim().isEmpty
+                                          ? 'Tous les tags sont deja ajoutes'
+                                          : 'Aucun tag disponible pour cette recherche',
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Annuler'),
-                ),
                 ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 12,
+                    ),
+                  ),
                   onPressed: () async {
-                    final trimmed = displayNameValue.trim();
                     await _repository.updateSoundSettings(
                       id: sound.id,
                       colorValue: selectedColorValue,
                       updateColor: true,
-                      displayName: trimmed.isEmpty ? null : trimmed,
+                      displayName: normalizedDisplayNameOrNull(displayNameValue),
                       updateDisplayName: true,
                       volume: selectedVolume,
                     );
@@ -348,6 +548,7 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
                       sound.id,
                       selectedTagIds.toList(),
                     );
+                    hasPersistedChanges = true;
                     if (!dialogContext.mounted) {
                       return;
                     }
@@ -361,8 +562,9 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
         );
       },
     );
+    dialogScrollController.dispose();
 
-    if (didSave != true) {
+    if (didSave != true && !hasPersistedChanges) {
       return;
     }
 
@@ -469,6 +671,10 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDesktopPlatform =
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux;
     return Scaffold(
       appBar: AppBar(title: const Text('Bibliothèque des sons')),
       body: Column(
@@ -509,56 +715,56 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
                       itemBuilder: (context, index) {
                         final sound = _filteredSounds[index];
                         final tags = _soundTags[sound.id] ?? [];
+                        // Correction : On retire le minVerticalPadding forcé pour uniformiser la hauteur entre tuiles avec/sans tags.
                         return Card(
                           margin: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 4,
                           ),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: scheme.primaryContainer,
-                              child: Icon(
-                                Icons.music_note,
-                                color: scheme.primary,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: scheme.primaryContainer,
+                                child: Icon(
+                                  Icons.music_note,
+                                  color: scheme.primary,
+                                ),
                               ),
+                              title: Text(sound.displayName ?? sound.title),
+                              subtitle: tags.isNotEmpty
+                                  ? Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const SizedBox(height: 6),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: -6,
+                                          children: [
+                                            for (final tag in tags) _buildTagChip(tag),
+                                          ],
+                                        ),
+                                      ],
+                                    )
+                                  : null,
+                              trailing: IconButton(
+                                icon: const Icon(Icons.edit_rounded),
+                                tooltip: 'Modifier',
+                                onPressed: () => _openSoundEdit(sound),
+                              ),
+                              onTap: isDesktopPlatform
+                                  ? null
+                                  : () => _openSoundEdit(sound),
+                              hoverColor: Colors.transparent,
+                              splashColor: Colors.transparent,
+                              focusColor: Colors.transparent,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+                              // minVerticalPadding enlevé : hauteur homogène quelle que soit la présence de tags.
                             ),
-                            title: Text(sound.displayName ?? sound.title),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 4),
-                                Text(
-                                  sound.filePath,
-                                  style: const TextStyle(fontSize: 11),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (tags.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: -6,
-                                    children: [
-                                      for (final tag in tags)
-                                        _buildTagChip(tag),
-                                    ],
-                                  ),
-                                ],
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Volume: ${(sound.volume * 100).round()}%',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            trailing: const Icon(Icons.edit_rounded),
-                            onTap: () => _openSoundEdit(sound),
                           ),
                         );
                       },
+           
                     ),
             ),
           ),
