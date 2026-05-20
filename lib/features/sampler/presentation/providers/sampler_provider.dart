@@ -265,6 +265,7 @@ class SamplerNotifier extends ChangeNotifier {
       for (final sound in sourceSounds) {
         await _repository.addSoundToBoard(newBoardId, sound.id);
       }
+      await _repository.copyBoardSoundSettings(sourceBoard.id, newBoardId);
 
       final newBoard = SoundBoard(
         id: newBoardId,

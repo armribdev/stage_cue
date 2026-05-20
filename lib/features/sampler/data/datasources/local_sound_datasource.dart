@@ -246,6 +246,19 @@ class LocalSoundDataSource {
     );
   }
 
+  /// Copie les réglages par-board d'une scène source vers une scène cible.
+  Future<void> copyBoardSoundSettings(int sourceBoardId, int targetBoardId) async {
+    await _database.customStatement(
+      '''
+      INSERT OR IGNORE INTO board_sound_settings (board_id, sound_id, display_name, color, volume)
+      SELECT ?, sound_id, display_name, color, volume
+      FROM board_sound_settings
+      WHERE board_id = ?
+      ''',
+      [targetBoardId, sourceBoardId],
+    );
+  }
+
   /// Indexe un fichier audio
   Future<void> indexAudioFile(File file) async {
     try {
