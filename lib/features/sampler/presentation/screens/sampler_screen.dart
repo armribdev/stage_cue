@@ -11,7 +11,7 @@ import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/database/database.dart' as db;
 import 'settings_screen.dart';
-import 'sound_details_screen.dart';
+import 'pad_details_screen.dart';
 import 'sound_library_screen.dart';
 import 'sound_library_manage_screen.dart';
 
@@ -124,7 +124,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
               onSubmitted: (_) =>
                   Navigator.of(dialogContext).pop(nameController.text.trim()),
               decoration: InputDecoration(
-                labelText: 'Nom de la scène',
                 hintText: suggestedName,
                 prefixIcon: Icon(
                   Icons.auto_awesome_rounded,
@@ -273,7 +272,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
               onSubmitted: (_) =>
                   Navigator.of(dialogContext).pop(nameController.text.trim()),
               decoration: InputDecoration(
-                labelText: 'Nom de la scène',
+                hintText: board.name,
                 prefixIcon: Icon(
                   Icons.text_fields_rounded,
                   color: scheme.primary.withValues(alpha: 0.9),
@@ -352,7 +351,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
               onSubmitted: (_) =>
                   Navigator.of(dialogContext).pop(nameController.text.trim()),
               decoration: InputDecoration(
-                labelText: 'Nom de la nouvelle scène',
+                hintText: suggestedName,
                 prefixIcon: Icon(
                   Icons.copy_rounded,
                   color: scheme.primary.withValues(alpha: 0.9),
@@ -594,7 +593,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => SoundDetailScreen(
+                  builder: (context) => PadDetailsScreen(
                     soundItem: soundItem,
                     notifier: _notifier,
                   ),
