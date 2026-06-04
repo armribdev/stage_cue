@@ -3,6 +3,10 @@ import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
+    if #available(macOS 10.14, *) {
+      appearance = NSAppearance(named: .darkAqua)
+    }
+
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
