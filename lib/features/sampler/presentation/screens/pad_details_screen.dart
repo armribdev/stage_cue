@@ -1,18 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
 
-/// Écran de détails d'un pad.
+/// Écran de détails d'un pad — réglages, sons, mode de lecture.
 class PadDetailsScreen extends StatefulWidget {
-  final SoundItem soundItem;
+  final PadItem padItem;
   final SamplerNotifier notifier;
 
   const PadDetailsScreen({
     super.key,
-    required this.soundItem,
+    required this.padItem,
     required this.notifier,
   });
 
@@ -23,21 +24,21 @@ class PadDetailsScreen extends StatefulWidget {
 class _PadDetailsScreenState extends State<PadDetailsScreen> {
   late Color? _selectedColor;
   late double _volume;
+  late PadPlayMode _playMode;
   late final TextEditingController _displayNameController;
   Timer? _displayNameDebounce;
   List<TagCategoryWithTags> _tagCatalog = [];
-  Set<int> _selectedTagIds = {};
   bool _isTagsLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _selectedColor = widget.soundItem.buttonColor;
-    _volume = widget.soundItem.volume.clamp(0.0, 1.0);
-    _displayNameController = TextEditingController(
-      text: widget.soundItem.sound.displayName ?? '',
-    );
-    _loadTags();
+    final pad = widget.padItem.pad;
+    _selectedColor = pad.colorValue != null ? Color(pad.colorValue!) : null;
+    _volume = pad.volume.clamp(0.0, 1.0);
+    _playMode = pad.playMode;
+    _displayNameController = TextEditingController(text: pad.name ?? '');
+    _loadTagCatalog();
   }
 
   @override
@@ -47,41 +48,19 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     super.dispose();
   }
 
-  Future<void> _loadTags() async {
-    setState(() {
-      _isTagsLoading = true;
-    });
+  Future<void> _loadTagCatalog() async {
     final catalog = await widget.notifier.loadTagCatalog();
-    final selected = await widget.notifier.getTagsForSound(
-      widget.soundItem.sound.id,
-    );
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     setState(() {
       _tagCatalog = catalog;
-      _selectedTagIds = selected.map((t) => t.id).toSet();
       _isTagsLoading = false;
     });
   }
 
-  String _getSoundTypeLabel(SoundType type) {
-    switch (type) {
-      case SoundType.soundEffect:
-        return 'Bruitage';
-      case SoundType.music:
-        return 'Musique';
-      case SoundType.ambiance:
-        return 'Son d\'ambiance';
-    }
-  }
-
   void _updateColor(Color? color) {
-    setState(() {
-      _selectedColor = color;
-    });
-    widget.notifier.updateSoundItemSettings(
-      widget.soundItem,
+    setState(() => _selectedColor = color);
+    widget.notifier.updatePadItemSettings(
+      widget.padItem,
       buttonColor: color,
       updateColor: true,
     );
@@ -89,20 +68,21 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
 
   void _updateVolume(double value) {
     final clamped = value.clamp(0.0, 1.0);
-    setState(() {
-      _volume = clamped;
-    });
-    widget.notifier.updateSoundItemSettings(widget.soundItem, volume: clamped);
-    widget.soundItem.player.setVolume(clamped);
+    setState(() => _volume = clamped);
+    widget.notifier.updatePadItemSettings(widget.padItem, volume: clamped);
+    widget.padItem.currentPlayer?.setVolume(clamped);
+  }
+
+  void _updatePlayMode(PadPlayMode mode) {
+    setState(() => _playMode = mode);
+    widget.notifier.updatePadItemSettings(widget.padItem, playMode: mode);
   }
 
   Future<void> _updateDisplayName() async {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     final trimmed = _displayNameController.text.trim();
-    await widget.notifier.updateSoundItemSettings(
-      widget.soundItem,
+    await widget.notifier.updatePadItemSettings(
+      widget.padItem,
       displayName: trimmed.isEmpty ? null : trimmed,
       updateDisplayName: true,
     );
@@ -111,16 +91,47 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   void _scheduleDisplayNameUpdate(String _) {
     _displayNameDebounce?.cancel();
     _displayNameDebounce = Timer(const Duration(milliseconds: 400), () {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       _updateDisplayName();
     });
   }
 
+  Future<void> _addSound(BuildContext ctx) async {
+    final pad = widget.padItem.pad;
+    // Ouvrir la bibliothèque pour choisir un son à ajouter à ce pad
+    await showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      builder: (_) => _AddSoundSheet(
+        padId: pad.id,
+        notifier: widget.notifier,
+        tagCatalog: _tagCatalog,
+      ),
+    );
+    if (!mounted) return;
+    setState(() {}); // Rafraîchir après ajout
+  }
+
+  Future<void> _removeSound(int soundId) async {
+    await widget.notifier.removeSoundFromPad(
+      widget.padItem.pad.id,
+      soundId,
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  String _soundTypeLabel(SoundType type) => switch (type) {
+        SoundType.soundEffect => 'Bruitage',
+        SoundType.music => 'Musique',
+        SoundType.ambiance => 'Ambiance',
+      };
+
   @override
   Widget build(BuildContext context) {
-    final sound = widget.soundItem.sound;
+    final scheme = Theme.of(context).colorScheme;
+    final pad = widget.padItem.pad;
+    final sounds = pad.sounds;
     final colorChoices = <Color>[
       Colors.blue,
       Colors.green,
@@ -135,86 +146,14 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Détails du pad')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Réglages du pad ──────────────────────────────────────────
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      sound.title,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildInfoRow(
-                      context,
-                      'Type',
-                      _getSoundTypeLabel(sound.type),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildInfoRow(context, 'Chemin', sound.filePath),
-                    const SizedBox(height: 8),
-                    _buildInfoRow(
-                      context,
-                      'Date de création',
-                      _formatDate(sound.createdAt),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildInfoRow(context, 'ID', sound.id.toString()),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Tags',
-                      style: Theme.of(context).textTheme.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    if (_isTagsLoading)
-                      const LinearProgressIndicator()
-                    else if (_tagCatalog.isEmpty)
-                      Text(
-                        'Aucun tag disponible',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      )
-                    else if (_selectedTagIds.isEmpty)
-                      Text(
-                        'Aucun tag',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      )
-                    else
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        children: [
-                          for (final category in _tagCatalog)
-                            ...category.tags
-                                .where((tag) => _selectedTagIds.contains(tag.id))
-                                .map(
-                                  (tag) => Chip(
-                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    padding: EdgeInsets.zero,
-                                    label: Text(
-                                      tag.name,
-                                      style: Theme.of(context).textTheme.labelSmall,
-                                    ),
-                                    backgroundColor: Color(
-                                      category.category.color,
-                                    ).withAlpha(40),
-                                  ),
-                                ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -231,28 +170,27 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                     TextField(
                       controller: _displayNameController,
                       decoration: InputDecoration(
-                        hintText: sound.title,
+                        hintText: pad.displayName,
                         border: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
+                          borderSide:
+                              BorderSide(color: scheme.outline),
                         ),
                         suffixIcon: _displayNameController.text.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.clear),
                                 onPressed: () {
-                                  setState(() {
-                                    _displayNameController.clear();
-                                  });
+                                  setState(
+                                    () => _displayNameController.clear(),
+                                  );
                                   _updateDisplayName();
                                 },
                               )
                             : null,
                       ),
                       textInputAction: TextInputAction.done,
-                      onChanged: (value) {
+                      onChanged: (v) {
                         setState(() {});
-                        _scheduleDisplayNameUpdate(value);
+                        _scheduleDisplayNameUpdate(v);
                       },
                       onSubmitted: (_) => _updateDisplayName(),
                     ),
@@ -267,8 +205,8 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                       runSpacing: 12,
                       children: [
                         _buildDefaultColorOption(context),
-                        for (final color in colorChoices)
-                          _buildColorDot(context, color),
+                        for (final c in colorChoices)
+                          _buildColorDot(context, c),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -290,6 +228,67 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                       label: '${(_volume * 100).round()}%',
                       onChanged: _updateVolume,
                     ),
+                    if (sounds.length > 1) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Mode de lecture',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      _PlayModeSelector(
+                        value: _playMode,
+                        onChanged: _updatePlayMode,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Sons du pad ───────────────────────────────────────────────
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Sons du pad',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => _addSound(context),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Ajouter'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (sounds.isEmpty)
+                      Text(
+                        'Aucun son',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      )
+                    else
+                      Column(
+                        children: [
+                          for (final sound in sounds)
+                            _SoundRow(
+                              sound: sound,
+                              canRemove: sounds.length > 1,
+                              typeLabel: _soundTypeLabel(sound.type),
+                              tagCatalog: _tagCatalog,
+                              isTagsLoading: _isTagsLoading,
+                              notifier: widget.notifier,
+                              onRemove: () => _removeSound(sound.id),
+                            ),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -298,30 +297,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
         ),
       ),
     );
-  }
-
-  Widget _buildInfoRow(BuildContext context, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 120,
-          child: Text(
-            '$label:',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-        Expanded(
-          child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
-        ),
-      ],
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 
   Widget _buildDefaultColorOption(BuildContext context) {
@@ -391,13 +366,240 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
           ],
         ),
         child: isSelected
-            ? Icon(Icons.check, color: _getCheckmarkColor(color), size: 20)
+            ? Icon(Icons.check, color: _checkColor(color), size: 20)
             : null,
       ),
     );
   }
 
-  Color _getCheckmarkColor(Color color) {
-    return color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
+  Color _checkColor(Color color) =>
+      color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
+}
+
+// ── Sélecteur de mode de lecture ──────────────────────────────────────────
+
+class _PlayModeSelector extends StatelessWidget {
+  final PadPlayMode value;
+  final ValueChanged<PadPlayMode> onChanged;
+
+  const _PlayModeSelector({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<PadPlayMode>(
+      segments: const [
+        ButtonSegment(
+          value: PadPlayMode.random,
+          icon: Icon(Icons.shuffle_rounded, size: 16),
+          label: Text('Aléatoire'),
+        ),
+        ButtonSegment(
+          value: PadPlayMode.sequential,
+          icon: Icon(Icons.repeat_one_rounded, size: 16),
+          label: Text('Séquentiel'),
+        ),
+      ],
+      selected: {value},
+      onSelectionChanged: (s) => onChanged(s.first),
+    );
   }
+}
+
+// ── Ligne d'un son ────────────────────────────────────────────────────────
+
+class _SoundRow extends StatefulWidget {
+  final Sound sound;
+  final bool canRemove;
+  final String typeLabel;
+  final List<TagCategoryWithTags> tagCatalog;
+  final bool isTagsLoading;
+  final SamplerNotifier notifier;
+  final VoidCallback onRemove;
+
+  const _SoundRow({
+    required this.sound,
+    required this.canRemove,
+    required this.typeLabel,
+    required this.tagCatalog,
+    required this.isTagsLoading,
+    required this.notifier,
+    required this.onRemove,
+  });
+
+  @override
+  State<_SoundRow> createState() => _SoundRowState();
+}
+
+class _SoundRowState extends State<_SoundRow> {
+  Set<int> _tagIds = {};
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTags();
+  }
+
+  Future<void> _loadTags() async {
+    final tags = await widget.notifier.getTagsForSound(widget.sound.id);
+    if (!mounted) return;
+    setState(() {
+      _tagIds = tags.map((t) => t.id).toSet();
+      _loaded = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final sound = widget.sound;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sound.displayName ?? sound.title,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  widget.typeLabel,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                if (_loaded && _tagIds.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 2,
+                    children: [
+                      for (final cat in widget.tagCatalog)
+                        ...cat.tags
+                            .where((t) => _tagIds.contains(t.id))
+                            .map(
+                              (t) => Chip(
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                padding: EdgeInsets.zero,
+                                label: Text(
+                                  t.name,
+                                  style:
+                                      Theme.of(context).textTheme.labelSmall,
+                                ),
+                                backgroundColor:
+                                    Color(cat.category.color).withAlpha(40),
+                              ),
+                            ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (widget.canRemove)
+            IconButton(
+              icon: const Icon(Icons.remove_circle_outline, size: 20),
+              tooltip: 'Retirer ce son du pad',
+              onPressed: widget.onRemove,
+              color: scheme.error,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Sheet d'ajout de son ──────────────────────────────────────────────────
+
+class _AddSoundSheet extends StatefulWidget {
+  final int padId;
+  final SamplerNotifier notifier;
+  final List<TagCategoryWithTags> tagCatalog;
+
+  const _AddSoundSheet({
+    required this.padId,
+    required this.notifier,
+    required this.tagCatalog,
+  });
+
+  @override
+  State<_AddSoundSheet> createState() => _AddSoundSheetState();
+}
+
+class _AddSoundSheetState extends State<_AddSoundSheet> {
+  List<Sound> _sounds = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSounds();
+  }
+
+  Future<void> _loadSounds() async {
+    final all = await widget.notifier.getAllSounds();
+    if (!mounted) return;
+    setState(() {
+      _sounds = all;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.9,
+      builder: (_, controller) => Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              'Ajouter un son au pad',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.builder(
+                    controller: controller,
+                    itemCount: _sounds.length,
+                    itemBuilder: (_, i) {
+                      final s = _sounds[i];
+                      return ListTile(
+                        title: Text(s.displayName ?? s.title),
+                        subtitle: Text(_typeLabel(s.type)),
+                        onTap: () async {
+                          await widget.notifier.addSoundToPad(
+                            widget.padId,
+                            s.id,
+                          );
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _typeLabel(SoundType type) => switch (type) {
+        SoundType.soundEffect => 'Bruitage',
+        SoundType.music => 'Musique',
+        SoundType.ambiance => 'Ambiance',
+      };
 }

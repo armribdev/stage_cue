@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import '../providers/sampler_provider.dart';
-import '../widgets/pad_item.dart';
+import '../widgets/pad_item.dart' show PadCard;
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/database/database.dart' as db;
@@ -72,7 +72,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   void _onStateChanged() {
     if (mounted) {
       setState(() {
-        if (_isEditMode && _notifier.state.sounds.isEmpty) {
+        if (_isEditMode && _notifier.state.pads.isEmpty) {
           _isEditMode = false;
         }
       });
@@ -533,9 +533,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
             controller: _gridScrollController,
             padding: const EdgeInsets.all(16),
             gridDelegate: gridDelegate,
-            itemCount: state.sounds.length,
+            itemCount: state.pads.length,
             dragEnabled: true,
-            // Desktop (souris) a besoin d'un démarrage immédiat pour un drag fiable.
             dragStartDelay: Duration.zero,
             dragWidgetBuilder: (index, child) {
               return Material(
@@ -547,22 +546,19 @@ class _SamplerScreenState extends State<SamplerScreen> {
               HapticFeedback.selectionClick();
             },
             onReorder: (oldIndex, newIndex) {
-              if (oldIndex == newIndex) {
-                return;
-              }
-              final reordered = List<SoundItem>.from(state.sounds);
+              if (oldIndex == newIndex) return;
+              final reordered = List<PadItem>.from(state.pads);
               final moved = reordered.removeAt(oldIndex);
               reordered.insert(newIndex, moved);
               _notifier.reorderSoundsFromList(reordered);
             },
             itemBuilder: (context, index) {
-              final soundItem = state.sounds[index];
-              return _buildPadCard(context, state, soundItem);
+              return _buildPadWidget(context, state, state.pads[index]);
             },
           );
         }
 
-        final gridItems = <Object>[...state.sounds, _addButtonMarker];
+        final gridItems = <Object>[...state.pads, _addButtonMarker];
         return GridView.builder(
           controller: _gridScrollController,
           padding: const EdgeInsets.all(16),
@@ -573,24 +569,24 @@ class _SamplerScreenState extends State<SamplerScreen> {
             if (item == _addButtonMarker) {
               return _buildAddButtonCard(context, selectedBoard);
             }
-            return _buildPadCard(context, state, item as SoundItem);
+            return _buildPadWidget(context, state, item as PadItem);
           },
         );
       },
     );
   }
 
-  Widget _buildPadCard(
+  Widget _buildPadWidget(
     BuildContext context,
     SamplerState state,
-    SoundItem soundItem,
+    PadItem padItem,
   ) {
-    return PadItem(
-      key: ValueKey<int>(soundItem.sound.id),
-      soundItem: soundItem,
+    return PadCard(
+      key: ValueKey<int>(padItem.pad.id),
+      padItem: padItem,
       isEditMode: _isEditMode,
-      animateOnRestore: _recentlyRestoredSoundId == soundItem.sound.id,
-      onTap: _isEditMode ? null : () => _notifier.toggleSound(soundItem),
+      animateOnRestore: _recentlyRestoredSoundId == padItem.pad.id,
+      onTap: _isEditMode ? null : () => _notifier.toggleSound(padItem),
       onLongPress: _isEditMode
           ? null
           : () async {
@@ -598,7 +594,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => PadDetailsScreen(
-                    soundItem: soundItem,
+                    padItem: padItem,
                     notifier: _notifier,
                   ),
                 ),
@@ -606,10 +602,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
             },
       onRemove: _isEditMode
           ? () async {
-              final removed = await _notifier.removeSound(soundItem);
-              if (!mounted || !removed) {
-                return;
-              }
+              final removed = await _notifier.removeSound(padItem);
+              if (!mounted || !removed) return;
             }
           : null,
     );
@@ -668,7 +662,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
             appBar: _SamplerAppBar(
               title: selectedBoard == null ? 'Scène' : selectedBoard.name,
               isEditMode: _isEditMode,
-              canToggleEditMode: state.sounds.isNotEmpty,
+              canToggleEditMode: state.pads.isNotEmpty,
               onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
               onToggleEditMode: () {
                 setState(() {
@@ -732,7 +726,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                         ? 'sounds_loading'
                         : state.error != null
                         ? 'sounds_error'
-                        : state.sounds.isEmpty
+                        : state.pads.isEmpty
                         ? 'sounds_empty'
                         : 'sounds_grid',
                   ),
@@ -774,7 +768,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                         ),
                       );
                     }
-                    if (state.sounds.isEmpty) {
+                    if (state.pads.isEmpty) {
                       return Center(
                         child: Padding(
                           padding: const EdgeInsets.all(24),

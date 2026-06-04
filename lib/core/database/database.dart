@@ -14,6 +14,8 @@ part 'database.g.dart';
     SoundBoards,
     WatchedPaths,
     BoardSounds,
+    Pads,
+    PadSounds,
     TagCategories,
     TagItems,
     SoundTags,
@@ -24,14 +26,13 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration {
     return MigrationStrategy(
       onCreate: (m) async {
         await m.createAll();
-        await _ensureBoardSoundSettingsTableExists();
         await _seedDefaultTagsIfEmpty();
       },
       onUpgrade: (m, from, to) async {
@@ -103,9 +104,16 @@ class AppDatabase extends _$AppDatabase {
         if (from < 9) {
           await _ensureBoardSoundSettingsTableExists();
         }
+        if (from < 10) {
+          await _migrateToPads(m);
+        }
       },
       beforeOpen: (details) async {
-        await _ensureBoardSoundSettingsTableExists();
+        // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
+        // encore migré — sans effet sur les bases v10+ (table inexistante).
+        if (details.versionBefore != null && details.versionBefore! < 9) {
+          await _ensureBoardSoundSettingsTableExists();
+        }
       },
     );
   }
@@ -123,6 +131,45 @@ class AppDatabase extends _$AppDatabase {
         FOREIGN KEY (sound_id) REFERENCES sounds(id) ON DELETE CASCADE
       )
     ''');
+  }
+
+  Future<void> _migrateToPads(Migrator m) async {
+    // Garantir que board_sound_settings existe (migrations antérieures)
+    await _ensureBoardSoundSettingsTableExists();
+
+    await m.createTable(pads);
+    await m.createTable(padSounds);
+
+    // Migrer board_sounds + board_sound_settings → pads + pad_sounds
+    final rows = await customSelect('''
+      SELECT bs.board_id, bs.sound_id, bs.sort_order,
+             bss.display_name, bss.color, bss.volume
+      FROM board_sounds bs
+      LEFT JOIN board_sound_settings bss
+        ON bss.board_id = bs.board_id AND bss.sound_id = bs.sound_id
+      ORDER BY bs.board_id, bs.sort_order
+    ''').get();
+
+    for (final row in rows) {
+      final padId = await into(pads).insert(
+        PadsCompanion.insert(
+          boardId: row.read<int>('board_id'),
+          name: Value(row.read<String?>('display_name')),
+          color: Value(row.read<int?>('color')),
+          sortOrder: Value(row.read<int>('sort_order')),
+          volume: Value(row.read<double?>('volume') ?? 1.0),
+        ),
+      );
+      await into(padSounds).insert(
+        PadSoundsCompanion.insert(
+          padId: padId,
+          soundId: row.read<int>('sound_id'),
+        ),
+      );
+    }
+
+    await customStatement('DROP TABLE IF EXISTS board_sound_settings');
+    await customStatement('DROP TABLE IF EXISTS board_sounds');
   }
 
   Future<void> _seedDefaultTagsIfEmpty() async {

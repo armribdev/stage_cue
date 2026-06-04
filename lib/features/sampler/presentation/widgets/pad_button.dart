@@ -1,46 +1,45 @@
 import 'package:flutter/material.dart';
+import '../../domain/entities/pad.dart';
 import '../providers/sampler_provider.dart';
 
 /// Widget représentant un pad de son
 class PadButton extends StatelessWidget {
-  final SoundItem soundItem;
+  final PadItem padItem;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
-  final VoidCallback onRemove;
 
   const PadButton({
     super.key,
-    required this.soundItem,
+    required this.padItem,
     required this.onTap,
     this.onLongPress,
-    required this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final customColor = soundItem.buttonColor;
-    final defaultColor = scheme.surfaceContainerHighest.withValues(alpha: 0.75);
+    final colorValue = padItem.pad.colorValue;
+    final customColor = colorValue != null ? Color(colorValue) : null;
+    final defaultColor =
+        scheme.surfaceContainerHighest.withValues(alpha: 0.75);
     final baseColor = customColor ?? defaultColor;
     final playingColor = customColor != null
         ? customColor.withValues(alpha: 0.75)
         : scheme.primaryContainer.withValues(alpha: 0.85);
-    final displayName = soundItem.sound.displayName;
-    final label = (displayName != null && displayName.trim().isNotEmpty)
-        ? displayName
-        : soundItem.sound.title;
+    final label = padItem.pad.displayName;
+    final soundCount = padItem.pad.sounds.length;
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: soundItem.isPlaying
+          color: padItem.isPlaying
               ? scheme.primary.withValues(alpha: 0.5)
               : scheme.outlineVariant.withValues(alpha: 0.45),
         ),
       ),
-      color: soundItem.isPlaying ? playingColor : baseColor,
+      color: padItem.isPlaying ? playingColor : baseColor,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
@@ -50,15 +49,17 @@ class PadButton extends StatelessWidget {
             // Barre de progression en arrière-plan
             TweenAnimationBuilder<double>(
               key: ValueKey(
-                'progress_${soundItem.sound.id}_${soundItem.isPlaying}',
+                'progress_${padItem.pad.id}_${padItem.isPlaying}'
+                '_${padItem.currentSoundIndex}',
               ),
-              tween: Tween(begin: 0.0, end: soundItem.isPlaying ? 1.0 : 0.0),
-              duration: soundItem.isPlaying
-                  ? soundItem.player.duration
+              tween: Tween(begin: 0.0, end: padItem.isPlaying ? 1.0 : 0.0),
+              duration: padItem.isPlaying
+                  ? (padItem.currentPlayer?.duration ??
+                      const Duration(seconds: 1))
                   : const Duration(milliseconds: 200),
               curve: Curves.linear,
               builder: (context, value, child) {
-                if (!soundItem.isPlaying && value == 0.0) {
+                if (!padItem.isPlaying && value == 0.0) {
                   return const SizedBox.shrink();
                 }
                 return Positioned.fill(
@@ -91,28 +92,47 @@ class PadButton extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 15,
-                        fontWeight: soundItem.isPlaying
+                        fontWeight: padItem.isPlaying
                             ? FontWeight.w700
                             : FontWeight.w500,
-                        color: soundItem.isPlaying
+                        color: padItem.isPlaying
                             ? scheme.primary
                             : scheme.onSurface,
                       ),
                     ),
+                    if (soundCount > 1) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            switch (padItem.pad.playMode) {
+                              PadPlayMode.random => Icons.shuffle_rounded,
+                              PadPlayMode.sequential =>
+                                Icons.repeat_one_rounded,
+                            },
+                            size: 11,
+                            color: scheme.onSurfaceVariant.withValues(
+                              alpha: 0.65,
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '$soundCount sons',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurfaceVariant.withValues(
+                                alpha: 0.65,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
-            // Positioned(
-            //   top: 8,
-            //   right: 8,
-            //   child: IconButton(
-            //     icon: const Icon(Icons.close, size: 20),
-            //     color: Colors.grey[600],
-            //     onPressed: onRemove,
-            //     tooltip: 'Retirer',
-            //   ),
-            // ),
           ],
         ),
       ),

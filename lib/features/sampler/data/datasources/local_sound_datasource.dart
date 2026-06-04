@@ -14,6 +14,7 @@ import '../models/indexing_progress.dart';
 import '../../domain/entities/sound.dart' as domain;
 import '../../domain/entities/sound_board.dart' as domain;
 import '../../domain/entities/watched_path.dart' as domain;
+import '../../domain/entities/pad.dart' as domain_pad;
 
 /// Source de données locale pour les sons (base de données)
 class LocalSoundDataSource {
@@ -564,5 +565,271 @@ class LocalWatchedPathDataSource {
       'Scan terminé: $totalIndexed nouveau(x) fichier(s) indexé(s) au total',
     );
     return totalIndexed;
+  }
+}
+
+/// Source de données locale pour les pads
+class LocalPadDataSource {
+  final db.AppDatabase _database;
+
+  LocalPadDataSource(this._database);
+
+  domain.Sound _rowToSound(QueryRow row) {
+    final typeValue = row.read<int>('type');
+    return domain.Sound(
+      id: row.read<int>('id'),
+      title: row.read<String>('title'),
+      displayName: row.read<String?>('display_name'),
+      filePath: row.read<String>('file_path'),
+      type: switch (typeValue) {
+        0 => domain.SoundType.soundEffect,
+        1 => domain.SoundType.music,
+        2 => domain.SoundType.ambiance,
+        _ => domain.SoundType.soundEffect,
+      },
+      colorValue: row.read<int?>('color'),
+      volume: row.read<double>('volume'),
+      createdAt: row.read<DateTime>('created_at'),
+    );
+  }
+
+  /// Récupère tous les pads d'une board avec leurs sons.
+  Future<List<domain_pad.Pad>> getBoardPads(int boardId) async {
+    final padRows = await _database.customSelect(
+      '''
+      SELECT id, board_id, name, color, sort_order, play_mode, volume, created_at
+      FROM pads
+      WHERE board_id = ?
+      ORDER BY sort_order, created_at
+      ''',
+      variables: [Variable<int>(boardId)],
+    ).get();
+
+    final pads = <domain_pad.Pad>[];
+    for (final padRow in padRows) {
+      final soundRows = await _database.customSelect(
+        '''
+        SELECT s.id, s.title, s.display_name, s.file_path, s.type,
+               s.color, s.volume, s.created_at
+        FROM pad_sounds ps
+        INNER JOIN sounds s ON s.id = ps.sound_id
+        WHERE ps.pad_id = ?
+        ORDER BY ps.sort_order, ps.added_at
+        ''',
+        variables: [Variable<int>(padRow.read<int>('id'))],
+      ).get();
+
+      pads.add(domain_pad.Pad(
+        id: padRow.read<int>('id'),
+        boardId: padRow.read<int>('board_id'),
+        name: padRow.read<String?>('name'),
+        colorValue: padRow.read<int?>('color'),
+        sortOrder: padRow.read<int>('sort_order'),
+        playMode: padRow.read<int>('play_mode') == 0
+            ? domain_pad.PadPlayMode.random
+            : domain_pad.PadPlayMode.sequential,
+        volume: padRow.read<double>('volume'),
+        createdAt: padRow.read<DateTime>('created_at'),
+        sounds: soundRows.map(_rowToSound).toList(),
+      ));
+    }
+    return pads;
+  }
+
+  /// Crée un pad avec un son initial, retourne l'id du pad créé.
+  Future<int> createPad(int boardId, int soundId) async {
+    final countRow = await _database.customSelect(
+      'SELECT COUNT(*) AS c FROM pads WHERE board_id = ?',
+      variables: [Variable<int>(boardId)],
+    ).getSingle();
+    final nextOrder = countRow.read<int>('c');
+
+    final padId = await _database.into(_database.pads).insert(
+      db.PadsCompanion.insert(
+        boardId: boardId,
+        sortOrder: Value(nextOrder),
+      ),
+    );
+    await _database.into(_database.padSounds).insert(
+      db.PadSoundsCompanion.insert(padId: padId, soundId: soundId),
+    );
+    return padId;
+  }
+
+  /// Crée un pad avec des réglages complets et plusieurs sons.
+  Future<int> createPadWithSettings({
+    required int boardId,
+    required List<int> soundIds,
+    String? name,
+    int? colorValue,
+    double volume = 1.0,
+    domain_pad.PadPlayMode playMode = domain_pad.PadPlayMode.random,
+    int? sortOrder,
+  }) async {
+    final nextOrder = sortOrder ??
+        (await _database.customSelect(
+          'SELECT COUNT(*) AS c FROM pads WHERE board_id = ?',
+          variables: [Variable<int>(boardId)],
+        ).getSingle())
+            .read<int>('c');
+
+    final padId = await _database.into(_database.pads).insert(
+      db.PadsCompanion.insert(
+        boardId: boardId,
+        name: Value(name),
+        color: Value(colorValue),
+        sortOrder: Value(nextOrder),
+        playMode: Value(
+          playMode == domain_pad.PadPlayMode.random
+              ? db_sounds.PadPlayMode.random
+              : db_sounds.PadPlayMode.sequential,
+        ),
+        volume: Value(volume),
+      ),
+    );
+    for (var i = 0; i < soundIds.length; i++) {
+      await _database.into(_database.padSounds).insert(
+        db.PadSoundsCompanion.insert(
+          padId: padId,
+          soundId: soundIds[i],
+          sortOrder: Value(i),
+        ),
+      );
+    }
+    return padId;
+  }
+
+  /// Supprime un pad (cascade sur pad_sounds).
+  Future<void> deletePad(int padId) async {
+    await (_database.delete(_database.pads)
+          ..where((p) => p.id.equals(padId)))
+        .go();
+  }
+
+  /// Ajoute un son à un pad existant.
+  Future<void> addSoundToPad(int padId, int soundId) async {
+    final existing = await _database.customSelect(
+      'SELECT COUNT(*) AS c FROM pad_sounds WHERE pad_id = ? AND sound_id = ?',
+      variables: [Variable<int>(padId), Variable<int>(soundId)],
+    ).getSingle();
+    if (existing.read<int>('c') > 0) return;
+
+    final countRow = await _database.customSelect(
+      'SELECT COUNT(*) AS c FROM pad_sounds WHERE pad_id = ?',
+      variables: [Variable<int>(padId)],
+    ).getSingle();
+    final nextOrder = countRow.read<int>('c');
+
+    await _database.into(_database.padSounds).insert(
+      db.PadSoundsCompanion.insert(
+        padId: padId,
+        soundId: soundId,
+        sortOrder: Value(nextOrder),
+      ),
+    );
+  }
+
+  /// Retire un son d'un pad.
+  Future<void> removeSoundFromPad(int padId, int soundId) async {
+    await (_database.delete(_database.padSounds)
+          ..where(
+            (ps) => ps.padId.equals(padId) & ps.soundId.equals(soundId),
+          ))
+        .go();
+  }
+
+  /// Réordonne les pads d'une board.
+  Future<void> reorderBoardPads(int boardId, List<int> padIdsInOrder) async {
+    await _database.transaction(() async {
+      for (var i = 0; i < padIdsInOrder.length; i++) {
+        await (_database.update(_database.pads)
+              ..where(
+                (p) =>
+                    p.id.equals(padIdsInOrder[i]) & p.boardId.equals(boardId),
+              ))
+            .write(db.PadsCompanion(sortOrder: Value(i)));
+      }
+    });
+  }
+
+  /// Met à jour les réglages d'un pad.
+  Future<void> updatePadSettings({
+    required int padId,
+    String? name,
+    bool updateName = false,
+    int? colorValue,
+    bool updateColor = false,
+    double? volume,
+    domain_pad.PadPlayMode? playMode,
+  }) async {
+    final companion = db.PadsCompanion(
+      name: updateName ? Value(name) : const Value.absent(),
+      color: updateColor ? Value(colorValue) : const Value.absent(),
+      volume: volume != null ? Value(volume) : const Value.absent(),
+      playMode: playMode != null
+          ? Value(
+              playMode == domain_pad.PadPlayMode.random
+                  ? db_sounds.PadPlayMode.random
+                  : db_sounds.PadPlayMode.sequential,
+            )
+          : const Value.absent(),
+    );
+    await (_database.update(_database.pads)
+          ..where((p) => p.id.equals(padId)))
+        .write(companion);
+  }
+
+  /// Duplique tous les pads d'une board vers une autre board.
+  Future<void> duplicatePads(int sourceBoardId, int targetBoardId) async {
+    final sourcePads = await _database.customSelect(
+      'SELECT id, name, color, sort_order, play_mode, volume FROM pads '
+      'WHERE board_id = ? ORDER BY sort_order',
+      variables: [Variable<int>(sourceBoardId)],
+    ).get();
+
+    for (final padRow in sourcePads) {
+      final newPadId = await _database.into(_database.pads).insert(
+        db.PadsCompanion.insert(
+          boardId: targetBoardId,
+          name: Value(padRow.read<String?>('name')),
+          color: Value(padRow.read<int?>('color')),
+          sortOrder: Value(padRow.read<int>('sort_order')),
+          playMode: Value(
+            db_sounds.PadPlayMode.values[padRow.read<int>('play_mode')],
+          ),
+          volume: Value(padRow.read<double>('volume')),
+        ),
+      );
+
+      final soundRows = await _database.customSelect(
+        'SELECT sound_id, sort_order FROM pad_sounds '
+        'WHERE pad_id = ? ORDER BY sort_order',
+        variables: [Variable<int>(padRow.read<int>('id'))],
+      ).get();
+
+      for (final soundRow in soundRows) {
+        await _database.into(_database.padSounds).insert(
+          db.PadSoundsCompanion.insert(
+            padId: newPadId,
+            soundId: soundRow.read<int>('sound_id'),
+            sortOrder: Value(soundRow.read<int>('sort_order')),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Retourne les IDs de tous les sons présents dans les pads d'une board.
+  Future<Set<int>> getSoundIdsInBoard(int boardId) async {
+    final rows = await _database.customSelect(
+      '''
+      SELECT DISTINCT ps.sound_id
+      FROM pad_sounds ps
+      INNER JOIN pads p ON p.id = ps.pad_id
+      WHERE p.board_id = ?
+      ''',
+      variables: [Variable<int>(boardId)],
+    ).get();
+    return rows.map((r) => r.read<int>('sound_id')).toSet();
   }
 }

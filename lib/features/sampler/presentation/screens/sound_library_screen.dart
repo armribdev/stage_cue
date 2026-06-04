@@ -58,21 +58,17 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     });
 
     try {
-      // Charger tous les sons indexés
       final allSounds = await _repository.getAllSounds();
+      // Sons déjà présents dans un pad de la board (indicatif uniquement)
+      final inBoard = await _repository.getSoundIdsInBoard(widget.boardId);
 
-      // Charger les sons qui sont dans la board (ordre conservé)
-      final boardSounds = await _repository.getBoardSounds(widget.boardId);
-      final boardSoundIds = boardSounds.map((s) => s.id).toSet();
-
-      // Filtrer : uniquement les bruitages (y compris ceux déjà dans la board)
-      final availableSounds = allSounds.where((sound) {
-        return sound.type == SoundType.soundEffect;
-      }).toList();
+      final availableSounds = allSounds
+          .where((s) => s.type == SoundType.soundEffect)
+          .toList();
 
       setState(() {
         _availableSounds = availableSounds;
-        _soundsInBoard = boardSoundIds;
+        _soundsInBoard = inBoard;
         _isLoading = false;
       });
       await _loadTagsForSounds(availableSounds);
@@ -89,25 +85,18 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   }
 
   Future<void> _addSoundToBoard(Sound sound) async {
-    // Ne rien faire si le son est déjà dans la board
-    if (_soundsInBoard.contains(sound.id)) {
-      return;
-    }
-
     try {
+      // Crée toujours un nouveau pad (même son autorisé plusieurs fois)
       await _addSoundToBoardUseCase(widget.boardId, sound.id);
-      // Mettre à jour l'état local pour refléter l'ajout
-      setState(() {
-        _soundsInBoard.add(sound.id);
-      });
+      setState(() => _soundsInBoard.add(sound.id));
       if (mounted) {
-        Navigator.pop(context, true); // Retour à la board avec succès
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Erreur lors de l\'ajout: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de l\'ajout: $e')),
+        );
       }
     }
   }
