@@ -1,6 +1,9 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../data/repositories/sound_repository.dart';
+import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -12,7 +15,7 @@ import '../../domain/usecases/remove_sound_from_board_usecase.dart';
 class SamplerState {
   static const Object _unset = Object();
 
-  final List<SoundItem> sounds;
+  final List<PadItem> pads;
   final bool isLoading;
   final String? error;
   final List<SoundBoard> boards;
@@ -21,7 +24,7 @@ class SamplerState {
   final String? boardsError;
 
   SamplerState({
-    required this.sounds,
+    required this.pads,
     this.isLoading = false,
     this.error,
     this.boards = const [],
@@ -31,7 +34,7 @@ class SamplerState {
   });
 
   SamplerState copyWith({
-    List<SoundItem>? sounds,
+    List<PadItem>? pads,
     bool? isLoading,
     Object? error = _unset,
     List<SoundBoard>? boards,
@@ -40,7 +43,7 @@ class SamplerState {
     Object? boardsError = _unset,
   }) {
     return SamplerState(
-      sounds: sounds ?? this.sounds,
+      pads: pads ?? this.pads,
       isLoading: isLoading ?? this.isLoading,
       error: identical(error, _unset) ? this.error : error as String?,
       boards: boards ?? this.boards,
@@ -55,31 +58,39 @@ class SamplerState {
   }
 }
 
-/// Item de son avec son lecteur audio associé
-class SoundItem {
-  Sound sound;
-  final AudioPlayerService player;
+/// Item de pad avec ses lecteurs audio associés (un par son)
+class PadItem {
+  Pad pad;
+  final List<AudioPlayerService> players;
   bool isPlaying;
-  Color? buttonColor;
-  double volume;
+  int _nextSoundIndex;
+  int? _currentPlayerIndex;
 
-  SoundItem({
-    required this.sound,
-    required this.player,
+  PadItem({
+    required this.pad,
+    required this.players,
     this.isPlaying = false,
-    this.buttonColor,
-    this.volume = 1.0,
-  });
+    int nextSoundIndex = 0,
+  }) : _nextSoundIndex = nextSoundIndex;
+
+  /// Lecteur actuellement actif (celui qui joue ou vient de jouer).
+  AudioPlayerService? get currentPlayer =>
+      _currentPlayerIndex != null && _currentPlayerIndex! < players.length
+          ? players[_currentPlayerIndex!]
+          : null;
+
+  /// Index du son actuellement joué (pour la clé du TweenAnimationBuilder).
+  int? get currentSoundIndex => _currentPlayerIndex;
 }
 
-class _RemovedSoundSnapshot {
+class _RemovedPadSnapshot {
   final int boardId;
-  final Sound sound;
+  final Pad pad;
   final int index;
 
-  const _RemovedSoundSnapshot({
+  const _RemovedPadSnapshot({
     required this.boardId,
-    required this.sound,
+    required this.pad,
     required this.index,
   });
 }
@@ -87,41 +98,43 @@ class _RemovedSoundSnapshot {
 /// Provider/Notifier pour la gestion de l'état du sampler
 class SamplerNotifier extends ChangeNotifier {
   final SoundRepository _repository;
-  final LoadSoundsUseCase _loadSoundsUseCase;
-  final RemoveSoundFromBoardUseCase? _removeSoundFromBoardUseCase;
+  final LoadSoundsUseCase _loadPadsUseCase;
+  final RemoveSoundFromBoardUseCase? _removePadUseCase;
   int? _activeBoardId;
   double _masterVolume = 1.0;
-  _RemovedSoundSnapshot? _lastRemovedSound;
+  _RemovedPadSnapshot? _lastRemovedPad;
+  final _random = Random();
 
-  SamplerState _state = SamplerState(sounds: []);
+  SamplerState _state = SamplerState(pads: []);
   SamplerState get state => _state;
   double get masterVolume => _masterVolume;
   bool get canUndoLastRemoval =>
-      _lastRemovedSound != null && _lastRemovedSound!.boardId == _activeBoardId;
+      _lastRemovedPad != null && _lastRemovedPad!.boardId == _activeBoardId;
 
   SamplerNotifier(
     this._repository,
-    this._loadSoundsUseCase, [
-    this._removeSoundFromBoardUseCase,
+    this._loadPadsUseCase, [
+    this._removePadUseCase,
   ]);
 
-  void _disposeSoundItems(List<SoundItem> items) {
+  void _disposePadItems(List<PadItem> items) {
     for (final item in items) {
-      item.player.dispose();
+      for (final player in item.players) {
+        player.dispose();
+      }
     }
   }
 
-  /// Définit la soundboard active (null pour désactiver)
   void setActiveBoard(int? boardId) {
     _activeBoardId = boardId;
   }
 
-  /// Efface la soundboard active
   void clearActiveBoard() {
     _activeBoardId = null;
   }
 
-  /// Charge toutes les soundboards et sélectionne une board active
+  // ── Boards ────────────────────────────────────────────────────────────────
+
   Future<void> loadBoards({int? selectBoardId}) async {
     _state = _state.copyWith(isBoardsLoading: true, boardsError: null);
     notifyListeners();
@@ -160,21 +173,17 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  /// Sélectionne une soundboard
   Future<void> selectBoard(SoundBoard board) async {
-    if (_state.selectedBoard?.id == board.id) {
-      return;
-    }
+    if (_state.selectedBoard?.id == board.id) return;
 
     await stopAllSounds();
-    _lastRemovedSound = null;
+    _lastRemovedPad = null;
     _state = _state.copyWith(selectedBoard: board);
     _activeBoardId = board.id;
     notifyListeners();
     await loadSounds();
   }
 
-  /// Crée une soundboard et la sélectionne
   Future<SoundBoard?> createBoard(String name) async {
     try {
       final newBoardId = await _repository.createSoundBoard(name);
@@ -201,7 +210,6 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  /// Renomme une soundboard
   Future<bool> renameBoard(SoundBoard board, String name) async {
     try {
       await _repository.renameSoundBoard(board.id, name);
@@ -226,13 +234,11 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  /// Supprime une soundboard
   Future<bool> deleteBoard(SoundBoard board) async {
     try {
       await _repository.deleteSoundBoard(board.id);
-      final updatedBoards = _state.boards
-          .where((b) => b.id != board.id)
-          .toList();
+      final updatedBoards =
+          _state.boards.where((b) => b.id != board.id).toList();
       SoundBoard? nextSelected = _state.selectedBoard;
       if (_state.selectedBoard?.id == board.id) {
         nextSelected = updatedBoards.isNotEmpty ? updatedBoards.first : null;
@@ -253,19 +259,13 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  /// Duplique une soundboard (sons et ordre) puis sélectionne la copie
   Future<SoundBoard?> duplicateBoard(
     SoundBoard sourceBoard,
     String newName,
   ) async {
     try {
-      final sourceSounds = await _repository.getBoardSounds(sourceBoard.id);
       final newBoardId = await _repository.createSoundBoard(newName);
-
-      for (final sound in sourceSounds) {
-        await _repository.addSoundToBoard(newBoardId, sound.id);
-      }
-      await _repository.copyBoardSoundSettings(sourceBoard.id, newBoardId);
+      await _repository.duplicatePads(sourceBoard.id, newBoardId);
 
       final newBoard = SoundBoard(
         id: newBoardId,
@@ -289,16 +289,15 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  /// Charge tous les sons
+  // ── Pads ──────────────────────────────────────────────────────────────────
+
   Future<void> loadSounds({int? boardId}) async {
-    if (boardId != null) {
-      _activeBoardId = boardId;
-    }
-    _lastRemovedSound = null;
+    if (boardId != null) _activeBoardId = boardId;
+    _lastRemovedPad = null;
     final currentBoardId = _activeBoardId;
     if (currentBoardId == null) {
-      _disposeSoundItems(_state.sounds);
-      _state = _state.copyWith(sounds: [], isLoading: false);
+      _disposePadItems(_state.pads);
+      _state = _state.copyWith(pads: [], isLoading: false);
       notifyListeners();
       return;
     }
@@ -307,272 +306,261 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final sounds = await _loadSoundsUseCase(currentBoardId);
-      final previousItems = _state.sounds;
-      final previousItemsById = <int, SoundItem>{
-        for (final item in previousItems) item.sound.id: item,
+      final pads = await _loadPadsUseCase(currentBoardId);
+      final previousItems = _state.pads;
+      final previousItemsById = <int, PadItem>{
+        for (final item in previousItems) item.pad.id: item,
       };
 
-      // Précharger les sons en parallèle pour une latence minimale
-      final loadFutures = sounds.map((sound) async {
-        final existingItem = previousItemsById[sound.id];
-        if (existingItem != null) {
-          existingItem.sound = sound;
-          existingItem.buttonColor = sound.colorValue != null
-              ? Color(sound.colorValue!)
-              : null;
-          existingItem.volume = sound.volume;
-          if (existingItem.isPlaying) {
-            existingItem.player.setVolume(existingItem.volume * _masterVolume);
+      final loadFutures = pads.map((pad) async {
+        final existing = previousItemsById[pad.id];
+        if (existing != null) {
+          // Mettre à jour les données du pad sans recréer les players
+          existing.pad = pad;
+          if (existing.isPlaying) {
+            existing.currentPlayer
+                ?.setVolume(existing.pad.volume * _masterVolume);
           }
-          return existingItem;
+          return existing;
         }
 
-        try {
-          final player = await AudioPlayerService.create(sound.filePath);
-          final color = sound.colorValue != null
-              ? Color(sound.colorValue!)
-              : null;
-          final soundItem = SoundItem(
-            sound: sound,
-            player: player,
-            buttonColor: color,
-            volume: sound.volume,
-          );
+        final players = <AudioPlayerService>[];
+        for (final sound in pad.sounds) {
+          try {
+            players.add(await AudioPlayerService.create(sound.filePath));
+          } catch (e) {
+            debugPrint('Échec du chargement de ${sound.filePath}: $e');
+          }
+        }
+        if (players.isEmpty && pad.sounds.isNotEmpty) return null;
 
-          player.onPlayerStateChanged.listen((isPlaying) {
-            if (soundItem.isPlaying == isPlaying) {
-              return;
+        final padItem = PadItem(pad: pad, players: players);
+        for (var i = 0; i < players.length; i++) {
+          final idx = i;
+          players[idx].onPlayerStateChanged.listen((playing) {
+            if (playing) {
+              padItem._currentPlayerIndex = idx;
+              padItem.isPlaying = true;
+            } else if (padItem._currentPlayerIndex == idx) {
+              padItem.isPlaying = false;
+              padItem._currentPlayerIndex = null;
             }
-            soundItem.isPlaying = isPlaying;
             notifyListeners();
           });
-
-          return soundItem;
-        } catch (e) {
-          debugPrint('Échec du chargement de ${sound.filePath}: $e');
-          return null;
         }
+        return padItem;
       });
 
       final items = await Future.wait(loadFutures);
-      final soundItems = items.whereType<SoundItem>().toList();
+      final padItems = items.whereType<PadItem>().toList();
 
-      _state = _state.copyWith(sounds: soundItems, isLoading: false);
-      final keptIds = soundItems.map((item) => item.sound.id).toSet();
-      final removedItems = previousItems
-          .where((item) => !keptIds.contains(item.sound.id))
-          .toList();
-      _disposeSoundItems(removedItems);
+      _state = _state.copyWith(pads: padItems, isLoading: false);
+      final keptIds = padItems.map((item) => item.pad.id).toSet();
+      final removedItems =
+          previousItems.where((item) => !keptIds.contains(item.pad.id)).toList();
+      _disposePadItems(removedItems);
     } catch (e) {
       _state = _state.copyWith(isLoading: false, error: e.toString());
     }
     notifyListeners();
   }
 
-  /// Joue ou arrête un son
-  Future<void> toggleSound(SoundItem soundItem) async {
-    if (soundItem.isPlaying) {
-      await soundItem.player.stop();
-      // L'état sera mis à jour automatiquement par le listener
-    } else {
-      soundItem.player.setVolume(soundItem.volume * _masterVolume);
-      await soundItem.player.play();
-      // L'état sera mis à jour automatiquement par le listener
+  /// Joue ou arrête le pad selon son mode de lecture.
+  Future<void> toggleSound(PadItem padItem) async {
+    if (padItem.isPlaying) {
+      await padItem.currentPlayer?.stop();
+      return;
     }
-    // Notifier immédiatement pour un feedback visuel rapide
+
+    if (padItem.players.isEmpty) return;
+
+    final soundIndex = switch (padItem.pad.playMode) {
+      PadPlayMode.random => padItem.players.length == 1
+          ? 0
+          : _random.nextInt(padItem.players.length),
+      PadPlayMode.sequential => () {
+          final idx = padItem._nextSoundIndex % padItem.players.length;
+          padItem._nextSoundIndex = (idx + 1) % padItem.players.length;
+          return idx;
+        }(),
+    };
+
+    final player = padItem.players[soundIndex];
+    player.setVolume(padItem.pad.volume * _masterVolume);
+    await player.play();
     notifyListeners();
   }
 
-  /// Met à jour les réglages d'un sound item et notifie l'UI
-  Future<void> updateSoundItemSettings(
-    SoundItem soundItem, {
+  /// Met à jour les réglages d'un pad et persiste en base.
+  Future<void> updatePadItemSettings(
+    PadItem padItem, {
     Color? buttonColor,
     bool updateColor = false,
     String? displayName,
     bool updateDisplayName = false,
     double? volume,
+    PadPlayMode? playMode,
   }) async {
-    final currentBoardId = _activeBoardId;
-    if (currentBoardId == null) {
-      return;
-    }
-
     var hasChanged = false;
-    int? colorValueToSave;
-    String? displayNameToSave;
-    double? volumeToSave;
-    var nextDisplayName = soundItem.sound.displayName;
-    var nextColorValue = soundItem.sound.colorValue;
-    var nextVolume = soundItem.sound.volume;
+    String? nextName = padItem.pad.name;
+    int? nextColor = padItem.pad.colorValue;
+    double nextVolume = padItem.pad.volume;
+    PadPlayMode? nextPlayMode;
 
     if (updateColor) {
-      soundItem.buttonColor = buttonColor;
-      colorValueToSave = buttonColor?.toARGB32();
-      nextColorValue = colorValueToSave;
+      nextColor = buttonColor?.toARGB32();
       hasChanged = true;
     }
     if (updateDisplayName) {
       final trimmed = displayName?.trim();
-      final normalized = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
-      if (soundItem.sound.displayName != normalized) {
-        nextDisplayName = normalized;
-        displayNameToSave = normalized;
-        hasChanged = true;
-      }
+      nextName = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+      if (nextName != padItem.pad.name) hasChanged = true;
     }
     if (volume != null) {
       final clamped = volume.clamp(0.0, 1.0);
-      if (soundItem.volume != clamped) {
-        soundItem.volume = clamped;
+      if (clamped != padItem.pad.volume) {
         nextVolume = clamped;
-        volumeToSave = clamped;
         hasChanged = true;
-        if (soundItem.isPlaying) {
-          soundItem.player.setVolume(soundItem.volume * _masterVolume);
+        if (padItem.isPlaying) {
+          padItem.currentPlayer?.setVolume(nextVolume * _masterVolume);
         }
       }
     }
-
-    if (hasChanged) {
-      soundItem.sound = Sound(
-        id: soundItem.sound.id,
-        title: soundItem.sound.title,
-        displayName: nextDisplayName,
-        filePath: soundItem.sound.filePath,
-        type: soundItem.sound.type,
-        colorValue: nextColorValue,
-        volume: nextVolume,
-        createdAt: soundItem.sound.createdAt,
-      );
-      notifyListeners();
-      await _repository.updateBoardSoundSettings(
-        boardId: currentBoardId,
-        soundId: soundItem.sound.id,
-        colorValue: colorValueToSave,
-        updateColor: updateColor,
-        displayName: displayNameToSave,
-        updateDisplayName: updateDisplayName,
-        volume: volumeToSave,
-      );
+    if (playMode != null && playMode != padItem.pad.playMode) {
+      nextPlayMode = playMode;
+      hasChanged = true;
     }
+
+    if (!hasChanged) return;
+
+    padItem.pad = padItem.pad.copyWith(
+      name: nextName,
+      clearName: updateDisplayName && nextName == null,
+      colorValue: nextColor,
+      clearColor: updateColor && nextColor == null,
+      volume: nextVolume,
+      playMode: nextPlayMode,
+    );
+    notifyListeners();
+
+    await _repository.updatePadSettings(
+      padId: padItem.pad.id,
+      name: nextName,
+      updateName: updateDisplayName,
+      colorValue: updateColor ? nextColor : null,
+      updateColor: updateColor,
+      volume: volume != null ? nextVolume : null,
+      playMode: nextPlayMode,
+    );
   }
 
-  /// Met à jour le volume général
   Future<void> setMasterVolume(double value) async {
     final clamped = value.clamp(0.0, 1.0);
-    if (_masterVolume == clamped) {
-      return;
-    }
+    if (_masterVolume == clamped) return;
     _masterVolume = clamped;
-    for (final soundItem in _state.sounds) {
-      if (soundItem.isPlaying) {
-        soundItem.player.setVolume(soundItem.volume * _masterVolume);
+    for (final padItem in _state.pads) {
+      if (padItem.isPlaying) {
+        padItem.currentPlayer?.setVolume(padItem.pad.volume * _masterVolume);
       }
     }
     notifyListeners();
   }
 
-  /// Arrête tous les sons
   Future<void> stopAllSounds() async {
-    for (var soundItem in _state.sounds) {
-      if (soundItem.isPlaying) {
-        await soundItem.player.stop();
-        soundItem.isPlaying = false;
+    for (final padItem in _state.pads) {
+      if (padItem.isPlaying) {
+        await padItem.currentPlayer?.stop();
+        padItem.isPlaying = false;
+        padItem._currentPlayerIndex = null;
       }
     }
     notifyListeners();
   }
 
-  /// Réordonne les sons de la board selon la liste fournie
-  Future<void> reorderSoundsFromList(List<SoundItem> newOrder) async {
+  Future<void> reorderSoundsFromList(List<PadItem> newOrder) async {
     if (_activeBoardId == null) return;
-    _state = _state.copyWith(sounds: newOrder);
+    _state = _state.copyWith(pads: newOrder);
     notifyListeners();
     try {
-      await _repository.reorderBoardSounds(
+      await _repository.reorderBoardPads(
         _activeBoardId!,
-        newOrder.map((s) => s.sound.id).toList(),
+        newOrder.map((p) => p.pad.id).toList(),
       );
     } catch (e) {
       debugPrint('Erreur lors du réordonnancement: $e');
-      await loadSounds(); // Restaurer l'ordre précédent
+      await loadSounds();
     }
   }
 
-  /// Retire un son de la board
-  Future<bool> removeSound(SoundItem soundItem) async {
+  /// Retire un pad de la board.
+  Future<bool> removeSound(PadItem padItem) async {
     final currentBoardId = _activeBoardId;
-    if (currentBoardId == null) {
-      return false;
-    }
-    final previousIndex = _state.sounds.indexOf(soundItem);
-    if (previousIndex < 0) {
-      return false;
-    }
+    if (currentBoardId == null) return false;
 
-    // Retirer d'abord le son de la board dans la base de données pour éviter
-    // une désynchronisation UI/DB en cas d'erreur.
-    if (_removeSoundFromBoardUseCase != null) {
+    final previousIndex = _state.pads.indexOf(padItem);
+    if (previousIndex < 0) return false;
+
+    if (_removePadUseCase != null) {
       try {
-        await _removeSoundFromBoardUseCase(currentBoardId, soundItem.sound.id);
+        await _removePadUseCase(padItem.pad.id);
       } catch (e) {
-        debugPrint('Erreur lors du retrait du son de la board: $e');
-        _state = _state.copyWith(
-          error: 'Impossible de retirer ce son de la board.',
-        );
+        debugPrint('Erreur lors du retrait du pad: $e');
+        _state = _state.copyWith(error: 'Impossible de retirer ce pad.');
         notifyListeners();
         return false;
       }
     }
 
-    _lastRemovedSound = _RemovedSoundSnapshot(
+    _lastRemovedPad = _RemovedPadSnapshot(
       boardId: currentBoardId,
-      sound: soundItem.sound,
+      pad: padItem.pad,
       index: previousIndex,
     );
-    if (soundItem.isPlaying) {
+    if (padItem.isPlaying) {
       try {
-        await soundItem.player.stop();
-      } catch (_) {
-        // Un échec d'arrêt ne doit pas empêcher la suppression du pad.
-      }
+        await padItem.currentPlayer?.stop();
+      } catch (_) {}
     }
-    soundItem.player.dispose();
+    for (final player in padItem.players) {
+      player.dispose();
+    }
+
     _state = _state.copyWith(
-      sounds: _state.sounds.where((s) => s != soundItem).toList(),
+      pads: _state.pads.where((p) => p != padItem).toList(),
       error: null,
     );
     notifyListeners();
     return true;
   }
 
-  /// Annule la dernière suppression de pad sur la board active.
+  /// Annule la dernière suppression de pad.
   Future<int?> undoLastRemoval() async {
-    final snapshot = _lastRemovedSound;
+    final snapshot = _lastRemovedPad;
     final currentBoardId = _activeBoardId;
-    if (snapshot == null || currentBoardId == null) {
-      return null;
-    }
-    if (snapshot.boardId != currentBoardId) {
-      return null;
-    }
+    if (snapshot == null || currentBoardId == null) return null;
+    if (snapshot.boardId != currentBoardId) return null;
 
     try {
-      await _repository.addSoundToBoard(snapshot.boardId, snapshot.sound.id);
+      await _repository.createPadWithSettings(
+        boardId: snapshot.boardId,
+        soundIds: snapshot.pad.sounds.map((s) => s.id).toList(),
+        name: snapshot.pad.name,
+        colorValue: snapshot.pad.colorValue,
+        volume: snapshot.pad.volume,
+        playMode: snapshot.pad.playMode,
+        sortOrder: snapshot.index,
+      );
 
-      final currentIds = _state.sounds.map((s) => s.sound.id).toList();
-      if (!currentIds.contains(snapshot.sound.id)) {
-        final insertionIndex = snapshot.index.clamp(0, currentIds.length);
-        currentIds.insert(insertionIndex, snapshot.sound.id);
-        await _repository.reorderBoardSounds(snapshot.boardId, currentIds);
-      }
-
-      _lastRemovedSound = null;
+      _lastRemovedPad = null;
       await loadSounds(boardId: snapshot.boardId);
       _state = _state.copyWith(error: null);
       notifyListeners();
-      return snapshot.sound.id;
+
+      // Retourner l'id du pad restauré (le nouvel id après recréation)
+      final restored = _state.pads
+          .where((p) => p.pad.sortOrder == snapshot.index)
+          .firstOrNull;
+      return restored?.pad.id;
     } catch (e) {
       debugPrint('Erreur lors de l\'annulation de suppression: $e');
       _state = _state.copyWith(
@@ -583,25 +571,49 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
+  /// Ajoute un son à un pad existant et recharge.
+  Future<void> addSoundToPad(int padId, int soundId) async {
+    await _repository.addSoundToPad(padId, soundId);
+    await loadSounds();
+  }
+
+  /// Retire un son d'un pad. Si c'est le dernier son, supprime le pad.
+  Future<void> removeSoundFromPad(int padId, int soundId) async {
+    final padItem = _state.pads.firstWhere((p) => p.pad.id == padId);
+    if (padItem.pad.sounds.length <= 1) {
+      await removeSound(padItem);
+    } else {
+      await _repository.removeSoundFromPad(padId, soundId);
+      await loadSounds();
+    }
+  }
+
   @override
   void dispose() {
-    for (var soundItem in _state.sounds) {
-      soundItem.player.dispose();
+    for (final padItem in _state.pads) {
+      for (final player in padItem.players) {
+        player.dispose();
+      }
     }
     super.dispose();
   }
 
-  /// Charge le catalogue des tags (catégories + tags)
+  // ── Sons (bibliothèque) ───────────────────────────────────────────────────
+
+  Future<List<Sound>> getAllSounds() async {
+    return await _repository.getAllSounds();
+  }
+
+  // ── Tags ──────────────────────────────────────────────────────────────────
+
   Future<List<TagCategoryWithTags>> loadTagCatalog() async {
     return await _repository.getTagCatalog();
   }
 
-  /// Récupère les tags d'un son
   Future<List<TagItem>> getTagsForSound(int soundId) async {
     return await _repository.getTagsForSound(soundId);
   }
 
-  /// Met à jour les tags d'un son
   Future<void> updateSoundTags(int soundId, Set<int> tagIds) async {
     await _repository.setTagsForSound(soundId, tagIds.toList());
   }

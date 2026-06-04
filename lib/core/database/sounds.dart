@@ -6,6 +6,11 @@ enum SoundType {
   ambiance,
 }
 
+enum PadPlayMode {
+  random,
+  sequential,
+}
+
 class Sounds extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get title => text()(); // Chemin complet du fichier
@@ -39,6 +44,31 @@ class BoardSounds extends Table {
   
   @override
   Set<Column> get primaryKey => {boardId, soundId};
+}
+
+class Pads extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get boardId =>
+      integer().references(SoundBoards, #id, onDelete: KeyAction.cascade)();
+  TextColumn get name => text().nullable()();
+  IntColumn get color => integer().nullable()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  IntColumn get playMode =>
+      intEnum<PadPlayMode>().withDefault(const Constant(0))();
+  RealColumn get volume => real().withDefault(const Constant(1.0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class PadSounds extends Table {
+  IntColumn get padId =>
+      integer().references(Pads, #id, onDelete: KeyAction.cascade)();
+  IntColumn get soundId =>
+      integer().references(Sounds, #id, onDelete: KeyAction.cascade)();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {padId, soundId};
 }
 
 class TagCategories extends Table {

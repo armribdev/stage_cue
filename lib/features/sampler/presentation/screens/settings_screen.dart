@@ -6,8 +6,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../../../core/database/database.dart' as db;
 import '../../data/repositories/sound_repository.dart';
-import '../../data/datasources/local_sound_datasource.dart';
-import '../../data/datasources/local_tag_datasource.dart';
 import '../../data/models/indexing_progress.dart';
 import '../../domain/entities/watched_path.dart' as domain;
 
@@ -51,16 +49,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _initializeRepository() {
-    final soundDataSource = LocalSoundDataSource(widget.database);
-    final watchedPathDataSource = LocalWatchedPathDataSource(widget.database);
-    final soundBoardDataSource = LocalSoundBoardDataSource(widget.database);
-    final tagDataSource = LocalTagDataSource(widget.database);
-    _repository = SoundRepository(
-      soundDataSource,
-      watchedPathDataSource,
-      soundBoardDataSource,
-      tagDataSource,
-    );
+    _repository = SoundRepository.fromDatabase(widget.database);
   }
 
   Future<void> _loadDatabaseInfo() async {
