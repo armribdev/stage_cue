@@ -5,13 +5,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../../../core/database/database.dart' as db;
-import '../../../../core/database/sounds.dart' as db_sounds;
 import '../../data/repositories/sound_repository.dart';
 import '../../data/datasources/local_sound_datasource.dart';
 import '../../data/datasources/local_tag_datasource.dart';
 import '../../data/models/indexing_progress.dart';
-import '../../domain/entities/tag_category_with_tags.dart';
-import '../../domain/entities/tag_item.dart';
 import '../../domain/entities/watched_path.dart' as domain;
 
 /// Écran des paramètres
@@ -33,8 +30,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final SoundRepository _repository;
   // Suivi de la progression d'indexation par chemin
   final Map<String, IndexingProgress> _indexingProgress = {};
-  final List<TagCategoryWithTags> _tagCatalog = [];
-  final Map<int, List<TagItem>> _soundTags = {};
 
   @override
   void initState() {
@@ -98,7 +93,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _dbSize = dbSize;
         _isLoading = false;
       });
-      unawaited(_loadSoundTags());
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -109,48 +103,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     }
-  }
-
-  Future<void> _loadSoundTags() async {
-    if (_sounds.isEmpty) {
-      setState(() {
-        _soundTags.clear();
-      });
-      return;
-    }
-    final entries = await Future.wait(
-      _sounds.map((sound) async {
-        final tags = await _repository.getTagsForSound(sound.id);
-        return MapEntry(sound.id, tags);
-      }),
-    );
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _soundTags
-        ..clear()
-        ..addEntries(entries);
-    });
-  }
-
-  Color? _getCategoryColor(int categoryId) {
-    for (final category in _tagCatalog) {
-      if (category.category.id == categoryId) {
-        return Color(category.category.color);
-      }
-    }
-    return null;
-  }
-
-  Widget _buildTagChip(TagItem tag) {
-    final color = _getCategoryColor(tag.categoryId);
-    return Chip(
-      label: Text(tag.name, style: const TextStyle(fontSize: 11)),
-      visualDensity: VisualDensity.compact,
-      backgroundColor: color?.withAlpha(24),
-      side: color == null ? null : BorderSide(color: color),
-    );
   }
 
   Future<void> _addDirectory() async {
@@ -335,16 +287,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
   }
 
-  String _getSoundTypeName(db_sounds.SoundType type) {
-    switch (type) {
-      case db_sounds.SoundType.soundEffect:
-        return 'Bruitage';
-      case db_sounds.SoundType.music:
-        return 'Musique';
-      case db_sounds.SoundType.ambiance:
-        return 'Son d\'ambiance';
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
