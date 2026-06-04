@@ -8,9 +8,10 @@ class MainFlutterWindow: NSWindow {
     }
 
     let flutterViewController = FlutterViewController()
-    let windowFrame = self.frame
     self.contentViewController = flutterViewController
-    self.setFrame(windowFrame, display: true)
+    if let screenFrame = NSScreen.main?.visibleFrame {
+      self.setFrame(screenFrame, display: true)
+    }
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
