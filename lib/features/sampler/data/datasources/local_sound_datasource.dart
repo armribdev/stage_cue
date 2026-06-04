@@ -832,4 +832,24 @@ class LocalPadDataSource {
     ).get();
     return rows.map((r) => r.read<int>('sound_id')).toSet();
   }
+
+  /// Premier pad (ordre de la board) contenant chaque son.
+  Future<Map<int, int>> getSoundIdToFirstPadIdInBoard(int boardId) async {
+    final rows = await _database.customSelect(
+      '''
+      SELECT ps.sound_id, ps.pad_id
+      FROM pad_sounds ps
+      INNER JOIN pads p ON p.id = ps.pad_id
+      WHERE p.board_id = ?
+      ORDER BY p.sort_order, p.created_at, ps.sort_order, ps.added_at
+      ''',
+      variables: [Variable<int>(boardId)],
+    ).get();
+    final map = <int, int>{};
+    for (final row in rows) {
+      final soundId = row.read<int>('sound_id');
+      map.putIfAbsent(soundId, () => row.read<int>('pad_id'));
+    }
+    return map;
+  }
 }

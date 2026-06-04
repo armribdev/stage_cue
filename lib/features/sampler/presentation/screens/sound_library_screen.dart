@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/utils/string_utils.dart';
 import '../../data/repositories/sound_repository.dart';
@@ -8,8 +9,21 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../../domain/usecases/add_sound_to_board_usecase.dart';
 
-/// Écran pour ajouter un bruitage à la board
-/// Affiche uniquement les bruitages qui ne sont pas déjà dans la board
+/// Résultat renvoyé à la fermeture de [SoundLibraryScreen].
+class SoundLibraryScreenResult {
+  final int highlightPadId;
+  final bool wasAdded;
+
+  const SoundLibraryScreenResult({
+    required this.highlightPadId,
+    required this.wasAdded,
+  });
+}
+
+/// Longueur minimale de la recherche pour ne pas reléguer les sons déjà en board.
+const int kMinPreciseSoundLibrarySearchLength = 5;
+
+/// Écran pour ajouter un bruitage à la board.
 class SoundLibraryScreen extends StatefulWidget {
   final db.AppDatabase database;
   final int boardId;
@@ -29,6 +43,9 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   late final AddSoundToBoardUseCase _addSoundToBoardUseCase;
   List<Sound> _availableSounds = [];
   Set<int> _soundsInBoard = {};
+  Map<int, int> _soundIdToPadId = {};
+  AudioPlayerService? _previewPlayer;
+  int? _previewingSoundId;
 
   /// IDs des sons correspondant à la recherche (AND entre tokens, tag ou titre par token).
   /// null = pas de filtre (requête vide ou tokens vides).
@@ -61,6 +78,8 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       final allSounds = await _repository.getAllSounds();
       // Sons déjà présents dans un pad de la board (indicatif uniquement)
       final inBoard = await _repository.getSoundIdsInBoard(widget.boardId);
+      final soundIdToPadId =
+          await _repository.getSoundIdToFirstPadIdInBoard(widget.boardId);
 
       final availableSounds = allSounds
           .where((s) => s.type == SoundType.soundEffect)
@@ -69,6 +88,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       setState(() {
         _availableSounds = availableSounds;
         _soundsInBoard = inBoard;
+        _soundIdToPadId = soundIdToPadId;
         _isLoading = false;
       });
       await _loadTagsForSounds(availableSounds);
@@ -84,14 +104,77 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     }
   }
 
-  Future<void> _addSoundToBoard(Sound sound) async {
+  bool get _isSearchPreciseEnough =>
+      _searchQuery.trim().length >= kMinPreciseSoundLibrarySearchLength;
+
+  Future<void> _stopPreview() async {
+    await _previewPlayer?.stop();
+    _previewPlayer?.dispose();
+    _previewPlayer = null;
+    _previewingSoundId = null;
+  }
+
+  Future<void> _playPreview(Sound sound) async {
     try {
-      // Crée toujours un nouveau pad (même son autorisé plusieurs fois)
-      await _addSoundToBoardUseCase(widget.boardId, sound.id);
-      setState(() => _soundsInBoard.add(sound.id));
-      if (mounted) {
-        Navigator.pop(context, true);
+      if (_previewingSoundId == sound.id && _previewPlayer?.isPlaying == true) {
+        await _stopPreview();
+        if (mounted) setState(() {});
+        return;
       }
+      await _stopPreview();
+      final player = await AudioPlayerService.create(sound.filePath);
+      player.setVolume(sound.volume);
+      await player.play();
+      if (!mounted) {
+        player.dispose();
+        return;
+      }
+      setState(() {
+        _previewPlayer = player;
+        _previewingSoundId = sound.id;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Impossible de lire le son: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleAdd(Sound sound) async {
+    final isInBoard = _soundsInBoard.contains(sound.id);
+    if (isInBoard) {
+      final padId = _soundIdToPadId[sound.id];
+      if (padId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Pad introuvable pour ce bruitage')),
+          );
+        }
+        return;
+      }
+      await _stopPreview();
+      if (!mounted) return;
+      Navigator.pop(
+        context,
+        SoundLibraryScreenResult(highlightPadId: padId, wasAdded: false),
+      );
+      return;
+    }
+
+    try {
+      final padId = await _addSoundToBoardUseCase(widget.boardId, sound.id);
+      setState(() {
+        _soundsInBoard.add(sound.id);
+        _soundIdToPadId[sound.id] = padId;
+      });
+      await _stopPreview();
+      if (!mounted) return;
+      Navigator.pop(
+        context,
+        SoundLibraryScreenResult(highlightPadId: padId, wasAdded: true),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -190,15 +273,27 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   }
 
   List<Sound> get _filteredSounds {
+    List<Sound> sounds;
     if (_searchQuery.trim().isEmpty) {
-      return _availableSounds;
+      sounds = _availableSounds;
+    } else if (_searchMatchedSoundIds == null) {
+      sounds = _availableSounds;
+    } else {
+      sounds = _availableSounds
+          .where((s) => _searchMatchedSoundIds!.contains(s.id))
+          .toList();
     }
-    if (_searchMatchedSoundIds == null) {
-      return _availableSounds;
+
+    if (!_isSearchPreciseEnough) {
+      sounds = List<Sound>.from(sounds)
+        ..sort((a, b) {
+          final aInBoard = _soundsInBoard.contains(a.id);
+          final bInBoard = _soundsInBoard.contains(b.id);
+          if (aInBoard == bInBoard) return 0;
+          return aInBoard ? 1 : -1;
+        });
     }
-    return _availableSounds
-        .where((s) => _searchMatchedSoundIds!.contains(s.id))
-        .toList();
+    return sounds;
   }
 
   void _scheduleSearch(String query) {
@@ -245,6 +340,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _previewPlayer?.dispose();
     super.dispose();
   }
 
@@ -385,18 +481,38 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                                     ),
                                   ],
                                 ),
-                                trailing: isInBoard
-                                    ? Icon(
-                                        Icons.check_circle,
-                                        color: scheme.primary,
-                                      )
-                                    : Icon(
-                                        Icons.add_circle,
-                                        color: Colors.green.shade400,
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip:
+                                          _previewingSoundId == sound.id &&
+                                                  _previewPlayer?.isPlaying ==
+                                                      true
+                                              ? 'Arrêter'
+                                              : 'Jouer',
+                                      onPressed: () => _playPreview(sound),
+                                      icon: Icon(
+                                        _previewingSoundId == sound.id &&
+                                                _previewPlayer?.isPlaying ==
+                                                    true
+                                            ? Icons.stop_rounded
+                                            : Icons.play_arrow_rounded,
                                       ),
-                                onTap: isInBoard
-                                    ? null
-                                    : () => _addSoundToBoard(sound),
+                                    ),
+                                    IconButton(
+                                      tooltip: isInBoard
+                                          ? 'Afficher sur la scène'
+                                          : 'Ajouter à la scène',
+                                      onPressed: () => _handleAdd(sound),
+                                      icon: Icon(
+                                        isInBoard
+                                            ? Icons.visibility_outlined
+                                            : Icons.add_circle_outline_rounded,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),

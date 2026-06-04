@@ -5,13 +5,13 @@ import '../providers/sampler_provider.dart';
 /// Widget représentant un pad de son
 class PadButton extends StatelessWidget {
   final PadItem padItem;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
   const PadButton({
     super.key,
     required this.padItem,
-    required this.onTap,
+    this.onTap,
     this.onLongPress,
   });
 
@@ -40,10 +40,9 @@ class PadButton extends StatelessWidget {
         ),
       ),
       color: padItem.isPlaying ? playingColor : baseColor,
-      child: InkWell(
+      child: _buildInteractiveChild(
         onTap: onTap,
         onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(14),
         child: Stack(
           children: [
             // Barre de progression en arrière-plan
@@ -136,6 +135,23 @@ class PadButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// Sans InkWell en mode édition : laisse le drag de la grille fonctionner.
+  Widget _buildInteractiveChild({
+    required VoidCallback? onTap,
+    required VoidCallback? onLongPress,
+    required Widget child,
+  }) {
+    if (onTap == null && onLongPress == null) {
+      return child;
+    }
+    return InkWell(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      borderRadius: BorderRadius.circular(14),
+      child: child,
     );
   }
 }

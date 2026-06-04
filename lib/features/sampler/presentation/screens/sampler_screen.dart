@@ -40,9 +40,16 @@ class _SamplerScreenState extends State<SamplerScreen> {
   late final SamplerNotifier _notifier;
   late final db.AppDatabase _database;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final ScrollController _gridScrollController = ScrollController();
+  final ScrollController _normalGridScrollController = ScrollController();
+  final ScrollController _editGridScrollController = ScrollController();
+
+  ScrollController get _activeGridScrollController =>
+      _isEditMode ? _editGridScrollController : _normalGridScrollController;
+  int _gridCrossAxisCount = 2;
+  double _gridViewportWidth = 0;
   bool _isEditMode = false;
   int? _recentlyRestoredSoundId;
+  int? _highlightedPadId;
   bool _didAutoOpenCreateForCurrentEmptyState = false;
   bool get _isDesktopPlatform =>
       !kIsWeb &&
@@ -445,8 +452,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
     setState(() {
       _recentlyRestoredSoundId = restoredSoundId;
     });
+    _scrollPadIntoView(restoredSoundId);
     unawaited(
-      Future<void>.delayed(const Duration(milliseconds: 650), () {
+      Future<void>.delayed(_padEmphasisDuration, () {
         if (!mounted || _recentlyRestoredSoundId != restoredSoundId) {
           return;
         }
@@ -458,6 +466,100 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   static const double _itemWidth = 180;
+  static const Duration _padEmphasisDuration = Duration(milliseconds: 2200);
+
+  Future<void> _openSoundLibrary(SoundBoard board) async {
+    final result = await Navigator.push<SoundLibraryScreenResult>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SoundLibraryScreen(
+          database: _database,
+          boardId: board.id,
+        ),
+      ),
+    );
+    await _notifier.loadSounds();
+    if (!mounted || result == null) {
+      return;
+    }
+    _emphasizePad(result.highlightPadId);
+  }
+
+  void _scrollPadIntoView(int padId) {
+    void tryScroll() {
+      if (!mounted) return;
+      final controller = _activeGridScrollController;
+      if (!controller.hasClients || controller.positions.length != 1) {
+        return;
+      }
+      final index = _notifier.state.pads.indexWhere((p) => p.pad.id == padId);
+      if (index < 0 || _gridViewportWidth <= 0) return;
+
+      const padding = 16.0;
+      const crossSpacing = 14.0;
+      const mainSpacing = 14.0;
+      const aspectRatio = 1.4;
+
+      final contentWidth = _gridViewportWidth - (padding * 2);
+      final cellWidth =
+          (contentWidth - crossSpacing * (_gridCrossAxisCount - 1)) /
+          _gridCrossAxisCount;
+      final cellHeight = cellWidth / aspectRatio;
+      final row = index ~/ _gridCrossAxisCount;
+      final targetTop = padding + row * (cellHeight + mainSpacing);
+      final viewport = controller.position.viewportDimension;
+      final offset = (targetTop - viewport * 0.25).clamp(
+        0.0,
+        controller.position.maxScrollExtent,
+      );
+
+      controller.animateTo(
+        offset,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOutCubic,
+      );
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      tryScroll();
+      WidgetsBinding.instance.addPostFrameCallback((_) => tryScroll());
+    });
+  }
+
+  void _toggleEditMode() {
+    final outgoing = _activeGridScrollController;
+    final savedOffset = outgoing.hasClients && outgoing.positions.length == 1
+        ? outgoing.offset
+        : 0.0;
+    setState(() {
+      _isEditMode = !_isEditMode;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final incoming = _activeGridScrollController;
+      if (!incoming.hasClients || incoming.positions.length != 1) return;
+      incoming.jumpTo(
+        savedOffset.clamp(0.0, incoming.position.maxScrollExtent),
+      );
+    });
+  }
+
+  void _emphasizePad(int padId) {
+    setState(() {
+      _highlightedPadId = padId;
+    });
+    _scrollPadIntoView(padId);
+    unawaited(
+      Future<void>.delayed(_padEmphasisDuration, () {
+        if (!mounted || _highlightedPadId != padId) {
+          return;
+        }
+        setState(() {
+          _highlightedPadId = null;
+        });
+      }),
+    );
+  }
 
   Widget _buildAddButtonCard(BuildContext context, SoundBoard selectedBoard) {
     final scheme = Theme.of(context).colorScheme;
@@ -473,18 +575,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       ),
       color: scheme.surfaceContainerHighest.withValues(alpha: 0.22),
       child: InkWell(
-        onTap: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SoundLibraryScreen(
-                database: _database,
-                boardId: selectedBoard.id,
-              ),
-            ),
-          );
-          await _notifier.loadSounds();
-        },
+        onTap: () => _openSoundLibrary(selectedBoard),
         borderRadius: BorderRadius.circular(14),
         child: Center(
           child: Column(
@@ -516,10 +607,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
     SoundBoard selectedBoard,
   ) {
     return LayoutBuilder(
+      key: ValueKey<bool>(_isEditMode),
       builder: (context, constraints) {
         final screenWidth = constraints.maxWidth;
         int crossAxisCount = (screenWidth / _itemWidth).floor();
         crossAxisCount = max(2, crossAxisCount);
+        _gridCrossAxisCount = crossAxisCount;
+        _gridViewportWidth = screenWidth;
         final gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: crossAxisCount,
           crossAxisSpacing: 14,
@@ -530,7 +624,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
         if (_isEditMode) {
           return ReorderableGridView.builder(
             key: const ValueKey('pads_reorder_grid'),
-            controller: _gridScrollController,
+            controller: _editGridScrollController,
             padding: const EdgeInsets.all(16),
             gridDelegate: gridDelegate,
             itemCount: state.pads.length,
@@ -560,7 +654,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
         final gridItems = <Object>[...state.pads, _addButtonMarker];
         return GridView.builder(
-          controller: _gridScrollController,
+          key: const ValueKey('pads_normal_grid'),
+          controller: _normalGridScrollController,
           padding: const EdgeInsets.all(16),
           gridDelegate: gridDelegate,
           itemCount: gridItems.length,
@@ -581,11 +676,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
     SamplerState state,
     PadItem padItem,
   ) {
+    // ValueKey sur la racine : requis par ReorderableGridView (ne pas utiliser GlobalKey ici).
     return PadCard(
       key: ValueKey<int>(padItem.pad.id),
       padItem: padItem,
       isEditMode: _isEditMode,
       animateOnRestore: _recentlyRestoredSoundId == padItem.pad.id,
+      isHighlighted: _highlightedPadId == padItem.pad.id,
       onTap: _isEditMode ? null : () => _notifier.toggleSound(padItem),
       onLongPress: _isEditMode
           ? null
@@ -611,7 +708,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   @override
   void dispose() {
-    _gridScrollController.dispose();
+    _normalGridScrollController.dispose();
+    _editGridScrollController.dispose();
     _notifier.removeListener(_onStateChanged);
     _notifier.dispose();
     super.dispose();
@@ -664,11 +762,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
               isEditMode: _isEditMode,
               canToggleEditMode: state.pads.isNotEmpty,
               onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
-              onToggleEditMode: () {
-                setState(() {
-                  _isEditMode = !_isEditMode;
-                });
-              },
+              onToggleEditMode: _toggleEditMode,
             ),
             drawer: _BoardsDrawer(
               boards: boards,
@@ -792,18 +886,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                               ),
                               const SizedBox(height: 20),
                               ElevatedButton.icon(
-                                onPressed: () async {
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => SoundLibraryScreen(
-                                        database: _database,
-                                        boardId: selectedBoard.id,
-                                      ),
-                                    ),
-                                  );
-                                  await _notifier.loadSounds();
-                                },
+                                onPressed: () => _openSoundLibrary(selectedBoard),
                                 icon: const Icon(Icons.library_music_rounded),
                                 label: const Text('Ouvrir la bibliothèque'),
                               ),

@@ -6,7 +6,10 @@ import 'pad_button.dart';
 class PadCard extends StatefulWidget {
   final PadItem padItem;
   final bool isEditMode;
+  /// Petit pop d'apparition (ex. annulation).
   final bool animateOnRestore;
+  /// Bordure discrète pour indiquer le pad ciblé (ex. retour bibliothèque).
+  final bool isHighlighted;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onRemove;
@@ -16,6 +19,7 @@ class PadCard extends StatefulWidget {
     required this.padItem,
     required this.isEditMode,
     this.animateOnRestore = false,
+    this.isHighlighted = false,
     this.onTap,
     this.onLongPress,
     this.onRemove,
@@ -34,6 +38,9 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
   late final Animation<double> _deleteScale;
   late final AnimationController _restoreController;
   late final Animation<double> _restoreCurve;
+  late final AnimationController _highlightFadeController;
+  late final Animation<double> _highlightFade;
+  late final AnimationController _highlightBreathController;
   bool _animationsDisabled = false;
   late final double _amplitudeFactor;
   late final double _speedFactor;
@@ -79,8 +86,68 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
       parent: _restoreController,
       curve: Curves.easeOutCubic,
     );
-    if (widget.animateOnRestore) {
+    _highlightFadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _highlightFade = CurvedAnimation(
+      parent: _highlightFadeController,
+      curve: Curves.easeInOutCubic,
+    );
+    _highlightBreathController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    );
+    _highlightFadeController.addStatusListener(_onHighlightFadeStatus);
+
+    if (widget.animateOnRestore && !widget.isHighlighted) {
       _restoreController.forward();
+    }
+    if (widget.isHighlighted) {
+      _applyHighlighted(true);
+    }
+    _syncAnimationState();
+  }
+
+  void _onHighlightFadeStatus(AnimationStatus status) {
+    if (!mounted) return;
+    if (status == AnimationStatus.completed && widget.isHighlighted) {
+      _startBreathing();
+    }
+    if (status == AnimationStatus.dismissed) {
+      _stopBreathing(resetValue: true);
+    }
+  }
+
+  void _startBreathing() {
+    if (!mounted || !widget.isHighlighted || _animationsDisabled) return;
+    if (_highlightBreathController.isAnimating) return;
+    _highlightBreathController.repeat(reverse: true);
+  }
+
+  void _stopBreathing({bool resetValue = false}) {
+    _highlightBreathController.stop();
+    if (resetValue) {
+      _highlightBreathController.value = 0;
+    }
+  }
+
+  void _applyHighlighted(bool highlighted) {
+    if (_animationsDisabled) {
+      _highlightFadeController.value = highlighted ? 1.0 : 0.0;
+      _stopBreathing(resetValue: true);
+      return;
+    }
+    if (highlighted) {
+      _stopBreathing(resetValue: true);
+      if (_highlightFadeController.value >= 1.0) {
+        _startBreathing();
+      } else {
+        _highlightFadeController.forward();
+      }
+    } else {
+      _stopBreathing(resetValue: true);
+      _highlightFadeController.reverse();
     }
   }
 
@@ -92,8 +159,12 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
     }
     if (!oldWidget.animateOnRestore &&
         widget.animateOnRestore &&
+        !widget.isHighlighted &&
         !_animationsDisabled) {
       _restoreController.forward(from: 0);
+    }
+    if (oldWidget.isHighlighted != widget.isHighlighted) {
+      _applyHighlighted(widget.isHighlighted);
     }
   }
 
@@ -110,13 +181,19 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final mediaQuery = MediaQuery.maybeOf(context);
-    _animationsDisabled = mediaQuery?.disableAnimations ?? false;
-    _syncAnimationState();
+    final disabled = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (disabled != _animationsDisabled) {
+      _animationsDisabled = disabled;
+      _syncAnimationState();
+      _applyHighlighted(widget.isHighlighted);
+    }
   }
 
   @override
   void dispose() {
+    _highlightFadeController.removeStatusListener(_onHighlightFadeStatus);
+    _highlightBreathController.dispose();
+    _highlightFadeController.dispose();
     _restoreController.dispose();
     _deleteController.dispose();
     _controller.dispose();
@@ -129,6 +206,16 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
       await _deleteController.forward(from: 0);
     }
     widget.onRemove!.call();
+  }
+
+  double _highlightBreathFactor() {
+    if (_highlightFade.value <= 0) return 0;
+    // Respiration uniquement une fois l'entrée terminée.
+    if (_highlightFadeController.status != AnimationStatus.completed) {
+      return 0;
+    }
+    // Valeur 0→1→0 : on centre sur 0.5 pour un souffle symétrique.
+    return (_highlightBreathController.value - 0.5).abs() * 2.0;
   }
 
   @override
@@ -149,8 +236,15 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
           )
         : null;
 
+    final scheme = Theme.of(context).colorScheme;
+
     return AnimatedBuilder(
-      animation: _wiggle,
+      animation: Listenable.merge([
+        _wiggle,
+        _restoreCurve,
+        _highlightFadeController,
+        _highlightBreathController,
+      ]),
       builder: (context, child) {
         final t = (_wiggle.value * 2.0) - 1.0;
         final rotation = widget.isEditMode
@@ -161,30 +255,77 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
             : 0.0;
         final deleteScale = _animationsDisabled ? 1.0 : _deleteScale.value;
         final restoreT = _animationsDisabled ? 1.0 : _restoreCurve.value;
+        final useRestorePop =
+            widget.animateOnRestore &&
+            !widget.isHighlighted &&
+            !_animationsDisabled;
+
+        final fade = _animationsDisabled ? 0.0 : _highlightFade.value;
+        final breath = _animationsDisabled ? 0.0 : _highlightBreathFactor();
+
+        // Ne pas scaler le pad (texte) : évite le flou et les artefacts de bordure.
+        final scale = useRestorePop
+            ? deleteScale * (0.97 + (0.03 * restoreT))
+            : deleteScale;
+        final opacity = useRestorePop ? 0.85 + (0.15 * restoreT) : 1.0;
+
+        final overlayScale = 1.0 + (fade * (0.01 + (0.008 * breath)));
+
         return Transform.translate(
           offset: Offset(offsetX, 0),
           child: Transform.rotate(
             angle: rotation,
             child: Transform.scale(
-              scale: deleteScale * (0.96 + (0.04 * restoreT)),
+              scale: scale,
               child: Opacity(
-                opacity: 0.6 + (0.4 * restoreT),
-                child: child,
+                opacity: opacity,
+                child: Stack(
+                  children: [
+                    RepaintBoundary(child: child!),
+                    if (fade > 0)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: Transform.scale(
+                            scale: overlayScale,
+                            child: Opacity(
+                              opacity: fade.clamp(0.0, 1.0),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: scheme.primary.withValues(
+                                        alpha: 0.1 + (0.06 * breath),
+                                      ),
+                                      blurRadius: 10 + (2 * breath),
+                                      spreadRadius: 0,
+                                    ),
+                                  ],
+                                  border: Border.all(
+                                    color: scheme.primary.withValues(
+                                      alpha: 0.3 + (0.15 * breath),
+                                    ),
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (deleteButton != null) deleteButton,
+                  ],
+                ),
               ),
             ),
           ),
         );
       },
-      child: Stack(
-        children: [
-          PadButton(
-            key: ValueKey<int>(widget.padItem.pad.id),
-            padItem: widget.padItem,
-            onTap: widget.onTap ?? () {},
-            onLongPress: widget.onLongPress,
-          ),
-          if (deleteButton != null) deleteButton,
-        ],
+      child: PadButton(
+        key: ValueKey<int>(widget.padItem.pad.id),
+        padItem: widget.padItem,
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
       ),
     );
   }

@@ -236,6 +236,10 @@ class SoundRepository {
     return await _padDataSource.getSoundIdsInBoard(boardId);
   }
 
+  Future<Map<int, int>> getSoundIdToFirstPadIdInBoard(int boardId) async {
+    return await _padDataSource.getSoundIdToFirstPadIdInBoard(boardId);
+  }
+
   // ── Tags ──────────────────────────────────────────────────────────────────
 
   Future<List<TagCategoryWithTags>> getTagCatalog() async {
