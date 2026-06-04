@@ -103,7 +103,9 @@ static gboolean my_application_local_command_line(GApplication* application,
 static void my_application_startup(GApplication* application) {
   // MyApplication* self = MY_APPLICATION(object);
 
-  // Perform any actions required at application startup.
+  // L'application est toujours en thème sombre (barre de titre GTK, etc.).
+  GtkSettings* settings = gtk_settings_get_default();
+  g_object_set(settings, "gtk-application-prefer-dark-theme", TRUE, nullptr);
 
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }
