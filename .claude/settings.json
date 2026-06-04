@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter pub run build_runner build*)",
+      "Bash(flutter pub run build_runner watch*)",
+      "Bash(flutter pub get)",
+      "Bash(flutter pub upgrade*)",
+      "Bash(flutter test*)",
+      "Bash(flutter analyze*)",
+      "Bash(dart analyze*)",
+      "Bash(dart format*)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)"
+    ],
+    "deny": []
+  }
+}
