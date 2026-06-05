@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import '../../../../core/database/database.dart' as db;
+import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/utils/string_utils.dart';
 import 'sound_details_screen.dart';
 import '../widgets/app_form_dialog.dart';
@@ -61,9 +62,7 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors du chargement: $e')),
-        );
+        showCopyableSnackBar(context, 'Erreur lors du chargement: $e');
       }
     }
   }

@@ -76,6 +76,11 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: _surfaceContainer,
+        contentTextStyle: TextStyle(
+          color: scheme.onSurface,
+          fontSize: 14,
+        ),
+        actionTextColor: scheme.primary,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );

@@ -9,6 +9,7 @@ import '../../../../core/platform/saf_directory_bridge.dart';
 import '../../../../core/sync/drive_account_profile.dart';
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
+import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../widgets/app_form_dialog.dart';
@@ -157,9 +158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isInitialLoad = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors du chargement: $e')),
-        );
+        showCopyableSnackBar(context, 'Erreur lors du chargement: $e');
       }
     }
   }
@@ -190,15 +189,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } on GoogleOAuthNotConfiguredException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), duration: const Duration(seconds: 8)),
+        showCopyableSnackBar(
+          context,
+          e.message,
+          duration: const Duration(seconds: 8),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur de connexion Google : $e')),
-        );
+        showCopyableSnackBar(context, 'Erreur de connexion Google : $e');
       }
     } finally {
       if (mounted) setState(() => _isDriveAuthBusy = false);
@@ -254,9 +253,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la déconnexion : $e')),
-        );
+        showCopyableSnackBar(context, 'Erreur lors de la déconnexion : $e');
       }
     } finally {
       if (mounted) setState(() => _isDriveAuthBusy = false);
@@ -418,9 +415,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } on SafDirectoryUnavailableException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
+        showCopyableSnackBar(context, e.message);
       }
     }
   }
@@ -460,13 +455,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (driveFolderId == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Impossible d\'identifier le dossier Drive. '
-              'Vérifiez votre connexion Google puis réessayez.',
-            ),
-          ),
+        showCopyableSnackBar(
+          context,
+          'Impossible d\'identifier le dossier Drive. '
+          'Vérifiez votre connexion Google puis réessayez.',
         );
       }
       return;
@@ -724,19 +716,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         await _loadDatabaseInfo();
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Dossier inaccessible. Réessayez ou choisissez un autre emplacement.',
-            ),
-          ),
+        showCopyableSnackBar(
+          context,
+          'Dossier inaccessible. Réessayez ou choisissez un autre emplacement.',
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de l\'ajout du dossier: $e')),
-        );
+        showCopyableSnackBar(context, 'Erreur lors de l\'ajout du dossier: $e');
       }
     }
   }
@@ -872,21 +859,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           uploadSucceeded =
               widget.syncController.state.status == SyncStatus.synced;
         } else if (syncStatus == SyncStatus.offline) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Impossible d\'envoyer vers Drive : session Google expirée',
-              ),
-            ),
+          showCopyableSnackBar(
+            context,
+            'Impossible d\'envoyer vers Drive : session Google expirée',
           );
         } else if (syncStatus == SyncStatus.error) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                widget.syncController.state.message ??
-                    'Erreur lors de l\'envoi vers Drive',
-              ),
-            ),
+          showCopyableSnackBar(
+            context,
+            widget.syncController.state.message ??
+                'Erreur lors de l\'envoi vers Drive',
           );
         }
       }
@@ -907,12 +888,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         } else {
           message = 'Dossier Drive « $folderName » lié';
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
+        if (init.shouldUpload && !uploadSucceeded) {
+          showCopyableSnackBar(
+            context,
+            message,
             duration: const Duration(seconds: 3),
-          ),
-        );
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
 
       await _loadDatabaseInfo();
@@ -924,11 +913,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               .toList();
           _indexingProgress.remove(pendingKey);
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message),
-            duration: const Duration(seconds: 8),
-          ),
+        showCopyableSnackBar(
+          context,
+          e.message,
+          duration: const Duration(seconds: 8),
         );
       }
     } catch (e) {
@@ -939,9 +927,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               .toList();
           _indexingProgress.remove(pendingKey);
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de l\'ajout Drive : $e')),
-        );
+        showCopyableSnackBar(context, 'Erreur lors de l\'ajout Drive : $e');
       }
     }
   }
@@ -1014,9 +1000,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la récupération : $e')),
-        );
+        showCopyableSnackBar(context, 'Erreur lors de la récupération : $e');
       }
     } finally {
       if (mounted) setState(() => _isSyncBusy = false);
@@ -1037,13 +1021,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       if (widget.syncController.state.status == SyncStatus.error) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.syncController.state.message ??
-                  'Erreur lors de la synchronisation',
-            ),
-          ),
+        showCopyableSnackBar(
+          context,
+          widget.syncController.state.message ??
+              'Erreur lors de la synchronisation',
         );
         return;
       }
@@ -1056,8 +1037,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la synchronisation : $e')),
+        showCopyableSnackBar(
+          context,
+          'Erreur lors de la synchronisation : $e',
         );
       }
     } finally {
@@ -1160,9 +1142,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _loadDatabaseInfo();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la suppression : $e')),
-        );
+        showCopyableSnackBar(context, 'Erreur lors de la suppression : $e');
       }
     }
   }
@@ -1192,9 +1172,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _loadDatabaseInfo();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la suppression: $e')),
-        );
+        showCopyableSnackBar(context, 'Erreur lors de la suppression: $e');
       }
     }
   }
