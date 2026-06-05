@@ -4,6 +4,7 @@ import '../../features/sampler/data/repositories/sound_repository.dart';
 import '../../features/sampler/domain/usecases/load_sounds_usecase.dart';
 import '../../features/sampler/domain/usecases/remove_sound_from_board_usecase.dart';
 import '../database/database.dart' as db;
+import '../sync/audio_cache_manager.dart';
 import '../sync/google_drive_client.dart';
 import '../sync/library_sync_service.dart';
 import '../sync/snapshot_store.dart';
@@ -31,6 +32,7 @@ class AppServices {
       LocalLibraryDataSource(database),
       GoogleDriveAuthenticator(),
       LibrarySyncService(DriftSnapshotStore(database)),
+      AudioCacheManager(),
     );
     return AppServices._(
       database: database,
