@@ -16,8 +16,13 @@ import '../providers/sync_controller.dart';
 /// à la demande des sons).
 class LibrarySyncScreen extends StatefulWidget {
   final LibraryRepository libraryRepository;
+  final SyncController syncController;
 
-  const LibrarySyncScreen({super.key, required this.libraryRepository});
+  const LibrarySyncScreen({
+    super.key,
+    required this.libraryRepository,
+    required this.syncController,
+  });
 
   @override
   State<LibrarySyncScreen> createState() => _LibrarySyncScreenState();
@@ -35,16 +40,10 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
   void initState() {
     super.initState();
     _repository = widget.libraryRepository;
-    _syncController = SyncController(_repository);
+    // Contrôleur partagé (AppServices) : l'état de sync reste cohérent avec la
+    // synchro automatique. On ne le crée ni ne le dispose ici.
+    _syncController = widget.syncController;
     _bootstrap();
-  }
-
-  @override
-  void dispose() {
-    // On ne dispose que le contrôleur local ; le repository appartient à
-    // AppServices et reste partagé avec la lecture.
-    _syncController.dispose();
-    super.dispose();
   }
 
   Future<void> _bootstrap() async {

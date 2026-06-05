@@ -4,6 +4,7 @@ import '../../features/sampler/domain/usecases/load_sounds_usecase.dart';
 import '../../features/sampler/domain/usecases/remove_sound_from_board_usecase.dart';
 import '../../features/sampler/presentation/providers/sync_controller.dart';
 import '../database/database.dart' as db;
+import '../sync/auto_sync_coordinator.dart';
 
 /// Composition root des services partagés de l'application.
 class AppServices {
@@ -11,6 +12,7 @@ class AppServices {
   final SoundRepository soundRepository;
   final LibraryRepository libraryRepository;
   final SyncController syncController;
+  final AutoSyncCoordinator autoSyncCoordinator;
   final LoadSoundsUseCase loadSoundsUseCase;
   final RemoveSoundFromBoardUseCase removeSoundFromBoardUseCase;
 
@@ -19,6 +21,7 @@ class AppServices {
     required this.soundRepository,
     required this.libraryRepository,
     required this.syncController,
+    required this.autoSyncCoordinator,
     required this.loadSoundsUseCase,
     required this.removeSoundFromBoardUseCase,
   });
@@ -27,17 +30,27 @@ class AppServices {
     final database = db.AppDatabase();
     final repository = SoundRepository.fromDatabase(database);
     final libraryRepository = LibraryRepository.fromDatabase(database);
+    final syncController = SyncController(libraryRepository);
+    final autoSyncCoordinator = AutoSyncCoordinator(
+      database,
+      libraryRepository,
+      syncController,
+    );
+    // Démarre l'écoute des modifications + le pull initial au lancement.
+    autoSyncCoordinator.start();
     return AppServices._(
       database: database,
       soundRepository: repository,
       libraryRepository: libraryRepository,
-      syncController: SyncController(libraryRepository),
+      syncController: syncController,
+      autoSyncCoordinator: autoSyncCoordinator,
       loadSoundsUseCase: LoadSoundsUseCase(repository),
       removeSoundFromBoardUseCase: RemoveSoundFromBoardUseCase(repository),
     );
   }
 
   void dispose() {
+    autoSyncCoordinator.dispose();
     syncController.dispose();
     database.close();
   }
