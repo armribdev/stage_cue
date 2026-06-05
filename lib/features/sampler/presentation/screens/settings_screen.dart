@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../../../core/database/database.dart' as db;
+import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../data/models/indexing_progress.dart';
 import '../../domain/entities/watched_path.dart' as domain;
@@ -13,8 +14,13 @@ import 'library_sync_screen.dart';
 /// Écran des paramètres
 class SettingsScreen extends StatefulWidget {
   final db.AppDatabase database;
+  final LibraryRepository libraryRepository;
 
-  const SettingsScreen({super.key, required this.database});
+  const SettingsScreen({
+    super.key,
+    required this.database,
+    required this.libraryRepository,
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -354,7 +360,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (context) => LibrarySyncScreen(
-                                  database: widget.database,
+                                  libraryRepository: widget.libraryRepository,
                                 ),
                               ),
                             );

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/database/database.dart' as db;
 import '../../data/repositories/library_repository.dart';
 import '../../domain/entities/library.dart';
 import '../providers/sync_controller.dart';
@@ -8,12 +7,13 @@ import '../providers/sync_controller.dart';
 /// Écran de gestion de la synchronisation Drive : connexion d'une bibliothèque
 /// portable, état de synchro, push/pull manuels et résolution de conflit.
 ///
-/// Construit ses propres dépendances depuis [db.AppDatabase] (réutilise le même
-/// câblage que [AppServices]) afin de rester autonome.
+/// Reçoit le [LibraryRepository] partagé d'AppServices : la session Drive
+/// connectée ici est donc la même que celle utilisée par la lecture (download
+/// à la demande des sons).
 class LibrarySyncScreen extends StatefulWidget {
-  final db.AppDatabase database;
+  final LibraryRepository libraryRepository;
 
-  const LibrarySyncScreen({super.key, required this.database});
+  const LibrarySyncScreen({super.key, required this.libraryRepository});
 
   @override
   State<LibrarySyncScreen> createState() => _LibrarySyncScreenState();
@@ -30,13 +30,15 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
   @override
   void initState() {
     super.initState();
-    _repository = LibraryRepository.fromDatabase(widget.database);
+    _repository = widget.libraryRepository;
     _syncController = SyncController(_repository);
     _bootstrap();
   }
 
   @override
   void dispose() {
+    // On ne dispose que le contrôleur local ; le repository appartient à
+    // AppServices et reste partagé avec la lecture.
     _syncController.dispose();
     super.dispose();
   }
