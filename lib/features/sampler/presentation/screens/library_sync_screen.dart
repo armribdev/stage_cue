@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../domain/entities/library.dart';
 import '../providers/sync_controller.dart';
+import '../widgets/app_form_dialog.dart';
+import '../widgets/app_modal.dart';
 
 /// Écran de gestion de la synchronisation Drive : connexion d'une bibliothèque
 /// portable, état de synchro, push/pull manuels et résolution de conflit.
@@ -13,12 +15,30 @@ import '../providers/sync_controller.dart';
 class LibrarySyncScreen extends StatefulWidget {
   final LibraryRepository libraryRepository;
   final SyncController syncController;
+  final bool isModal;
 
   const LibrarySyncScreen({
     super.key,
     required this.libraryRepository,
     required this.syncController,
+    this.isModal = false,
   });
+
+  /// Page plein écran sur téléphone, modale sur tablette et desktop.
+  static Future<void> open(
+    BuildContext context, {
+    required LibraryRepository libraryRepository,
+    required SyncController syncController,
+  }) {
+    return openAdaptiveScreen(
+      context: context,
+      builder: ({required isModal}) => LibrarySyncScreen(
+        libraryRepository: libraryRepository,
+        syncController: syncController,
+        isModal: isModal,
+      ),
+    );
+  }
 
   @override
   State<LibrarySyncScreen> createState() => _LibrarySyncScreenState();
@@ -139,8 +159,10 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
     final controller = TextEditingController(text: 'Stage Cue');
     return showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Nouvelle bibliothèque Drive'),
+      builder: (dialogContext) => AppFormDialog(
+        title: 'Nouvelle bibliothèque Drive',
+        width: 400,
+        onClose: () => Navigator.of(dialogContext).pop(),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -151,11 +173,11 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Annuler'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
             child: const Text('Connecter'),
           ),
         ],
@@ -167,41 +189,53 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _ConnectionCard(
+          email: _repository.connectedAccountEmail,
+          isBusy: _isBusy,
+          onConnect: _connect,
+          onDisconnect: _repository.isConnected ? _disconnect : null,
+        ),
+        const SizedBox(height: 16),
+        ListenableBuilder(
+          listenable: _syncController,
+          builder: (context, _) =>
+              _SyncStatusBanner(state: _syncController.state),
+        ),
+        const SizedBox(height: 8),
+        if (_libraries.isEmpty)
+          const _EmptyLibrariesHint()
+        else
+          ..._libraries.map(
+            (library) => _LibraryTile(
+              library: library,
+              enabled: !_isBusy,
+              onSync: () => _syncNow(library),
+              onPull: () => _pull(library),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final body = _buildBody();
+
+    if (widget.isModal) {
+      return AppModalShell(title: 'Bibliothèque Drive', body: body);
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Bibliothèque Drive')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _ConnectionCard(
-                  email: _repository.connectedAccountEmail,
-                  isBusy: _isBusy,
-                  onConnect: _connect,
-                  onDisconnect: _repository.isConnected ? _disconnect : null,
-                ),
-                const SizedBox(height: 16),
-                ListenableBuilder(
-                  listenable: _syncController,
-                  builder: (context, _) =>
-                      _SyncStatusBanner(state: _syncController.state),
-                ),
-                const SizedBox(height: 8),
-                if (_libraries.isEmpty)
-                  const _EmptyLibrariesHint()
-                else
-                  ..._libraries.map(
-                    (library) => _LibraryTile(
-                      library: library,
-                      enabled: !_isBusy,
-                      onSync: () => _syncNow(library),
-                      onPull: () => _pull(library),
-                    ),
-                  ),
-              ],
-            ),
+      body: body,
     );
   }
 }
@@ -244,16 +278,17 @@ class _ConnectionCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 FilledButton.icon(
                   onPressed: isBusy ? null : onConnect,
                   icon: const Icon(Icons.add_to_drive),
                   label: const Text('Connecter une bibliothèque'),
                 ),
-                const SizedBox(width: 8),
                 if (onDisconnect != null)
-                  TextButton(
+                  OutlinedButton(
                     onPressed: isBusy ? null : onDisconnect,
                     child: const Text('Déconnecter'),
                   ),
@@ -323,18 +358,42 @@ class _LibraryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final lastSync = library.lastSyncedAt;
     final subtitle = lastSync != null
         ? 'Révision ${library.lastSyncedRevision} · ${_formatDate(lastSync)}'
         : 'Jamais synchronisé';
     return Card(
-      child: ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.library_music)),
-        title: Text(library.name),
-        subtitle: Text(subtitle),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            CircleAvatar(
+              backgroundColor: scheme.primaryContainer,
+              child: Icon(Icons.library_music, color: scheme.primary),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    library.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             IconButton(
               icon: const Icon(Icons.cloud_download),
               tooltip: 'Récupérer depuis Drive',

@@ -6,6 +6,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/platform/saf_directory_bridge.dart';
+import '../../../../core/utils/layout_utils.dart';
+import '../widgets/app_form_dialog.dart';
+import '../widgets/app_modal.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../data/models/indexing_progress.dart';
@@ -19,13 +22,33 @@ class SettingsScreen extends StatefulWidget {
   final db.AppDatabase database;
   final LibraryRepository libraryRepository;
   final SyncController syncController;
+  final bool isModal;
 
   const SettingsScreen({
     super.key,
     required this.database,
     required this.libraryRepository,
     required this.syncController,
+    this.isModal = false,
   });
+
+  /// Page plein écran sur téléphone, modale sur tablette et desktop.
+  static Future<void> open(
+    BuildContext context, {
+    required db.AppDatabase database,
+    required LibraryRepository libraryRepository,
+    required SyncController syncController,
+  }) {
+    return openAdaptiveScreen(
+      context: context,
+      builder: ({required isModal}) => SettingsScreen(
+        database: database,
+        libraryRepository: libraryRepository,
+        syncController: syncController,
+        isModal: isModal,
+      ),
+    );
+  }
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -213,29 +236,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _reloadWatchedPaths();
   }
 
-  Future<void> _showAddFolderMenu() async {
-    final choice = await showModalBottomSheet<String>(
+  Future<String?> _pickAddFolderSource() async {
+    if (widget.isModal || preferModalPresentation(context)) {
+      return showDialog<String>(
+        context: context,
+        builder: (dialogContext) {
+          return AppFormDialog(
+            title: 'Ajouter un dossier',
+            width: 400,
+            onClose: () => Navigator.of(dialogContext).pop(),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppChoiceOption(
+                  icon: Icons.folder_outlined,
+                  label: 'Dossier local',
+                  onTap: () => Navigator.of(dialogContext).pop('local'),
+                ),
+                const SizedBox(height: 8),
+                AppChoiceOption(
+                  icon: Icons.cloud_outlined,
+                  label: 'Dossier Drive',
+                  onTap: () => Navigator.of(dialogContext).pop('drive'),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    return showModalBottomSheet<String>(
       context: context,
+      clipBehavior: Clip.antiAlias,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppModalStyle.radius),
+        ),
+      ),
       builder: (sheetContext) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.folder_outlined),
-                title: const Text('Dossier local'),
-                onTap: () => Navigator.of(sheetContext).pop('local'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.cloud_outlined),
-                title: const Text('Dossier Drive'),
-                onTap: () => Navigator.of(sheetContext).pop('drive'),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(AppModalStyle.padding),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppChoiceOption(
+                  icon: Icons.folder_outlined,
+                  label: 'Dossier local',
+                  onTap: () => Navigator.of(sheetContext).pop('local'),
+                ),
+                const SizedBox(height: 8),
+                AppChoiceOption(
+                  icon: Icons.cloud_outlined,
+                  label: 'Dossier Drive',
+                  onTap: () => Navigator.of(sheetContext).pop('drive'),
+                ),
+              ],
+            ),
           ),
         );
       },
     );
+  }
+
+  Future<void> _showAddFolderMenu() async {
+    final choice = await _pickAddFolderSource();
 
     if (!mounted || choice == null) {
       return;
@@ -813,12 +879,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Paramètres')),
-      body: AnimatedSwitcher(
+  Widget _buildSettingsBody() {
+    return AnimatedSwitcher(
         duration: const Duration(milliseconds: 240),
+        layoutBuilder: (currentChild, previousChildren) {
+          return Stack(
+            alignment: widget.isModal
+                ? Alignment.topCenter
+                : Alignment.center,
+            children: [
+              ...previousChildren,
+              if (currentChild != null) currentChild,
+            ],
+          );
+        },
         child: _isLoading
             ? const _SettingsLoadingView(key: ValueKey('settings-loading'))
             : RefreshIndicator(
@@ -874,28 +948,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Card(
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.cloud_sync,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          title: const Text('Bibliothèque Drive'),
-                          subtitle: const Text(
+                      AppNavigationCard(
+                        icon: Icons.cloud_sync,
+                        title: 'Bibliothèque Drive',
+                        subtitle:
                             'Synchroniser les sons et métadonnées entre appareils',
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => LibrarySyncScreen(
-                                  libraryRepository: widget.libraryRepository,
-                                  syncController: widget.syncController,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                        onTap: () {
+                          LibrarySyncScreen.open(
+                            context,
+                            libraryRepository: widget.libraryRepository,
+                            syncController: widget.syncController,
+                          );
+                        },
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -962,80 +1026,93 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 8),
-                                  child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      16,
-                                      12,
-                                      8,
-                                      12,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      children: [
-                                        CircleAvatar(
-                                          backgroundColor: Theme.of(
-                                            context,
-                                          ).colorScheme.primaryContainer,
-                                          child: Icon(
-                                            item.isLocal &&
-                                                    SafDirectoryBridge
-                                                        .isSafTreeUri(
-                                                      item.watchedPath!.path,
-                                                    )
-                                                ? Icons.cloud
-                                                : item.isLocal
-                                                ? Icons.folder
-                                                : Icons.cloud,
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.primary,
-                                          ),
+                                  child: Stack(
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          12,
+                                          44,
+                                          12,
                                         ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                item.isLocal
-                                                    ? _watchedPathTitle(
-                                                        item.watchedPath!,
-                                                      )
-                                                    : item.title,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                item.isLocal
-                                                    ? _watchedPathSubtitle(
-                                                        item.watchedPath!,
-                                                      )
-                                                    : widget
-                                                              .libraryRepository
-                                                              .connectedAccountEmail ??
-                                                          'Bibliothèque Drive',
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                ),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              _buildIndexingProgressSection(
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            CircleAvatar(
+                                              backgroundColor: Theme.of(
                                                 context,
-                                                progress,
-                                                isIndexing,
+                                              ).colorScheme.primaryContainer,
+                                              child: Icon(
+                                                item.isLocal &&
+                                                        SafDirectoryBridge
+                                                            .isSafTreeUri(
+                                                          item
+                                                              .watchedPath!
+                                                              .path,
+                                                        )
+                                                    ? Icons.cloud
+                                                    : item.isLocal
+                                                    ? Icons.folder
+                                                    : Icons.cloud,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.primary,
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    item.isLocal
+                                                        ? _watchedPathTitle(
+                                                            item.watchedPath!,
+                                                          )
+                                                        : item.title,
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    item.isLocal
+                                                        ? _watchedPathSubtitle(
+                                                            item.watchedPath!,
+                                                          )
+                                                        : widget
+                                                                  .libraryRepository
+                                                                  .connectedAccountEmail ??
+                                                              'Bibliothèque Drive',
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                    ),
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                  _buildIndexingProgressSection(
+                                                    context,
+                                                    progress,
+                                                    isIndexing,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        IconButton(
+                                      ),
+                                      Positioned(
+                                        top: 10,
+                                        right: 10,
+                                        child: IconButton(
                                           padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints.tightFor(
+                                          constraints:
+                                              const BoxConstraints.tightFor(
                                             width: 32,
                                             height: 32,
                                           ),
@@ -1047,7 +1124,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                                 .onSurfaceVariant
                                                 .withValues(alpha: 0.55),
                                           ),
-                                          visualDensity: VisualDensity.compact,
+                                          visualDensity:
+                                              VisualDensity.compact,
                                           onPressed: () {
                                             if (item.isLocal) {
                                               _confirmRemoveWatchedPath(
@@ -1061,8 +1139,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                           },
                                           tooltip: 'Retirer',
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
                                 );
                               },
@@ -1071,7 +1149,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
-      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final body = _buildSettingsBody();
+
+    if (widget.isModal) {
+      return AppModalShell(title: 'Paramètres', body: body);
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Paramètres')),
+      body: body,
     );
   }
 
@@ -1205,40 +1296,80 @@ class _SettingsLoadingViewState extends State<_SettingsLoadingView>
     );
   }
 
-  Widget _listHeader(Color color) {
+  Widget _driveLibraryCard(Color color) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            _bar(color, width: 24, height: 24),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _bar(color, width: 140, height: 14),
+                  const SizedBox(height: 8),
+                  _bar(color, height: 10),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _bar(color, width: 16, height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _indexedHeader(Color color) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _bar(color, width: 170, height: 20),
-        Row(
-          children: [
-            _bar(color, width: 28, height: 28),
-            const SizedBox(width: 8),
-            _bar(color, width: 28, height: 28),
-          ],
-        ),
+        _bar(color, width: 150, height: 20),
+        _bar(color, width: 28, height: 28),
       ],
     );
   }
 
-  Widget _itemCard(Color color) {
+  Widget _indexedItemCard(Color color) {
     return Card(
-      child: ListTile(
-        isThreeLine: true,
-        leading: CircleAvatar(backgroundColor: color),
-        title: _bar(color, width: 180),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _bar(color),
-              const SizedBox(height: 6),
-              _bar(color, width: 120),
-            ],
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 44, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: color,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _bar(color, width: 150, height: 14),
+                      const SizedBox(height: 8),
+                      _bar(color, height: 10),
+                      const SizedBox(height: 8),
+                      _bar(color, height: 4),
+                      const SizedBox(height: 4),
+                      _bar(color, width: 72, height: 10),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        trailing: _bar(color, width: 20, height: 20),
+          Positioned(
+            top: 10,
+            right: 10,
+            child: _bar(color, width: 20, height: 20),
+          ),
+        ],
       ),
     );
   }
@@ -1251,21 +1382,23 @@ class _SettingsLoadingViewState extends State<_SettingsLoadingView>
       builder: (context, child) {
         final alpha = 0.12 + (_controller.value * 0.08);
         final color = scheme.onSurface.withValues(alpha: alpha);
-        return ListView(
+        return SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
-          children: [
-            _databaseCard(color),
-            const SizedBox(height: 16),
-            _listHeader(color),
-            const SizedBox(height: 8),
-            _itemCard(color),
-            const SizedBox(height: 8),
-            _itemCard(color),
-            const SizedBox(height: 16),
-            _bar(color, width: 160, height: 20),
-            const SizedBox(height: 8),
-            _itemCard(color),
-          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _databaseCard(color),
+              const SizedBox(height: 16),
+              _driveLibraryCard(color),
+              const SizedBox(height: 16),
+              _indexedHeader(color),
+              const SizedBox(height: 8),
+              _indexedItemCard(color),
+              _indexedItemCard(color),
+            ],
+          ),
         );
       },
     );

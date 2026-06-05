@@ -992,15 +992,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     },
               onOpenSettings: () async {
                 Navigator.pop(context);
-                await Navigator.push(
+                await SettingsScreen.open(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => SettingsScreen(
-                      database: _database,
-                      libraryRepository: widget.services.libraryRepository,
-                      syncController: widget.services.syncController,
-                    ),
-                  ),
+                  database: _database,
+                  libraryRepository: widget.services.libraryRepository,
+                  syncController: widget.services.syncController,
                 );
                 await _notifier.loadSounds();
               },
