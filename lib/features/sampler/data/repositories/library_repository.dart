@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/sync/drive_client.dart';
 import '../../../../core/sync/drive_models.dart';
+import '../../../../core/sync/library_sync_service.dart';
 import '../../domain/entities/library.dart';
 import '../datasources/local_library_datasource.dart';
 
@@ -17,10 +18,15 @@ import '../datasources/local_library_datasource.dart';
 class LibraryRepository {
   final LocalLibraryDataSource _dataSource;
   final DriveAuthenticator _authenticator;
+  final LibrarySyncService _syncService;
 
   DriveClient? _activeClient;
 
-  LibraryRepository(this._dataSource, this._authenticator);
+  LibraryRepository(
+    this._dataSource,
+    this._authenticator,
+    this._syncService,
+  );
 
   DriveClient? get activeClient => _activeClient;
   String? get connectedAccountEmail => _authenticator.accountEmail;
@@ -65,6 +71,52 @@ class LibraryRepository {
       throw StateError('Bibliothèque non connectée à Drive');
     }
     return client.listFolder(folderId);
+  }
+
+  /// Pousse l'état local de [library] vers Drive. En cas de succès, met à jour
+  /// la révision et l'horodatage de synchro en base.
+  Future<PushOutcome> pushLibrary(Library library) async {
+    final client = _activeClient;
+    final folderId = library.driveFolderId;
+    if (client == null || folderId == null) {
+      throw StateError('Bibliothèque non connectée à Drive');
+    }
+    final outcome = await _syncService.push(
+      client: client,
+      libraryFolderId: folderId,
+      knownRevision: library.lastSyncedRevision,
+    );
+    if (outcome is PushSuccess) {
+      await _dataSource.updateSyncState(
+        id: library.id,
+        lastSyncedRevision: outcome.revision,
+        lastSyncedAt: DateTime.now(),
+      );
+    }
+    return outcome;
+  }
+
+  /// Télécharge le snapshot distant de [library] s'il est plus récent. Un
+  /// snapshot tiré est appliqué au prochain démarrage de l'application.
+  Future<PullOutcome> pullLibrary(Library library) async {
+    final client = _activeClient;
+    final folderId = library.driveFolderId;
+    if (client == null || folderId == null) {
+      throw StateError('Bibliothèque non connectée à Drive');
+    }
+    final outcome = await _syncService.pull(
+      client: client,
+      libraryFolderId: folderId,
+      knownRevision: library.lastSyncedRevision,
+    );
+    if (outcome is PullStaged) {
+      await _dataSource.updateSyncState(
+        id: library.id,
+        lastSyncedRevision: outcome.revision,
+        lastSyncedAt: DateTime.now(),
+      );
+    }
+    return outcome;
   }
 
   /// Ferme la session Drive et révoque la connexion du compte.

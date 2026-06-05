@@ -5,6 +5,8 @@ import '../../features/sampler/domain/usecases/load_sounds_usecase.dart';
 import '../../features/sampler/domain/usecases/remove_sound_from_board_usecase.dart';
 import '../database/database.dart' as db;
 import '../sync/google_drive_client.dart';
+import '../sync/library_sync_service.dart';
+import '../sync/snapshot_store.dart';
 
 /// Composition root des services partagés de l'application.
 class AppServices {
@@ -28,6 +30,7 @@ class AppServices {
     final libraryRepository = LibraryRepository(
       LocalLibraryDataSource(database),
       GoogleDriveAuthenticator(),
+      LibrarySyncService(DriftSnapshotStore(database)),
     );
     return AppServices._(
       database: database,
