@@ -79,7 +79,14 @@ class LibraryRepository {
 
   /// Pousse l'état local de [library] vers Drive. En cas de succès, met à jour
   /// la révision et l'horodatage de synchro en base.
-  Future<PushOutcome> pushLibrary(Library library) async {
+  ///
+  /// [overrideKnownRevision] force la révision de référence (résolution de
+  /// conflit « garder le local » : on adopte la révision distante pour passer
+  /// la garde, ce qui écrase la version distante).
+  Future<PushOutcome> pushLibrary(
+    Library library, {
+    int? overrideKnownRevision,
+  }) async {
     final client = _activeClient;
     final folderId = library.driveFolderId;
     if (client == null || folderId == null) {
@@ -88,7 +95,7 @@ class LibraryRepository {
     final outcome = await _syncService.push(
       client: client,
       libraryFolderId: folderId,
-      knownRevision: library.lastSyncedRevision,
+      knownRevision: overrideKnownRevision ?? library.lastSyncedRevision,
     );
     if (outcome is PushSuccess) {
       await _dataSource.updateSyncState(

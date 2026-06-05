@@ -3,6 +3,7 @@ import '../../features/sampler/data/repositories/library_repository.dart';
 import '../../features/sampler/data/repositories/sound_repository.dart';
 import '../../features/sampler/domain/usecases/load_sounds_usecase.dart';
 import '../../features/sampler/domain/usecases/remove_sound_from_board_usecase.dart';
+import '../../features/sampler/presentation/providers/sync_controller.dart';
 import '../database/database.dart' as db;
 import '../sync/audio_cache_manager.dart';
 import '../sync/google_drive_client.dart';
@@ -14,6 +15,7 @@ class AppServices {
   final db.AppDatabase database;
   final SoundRepository soundRepository;
   final LibraryRepository libraryRepository;
+  final SyncController syncController;
   final LoadSoundsUseCase loadSoundsUseCase;
   final RemoveSoundFromBoardUseCase removeSoundFromBoardUseCase;
 
@@ -21,6 +23,7 @@ class AppServices {
     required this.database,
     required this.soundRepository,
     required this.libraryRepository,
+    required this.syncController,
     required this.loadSoundsUseCase,
     required this.removeSoundFromBoardUseCase,
   });
@@ -38,12 +41,14 @@ class AppServices {
       database: database,
       soundRepository: repository,
       libraryRepository: libraryRepository,
+      syncController: SyncController(libraryRepository),
       loadSoundsUseCase: LoadSoundsUseCase(repository),
       removeSoundFromBoardUseCase: RemoveSoundFromBoardUseCase(repository),
     );
   }
 
   void dispose() {
+    syncController.dispose();
     database.close();
   }
 }
