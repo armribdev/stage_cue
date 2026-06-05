@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
+import '../utils/sound_type_ui.dart';
 import '../providers/sampler_provider.dart';
 import 'music_preview_panel.dart';
 
@@ -241,7 +242,7 @@ class _PickerTrackRow extends StatelessWidget {
                 ),
               ),
               child: Icon(
-                Icons.music_note_rounded,
+                SoundType.music.icon,
                 color: chipColor.computeLuminance() > 0.55
                     ? Colors.black87
                     : Colors.white,

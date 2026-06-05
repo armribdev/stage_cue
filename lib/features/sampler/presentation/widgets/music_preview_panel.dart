@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
+import '../utils/sound_type_ui.dart';
 
 /// Panneau régie musique — bandeau compact + console étendue.
 class MusicPreviewPanel extends StatelessWidget {
@@ -1178,7 +1180,7 @@ class _PadColorChip extends StatelessWidget {
       ),
       child: size >= 32
           ? Icon(
-              Icons.music_note_rounded,
+              SoundType.music.icon,
               size: size * 0.45,
               color: _chipIconColor(color, scheme),
             )

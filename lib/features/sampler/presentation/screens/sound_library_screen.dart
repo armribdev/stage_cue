@@ -9,6 +9,7 @@ import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../../domain/usecases/add_sound_to_board_usecase.dart';
+import '../utils/sound_type_ui.dart';
 
 /// Résultat renvoyé à la fermeture de [SoundLibraryScreen].
 class SoundLibraryScreenResult {
@@ -231,17 +232,6 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     );
   }
 
-  String _getSoundTypeName(SoundType type) {
-    switch (type) {
-      case SoundType.soundEffect:
-        return 'Bruitage';
-      case SoundType.music:
-        return 'Musique';
-      case SoundType.ambiance:
-        return 'Son d\'ambiance';
-    }
-  }
-
   /// Extrait les tokens de recherche (séparateurs: espaces, virgules).
   /// Exclut les chaînes vides et les tokens de moins de 2 caractères.
   List<String> _parseSearchTokens(String query) {
@@ -341,7 +331,6 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Ajouter un bruitage')),
       body: Column(
@@ -380,7 +369,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            Icons.music_off,
+                            SoundType.soundEffect.icon,
                             size: 64,
                             color: Colors.grey[600],
                           ),
@@ -426,13 +415,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                             child: Opacity(
                               opacity: isInBoard ? 0.6 : 1.0,
                               child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: scheme.primaryContainer,
-                                  child: Icon(
-                                    Icons.music_note,
-                                    color: scheme.primary,
-                                  ),
-                                ),
+                                leading: SoundTypeAvatar(type: sound.type),
                                 title: Text(
                                   sound.title,
                                   style: TextStyle(
@@ -466,7 +449,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                                     Row(
                                       children: [
                                         Text(
-                                          'Type: ${_getSoundTypeName(sound.type)}',
+                                          'Type: ${sound.type.label}',
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: Colors.grey[600],

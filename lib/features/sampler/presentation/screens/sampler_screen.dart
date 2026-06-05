@@ -9,6 +9,7 @@ import '../providers/sampler_provider.dart';
 import '../widgets/pad_item.dart' show PadCard;
 import '../widgets/music_preview_panel.dart';
 import '../widgets/music_picker_sheet.dart';
+import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
@@ -18,6 +19,7 @@ import 'settings_screen.dart';
 import 'pad_details_screen.dart';
 import 'sound_library_screen.dart';
 import 'sound_library_manage_screen.dart';
+import '../utils/sound_type_ui.dart';
 
 /// Marqueur pour le bouton d'ajout dans la grille
 const _addButtonMarker = _AddButtonMarker();
@@ -793,7 +795,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      Icons.graphic_eq_rounded,
+                      SoundType.soundEffect.icon,
                       size: 48,
                       color: Theme.of(context).colorScheme.primary,
                     ),
