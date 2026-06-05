@@ -11,6 +11,7 @@ import '../widgets/music_preview_panel.dart';
 import '../widgets/music_picker_sheet.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
+import '../../../../core/audio/music_transition.dart';
 import '../../../../core/database/database.dart' as db;
 import 'settings_screen.dart';
 import 'pad_details_screen.dart';
@@ -842,6 +843,18 @@ class _SamplerScreenState extends State<SamplerScreen> {
       onRemoveFromQueue: (padId) =>
           unawaited(_notifier.removeFromMusicQueue(padId)),
       onSelectMusicPad: (padItem) => unawaited(_notifier.toggleSound(padItem)),
+      onFadeOutShort: () => unawaited(
+        _notifier.fadeOutCurrentMusic(MusicTransitionDuration.short),
+      ),
+      onFadeOutLong: () => unawaited(
+        _notifier.fadeOutCurrentMusic(MusicTransitionDuration.long),
+      ),
+      onCrossfadeShort: () => unawaited(
+        _notifier.crossfadeToNextMusic(MusicCrossfadeDuration.short),
+      ),
+      onCrossfadeLong: () => unawaited(
+        _notifier.crossfadeToNextMusic(MusicCrossfadeDuration.long),
+      ),
     );
   }
 

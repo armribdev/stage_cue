@@ -31,6 +31,19 @@ class FakeAudioPlayerService implements AudioPlayerService {
   Future<void> stop() async {
     played = false;
   }
+
+  @override
+  Future<void> playAtVolume(double volume) async {
+    played = true;
+  }
+
+  @override
+  void fadeVolumeTo(double to, Duration duration) {}
+
+  @override
+  Future<void> fadeOutAndStop(Duration duration) async {
+    played = false;
+  }
 }
 
 void main() {

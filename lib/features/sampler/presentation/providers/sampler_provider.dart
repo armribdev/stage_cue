@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import '../../../../core/audio/audio_player_service.dart';
+import '../../../../core/audio/music_transition.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
@@ -675,6 +676,86 @@ class SamplerNotifier extends ChangeNotifier {
     final current = _state.currentMusicPad;
     if (current == null || !current.isPlaying) return;
     await _stopMusicPad(current, manual: true);
+  }
+
+  /// Fondu sortant de la musique en cours (sans lancer la file).
+  Future<void> fadeOutCurrentMusic(MusicTransitionDuration duration) async {
+    final current = _state.currentMusicPad;
+    if (current == null || !current.isPlaying) return;
+    final player = current.currentPlayer;
+    if (player == null) return;
+
+    _skipMusicAutoAdvance = true;
+    try {
+      await player.fadeOutAndStop(duration.duration);
+    } finally {
+      _skipMusicAutoAdvance = false;
+    }
+
+    var nextState = _state;
+    if (_state.currentMusicPad?.pad.id == current.pad.id) {
+      nextState = nextState.copyWith(clearCurrentMusicPad: true);
+    }
+    current.isPlaying = false;
+    current._currentPlayerIndex = null;
+    _state = nextState;
+    notifyListeners();
+  }
+
+  /// Crossfade vers la musique suivante en file.
+  Future<void> crossfadeToNextMusic(MusicCrossfadeDuration duration) async {
+    if (_state.musicQueuePadIds.isEmpty) return;
+
+    final current = _state.currentMusicPad;
+    if (current == null || !current.isPlaying) {
+      await playNextInQueueNow();
+      return;
+    }
+
+    final nextId = _state.musicQueuePadIds.first;
+    final next = _resolvePadItem(nextId);
+    if (next == null || next.players.isEmpty) {
+      _state = _state.copyWith(
+        musicQueuePadIds: _state.musicQueuePadIds.sublist(1),
+      );
+      notifyListeners();
+      return;
+    }
+
+    final currentPlayer = current.currentPlayer;
+    if (currentPlayer == null) return;
+
+    final soundIndex = _pickSoundIndex(next);
+    final nextPlayer = next.players[soundIndex];
+    final targetVolume = next.pad.volume * _masterVolume;
+    final crossfadeDuration = duration.duration;
+
+    _skipMusicAutoAdvance = true;
+    try {
+      _state = _state.copyWith(
+        currentMusicPad: next,
+        musicQueuePadIds: _state.musicQueuePadIds.sublist(1),
+      );
+      notifyListeners();
+
+      await nextPlayer.playAtVolume(0);
+      next._currentPlayerIndex = soundIndex;
+      next.isPlaying = true;
+
+      currentPlayer.fadeVolumeTo(0, crossfadeDuration);
+      nextPlayer.fadeVolumeTo(targetVolume, crossfadeDuration);
+
+      await Future<void>.delayed(crossfadeDuration);
+
+      if (currentPlayer.isPlaying) {
+        await currentPlayer.stop();
+      }
+      current.isPlaying = false;
+      current._currentPlayerIndex = null;
+    } finally {
+      _skipMusicAutoAdvance = false;
+    }
+    notifyListeners();
   }
 
   Future<void> toggleCurrentMusicPlayback() async {

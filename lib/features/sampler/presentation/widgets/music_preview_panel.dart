@@ -15,6 +15,10 @@ class MusicPreviewPanel extends StatelessWidget {
   final VoidCallback? onPlayNextInQueue;
   final ValueChanged<int>? onRemoveFromQueue;
   final ValueChanged<PadItem>? onSelectMusicPad;
+  final VoidCallback? onFadeOutShort;
+  final VoidCallback? onFadeOutLong;
+  final VoidCallback? onCrossfadeShort;
+  final VoidCallback? onCrossfadeLong;
 
   const MusicPreviewPanel({
     super.key,
@@ -30,6 +34,10 @@ class MusicPreviewPanel extends StatelessWidget {
     this.onPlayNextInQueue,
     this.onRemoveFromQueue,
     this.onSelectMusicPad,
+    this.onFadeOutShort,
+    this.onFadeOutLong,
+    this.onCrossfadeShort,
+    this.onCrossfadeLong,
   });
 
   PadItem? _resolve(int padId) {
@@ -56,6 +64,10 @@ class MusicPreviewPanel extends StatelessWidget {
         onPlayNextInQueue: onPlayNextInQueue,
         onRemoveFromQueue: onRemoveFromQueue,
         onSelectMusicPad: onSelectMusicPad,
+        onFadeOutShort: onFadeOutShort,
+        onFadeOutLong: onFadeOutLong,
+        onCrossfadeShort: onCrossfadeShort,
+        onCrossfadeLong: onCrossfadeLong,
       );
     }
 
@@ -67,6 +79,10 @@ class MusicPreviewPanel extends StatelessWidget {
       onTogglePlayPause: onTogglePlayPause,
       onStopCurrent: onStopCurrent,
       onSkipNext: onSkipNext,
+      onFadeOutShort: onFadeOutShort,
+      onFadeOutLong: onFadeOutLong,
+      onCrossfadeShort: onCrossfadeShort,
+      onCrossfadeLong: onCrossfadeLong,
     );
   }
 }
@@ -79,6 +95,10 @@ class _RegieMusicStrip extends StatelessWidget {
   final VoidCallback? onTogglePlayPause;
   final VoidCallback? onStopCurrent;
   final VoidCallback? onSkipNext;
+  final VoidCallback? onFadeOutShort;
+  final VoidCallback? onFadeOutLong;
+  final VoidCallback? onCrossfadeShort;
+  final VoidCallback? onCrossfadeLong;
 
   const _RegieMusicStrip({
     required this.state,
@@ -88,6 +108,10 @@ class _RegieMusicStrip extends StatelessWidget {
     this.onTogglePlayPause,
     this.onStopCurrent,
     this.onSkipNext,
+    this.onFadeOutShort,
+    this.onFadeOutLong,
+    this.onCrossfadeShort,
+    this.onCrossfadeLong,
   });
 
   @override
@@ -187,6 +211,18 @@ class _RegieMusicStrip extends StatelessWidget {
                       onTogglePlayPause: onTogglePlayPause,
                       onSkipNext: onSkipNext,
                     ),
+                    if (isPlaying || queue.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      _MusicTransitionBar(
+                        compact: true,
+                        canFadeOut: isPlaying,
+                        canCrossfade: isPlaying && queue.isNotEmpty,
+                        onFadeOutShort: onFadeOutShort,
+                        onFadeOutLong: onFadeOutLong,
+                        onCrossfadeShort: onCrossfadeShort,
+                        onCrossfadeLong: onCrossfadeLong,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -212,6 +248,10 @@ class _RegieMusicConsole extends StatelessWidget {
   final VoidCallback? onPlayNextInQueue;
   final ValueChanged<int>? onRemoveFromQueue;
   final ValueChanged<PadItem>? onSelectMusicPad;
+  final VoidCallback? onFadeOutShort;
+  final VoidCallback? onFadeOutLong;
+  final VoidCallback? onCrossfadeShort;
+  final VoidCallback? onCrossfadeLong;
 
   const _RegieMusicConsole({
     required this.state,
@@ -227,6 +267,10 @@ class _RegieMusicConsole extends StatelessWidget {
     this.onPlayNextInQueue,
     this.onRemoveFromQueue,
     this.onSelectMusicPad,
+    this.onFadeOutShort,
+    this.onFadeOutLong,
+    this.onCrossfadeShort,
+    this.onCrossfadeLong,
   });
 
   @override
@@ -299,6 +343,17 @@ class _RegieMusicConsole extends StatelessWidget {
                     onTogglePlayPause: onTogglePlayPause,
                     onSkipNext: onSkipNext,
                   ),
+                  if (isPlaying || queue.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _MusicTransitionBar(
+                      canFadeOut: isPlaying,
+                      canCrossfade: isPlaying && queue.isNotEmpty,
+                      onFadeOutShort: onFadeOutShort,
+                      onFadeOutLong: onFadeOutLong,
+                      onCrossfadeShort: onCrossfadeShort,
+                      onCrossfadeLong: onCrossfadeLong,
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   _PassageQueueSection(
                     queue: queue,
@@ -657,6 +712,182 @@ class _RegieControlBar extends StatelessWidget {
           label: const Text('Suivant'),
         ),
       ],
+    );
+  }
+}
+
+class _MusicTransitionBar extends StatelessWidget {
+  final bool compact;
+  final bool canFadeOut;
+  final bool canCrossfade;
+  final VoidCallback? onFadeOutShort;
+  final VoidCallback? onFadeOutLong;
+  final VoidCallback? onCrossfadeShort;
+  final VoidCallback? onCrossfadeLong;
+
+  const _MusicTransitionBar({
+    this.compact = false,
+    required this.canFadeOut,
+    required this.canCrossfade,
+    this.onFadeOutShort,
+    this.onFadeOutLong,
+    this.onCrossfadeShort,
+    this.onCrossfadeLong,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    if (compact) {
+      return Row(
+        children: [
+          _TransitionIconButton(
+            tooltip: 'Fade out court (2 s)',
+            icon: Icons.volume_down_rounded,
+            enabled: canFadeOut,
+            onPressed: onFadeOutShort,
+          ),
+          _TransitionIconButton(
+            tooltip: 'Fade out long (8 s)',
+            icon: Icons.volume_mute_rounded,
+            enabled: canFadeOut,
+            onPressed: onFadeOutLong,
+          ),
+          const SizedBox(width: 4),
+          _TransitionIconButton(
+            tooltip: 'Enchaînement court (3 s)',
+            icon: Icons.swap_horiz_rounded,
+            enabled: canCrossfade,
+            onPressed: onCrossfadeShort,
+          ),
+          _TransitionIconButton(
+            tooltip: 'Enchaînement long (10 s)',
+            icon: Icons.sync_alt_rounded,
+            enabled: canCrossfade,
+            onPressed: onCrossfadeLong,
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Transitions',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _TransitionButton(
+              label: 'Fade court',
+              subtitle: '2 s',
+              icon: Icons.volume_down_rounded,
+              enabled: canFadeOut,
+              onPressed: onFadeOutShort,
+            ),
+            _TransitionButton(
+              label: 'Fade long',
+              subtitle: '8 s',
+              icon: Icons.volume_mute_rounded,
+              enabled: canFadeOut,
+              onPressed: onFadeOutLong,
+            ),
+            _TransitionButton(
+              label: 'Enchaînement court',
+              subtitle: '3 s',
+              icon: Icons.swap_horiz_rounded,
+              enabled: canCrossfade,
+              onPressed: onCrossfadeShort,
+            ),
+            _TransitionButton(
+              label: 'Enchaînement long',
+              subtitle: '10 s',
+              icon: Icons.sync_alt_rounded,
+              enabled: canCrossfade,
+              onPressed: onCrossfadeLong,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _TransitionButton extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback? onPressed;
+
+  const _TransitionButton({
+    required this.label,
+    required this.subtitle,
+    required this.icon,
+    required this.enabled,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      onPressed: enabled ? onPressed : null,
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: Theme.of(context).textTheme.labelLarge),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TransitionIconButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback? onPressed;
+
+  const _TransitionIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.enabled,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: enabled ? onPressed : null,
+      icon: Icon(icon, size: 20),
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
     );
   }
 }
