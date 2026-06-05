@@ -4,10 +4,12 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/sync/audio_cache_manager.dart';
 import '../../../../core/sync/drive_client.dart';
 import '../../../../core/sync/drive_models.dart';
 import '../../../../core/sync/library_sync_service.dart';
 import '../../domain/entities/library.dart';
+import '../../domain/entities/sound.dart';
 import '../datasources/local_library_datasource.dart';
 
 /// Orchestration des bibliothèques portables : relie l'authentification Drive
@@ -19,6 +21,7 @@ class LibraryRepository {
   final LocalLibraryDataSource _dataSource;
   final DriveAuthenticator _authenticator;
   final LibrarySyncService _syncService;
+  final AudioCacheManager _cacheManager;
 
   DriveClient? _activeClient;
 
@@ -26,6 +29,7 @@ class LibraryRepository {
     this._dataSource,
     this._authenticator,
     this._syncService,
+    this._cacheManager,
   );
 
   DriveClient? get activeClient => _activeClient;
@@ -117,6 +121,58 @@ class LibraryRepository {
       );
     }
     return outcome;
+  }
+
+  /// Résout le chemin local jouable d'un son.
+  ///
+  /// - Son legacy (hors bibliothèque) : renvoie directement [Sound.filePath].
+  /// - Son de bibliothèque : matérialise le fichier dans le cache (download
+  ///   Drive à la demande) et renvoie le chemin local. Hors-ligne, renvoie le
+  ///   fichier en cache s'il existe, sinon lève une erreur.
+  Future<String> resolvePlayablePath(Sound sound) async {
+    final libraryId = sound.libraryId;
+    final relativePath = sound.relativePath;
+    if (libraryId == null || relativePath == null) {
+      return sound.filePath;
+    }
+
+    final library = await _dataSource.getLibraryById(libraryId);
+    if (library == null) return sound.filePath;
+
+    final client = _activeClient;
+    if (client == null) {
+      // Hors-ligne : on ne peut servir que ce qui est déjà en cache.
+      final localPath = _cacheManager.localPathFor(library, relativePath);
+      if (await File(localPath).exists()) return localPath;
+      throw StateError(
+        'Son indisponible hors-ligne (non mis en cache) : $relativePath',
+      );
+    }
+
+    return _cacheManager.ensureCached(
+      client: client,
+      library: library,
+      relativePath: relativePath,
+    );
+  }
+
+  /// Importe un fichier audio local dans une bibliothèque (upload Drive + cache)
+  /// et renvoie son emplacement relatif + l'id Drive.
+  Future<ImportedAudio> importAudioToLibrary({
+    required Library library,
+    required File source,
+    required String relativePath,
+  }) async {
+    final client = _activeClient;
+    if (client == null) {
+      throw StateError('Bibliothèque non connectée à Drive');
+    }
+    return _cacheManager.importFile(
+      client: client,
+      library: library,
+      source: source,
+      relativePath: relativePath,
+    );
   }
 
   /// Ferme la session Drive et révoque la connexion du compte.
