@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/audio/music_transition.dart';
+import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
@@ -150,6 +151,11 @@ class SamplerNotifier extends ChangeNotifier {
   final SoundRepository _repository;
   final LoadSoundsUseCase _loadPadsUseCase;
   final RemoveSoundFromBoardUseCase? _removePadUseCase;
+
+  /// Optionnel : résout le chemin local jouable d'un son de bibliothèque Drive
+  /// (download/cache à la demande). Null = sons purement locaux.
+  final LibraryRepository? _libraryRepository;
+
   int? _activeBoardId;
   double _masterVolume = 1.0;
   _RemovedPadSnapshot? _lastRemovedPad;
@@ -166,7 +172,21 @@ class SamplerNotifier extends ChangeNotifier {
     this._repository,
     this._loadPadsUseCase, [
     this._removePadUseCase,
+    this._libraryRepository,
   ]);
+
+  /// Résout le chemin local jouable d'un son (cache Drive si bibliothèque),
+  /// avec repli sur [Sound.filePath] en cas d'échec (hors-ligne non caché…).
+  Future<String> _resolvePlayablePath(Sound sound) async {
+    final libraryRepository = _libraryRepository;
+    if (libraryRepository == null) return sound.filePath;
+    try {
+      return await libraryRepository.resolvePlayablePath(sound);
+    } catch (e) {
+      debugPrint('Résolution du chemin échouée pour ${sound.title}: $e');
+      return sound.filePath;
+    }
+  }
 
   void _disposePadItems(List<PadItem> items) {
     for (final item in items) {
@@ -378,7 +398,8 @@ class SamplerNotifier extends ChangeNotifier {
         final players = <AudioPlayerService>[];
         for (final sound in pad.sounds) {
           try {
-            players.add(await AudioPlayerService.create(sound.filePath));
+            final path = await _resolvePlayablePath(sound);
+            players.add(await AudioPlayerService.create(path));
           } catch (e) {
             debugPrint('Échec du chargement de ${sound.filePath}: $e');
           }

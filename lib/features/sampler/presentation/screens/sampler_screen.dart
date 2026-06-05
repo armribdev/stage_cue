@@ -74,6 +74,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       widget.services.soundRepository,
       widget.services.loadSoundsUseCase,
       widget.services.removeSoundFromBoardUseCase,
+      widget.services.libraryRepository,
     );
 
     _notifier.addListener(_onStateChanged);
@@ -975,7 +976,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => SettingsScreen(database: _database),
+                    builder: (context) => SettingsScreen(
+                      database: _database,
+                      libraryRepository: widget.services.libraryRepository,
+                    ),
                   ),
                 );
                 await _notifier.loadSounds();
