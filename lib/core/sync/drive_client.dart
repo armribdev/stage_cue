@@ -1,3 +1,4 @@
+import 'drive_account_profile.dart';
 import 'drive_models.dart';
 
 /// Abstraction d'accès à un stockage de fichiers distant.
@@ -82,4 +83,7 @@ abstract class DriveAuthenticator {
 
   /// Email du compte connecté, ou null si déconnecté.
   String? get accountEmail;
+
+  /// Profil du compte connecté (nom, photo…), ou null si déconnecté.
+  DriveAccountProfile? get accountProfile;
 }

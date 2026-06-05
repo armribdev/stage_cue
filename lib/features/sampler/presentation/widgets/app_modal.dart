@@ -66,46 +66,61 @@ class AppModalShell extends StatelessWidget {
     super.key,
     required this.title,
     required this.body,
+    this.actions,
     this.onClose,
   });
 
+  static const double _headerHeight = 52;
+
   final String title;
   final Widget body;
+  final List<Widget>? actions;
   final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
+    final modalActions = actions ?? const <Widget>[];
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppModalStyle.padding,
-            AppModalStyle.padding,
-            8,
-            8,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleLarge,
+          padding: const EdgeInsets.symmetric(horizontal: AppModalStyle.padding),
+          child: SizedBox(
+            height: _headerHeight,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
                 ),
-              ),
-              IconButton(
-                tooltip: 'Fermer',
-                onPressed: onClose ?? () => Navigator.of(context).pop(),
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-                constraints: const BoxConstraints.tightFor(
-                  width: 34,
-                  height: 34,
+                for (var i = 0; i < modalActions.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  modalActions[i],
+                ],
+                if (modalActions.isNotEmpty) const SizedBox(width: 12),
+                IconButton(
+                  tooltip: 'Fermer',
+                  onPressed: onClose ?? () => Navigator.of(context).pop(),
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 34,
+                    height: 34,
+                  ),
+                  icon: const Icon(Icons.close, size: 22),
                 ),
-                icon: const Icon(Icons.close),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         const Divider(height: 1),

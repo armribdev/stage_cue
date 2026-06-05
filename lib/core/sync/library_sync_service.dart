@@ -69,6 +69,7 @@ class LibrarySyncService {
   /// Pousse l'état local vers Drive si aucun conflit de révision n'est détecté.
   Future<PushOutcome> push({
     required DriveClient client,
+    required int libraryId,
     required String libraryFolderId,
     required int knownRevision,
   }) async {
@@ -81,7 +82,8 @@ class LibrarySyncService {
 
     final tempDir = await _resolveTempDir();
     final snapshotPath = p.join(tempDir.path, 'library-push.db');
-    final length = await _snapshotStore.exportSnapshot(snapshotPath);
+    final length =
+        await _snapshotStore.exportLibrarySnapshot(libraryId, snapshotPath);
 
     try {
       await _putFile(
@@ -107,10 +109,25 @@ class LibrarySyncService {
     }
   }
 
-  /// Télécharge le snapshot distant s'il est plus récent et le met en attente
-  /// (appliqué au prochain démarrage).
+  /// Indique si un snapshot BDD (`.stagecue/library.db`) existe sur Drive.
+  Future<bool> hasRemoteSnapshot({
+    required DriveClient client,
+    required String libraryFolderId,
+  }) async {
+    final stage = await _findInFolder(client, libraryFolderId, _stageFolderName);
+    if (stage == null) return false;
+    final dbFile = await client.findInFolder(
+      parentId: stage.id,
+      name: _dbFileName,
+    );
+    return dbFile != null;
+  }
+
+  /// Télécharge le snapshot distant s'il est plus récent et le fusionne
+  /// immédiatement dans la base locale (périmètre : [libraryId]).
   Future<PullOutcome> pull({
     required DriveClient client,
+    required int libraryId,
     required String libraryFolderId,
     required int knownRevision,
   }) async {
@@ -135,7 +152,11 @@ class LibrarySyncService {
         fileId: dbFile.id,
         destinationPath: downloadPath,
       );
-      await _snapshotStore.stageForImport(downloadPath);
+      await _snapshotStore.mergeLibrarySnapshot(
+        libraryId,
+        downloadPath,
+        driveFolderId: libraryFolderId,
+      );
       return PullStaged(remoteManifest.revision);
     } finally {
       await _safeDelete(downloadPath);

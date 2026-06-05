@@ -37,25 +37,36 @@ class AutoSyncCoordinator {
     final touchesUserData = updates.any((u) => u.table != 'libraries');
     if (!touchesUserData) return;
 
-    final library = await _firstConnectedLibrary();
-    if (library == null) return;
-    _syncController.schedulePush(library);
+    final libraries = await _connectedLibraries();
+    for (final library in libraries) {
+      _syncController.schedulePush(library);
+    }
   }
 
   Future<void> _initialPull() async {
     final reconnected = await _repository.reconnectSilently();
     if (!reconnected) return;
-    final library = await _firstConnectedLibrary();
-    if (library == null) return;
-    await _syncController.pullForLaunch(library);
+
+    final libraries = await _connectedLibraries();
+    if (libraries.isEmpty) return;
+
+    for (final library in libraries) {
+      await _syncController.pullForLaunch(library);
+    }
+
+    // Indexe les fichiers ajoutés manuellement sur Drive (absents de la BDD).
+    for (final library in libraries) {
+      try {
+        await _repository.indexDriveFolder(library: library);
+      } catch (_) {
+        // Continue avec les autres dossiers si l'indexation échoue.
+      }
+    }
   }
 
-  Future<Library?> _firstConnectedLibrary() async {
+  Future<List<Library>> _connectedLibraries() async {
     final libraries = await _repository.getLibraries();
-    for (final library in libraries) {
-      if (library.isConnectedToDrive) return library;
-    }
-    return null;
+    return libraries.where((library) => library.isConnectedToDrive).toList();
   }
 
   void dispose() {

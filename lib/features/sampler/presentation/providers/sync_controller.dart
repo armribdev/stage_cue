@@ -76,7 +76,7 @@ class SyncController extends ChangeNotifier {
   final LibraryRepository _repository;
   final Duration _debounce;
 
-  Timer? _debounceTimer;
+  final Map<int, Timer> _debounceTimers = {};
   SyncState _state = const SyncState();
 
   SyncController(
@@ -94,14 +94,18 @@ class SyncController extends ChangeNotifier {
   /// Planifie un push après une période d'inactivité (anti-rebond). Appelé à
   /// chaque modification de la bibliothèque (tags, pads, settings…).
   void schedulePush(Library library) {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(_debounce, () => syncNow(library));
+    _debounceTimers[library.id]?.cancel();
+    _debounceTimers[library.id] = Timer(_debounce, () {
+      _debounceTimers.remove(library.id);
+      unawaited(syncNow(library));
+    });
   }
 
   /// Pousse immédiatement l'état local vers Drive.
   Future<void> syncNow(Library library) async {
     // Un push immédiat supersède un push débouncé éventuellement en attente.
-    _debounceTimer?.cancel();
+    _debounceTimers[library.id]?.cancel();
+    _debounceTimers.remove(library.id);
     if (!await _ensureConnected()) {
       _set(_state.copyWith(status: SyncStatus.offline));
       return;
@@ -116,8 +120,7 @@ class SyncController extends ChangeNotifier {
     }
   }
 
-  /// Au lancement : reconnexion silencieuse puis pull du snapshot distant.
-  /// Un snapshot plus récent est mis en attente (appliqué au prochain démarrage).
+  /// Au lancement : reconnexion silencieuse puis pull/fusion du snapshot distant.
   Future<void> pullForLaunch(Library library) async {
     if (!await _ensureConnected()) {
       _set(_state.copyWith(status: SyncStatus.offline));
@@ -131,7 +134,6 @@ class SyncController extends ChangeNotifier {
         case PullStaged():
           _set(_state.copyWith(
             status: SyncStatus.synced,
-            pendingRestart: true,
             lastSyncedAt: DateTime.now(),
           ));
         case PullUpToDate():
@@ -172,7 +174,6 @@ class SyncController extends ChangeNotifier {
         case PullStaged():
           _set(_state.copyWith(
             status: SyncStatus.synced,
-            pendingRestart: true,
             lastSyncedAt: DateTime.now(),
             clearConflict: true,
           ));
@@ -211,7 +212,10 @@ class SyncController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
+    for (final timer in _debounceTimers.values) {
+      timer.cancel();
+    }
+    _debounceTimers.clear();
     super.dispose();
   }
 }

@@ -213,7 +213,11 @@ class SamplerNotifier extends ChangeNotifier {
     try {
       var boards = await _repository.getSoundBoards();
       if (boards.isEmpty) {
-        final newBoardId = await _repository.createSoundBoard('Scène 1');
+        final libraryId = await _libraryRepository?.singleConnectedLibraryId();
+        final newBoardId = await _repository.createSoundBoard(
+          'Scène 1',
+          libraryId: libraryId,
+        );
         boards = await _repository.getSoundBoards();
         selectBoardId = newBoardId;
       }
@@ -257,10 +261,15 @@ class SamplerNotifier extends ChangeNotifier {
 
   Future<SoundBoard?> createBoard(String name) async {
     try {
-      final newBoardId = await _repository.createSoundBoard(name);
+      final libraryId = await _libraryRepository?.singleConnectedLibraryId();
+      final newBoardId = await _repository.createSoundBoard(
+        name,
+        libraryId: libraryId,
+      );
       final newBoard = SoundBoard(
         id: newBoardId,
         name: name,
+        libraryId: libraryId,
         createdAt: DateTime.now(),
       );
 
@@ -335,12 +344,16 @@ class SamplerNotifier extends ChangeNotifier {
     String newName,
   ) async {
     try {
-      final newBoardId = await _repository.createSoundBoard(newName);
+      final newBoardId = await _repository.createSoundBoard(
+        newName,
+        libraryId: sourceBoard.libraryId,
+      );
       await _repository.duplicatePads(sourceBoard.id, newBoardId);
 
       final newBoard = SoundBoard(
         id: newBoardId,
         name: newName,
+        libraryId: sourceBoard.libraryId,
         createdAt: DateTime.now(),
       );
       _state = _state.copyWith(

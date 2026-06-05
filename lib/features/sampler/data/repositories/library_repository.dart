@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/sync/audio_cache_manager.dart';
+import '../../../../core/sync/drive_account_profile.dart';
 import '../../../../core/sync/drive_client.dart';
 import '../../../../core/sync/drive_models.dart';
 import '../../../../core/sync/google_drive_client.dart';
@@ -18,6 +19,20 @@ import '../../domain/entities/sound.dart';
 import '../datasources/local_library_datasource.dart';
 import '../datasources/local_sound_datasource.dart';
 import '../models/indexing_progress.dart';
+
+/// Résultat de l'initialisation d'un dossier Drive nouvellement lié.
+class DriveFolderLinkInitResult {
+  final bool hadRemoteSnapshot;
+  final int indexedNewFiles;
+
+  const DriveFolderLinkInitResult({
+    required this.hadRemoteSnapshot,
+    required this.indexedNewFiles,
+  });
+
+  /// Upload si la BDD distante n'existait pas ou si de nouveaux fichiers ont été indexés.
+  bool get shouldUpload => !hadRemoteSnapshot || indexedNewFiles > 0;
+}
 
 /// Orchestration des bibliothèques portables : relie l'authentification Drive
 /// (infra `core/sync`) à la persistance locale (table Libraries).
@@ -54,7 +69,38 @@ class LibraryRepository {
 
   DriveClient? get activeClient => _activeClient;
   String? get connectedAccountEmail => _authenticator.accountEmail;
+  DriveAccountProfile? get connectedAccountProfile =>
+      isConnected ? _authenticator.accountProfile : null;
   bool get isConnected => _activeClient != null;
+
+  /// Identifiant Drive d'un dossier choisi via le sélecteur SAF Android.
+  ///
+  /// SAF expose parfois l'ID directement ; sinon on le déduit via l'API Drive
+  /// (chemin relatif ou nom du dossier).
+  Future<String?> resolveSafDriveFolderId({
+    required String? driveFileId,
+    required String folderName,
+    String? relativeDrivePath,
+  }) async {
+    if (driveFileId != null && driveFileId.isNotEmpty) {
+      return driveFileId;
+    }
+
+    final client = await _ensureDriveClient();
+    if (client == null) {
+      return null;
+    }
+
+    final path = relativeDrivePath?.trim() ?? '';
+    if (path.isNotEmpty) {
+      final byPath = await client.findFolderByRelativePath(path);
+      if (byPath != null) {
+        return byPath;
+      }
+    }
+
+    return client.findFolderIdByName(folderName);
+  }
 
   /// Résout l'e-mail propriétaire d'un dossier Drive choisi via SAF.
   ///
@@ -95,6 +141,15 @@ class LibraryRepository {
   }
 
   Future<List<Library>> getLibraries() => _dataSource.getAllLibraries();
+
+  /// Bibliothèque Drive unique liée, si une seule est configurée.
+  Future<int?> singleConnectedLibraryId() async {
+    final libraries = await getLibraries();
+    final connected =
+        libraries.where((library) => library.isConnectedToDrive).toList();
+    if (connected.length != 1) return null;
+    return connected.first.id;
+  }
 
   /// Établit une session Drive (silencieuse puis interactive si besoin).
   /// Retourne false si l'utilisateur annule la connexion.
@@ -247,6 +302,7 @@ class LibraryRepository {
     }
     final outcome = await _syncService.push(
       client: client,
+      libraryId: library.id,
       libraryFolderId: folderId,
       knownRevision: overrideKnownRevision ?? library.lastSyncedRevision,
     );
@@ -260,8 +316,7 @@ class LibraryRepository {
     return outcome;
   }
 
-  /// Télécharge le snapshot distant de [library] s'il est plus récent. Un
-  /// snapshot tiré est appliqué au prochain démarrage de l'application.
+  /// Télécharge et fusionne le snapshot distant de [library] s'il est plus récent.
   Future<PullOutcome> pullLibrary(Library library) async {
     final client = _activeClient;
     final folderId = library.driveFolderId;
@@ -270,6 +325,7 @@ class LibraryRepository {
     }
     final outcome = await _syncService.pull(
       client: client,
+      libraryId: library.id,
       libraryFolderId: folderId,
       knownRevision: library.lastSyncedRevision,
     );
@@ -281,6 +337,47 @@ class LibraryRepository {
       );
     }
     return outcome;
+  }
+
+  Future<Library?> getLibraryById(int id) => _dataSource.getLibraryById(id);
+
+  /// Indique si le dossier Drive possède déjà un snapshot `.stagecue/library.db`.
+  Future<bool> hasRemoteSnapshot(Library library) async {
+    final client = _activeClient;
+    final folderId = library.driveFolderId;
+    if (client == null || folderId == null) {
+      throw StateError('Bibliothèque non connectée à Drive');
+    }
+    return _syncService.hasRemoteSnapshot(
+      client: client,
+      libraryFolderId: folderId,
+    );
+  }
+
+  /// Après liaison d'un dossier Drive : pull si BDD distante, indexation des
+  /// nouveaux fichiers audio, puis [DriveFolderLinkInitResult.shouldUpload]
+  /// indique s'il faut pousser les changements.
+  Future<DriveFolderLinkInitResult> initializeLinkedDriveFolder({
+    required Library library,
+    void Function(IndexingProgress)? onProgress,
+  }) async {
+    final hasRemote = await hasRemoteSnapshot(library);
+    var current = library;
+
+    if (hasRemote) {
+      await pullLibrary(current);
+      current = await _dataSource.getLibraryById(library.id) ?? current;
+    }
+
+    final indexed = await indexDriveFolder(
+      library: current,
+      onProgress: onProgress,
+    );
+
+    return DriveFolderLinkInitResult(
+      hadRemoteSnapshot: hasRemote,
+      indexedNewFiles: indexed,
+    );
   }
 
   /// Résout le chemin local jouable d'un son.
@@ -373,6 +470,8 @@ class LibraryRepository {
 
       var processedCount = 0;
       var indexedCount = 0;
+      var failureCount = 0;
+      String? lastFailure;
 
       for (final audio in audioFiles) {
         processedCount++;
@@ -388,8 +487,9 @@ class LibraryRepository {
             relativePath: audio.relativePath,
           );
           if (isNew) indexedCount++;
-        } catch (_) {
-          // Continue avec les autres fichiers.
+        } catch (e) {
+          failureCount++;
+          lastFailure = e.toString();
         }
 
         onProgress?.call(
@@ -402,12 +502,27 @@ class LibraryRepository {
         );
       }
 
+      if (audioFiles.isNotEmpty && indexedCount == 0 && failureCount > 0) {
+        final error = lastFailure ?? 'Échec du téléchargement des fichiers audio';
+        onProgress?.call(
+          IndexingProgress(
+            path: library.name,
+            current: processedCount,
+            total: audioFiles.length,
+            isComplete: true,
+            error: error,
+          ),
+        );
+        throw StateError(error);
+      }
+
       onProgress?.call(
         IndexingProgress(
           path: library.name,
           current: processedCount,
           total: audioFiles.length,
           isComplete: true,
+          error: failureCount > 0 ? '$failureCount fichier(s) ignoré(s)' : null,
         ),
       );
 
@@ -468,8 +583,8 @@ class LibraryRepository {
         );
       } else if (isAudioFile(child.name)) {
         final relativePath = relativePrefix.isEmpty
-            ? 'sounds/${child.name}'
-            : 'sounds/$relativePrefix/${child.name}';
+            ? child.name
+            : '$relativePrefix/${child.name}';
         results.add((relativePath: relativePath));
       }
     }

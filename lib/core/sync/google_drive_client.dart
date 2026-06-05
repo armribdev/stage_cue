@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart' as gsi;
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 
+import 'drive_account_profile.dart';
 import 'drive_client.dart';
 import 'drive_models.dart';
 import 'google_drive_desktop_auth.dart';
@@ -280,6 +281,59 @@ class GoogleDriveClient implements DriveClient {
 
   /// Recherche un dossier par nom (tous Drive accessibles) et renvoie l'e-mail propriétaire.
   Future<String?> findFolderOwnerByName(String folderName) async {
+    final folder = await _findFirstFolderByName(folderName);
+    if (folder == null) {
+      return null;
+    }
+
+    try {
+      final file = await _api.files.get(
+        folder.id!,
+        $fields: 'owners(emailAddress)',
+        supportsAllDrives: true,
+      ) as drive.File;
+      final owners = file.owners;
+      if (owners == null || owners.isEmpty) {
+        return null;
+      }
+      return owners.first.emailAddress;
+    } on drive.DetailedApiRequestError catch (e) {
+      if (e.status == 404 || e.status == 403) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  /// Identifiant Drive d'un dossier trouvé par nom (premier résultat accessible).
+  Future<String?> findFolderIdByName(String folderName) async {
+    final folder = await _findFirstFolderByName(folderName);
+    return folder?.id;
+  }
+
+  /// Parcourt « Mon Drive » segment par segment et renvoie l'identifiant du dossier cible.
+  Future<String?> findFolderByRelativePath(String relativePath) async {
+    final segments = relativePath
+        .split('/')
+        .map((segment) => segment.trim())
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+    if (segments.isEmpty) {
+      return null;
+    }
+
+    var parentId = 'root';
+    for (final segment in segments) {
+      final folder = await findInFolder(parentId: parentId, name: segment);
+      if (folder == null || !folder.isFolder) {
+        return null;
+      }
+      parentId = folder.id;
+    }
+    return parentId;
+  }
+
+  Future<drive.File?> _findFirstFolderByName(String folderName) async {
     final trimmed = folderName.trim();
     if (trimmed.isEmpty) {
       return null;
@@ -293,18 +347,13 @@ class GoogleDriveClient implements DriveClient {
         corpora: 'allDrives',
         includeItemsFromAllDrives: true,
         supportsAllDrives: true,
-        $fields: 'nextPageToken, files(owners/emailAddress)',
+        $fields: 'nextPageToken, files(id)',
         pageSize: 20,
         pageToken: pageToken,
       );
-      for (final file in response.files ?? const <drive.File>[]) {
-        final owners = file.owners;
-        if (owners != null && owners.isNotEmpty) {
-          final email = owners.first.emailAddress;
-          if (email != null && email.isNotEmpty) {
-            return email;
-          }
-        }
+      final files = response.files;
+      if (files != null && files.isNotEmpty) {
+        return files.first;
       }
       pageToken = response.nextPageToken;
     } while (pageToken != null);
@@ -337,6 +386,9 @@ class GoogleDriveAuthenticator implements DriveAuthenticator {
   String? get accountEmail => _delegate.accountEmail;
 
   @override
+  DriveAccountProfile? get accountProfile => _delegate.accountProfile;
+
+  @override
   Future<DriveClient?> connect() => _delegate.connect();
 
   @override
@@ -352,6 +404,7 @@ class _MobileGoogleDriveAuthenticator implements DriveAuthenticator {
       : _googleSignIn = googleSignIn ??
             gsi.GoogleSignIn(
               scopes: const [
+                drive.DriveApi.driveScope,
                 drive.DriveApi.driveFileScope,
                 drive.DriveApi.driveReadonlyScope,
               ],
@@ -360,7 +413,20 @@ class _MobileGoogleDriveAuthenticator implements DriveAuthenticator {
   final gsi.GoogleSignIn _googleSignIn;
 
   @override
-  String? get accountEmail => _googleSignIn.currentUser?.email;
+  String? get accountEmail => accountProfile?.email;
+
+  @override
+  DriveAccountProfile? get accountProfile {
+    final user = _googleSignIn.currentUser;
+    if (user == null) {
+      return null;
+    }
+    return DriveAccountProfile(
+      email: user.email,
+      displayName: user.displayName,
+      photoUrl: user.photoUrl,
+    );
+  }
 
   Future<DriveClient?> _clientForCurrentUser() async {
     final authClient = await _googleSignIn.authenticatedClient();

@@ -27,7 +27,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration {
@@ -128,6 +128,9 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 14) {
           await m.addColumn(libraries, libraries.sharedDriveId);
+        }
+        if (from < 15) {
+          await m.addColumn(soundBoards, soundBoards.libraryId);
         }
       },
       beforeOpen: (details) async {
