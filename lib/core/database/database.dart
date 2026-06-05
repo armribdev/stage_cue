@@ -450,6 +450,12 @@ class AppDatabase extends _$AppDatabase {
   }
 }
 
+/// Nom du fichier de base principal.
+const String kDbFileName = 'db.sqlite';
+
+/// Snapshot tiré depuis Drive en attente d'application (cf. LibrarySyncService).
+const String kPendingDbFileName = 'db.pending.sqlite';
+
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     // Initialiser les bibliothèques natives SQLite sur Android/iOS
@@ -458,7 +464,24 @@ LazyDatabase _openConnection() {
     }
 
     final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'db.sqlite'));
+    final file = File(p.join(dbFolder.path, kDbFileName));
+
+    // Appliquer un snapshot tiré depuis Drive AVANT d'ouvrir la base : on ne
+    // remplace jamais un `.sqlite` ouvert. Le swap est atomique (rename).
+    await _applyPendingSnapshot(dbFolder.path, file);
+
     return NativeDatabase.createInBackground(file);
   });
+}
+
+Future<void> _applyPendingSnapshot(String dbFolderPath, File dbFile) async {
+  final pending = File(p.join(dbFolderPath, kPendingDbFileName));
+  if (!await pending.exists()) return;
+
+  // Supprimer la base courante et ses journaux WAL/SHM avant le swap.
+  for (final path in [dbFile.path, '${dbFile.path}-wal', '${dbFile.path}-shm']) {
+    final f = File(path);
+    if (await f.exists()) await f.delete();
+  }
+  await pending.rename(dbFile.path);
 }
