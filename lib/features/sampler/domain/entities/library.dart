@@ -1,0 +1,30 @@
+/// Entité métier représentant une bibliothèque portable (synchronisable Drive).
+///
+/// Une bibliothèque est un dossier distant (Drive) qui regroupe des fichiers
+/// audio + leurs métadonnées. [localRootPath] est la matérialisation/cache
+/// locale ; les sons stockent leur chemin relatif à cette racine.
+class Library {
+  final int id;
+  final String name;
+  final String localRootPath;
+
+  /// Identifiant du dossier Drive, ou null tant que la connexion n'est pas faite.
+  final String? driveFolderId;
+
+  /// Dernière révision de snapshot DB connue localement (cf. étape sync).
+  final int lastSyncedRevision;
+  final DateTime? lastSyncedAt;
+  final DateTime createdAt;
+
+  Library({
+    required this.id,
+    required this.name,
+    required this.localRootPath,
+    this.driveFolderId,
+    this.lastSyncedRevision = 0,
+    this.lastSyncedAt,
+    required this.createdAt,
+  });
+
+  bool get isConnectedToDrive => driveFolderId != null;
+}
