@@ -21,6 +21,12 @@ class Libraries extends Table {
   TextColumn get localRootPath => text()();
   // Identifiant du dossier distant (Google Drive) — null tant que non connecté.
   TextColumn get driveFolderId => text().nullable()();
+  /// Chemin relatif dans Drive (sans e-mail propriétaire).
+  TextColumn get drivePath => text().nullable()();
+  /// E-mail du propriétaire du dossier Drive lié.
+  TextColumn get ownerEmail => text().nullable()();
+  /// Drive d'équipe parent, si le dossier est dans un drive partagé.
+  TextColumn get sharedDriveId => text().nullable()();
   // Dernière révision de snapshot DB connue localement (cf. sync).
   IntColumn get lastSyncedRevision => integer().withDefault(const Constant(0))();
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();

@@ -6,13 +6,25 @@ import 'drive_models.dart';
 /// interface, ce qui permet de mocker la synchro en test et de changer de
 /// fournisseur sans toucher au domaine.
 abstract class DriveClient {
+  /// Drives d'équipe accessibles par l'utilisateur connecté.
+  Future<List<DriveSharedDrive>> listSharedDrives();
+
+  /// Dossiers partagés individuellement avec l'utilisateur (« Partagés avec moi »).
+  Future<List<DriveFile>> listSharedWithMeFolders();
+
   /// Liste les enfants directs d'un dossier (fichiers et sous-dossiers).
-  Future<List<DriveFile>> listFolder(String folderId);
+  ///
+  /// [sharedDriveId] requis pour parcourir la racine d'un drive d'équipe.
+  Future<List<DriveFile>> listFolder(
+    String folderId, {
+    String? sharedDriveId,
+  });
 
   /// Cherche un enfant direct par nom dans un dossier. Null si absent.
   Future<DriveFile?> findInFolder({
     required String parentId,
     required String name,
+    String? sharedDriveId,
   });
 
   /// Crée un dossier. `parentId` null = racine « My Drive ».
@@ -36,7 +48,10 @@ abstract class DriveClient {
   });
 
   /// Métadonnées d'un fichier (révision, taille, md5…). Null si introuvable.
-  Future<DriveFile?> getFile(String fileId);
+  Future<DriveFile?> getFile(
+    String fileId, {
+    String? sharedDriveId,
+  });
 
   /// Télécharge le contenu complet en mémoire (réservé aux petits fichiers :
   /// manifest, snapshot DB). Pour l'audio, utiliser [downloadToFile].

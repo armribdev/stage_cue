@@ -11,6 +11,15 @@ class Library {
   /// Identifiant du dossier Drive, ou null tant que la connexion n'est pas faite.
   final String? driveFolderId;
 
+  /// Chemin relatif dans Drive (affichage : propriétaire/chemin).
+  final String? drivePath;
+
+  /// E-mail du propriétaire du dossier Drive.
+  final String? ownerEmail;
+
+  /// Drive d'équipe parent (null = Mon Drive ou dossier partagé individuellement).
+  final String? sharedDriveId;
+
   /// Dernière révision de snapshot DB connue localement (cf. étape sync).
   final int lastSyncedRevision;
   final DateTime? lastSyncedAt;
@@ -21,6 +30,9 @@ class Library {
     required this.name,
     required this.localRootPath,
     this.driveFolderId,
+    this.drivePath,
+    this.ownerEmail,
+    this.sharedDriveId,
     this.lastSyncedRevision = 0,
     this.lastSyncedAt,
     required this.createdAt,

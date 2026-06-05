@@ -1,12 +1,13 @@
 import 'dart:io';
 
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_sign_in/google_sign_in.dart' as gsi;
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 
 import 'drive_client.dart';
 import 'drive_models.dart';
+import 'google_drive_desktop_auth.dart';
 
 /// Champs Drive demandés pour décrire un fichier (révision, hash, taille…).
 const String _fileFields =
@@ -40,16 +41,69 @@ class GoogleDriveClient implements DriveClient {
   String _escape(String value) => value.replaceAll("'", r"\'");
 
   @override
-  Future<List<DriveFile>> listFolder(String folderId) async {
+  Future<List<DriveSharedDrive>> listSharedDrives() async {
+    final results = <DriveSharedDrive>[];
+    String? pageToken;
+    do {
+      final driveList = await _api.drives.list(
+        pageSize: 100,
+        pageToken: pageToken,
+      );
+      for (final sharedDrive in driveList.drives ?? const <drive.Drive>[]) {
+        final id = sharedDrive.id;
+        final name = sharedDrive.name;
+        if (id == null || name == null) {
+          continue;
+        }
+        results.add(DriveSharedDrive(id: id, name: name));
+      }
+      pageToken = driveList.nextPageToken;
+    } while (pageToken != null);
+
+    results.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
+    return results;
+  }
+
+  @override
+  Future<List<DriveFile>> listSharedWithMeFolders() async {
+    return _listFiles(
+      q: "sharedWithMe = true and mimeType = '$driveFolderMimeType' "
+          'and trashed = false',
+      pageSize: 200,
+    );
+  }
+
+  @override
+  Future<List<DriveFile>> listFolder(
+    String folderId, {
+    String? sharedDriveId,
+  }) async {
+    return _listFiles(
+      q: "'${_escape(folderId)}' in parents and trashed = false",
+      sharedDriveId: sharedDriveId,
+    );
+  }
+
+  Future<List<DriveFile>> _listFiles({
+    required String q,
+    String? sharedDriveId,
+    int pageSize = 200,
+  }) async {
     final results = <DriveFile>[];
     String? pageToken;
     do {
       final fileList = await _api.files.list(
-        q: "'${_escape(folderId)}' in parents and trashed = false",
+        q: q,
         spaces: 'drive',
         $fields: 'nextPageToken, files($_fileFields)',
-        pageSize: 200,
+        pageSize: pageSize,
         pageToken: pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+        driveId: sharedDriveId,
+        corpora: sharedDriveId != null ? 'drive' : null,
       );
       for (final f in fileList.files ?? const <drive.File>[]) {
         results.add(_toDriveFile(f));
@@ -63,6 +117,7 @@ class GoogleDriveClient implements DriveClient {
   Future<DriveFile?> findInFolder({
     required String parentId,
     required String name,
+    String? sharedDriveId,
   }) async {
     final fileList = await _api.files.list(
       q: "'${_escape(parentId)}' in parents and "
@@ -70,6 +125,10 @@ class GoogleDriveClient implements DriveClient {
       spaces: 'drive',
       $fields: 'files($_fileFields)',
       pageSize: 1,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      driveId: sharedDriveId,
+      corpora: sharedDriveId != null ? 'drive' : null,
     );
     final files = fileList.files;
     if (files == null || files.isEmpty) return null;
@@ -135,9 +194,16 @@ class GoogleDriveClient implements DriveClient {
   }
 
   @override
-  Future<DriveFile?> getFile(String fileId) async {
+  Future<DriveFile?> getFile(
+    String fileId, {
+    String? sharedDriveId,
+  }) async {
     try {
-      final f = await _api.files.get(fileId, $fields: _fileFields) as drive.File;
+      final f = await _api.files.get(
+        fileId,
+        $fields: _fileFields,
+        supportsAllDrives: true,
+      ) as drive.File;
       return _toDriveFile(f);
     } on drive.DetailedApiRequestError catch (e) {
       if (e.status == 404) return null;
@@ -150,6 +216,7 @@ class GoogleDriveClient implements DriveClient {
     final media = await _api.files.get(
       fileId,
       downloadOptions: drive.DownloadOptions.fullMedia,
+      supportsAllDrives: true,
     ) as drive.Media;
     final bytes = <int>[];
     await for (final chunk in media.stream) {
@@ -166,6 +233,7 @@ class GoogleDriveClient implements DriveClient {
     final media = await _api.files.get(
       fileId,
       downloadOptions: drive.DownloadOptions.fullMedia,
+      supportsAllDrives: true,
     ) as drive.Media;
 
     final destination = File(destinationPath);
@@ -250,43 +318,73 @@ class GoogleDriveClient implements DriveClient {
   }
 }
 
-/// Authentificateur Google : OAuth via `google_sign_in`, puis construction d'un
-/// [GoogleDriveClient] sur un client HTTP authentifié.
-///
-/// Note plateforme : `google_sign_in` ne supporte pas Windows/Linux desktop —
-/// l'auth Drive fonctionne sur Android, iOS, macOS et Web.
+/// Authentificateur Google : OAuth via `google_sign_in` (mobile/macOS) ou
+/// navigateur système (Windows/Linux), puis [GoogleDriveClient].
 class GoogleDriveAuthenticator implements DriveAuthenticator {
-  final GoogleSignIn _googleSignIn;
+  GoogleDriveAuthenticator({DriveAuthenticator? authenticator})
+      : _delegate = authenticator ?? _createPlatformAuthenticator();
 
-  GoogleDriveAuthenticator({GoogleSignIn? googleSignIn})
+  final DriveAuthenticator _delegate;
+
+  static DriveAuthenticator _createPlatformAuthenticator() {
+    if (Platform.isWindows || Platform.isLinux) {
+      return GoogleDriveDesktopAuthenticator();
+    }
+    return _MobileGoogleDriveAuthenticator();
+  }
+
+  @override
+  String? get accountEmail => _delegate.accountEmail;
+
+  @override
+  Future<DriveClient?> connect() => _delegate.connect();
+
+  @override
+  Future<DriveClient?> connectSilently() => _delegate.connectSilently();
+
+  @override
+  Future<void> signOut() => _delegate.signOut();
+}
+
+/// OAuth via le plugin `google_sign_in` (Android, iOS, macOS).
+class _MobileGoogleDriveAuthenticator implements DriveAuthenticator {
+  _MobileGoogleDriveAuthenticator({gsi.GoogleSignIn? googleSignIn})
       : _googleSignIn = googleSignIn ??
-            GoogleSignIn(
+            gsi.GoogleSignIn(
               scopes: const [
                 drive.DriveApi.driveFileScope,
                 drive.DriveApi.driveReadonlyScope,
               ],
             );
 
+  final gsi.GoogleSignIn _googleSignIn;
+
   @override
   String? get accountEmail => _googleSignIn.currentUser?.email;
 
   Future<DriveClient?> _clientForCurrentUser() async {
     final authClient = await _googleSignIn.authenticatedClient();
-    if (authClient == null) return null;
+    if (authClient == null) {
+      return null;
+    }
     return GoogleDriveClient(drive.DriveApi(authClient), authClient);
   }
 
   @override
   Future<DriveClient?> connect() async {
     final account = await _googleSignIn.signIn();
-    if (account == null) return null; // annulé par l'utilisateur
+    if (account == null) {
+      return null;
+    }
     return _clientForCurrentUser();
   }
 
   @override
   Future<DriveClient?> connectSilently() async {
     final account = await _googleSignIn.signInSilently();
-    if (account == null) return null;
+    if (account == null) {
+      return null;
+    }
     return _clientForCurrentUser();
   }
 

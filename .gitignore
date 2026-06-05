@@ -42,6 +42,9 @@ app.*.map.json
 # Claude Code local overrides (personal preferences, not shared)
 .claude/settings.local.json
 
+# Identifiants OAuth Google Drive (desktop)
+lib/core/sync/google_oauth_secrets.dart
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile

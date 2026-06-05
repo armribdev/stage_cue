@@ -123,11 +123,16 @@ class AudioCacheManager {
       final folder = await client.findInFolder(
         parentId: parentId!,
         name: segments[i],
+        sharedDriveId: library.sharedDriveId,
       );
       if (folder == null) return null;
       parentId = folder.id;
     }
-    return client.findInFolder(parentId: parentId!, name: segments.last);
+    return client.findInFolder(
+      parentId: parentId!,
+      name: segments.last,
+      sharedDriveId: library.sharedDriveId,
+    );
   }
 
   Future<String> _ensureRemoteFolders(
@@ -141,6 +146,7 @@ class AudioCacheManager {
       var folder = await client.findInFolder(
         parentId: parentId,
         name: segment,
+        sharedDriveId: library.sharedDriveId,
       );
       folder ??= await client.createFolder(name: segment, parentId: parentId);
       parentId = folder.id;
