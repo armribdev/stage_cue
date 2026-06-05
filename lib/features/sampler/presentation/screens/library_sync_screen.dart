@@ -1,5 +1,9 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/file_utils.dart' show audioExtensions;
 import '../../data/repositories/library_repository.dart';
 import '../../domain/entities/library.dart';
 import '../providers/sync_controller.dart';
@@ -86,6 +90,46 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
     await _loadLibraries();
     if (_syncController.state.status == SyncStatus.conflict && mounted) {
       await _showConflictDialog(library);
+    }
+  }
+
+  Future<void> _addSounds(Library library) async {
+    if (!_repository.isConnected) {
+      _snack('Connecte d\'abord la bibliothèque à Drive');
+      return;
+    }
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: audioExtensions,
+      allowMultiple: true,
+    );
+    if (result == null) return;
+
+    final files = result.files
+        .where((f) => f.path != null)
+        .map((f) => File(f.path!))
+        .toList();
+    if (files.isEmpty) return;
+
+    setState(() => _isBusy = true);
+    try {
+      final created = await _repository.addSoundsToLibrary(
+        library: library,
+        sources: files,
+      );
+      // Pousse les nouveaux sons (DB) immédiatement vers Drive.
+      await _syncController.syncNow(library);
+      await _loadLibraries();
+      if (!mounted) return;
+      _snack('$created son(s) ajouté(s) et synchronisé(s)');
+      if (_syncController.state.status == SyncStatus.conflict) {
+        await _showConflictDialog(library);
+      }
+    } catch (e) {
+      if (mounted) _snack('Erreur lors de l\'ajout : $e');
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
     }
   }
 
@@ -197,6 +241,7 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
                     (library) => _LibraryTile(
                       library: library,
                       enabled: !_isBusy,
+                      onAddSounds: () => _addSounds(library),
                       onSync: () => _syncNow(library),
                       onPull: () => _pull(library),
                     ),
@@ -312,12 +357,14 @@ class _SyncStatusBanner extends StatelessWidget {
 class _LibraryTile extends StatelessWidget {
   final Library library;
   final bool enabled;
+  final VoidCallback onAddSounds;
   final VoidCallback onSync;
   final VoidCallback onPull;
 
   const _LibraryTile({
     required this.library,
     required this.enabled,
+    required this.onAddSounds,
     required this.onSync,
     required this.onPull,
   });
@@ -336,6 +383,11 @@ class _LibraryTile extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              icon: const Icon(Icons.library_add),
+              tooltip: 'Ajouter des sons',
+              onPressed: enabled ? onAddSounds : null,
+            ),
             IconButton(
               icon: const Icon(Icons.cloud_download),
               tooltip: 'Récupérer depuis Drive',
