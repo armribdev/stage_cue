@@ -43,6 +43,11 @@ dependencies:
   sqlite3_flutter_libs: ^0.5.41
   permission_handler: ^12.0.1
   reorderable_grid_view: ^2.2.8
+  # Synchronisation Google Drive (bibliothèque portable)
+  google_sign_in: ^6.2.2
+  googleapis: ^13.2.0
+  extension_google_sign_in_as_googleapis_auth: ^2.0.12
+  http: ^1.2.2
 
 
 dev_dependencies:
