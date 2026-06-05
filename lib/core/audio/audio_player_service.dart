@@ -54,8 +54,42 @@ class AudioPlayerService {
   /// Définit le volume (0.0 -> 1.0)
   void setVolume(double volume) {
     final clamped = volume.clamp(0.0, 1.0);
-    if (_currentHandle != null && SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
+    if (_hasActiveHandle) {
       SoLoud.instance.setVolume(_currentHandle!, clamped);
+    }
+  }
+
+  bool get _hasActiveHandle =>
+      _currentHandle != null &&
+      SoLoud.instance.getIsValidVoiceHandle(_currentHandle!);
+
+  /// Lance la lecture à un volume initial donné.
+  Future<void> playAtVolume(double volume) async {
+    try {
+      if (_hasActiveHandle) {
+        await SoLoud.instance.stop(_currentHandle!);
+      }
+      _currentHandle = await SoLoud.instance.play(_source);
+      SoLoud.instance.setVolume(_currentHandle!, volume.clamp(0.0, 1.0));
+      _stateController.add(true);
+    } catch (e) {
+      debugPrint('Erreur lors de la lecture: $e');
+    }
+  }
+
+  /// Fond le volume vers [to] sur [duration] (SoLoud gère l'interpolation).
+  void fadeVolumeTo(double to, Duration duration) {
+    if (!_hasActiveHandle) return;
+    SoLoud.instance.fadeVolume(_currentHandle!, to.clamp(0.0, 1.0), duration);
+  }
+
+  /// Fondu sortant puis arrêt du lecteur.
+  Future<void> fadeOutAndStop(Duration duration) async {
+    if (!_hasActiveHandle) return;
+    SoLoud.instance.fadeVolume(_currentHandle!, 0, duration);
+    await Future<void>.delayed(duration);
+    if (_hasActiveHandle) {
+      await stop();
     }
   }
 

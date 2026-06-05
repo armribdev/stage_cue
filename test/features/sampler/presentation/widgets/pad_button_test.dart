@@ -32,6 +32,15 @@ class FakeAudioPlayerService implements AudioPlayerService {
 
   @override
   Future<void> stop() async {}
+
+  @override
+  Future<void> playAtVolume(double volume) async {}
+
+  @override
+  void fadeVolumeTo(double to, Duration duration) {}
+
+  @override
+  Future<void> fadeOutAndStop(Duration duration) async {}
 }
 
 PadItem buildPadItem({String? padName, required String soundTitle}) {
