@@ -6,7 +6,7 @@ import 'package:flutter_soloud/flutter_soloud.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/database/sounds.dart' as db_sounds;
 import '../../../../core/utils/file_utils.dart'
-    show scanDirectoryForAudioFiles, isAudioFile;
+    show scanDirectoryForAudioFiles, isAudioFile, computeQuickHash;
 import '../models/sound_model.dart';
 import '../models/sound_board_model.dart';
 import '../models/watched_path_model.dart';
@@ -276,6 +276,7 @@ class LocalSoundDataSource {
       // Extraire le nom du fichier sans extension pour le titre
       final title = p.basenameWithoutExtension(file.path);
       final soundType = await _resolveSoundTypeFromDuration(file);
+      final contentHash = await computeQuickHash(file);
 
       // Ajouter le fichier à la base de données
       await _database
@@ -285,6 +286,7 @@ class LocalSoundDataSource {
               title: title,
               filePath: file.path,
               type: soundType,
+              contentHash: Value(contentHash),
             ),
           );
     } catch (e) {
@@ -361,6 +363,7 @@ class LocalSoundDataSource {
           // Extraire le nom du fichier sans extension pour le titre
           final title = p.basenameWithoutExtension(file.path);
           final soundType = await _resolveSoundTypeFromDuration(file);
+          final contentHash = await computeQuickHash(file);
 
           // Ajouter le fichier à la base de données
           await _database
@@ -370,6 +373,7 @@ class LocalSoundDataSource {
                   title: title,
                   filePath: file.path,
                   type: soundType,
+                  contentHash: Value(contentHash),
                 ),
               );
           indexedCount++;

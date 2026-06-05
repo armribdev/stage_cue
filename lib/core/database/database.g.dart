@@ -3,6 +3,478 @@
 part of 'database.dart';
 
 // ignore_for_file: type=lint
+class $LibrariesTable extends Libraries
+    with TableInfo<$LibrariesTable, Library> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LibrariesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localRootPathMeta = const VerificationMeta(
+    'localRootPath',
+  );
+  @override
+  late final GeneratedColumn<String> localRootPath = GeneratedColumn<String>(
+    'local_root_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _driveFolderIdMeta = const VerificationMeta(
+    'driveFolderId',
+  );
+  @override
+  late final GeneratedColumn<String> driveFolderId = GeneratedColumn<String>(
+    'drive_folder_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSyncedRevisionMeta =
+      const VerificationMeta('lastSyncedRevision');
+  @override
+  late final GeneratedColumn<int> lastSyncedRevision = GeneratedColumn<int>(
+    'last_synced_revision',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lastSyncedAtMeta = const VerificationMeta(
+    'lastSyncedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastSyncedAt = GeneratedColumn<DateTime>(
+    'last_synced_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    localRootPath,
+    driveFolderId,
+    lastSyncedRevision,
+    lastSyncedAt,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'libraries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Library> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('local_root_path')) {
+      context.handle(
+        _localRootPathMeta,
+        localRootPath.isAcceptableOrUnknown(
+          data['local_root_path']!,
+          _localRootPathMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localRootPathMeta);
+    }
+    if (data.containsKey('drive_folder_id')) {
+      context.handle(
+        _driveFolderIdMeta,
+        driveFolderId.isAcceptableOrUnknown(
+          data['drive_folder_id']!,
+          _driveFolderIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_synced_revision')) {
+      context.handle(
+        _lastSyncedRevisionMeta,
+        lastSyncedRevision.isAcceptableOrUnknown(
+          data['last_synced_revision']!,
+          _lastSyncedRevisionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_synced_at')) {
+      context.handle(
+        _lastSyncedAtMeta,
+        lastSyncedAt.isAcceptableOrUnknown(
+          data['last_synced_at']!,
+          _lastSyncedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Library map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Library(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      localRootPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_root_path'],
+      )!,
+      driveFolderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}drive_folder_id'],
+      ),
+      lastSyncedRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_synced_revision'],
+      )!,
+      lastSyncedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_synced_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LibrariesTable createAlias(String alias) {
+    return $LibrariesTable(attachedDatabase, alias);
+  }
+}
+
+class Library extends DataClass implements Insertable<Library> {
+  final int id;
+  final String name;
+  final String localRootPath;
+  final String? driveFolderId;
+  final int lastSyncedRevision;
+  final DateTime? lastSyncedAt;
+  final DateTime createdAt;
+  const Library({
+    required this.id,
+    required this.name,
+    required this.localRootPath,
+    this.driveFolderId,
+    required this.lastSyncedRevision,
+    this.lastSyncedAt,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['local_root_path'] = Variable<String>(localRootPath);
+    if (!nullToAbsent || driveFolderId != null) {
+      map['drive_folder_id'] = Variable<String>(driveFolderId);
+    }
+    map['last_synced_revision'] = Variable<int>(lastSyncedRevision);
+    if (!nullToAbsent || lastSyncedAt != null) {
+      map['last_synced_at'] = Variable<DateTime>(lastSyncedAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  LibrariesCompanion toCompanion(bool nullToAbsent) {
+    return LibrariesCompanion(
+      id: Value(id),
+      name: Value(name),
+      localRootPath: Value(localRootPath),
+      driveFolderId: driveFolderId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driveFolderId),
+      lastSyncedRevision: Value(lastSyncedRevision),
+      lastSyncedAt: lastSyncedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncedAt),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Library.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Library(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      localRootPath: serializer.fromJson<String>(json['localRootPath']),
+      driveFolderId: serializer.fromJson<String?>(json['driveFolderId']),
+      lastSyncedRevision: serializer.fromJson<int>(json['lastSyncedRevision']),
+      lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'localRootPath': serializer.toJson<String>(localRootPath),
+      'driveFolderId': serializer.toJson<String?>(driveFolderId),
+      'lastSyncedRevision': serializer.toJson<int>(lastSyncedRevision),
+      'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  Library copyWith({
+    int? id,
+    String? name,
+    String? localRootPath,
+    Value<String?> driveFolderId = const Value.absent(),
+    int? lastSyncedRevision,
+    Value<DateTime?> lastSyncedAt = const Value.absent(),
+    DateTime? createdAt,
+  }) => Library(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    localRootPath: localRootPath ?? this.localRootPath,
+    driveFolderId: driveFolderId.present
+        ? driveFolderId.value
+        : this.driveFolderId,
+    lastSyncedRevision: lastSyncedRevision ?? this.lastSyncedRevision,
+    lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Library copyWithCompanion(LibrariesCompanion data) {
+    return Library(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      localRootPath: data.localRootPath.present
+          ? data.localRootPath.value
+          : this.localRootPath,
+      driveFolderId: data.driveFolderId.present
+          ? data.driveFolderId.value
+          : this.driveFolderId,
+      lastSyncedRevision: data.lastSyncedRevision.present
+          ? data.lastSyncedRevision.value
+          : this.lastSyncedRevision,
+      lastSyncedAt: data.lastSyncedAt.present
+          ? data.lastSyncedAt.value
+          : this.lastSyncedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Library(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('localRootPath: $localRootPath, ')
+          ..write('driveFolderId: $driveFolderId, ')
+          ..write('lastSyncedRevision: $lastSyncedRevision, ')
+          ..write('lastSyncedAt: $lastSyncedAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    localRootPath,
+    driveFolderId,
+    lastSyncedRevision,
+    lastSyncedAt,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Library &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.localRootPath == this.localRootPath &&
+          other.driveFolderId == this.driveFolderId &&
+          other.lastSyncedRevision == this.lastSyncedRevision &&
+          other.lastSyncedAt == this.lastSyncedAt &&
+          other.createdAt == this.createdAt);
+}
+
+class LibrariesCompanion extends UpdateCompanion<Library> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String> localRootPath;
+  final Value<String?> driveFolderId;
+  final Value<int> lastSyncedRevision;
+  final Value<DateTime?> lastSyncedAt;
+  final Value<DateTime> createdAt;
+  const LibrariesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.localRootPath = const Value.absent(),
+    this.driveFolderId = const Value.absent(),
+    this.lastSyncedRevision = const Value.absent(),
+    this.lastSyncedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  LibrariesCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    required String localRootPath,
+    this.driveFolderId = const Value.absent(),
+    this.lastSyncedRevision = const Value.absent(),
+    this.lastSyncedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : name = Value(name),
+       localRootPath = Value(localRootPath);
+  static Insertable<Library> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? localRootPath,
+    Expression<String>? driveFolderId,
+    Expression<int>? lastSyncedRevision,
+    Expression<DateTime>? lastSyncedAt,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (localRootPath != null) 'local_root_path': localRootPath,
+      if (driveFolderId != null) 'drive_folder_id': driveFolderId,
+      if (lastSyncedRevision != null)
+        'last_synced_revision': lastSyncedRevision,
+      if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  LibrariesCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String>? localRootPath,
+    Value<String?>? driveFolderId,
+    Value<int>? lastSyncedRevision,
+    Value<DateTime?>? lastSyncedAt,
+    Value<DateTime>? createdAt,
+  }) {
+    return LibrariesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      localRootPath: localRootPath ?? this.localRootPath,
+      driveFolderId: driveFolderId ?? this.driveFolderId,
+      lastSyncedRevision: lastSyncedRevision ?? this.lastSyncedRevision,
+      lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (localRootPath.present) {
+      map['local_root_path'] = Variable<String>(localRootPath.value);
+    }
+    if (driveFolderId.present) {
+      map['drive_folder_id'] = Variable<String>(driveFolderId.value);
+    }
+    if (lastSyncedRevision.present) {
+      map['last_synced_revision'] = Variable<int>(lastSyncedRevision.value);
+    }
+    if (lastSyncedAt.present) {
+      map['last_synced_at'] = Variable<DateTime>(lastSyncedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LibrariesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('localRootPath: $localRootPath, ')
+          ..write('driveFolderId: $driveFolderId, ')
+          ..write('lastSyncedRevision: $lastSyncedRevision, ')
+          ..write('lastSyncedAt: $lastSyncedAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -92,6 +564,42 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _libraryIdMeta = const VerificationMeta(
+    'libraryId',
+  );
+  @override
+  late final GeneratedColumn<int> libraryId = GeneratedColumn<int>(
+    'library_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES libraries (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _relativePathMeta = const VerificationMeta(
+    'relativePath',
+  );
+  @override
+  late final GeneratedColumn<String> relativePath = GeneratedColumn<String>(
+    'relative_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _contentHashMeta = const VerificationMeta(
+    'contentHash',
+  );
+  @override
+  late final GeneratedColumn<String> contentHash = GeneratedColumn<String>(
+    'content_hash',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -102,6 +610,9 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     color,
     volume,
     createdAt,
+    libraryId,
+    relativePath,
+    contentHash,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -161,6 +672,30 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('library_id')) {
+      context.handle(
+        _libraryIdMeta,
+        libraryId.isAcceptableOrUnknown(data['library_id']!, _libraryIdMeta),
+      );
+    }
+    if (data.containsKey('relative_path')) {
+      context.handle(
+        _relativePathMeta,
+        relativePath.isAcceptableOrUnknown(
+          data['relative_path']!,
+          _relativePathMeta,
+        ),
+      );
+    }
+    if (data.containsKey('content_hash')) {
+      context.handle(
+        _contentHashMeta,
+        contentHash.isAcceptableOrUnknown(
+          data['content_hash']!,
+          _contentHashMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -204,6 +739,18 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      libraryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}library_id'],
+      ),
+      relativePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}relative_path'],
+      ),
+      contentHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content_hash'],
+      ),
     );
   }
 
@@ -225,6 +772,9 @@ class Sound extends DataClass implements Insertable<Sound> {
   final int? color;
   final double volume;
   final DateTime createdAt;
+  final int? libraryId;
+  final String? relativePath;
+  final String? contentHash;
   const Sound({
     required this.id,
     required this.title,
@@ -234,6 +784,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     this.color,
     required this.volume,
     required this.createdAt,
+    this.libraryId,
+    this.relativePath,
+    this.contentHash,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -252,6 +805,15 @@ class Sound extends DataClass implements Insertable<Sound> {
     }
     map['volume'] = Variable<double>(volume);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || libraryId != null) {
+      map['library_id'] = Variable<int>(libraryId);
+    }
+    if (!nullToAbsent || relativePath != null) {
+      map['relative_path'] = Variable<String>(relativePath);
+    }
+    if (!nullToAbsent || contentHash != null) {
+      map['content_hash'] = Variable<String>(contentHash);
+    }
     return map;
   }
 
@@ -269,6 +831,15 @@ class Sound extends DataClass implements Insertable<Sound> {
           : Value(color),
       volume: Value(volume),
       createdAt: Value(createdAt),
+      libraryId: libraryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(libraryId),
+      relativePath: relativePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(relativePath),
+      contentHash: contentHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(contentHash),
     );
   }
 
@@ -288,6 +859,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       color: serializer.fromJson<int?>(json['color']),
       volume: serializer.fromJson<double>(json['volume']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      libraryId: serializer.fromJson<int?>(json['libraryId']),
+      relativePath: serializer.fromJson<String?>(json['relativePath']),
+      contentHash: serializer.fromJson<String?>(json['contentHash']),
     );
   }
   @override
@@ -302,6 +876,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       'color': serializer.toJson<int?>(color),
       'volume': serializer.toJson<double>(volume),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'libraryId': serializer.toJson<int?>(libraryId),
+      'relativePath': serializer.toJson<String?>(relativePath),
+      'contentHash': serializer.toJson<String?>(contentHash),
     };
   }
 
@@ -314,6 +891,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     Value<int?> color = const Value.absent(),
     double? volume,
     DateTime? createdAt,
+    Value<int?> libraryId = const Value.absent(),
+    Value<String?> relativePath = const Value.absent(),
+    Value<String?> contentHash = const Value.absent(),
   }) => Sound(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -323,6 +903,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     color: color.present ? color.value : this.color,
     volume: volume ?? this.volume,
     createdAt: createdAt ?? this.createdAt,
+    libraryId: libraryId.present ? libraryId.value : this.libraryId,
+    relativePath: relativePath.present ? relativePath.value : this.relativePath,
+    contentHash: contentHash.present ? contentHash.value : this.contentHash,
   );
   Sound copyWithCompanion(SoundsCompanion data) {
     return Sound(
@@ -336,6 +919,13 @@ class Sound extends DataClass implements Insertable<Sound> {
       color: data.color.present ? data.color.value : this.color,
       volume: data.volume.present ? data.volume.value : this.volume,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      libraryId: data.libraryId.present ? data.libraryId.value : this.libraryId,
+      relativePath: data.relativePath.present
+          ? data.relativePath.value
+          : this.relativePath,
+      contentHash: data.contentHash.present
+          ? data.contentHash.value
+          : this.contentHash,
     );
   }
 
@@ -349,7 +939,10 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('type: $type, ')
           ..write('color: $color, ')
           ..write('volume: $volume, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('libraryId: $libraryId, ')
+          ..write('relativePath: $relativePath, ')
+          ..write('contentHash: $contentHash')
           ..write(')'))
         .toString();
   }
@@ -364,6 +957,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     color,
     volume,
     createdAt,
+    libraryId,
+    relativePath,
+    contentHash,
   );
   @override
   bool operator ==(Object other) =>
@@ -376,7 +972,10 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.type == this.type &&
           other.color == this.color &&
           other.volume == this.volume &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.libraryId == this.libraryId &&
+          other.relativePath == this.relativePath &&
+          other.contentHash == this.contentHash);
 }
 
 class SoundsCompanion extends UpdateCompanion<Sound> {
@@ -388,6 +987,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<int?> color;
   final Value<double> volume;
   final Value<DateTime> createdAt;
+  final Value<int?> libraryId;
+  final Value<String?> relativePath;
+  final Value<String?> contentHash;
   const SoundsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -397,6 +999,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.color = const Value.absent(),
     this.volume = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.libraryId = const Value.absent(),
+    this.relativePath = const Value.absent(),
+    this.contentHash = const Value.absent(),
   });
   SoundsCompanion.insert({
     this.id = const Value.absent(),
@@ -407,6 +1012,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.color = const Value.absent(),
     this.volume = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.libraryId = const Value.absent(),
+    this.relativePath = const Value.absent(),
+    this.contentHash = const Value.absent(),
   }) : title = Value(title),
        filePath = Value(filePath),
        type = Value(type);
@@ -419,6 +1027,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<int>? color,
     Expression<double>? volume,
     Expression<DateTime>? createdAt,
+    Expression<int>? libraryId,
+    Expression<String>? relativePath,
+    Expression<String>? contentHash,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -429,6 +1040,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (color != null) 'color': color,
       if (volume != null) 'volume': volume,
       if (createdAt != null) 'created_at': createdAt,
+      if (libraryId != null) 'library_id': libraryId,
+      if (relativePath != null) 'relative_path': relativePath,
+      if (contentHash != null) 'content_hash': contentHash,
     });
   }
 
@@ -441,6 +1055,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<int?>? color,
     Value<double>? volume,
     Value<DateTime>? createdAt,
+    Value<int?>? libraryId,
+    Value<String?>? relativePath,
+    Value<String?>? contentHash,
   }) {
     return SoundsCompanion(
       id: id ?? this.id,
@@ -451,6 +1068,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       color: color ?? this.color,
       volume: volume ?? this.volume,
       createdAt: createdAt ?? this.createdAt,
+      libraryId: libraryId ?? this.libraryId,
+      relativePath: relativePath ?? this.relativePath,
+      contentHash: contentHash ?? this.contentHash,
     );
   }
 
@@ -483,6 +1103,15 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (libraryId.present) {
+      map['library_id'] = Variable<int>(libraryId.value);
+    }
+    if (relativePath.present) {
+      map['relative_path'] = Variable<String>(relativePath.value);
+    }
+    if (contentHash.present) {
+      map['content_hash'] = Variable<String>(contentHash.value);
+    }
     return map;
   }
 
@@ -496,7 +1125,10 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('type: $type, ')
           ..write('color: $color, ')
           ..write('volume: $volume, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('libraryId: $libraryId, ')
+          ..write('relativePath: $relativePath, ')
+          ..write('contentHash: $contentHash')
           ..write(')'))
         .toString();
   }
@@ -3480,6 +4112,7 @@ class TagAliasesCompanion extends UpdateCompanion<TagAliase> {
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
+  late final $LibrariesTable libraries = $LibrariesTable(this);
   late final $SoundsTable sounds = $SoundsTable(this);
   late final $SoundBoardsTable soundBoards = $SoundBoardsTable(this);
   late final $WatchedPathsTable watchedPaths = $WatchedPathsTable(this);
@@ -3495,6 +4128,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
+    libraries,
     sounds,
     soundBoards,
     watchedPaths,
@@ -3508,6 +4142,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'libraries',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('sounds', kind: UpdateKind.update)],
+    ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'sound_boards',
@@ -3574,6 +4215,340 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   ]);
 }
 
+typedef $$LibrariesTableCreateCompanionBuilder =
+    LibrariesCompanion Function({
+      Value<int> id,
+      required String name,
+      required String localRootPath,
+      Value<String?> driveFolderId,
+      Value<int> lastSyncedRevision,
+      Value<DateTime?> lastSyncedAt,
+      Value<DateTime> createdAt,
+    });
+typedef $$LibrariesTableUpdateCompanionBuilder =
+    LibrariesCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String> localRootPath,
+      Value<String?> driveFolderId,
+      Value<int> lastSyncedRevision,
+      Value<DateTime?> lastSyncedAt,
+      Value<DateTime> createdAt,
+    });
+
+final class $$LibrariesTableReferences
+    extends BaseReferences<_$AppDatabase, $LibrariesTable, Library> {
+  $$LibrariesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$SoundsTable, List<Sound>> _soundsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.sounds,
+    aliasName: $_aliasNameGenerator(db.libraries.id, db.sounds.libraryId),
+  );
+
+  $$SoundsTableProcessedTableManager get soundsRefs {
+    final manager = $$SoundsTableTableManager(
+      $_db,
+      $_db.sounds,
+    ).filter((f) => f.libraryId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_soundsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$LibrariesTableFilterComposer
+    extends Composer<_$AppDatabase, $LibrariesTable> {
+  $$LibrariesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localRootPath => $composableBuilder(
+    column: $table.localRootPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get driveFolderId => $composableBuilder(
+    column: $table.driveFolderId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastSyncedRevision => $composableBuilder(
+    column: $table.lastSyncedRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> soundsRefs(
+    Expression<bool> Function($$SoundsTableFilterComposer f) f,
+  ) {
+    final $$SoundsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.sounds,
+      getReferencedColumn: (t) => t.libraryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundsTableFilterComposer(
+            $db: $db,
+            $table: $db.sounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$LibrariesTableOrderingComposer
+    extends Composer<_$AppDatabase, $LibrariesTable> {
+  $$LibrariesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localRootPath => $composableBuilder(
+    column: $table.localRootPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get driveFolderId => $composableBuilder(
+    column: $table.driveFolderId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastSyncedRevision => $composableBuilder(
+    column: $table.lastSyncedRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LibrariesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LibrariesTable> {
+  $$LibrariesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get localRootPath => $composableBuilder(
+    column: $table.localRootPath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get driveFolderId => $composableBuilder(
+    column: $table.driveFolderId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastSyncedRevision => $composableBuilder(
+    column: $table.lastSyncedRevision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> soundsRefs<T extends Object>(
+    Expression<T> Function($$SoundsTableAnnotationComposer a) f,
+  ) {
+    final $$SoundsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.sounds,
+      getReferencedColumn: (t) => t.libraryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.sounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$LibrariesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LibrariesTable,
+          Library,
+          $$LibrariesTableFilterComposer,
+          $$LibrariesTableOrderingComposer,
+          $$LibrariesTableAnnotationComposer,
+          $$LibrariesTableCreateCompanionBuilder,
+          $$LibrariesTableUpdateCompanionBuilder,
+          (Library, $$LibrariesTableReferences),
+          Library,
+          PrefetchHooks Function({bool soundsRefs})
+        > {
+  $$LibrariesTableTableManager(_$AppDatabase db, $LibrariesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LibrariesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LibrariesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LibrariesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> localRootPath = const Value.absent(),
+                Value<String?> driveFolderId = const Value.absent(),
+                Value<int> lastSyncedRevision = const Value.absent(),
+                Value<DateTime?> lastSyncedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => LibrariesCompanion(
+                id: id,
+                name: name,
+                localRootPath: localRootPath,
+                driveFolderId: driveFolderId,
+                lastSyncedRevision: lastSyncedRevision,
+                lastSyncedAt: lastSyncedAt,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                required String localRootPath,
+                Value<String?> driveFolderId = const Value.absent(),
+                Value<int> lastSyncedRevision = const Value.absent(),
+                Value<DateTime?> lastSyncedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => LibrariesCompanion.insert(
+                id: id,
+                name: name,
+                localRootPath: localRootPath,
+                driveFolderId: driveFolderId,
+                lastSyncedRevision: lastSyncedRevision,
+                lastSyncedAt: lastSyncedAt,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LibrariesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({soundsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (soundsRefs) db.sounds],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (soundsRefs)
+                    await $_getPrefetchedData<Library, $LibrariesTable, Sound>(
+                      currentTable: table,
+                      referencedTable: $$LibrariesTableReferences
+                          ._soundsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$LibrariesTableReferences(db, table, p0).soundsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.libraryId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$LibrariesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LibrariesTable,
+      Library,
+      $$LibrariesTableFilterComposer,
+      $$LibrariesTableOrderingComposer,
+      $$LibrariesTableAnnotationComposer,
+      $$LibrariesTableCreateCompanionBuilder,
+      $$LibrariesTableUpdateCompanionBuilder,
+      (Library, $$LibrariesTableReferences),
+      Library,
+      PrefetchHooks Function({bool soundsRefs})
+    >;
 typedef $$SoundsTableCreateCompanionBuilder =
     SoundsCompanion Function({
       Value<int> id,
@@ -3584,6 +4559,9 @@ typedef $$SoundsTableCreateCompanionBuilder =
       Value<int?> color,
       Value<double> volume,
       Value<DateTime> createdAt,
+      Value<int?> libraryId,
+      Value<String?> relativePath,
+      Value<String?> contentHash,
     });
 typedef $$SoundsTableUpdateCompanionBuilder =
     SoundsCompanion Function({
@@ -3595,11 +4573,31 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<int?> color,
       Value<double> volume,
       Value<DateTime> createdAt,
+      Value<int?> libraryId,
+      Value<String?> relativePath,
+      Value<String?> contentHash,
     });
 
 final class $$SoundsTableReferences
     extends BaseReferences<_$AppDatabase, $SoundsTable, Sound> {
   $$SoundsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LibrariesTable _libraryIdTable(_$AppDatabase db) => db.libraries
+      .createAlias($_aliasNameGenerator(db.sounds.libraryId, db.libraries.id));
+
+  $$LibrariesTableProcessedTableManager? get libraryId {
+    final $_column = $_itemColumn<int>('library_id');
+    if ($_column == null) return null;
+    final manager = $$LibrariesTableTableManager(
+      $_db,
+      $_db.libraries,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_libraryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
 
   static MultiTypedResultKey<$BoardSoundsTable, List<BoardSound>>
   _boardSoundsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
@@ -3705,6 +4703,39 @@ class $$SoundsTableFilterComposer
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contentHash => $composableBuilder(
+    column: $table.contentHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LibrariesTableFilterComposer get libraryId {
+    final $$LibrariesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.libraryId,
+      referencedTable: $db.libraries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LibrariesTableFilterComposer(
+            $db: $db,
+            $table: $db.libraries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   Expression<bool> boardSoundsRefs(
     Expression<bool> Function($$BoardSoundsTableFilterComposer f) f,
@@ -3830,6 +4861,39 @@ class $$SoundsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get contentHash => $composableBuilder(
+    column: $table.contentHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LibrariesTableOrderingComposer get libraryId {
+    final $$LibrariesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.libraryId,
+      referencedTable: $db.libraries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LibrariesTableOrderingComposer(
+            $db: $db,
+            $table: $db.libraries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$SoundsTableAnnotationComposer
@@ -3866,6 +4930,39 @@ class $$SoundsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get contentHash => $composableBuilder(
+    column: $table.contentHash,
+    builder: (column) => column,
+  );
+
+  $$LibrariesTableAnnotationComposer get libraryId {
+    final $$LibrariesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.libraryId,
+      referencedTable: $db.libraries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LibrariesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.libraries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   Expression<T> boardSoundsRefs<T extends Object>(
     Expression<T> Function($$BoardSoundsTableAnnotationComposer a) f,
@@ -3957,6 +5054,7 @@ class $$SoundsTableTableManager
           (Sound, $$SoundsTableReferences),
           Sound,
           PrefetchHooks Function({
+            bool libraryId,
             bool boardSoundsRefs,
             bool padSoundsRefs,
             bool soundTagsRefs,
@@ -3983,6 +5081,9 @@ class $$SoundsTableTableManager
                 Value<int?> color = const Value.absent(),
                 Value<double> volume = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> libraryId = const Value.absent(),
+                Value<String?> relativePath = const Value.absent(),
+                Value<String?> contentHash = const Value.absent(),
               }) => SoundsCompanion(
                 id: id,
                 title: title,
@@ -3992,6 +5093,9 @@ class $$SoundsTableTableManager
                 color: color,
                 volume: volume,
                 createdAt: createdAt,
+                libraryId: libraryId,
+                relativePath: relativePath,
+                contentHash: contentHash,
               ),
           createCompanionCallback:
               ({
@@ -4003,6 +5107,9 @@ class $$SoundsTableTableManager
                 Value<int?> color = const Value.absent(),
                 Value<double> volume = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> libraryId = const Value.absent(),
+                Value<String?> relativePath = const Value.absent(),
+                Value<String?> contentHash = const Value.absent(),
               }) => SoundsCompanion.insert(
                 id: id,
                 title: title,
@@ -4012,6 +5119,9 @@ class $$SoundsTableTableManager
                 color: color,
                 volume: volume,
                 createdAt: createdAt,
+                libraryId: libraryId,
+                relativePath: relativePath,
+                contentHash: contentHash,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -4021,6 +5131,7 @@ class $$SoundsTableTableManager
               .toList(),
           prefetchHooksCallback:
               ({
+                libraryId = false,
                 boardSoundsRefs = false,
                 padSoundsRefs = false,
                 soundTagsRefs = false,
@@ -4032,7 +5143,38 @@ class $$SoundsTableTableManager
                     if (padSoundsRefs) db.padSounds,
                     if (soundTagsRefs) db.soundTags,
                   ],
-                  addJoins: null,
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (libraryId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.libraryId,
+                                    referencedTable: $$SoundsTableReferences
+                                        ._libraryIdTable(db),
+                                    referencedColumn: $$SoundsTableReferences
+                                        ._libraryIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (boardSoundsRefs)
@@ -4119,6 +5261,7 @@ typedef $$SoundsTableProcessedTableManager =
       (Sound, $$SoundsTableReferences),
       Sound,
       PrefetchHooks Function({
+        bool libraryId,
         bool boardSoundsRefs,
         bool padSoundsRefs,
         bool soundTagsRefs,
@@ -7343,6 +8486,8 @@ typedef $$TagAliasesTableProcessedTableManager =
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
+  $$LibrariesTableTableManager get libraries =>
+      $$LibrariesTableTableManager(_db, _db.libraries);
   $$SoundsTableTableManager get sounds =>
       $$SoundsTableTableManager(_db, _db.sounds);
   $$SoundBoardsTableTableManager get soundBoards =>

@@ -16,6 +16,9 @@ class SoundModel {
       colorValue: sound.color,
       volume: sound.volume,
       createdAt: sound.createdAt,
+      libraryId: sound.libraryId,
+      relativePath: sound.relativePath,
+      contentHash: sound.contentHash,
     );
   }
 
@@ -28,6 +31,9 @@ class SoundModel {
       type: _mapSoundTypeToDb(sound.type),
       color: Value(sound.colorValue),
       volume: Value(sound.volume),
+      libraryId: Value(sound.libraryId),
+      relativePath: Value(sound.relativePath),
+      contentHash: Value(sound.contentHash),
     );
   }
 
