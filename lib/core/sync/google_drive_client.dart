@@ -189,6 +189,61 @@ class GoogleDriveClient implements DriveClient {
     await _api.files.delete(fileId);
   }
 
+  /// E-mail du propriétaire du dossier (y compris dossier partagé).
+  Future<String?> getFolderOwnerEmail(String fileId) async {
+    try {
+      final file = await _api.files.get(
+        fileId,
+        $fields: 'owners(emailAddress)',
+        supportsAllDrives: true,
+      ) as drive.File;
+      final owners = file.owners;
+      if (owners == null || owners.isEmpty) {
+        return null;
+      }
+      return owners.first.emailAddress;
+    } on drive.DetailedApiRequestError catch (e) {
+      if (e.status == 404 || e.status == 403) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  /// Recherche un dossier par nom (tous Drive accessibles) et renvoie l'e-mail propriétaire.
+  Future<String?> findFolderOwnerByName(String folderName) async {
+    final trimmed = folderName.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    String? pageToken;
+    do {
+      final response = await _api.files.list(
+        q: "name = '${_escape(trimmed)}' and "
+            "mimeType = '$driveFolderMimeType' and trashed = false",
+        corpora: 'allDrives',
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true,
+        $fields: 'nextPageToken, files(owners/emailAddress)',
+        pageSize: 20,
+        pageToken: pageToken,
+      );
+      for (final file in response.files ?? const <drive.File>[]) {
+        final owners = file.owners;
+        if (owners != null && owners.isNotEmpty) {
+          final email = owners.first.emailAddress;
+          if (email != null && email.isNotEmpty) {
+            return email;
+          }
+        }
+      }
+      pageToken = response.nextPageToken;
+    } while (pageToken != null);
+
+    return null;
+  }
+
   @override
   void dispose() {
     _httpClient.close();
@@ -205,7 +260,12 @@ class GoogleDriveAuthenticator implements DriveAuthenticator {
 
   GoogleDriveAuthenticator({GoogleSignIn? googleSignIn})
       : _googleSignIn = googleSignIn ??
-            GoogleSignIn(scopes: const [drive.DriveApi.driveFileScope]);
+            GoogleSignIn(
+              scopes: const [
+                drive.DriveApi.driveFileScope,
+                drive.DriveApi.driveReadonlyScope,
+              ],
+            );
 
   @override
   String? get accountEmail => _googleSignIn.currentUser?.email;

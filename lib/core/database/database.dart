@@ -27,7 +27,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration {
@@ -116,6 +116,10 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(sounds, sounds.libraryId);
           await m.addColumn(sounds, sounds.relativePath);
           await m.addColumn(sounds, sounds.contentHash);
+        }
+        if (from < 12) {
+          await m.addColumn(watchedPaths, watchedPaths.accountEmail);
+          await m.addColumn(watchedPaths, watchedPaths.driveFileId);
         }
       },
       beforeOpen: (details) async {
