@@ -294,6 +294,44 @@ class LocalSoundDataSource {
     }
   }
 
+  /// Indexe un fichier audio déjà matérialisé dans le cache d'une bibliothèque.
+  ///
+  /// [file] est le fichier local (dans le cache de la bibliothèque), [libraryId]
+  /// la bibliothèque d'appartenance et [relativePath] le chemin portable. Le son
+  /// devient ainsi synchronisable entre appareils. Retourne true si un nouveau
+  /// son a été créé (false si déjà présent).
+  Future<bool> indexLibraryAudioFile(
+    File file, {
+    required int libraryId,
+    required String relativePath,
+  }) async {
+    // Déduplication par (bibliothèque, chemin relatif).
+    final existing = await (_database.select(_database.sounds)
+          ..where(
+            (s) =>
+                s.libraryId.equals(libraryId) &
+                s.relativePath.equals(relativePath),
+          ))
+        .get();
+    if (existing.isNotEmpty) return false;
+
+    final title = p.basenameWithoutExtension(file.path);
+    final soundType = await _resolveSoundTypeFromDuration(file);
+    final contentHash = await computeQuickHash(file);
+
+    await _database.into(_database.sounds).insert(
+          db.SoundsCompanion.insert(
+            title: title,
+            filePath: file.path,
+            type: soundType,
+            libraryId: Value(libraryId),
+            relativePath: Value(relativePath),
+            contentHash: Value(contentHash),
+          ),
+        );
+    return true;
+  }
+
   /// Indexe tous les fichiers audio d'un dossier
   Future<int> indexDirectory(
     Directory directory, {

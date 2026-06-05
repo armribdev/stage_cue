@@ -14,6 +14,7 @@ import '../../../../core/sync/snapshot_store.dart';
 import '../../domain/entities/library.dart';
 import '../../domain/entities/sound.dart';
 import '../datasources/local_library_datasource.dart';
+import '../datasources/local_sound_datasource.dart';
 
 /// Orchestration des bibliothèques portables : relie l'authentification Drive
 /// (infra `core/sync`) à la persistance locale (table Libraries).
@@ -25,6 +26,7 @@ class LibraryRepository {
   final DriveAuthenticator _authenticator;
   final LibrarySyncService _syncService;
   final AudioCacheManager _cacheManager;
+  final LocalSoundDataSource _soundDataSource;
 
   DriveClient? _activeClient;
 
@@ -33,6 +35,7 @@ class LibraryRepository {
     this._authenticator,
     this._syncService,
     this._cacheManager,
+    this._soundDataSource,
   );
 
   /// Assemble le repository avec ses dépendances Drive par défaut.
@@ -42,6 +45,7 @@ class LibraryRepository {
       GoogleDriveAuthenticator(),
       LibrarySyncService(DriftSnapshotStore(database)),
       AudioCacheManager(),
+      LocalSoundDataSource(database),
     );
   }
 
@@ -193,6 +197,46 @@ class LibraryRepository {
       source: source,
       relativePath: relativePath,
     );
+  }
+
+  /// Ajoute des fichiers audio à une bibliothèque : upload Drive + cache local +
+  /// indexation en sons de bibliothèque (synchronisables). Retourne le nombre de
+  /// nouveaux sons créés. [onProgress] rapporte l'avancement (index, total).
+  Future<int> addSoundsToLibrary({
+    required Library library,
+    required List<File> sources,
+    void Function(int current, int total)? onProgress,
+  }) async {
+    if (_activeClient == null) {
+      throw StateError('Bibliothèque non connectée à Drive');
+    }
+
+    var created = 0;
+    for (var i = 0; i < sources.length; i++) {
+      final source = sources[i];
+      onProgress?.call(i + 1, sources.length);
+
+      // Chemin portable sous `sounds/`, basé sur le nom de fichier.
+      final relativePath = 'sounds/${p.basename(source.path)}';
+      final imported = await importAudioToLibrary(
+        library: library,
+        source: source,
+        relativePath: relativePath,
+      );
+
+      // Le fichier est désormais matérialisé dans le cache local.
+      final localPath = _cacheManager.localPathFor(
+        library,
+        imported.relativePath,
+      );
+      final isNew = await _soundDataSource.indexLibraryAudioFile(
+        File(localPath),
+        libraryId: library.id,
+        relativePath: imported.relativePath,
+      );
+      if (isNew) created++;
+    }
+    return created;
   }
 
   /// Ferme la session Drive et révoque la connexion du compte.
