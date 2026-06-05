@@ -147,5 +147,20 @@ void main() {
 
       verify(() => repo.pushLibrary(any())).called(1);
     });
+
+    test('syncNow supersède un push débouncé en attente', () async {
+      when(() => repo.pushLibrary(any(),
+              overrideKnownRevision: any(named: 'overrideKnownRevision')))
+          .thenAnswer((_) async => const PushSuccess(3));
+      final controller =
+          SyncController(repo, debounce: const Duration(milliseconds: 50));
+
+      controller.schedulePush(library);
+      await controller.syncNow(library); // push immédiat
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      // Seul le push immédiat a eu lieu ; le push débouncé a été annulé.
+      verify(() => repo.pushLibrary(any())).called(1);
+    });
   });
 }

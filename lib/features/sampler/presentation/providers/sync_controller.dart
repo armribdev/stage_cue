@@ -100,6 +100,8 @@ class SyncController extends ChangeNotifier {
 
   /// Pousse immédiatement l'état local vers Drive.
   Future<void> syncNow(Library library) async {
+    // Un push immédiat supersède un push débouncé éventuellement en attente.
+    _debounceTimer?.cancel();
     if (!await _ensureConnected()) {
       _set(_state.copyWith(status: SyncStatus.offline));
       return;

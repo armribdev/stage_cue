@@ -9,17 +9,20 @@ import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../data/models/indexing_progress.dart';
 import '../../domain/entities/watched_path.dart' as domain;
+import '../providers/sync_controller.dart';
 import 'library_sync_screen.dart';
 
 /// Écran des paramètres
 class SettingsScreen extends StatefulWidget {
   final db.AppDatabase database;
   final LibraryRepository libraryRepository;
+  final SyncController syncController;
 
   const SettingsScreen({
     super.key,
     required this.database,
     required this.libraryRepository,
+    required this.syncController,
   });
 
   @override
@@ -361,6 +364,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               MaterialPageRoute(
                                 builder: (context) => LibrarySyncScreen(
                                   libraryRepository: widget.libraryRepository,
+                                  syncController: widget.syncController,
                                 ),
                               ),
                             );
