@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
@@ -85,9 +86,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Erreur de sauvegarde: $error')));
+      showCopyableSnackBar(context, 'Erreur de sauvegarde: $error');
     } finally {
       if (mounted) {
         setState(() {

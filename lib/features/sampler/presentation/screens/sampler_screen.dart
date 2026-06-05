@@ -11,6 +11,7 @@ import '../widgets/music_preview_panel.dart';
 import '../widgets/music_picker_sheet.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
+import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/audio/music_transition.dart';
 import '../../../../core/database/database.dart' as db;
 import 'settings_screen.dart';
@@ -193,9 +194,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
     if (newBoard == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erreur lors de la création de la scène')),
-      );
+      showCopyableSnackBar(context, 'Erreur lors de la création de la scène');
     }
   }
 
@@ -338,9 +337,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erreur lors du renommage de la scène')),
-      );
+      showCopyableSnackBar(context, 'Erreur lors du renommage de la scène');
     }
   }
 
@@ -415,11 +412,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
     if (duplicated == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Erreur lors de la duplication de la scène'),
-        ),
-      );
+      showCopyableSnackBar(context, 'Erreur lors de la duplication de la scène');
     }
   }
 
@@ -455,11 +448,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Erreur lors de la suppression de la scène'),
-        ),
-      );
+      showCopyableSnackBar(context, 'Erreur lors de la suppression de la scène');
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/sync/google_oauth_config.dart';
+import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../domain/entities/library.dart';
@@ -103,9 +104,9 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
         await _loadLibraries();
       }
     } on GoogleOAuthNotConfiguredException catch (e) {
-      if (mounted) _snack(e.message);
+      if (mounted) _snack(e.message, copyable: true);
     } catch (e) {
-      if (mounted) _snack('Erreur de connexion : $e');
+      if (mounted) _snack('Erreur de connexion : $e', copyable: true);
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }
@@ -196,7 +197,11 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
     );
   }
 
-  void _snack(String message) {
+  void _snack(String message, {bool copyable = false}) {
+    if (copyable) {
+      showCopyableSnackBar(context, message);
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 

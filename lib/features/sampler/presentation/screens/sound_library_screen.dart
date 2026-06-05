@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/database/database.dart' as db;
+import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
@@ -97,9 +98,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors du chargement: $e')),
-        );
+        showCopyableSnackBar(context, 'Erreur lors du chargement: $e');
       }
     }
   }
@@ -135,9 +134,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Impossible de lire le son: $e')),
-        );
+        showCopyableSnackBar(context, 'Impossible de lire le son: $e');
       }
     }
   }
@@ -177,9 +174,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de l\'ajout: $e')),
-        );
+        showCopyableSnackBar(context, 'Erreur lors de l\'ajout: $e');
       }
     }
   }
