@@ -1085,16 +1085,158 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  String _driveSyncStatusLabel(domain.Library library) {
-    final lastSync = library.lastSyncedAt;
-    if (lastSync == null) {
-      return 'Jamais synchronisé';
-    }
-    final local = lastSync.toLocal();
+  String _formatDriveSyncTimestamp(DateTime syncedAt) {
+    final local = syncedAt.toLocal();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final syncDay = DateTime(local.year, local.month, local.day);
     String two(int n) => n.toString().padLeft(2, '0');
-    return 'Révision ${library.lastSyncedRevision} · '
-        '${two(local.day)}/${two(local.month)} '
-        '${two(local.hour)}:${two(local.minute)}';
+    final time = '${two(local.hour)}:${two(local.minute)}';
+
+    if (syncDay == today) {
+      return "aujourd'hui à $time";
+    }
+    if (syncDay == today.subtract(const Duration(days: 1))) {
+      return 'hier à $time';
+    }
+    return 'le ${two(local.day)}/${two(local.month)} à $time';
+  }
+
+  Widget _buildDriveSyncStatus(domain.Library library) {
+    final scheme = Theme.of(context).colorScheme;
+    final muted = scheme.onSurfaceVariant.withValues(alpha: 0.75);
+    final lastSync = library.lastSyncedAt;
+
+    if (lastSync == null) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.cloud_off_outlined, size: 13, color: muted),
+          const SizedBox(width: 4),
+          Text(
+            'Pas encore synchronisé',
+            style: TextStyle(fontSize: 11, color: muted),
+          ),
+        ],
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.cloud_done_outlined,
+          size: 13,
+          color: scheme.primary.withValues(alpha: 0.85),
+        ),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            'Synchronisé ${_formatDriveSyncTimestamp(lastSync)}',
+            style: TextStyle(fontSize: 11, color: muted),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDriveSyncMenu(domain.Library library) {
+    if (_isSyncBusy) {
+      return const SizedBox(
+        width: 32,
+        height: 32,
+        child: Padding(
+          padding: EdgeInsets.all(7),
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    final scheme = Theme.of(context).colorScheme;
+    final iconColor = scheme.onSurfaceVariant.withValues(alpha: 0.55);
+
+    return PopupMenuButton<_DriveSyncAction>(
+      tooltip: 'Synchroniser',
+      padding: EdgeInsets.zero,
+      splashRadius: 16,
+      offset: const Offset(0, 36),
+      child: Icon(
+        Icons.sync,
+        size: 20,
+        color: iconColor,
+      ),
+      onSelected: (action) {
+        switch (action) {
+          case _DriveSyncAction.pull:
+            unawaited(_pullDriveLibrary(library));
+          case _DriveSyncAction.push:
+            unawaited(_syncDriveLibrary(library));
+        }
+      },
+      itemBuilder: (menuContext) => [
+        PopupMenuItem<_DriveSyncAction>(
+          value: _DriveSyncAction.pull,
+          height: 48,
+          child: Row(
+            children: [
+              Icon(
+                Icons.cloud_download_outlined,
+                size: 20,
+                color: scheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Récupérer depuis Drive'),
+                    Text(
+                      'Appliquer la version distante',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<_DriveSyncAction>(
+          value: _DriveSyncAction.push,
+          height: 48,
+          child: Row(
+            children: [
+              Icon(
+                Icons.cloud_upload_outlined,
+                size: 20,
+                color: scheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Envoyer vers Drive'),
+                    Text(
+                      'Publier les changements locaux',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _confirmRemoveDriveLibrary(domain.Library library) async {
@@ -1558,14 +1700,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                             ),
                                             if (!item.isLocal) ...[
                                               const SizedBox(height: 2),
-                                              Text(
-                                                _driveSyncStatusLabel(
-                                                  item.library!,
-                                                ),
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.grey[500],
-                                                ),
+                                              _buildDriveSyncStatus(
+                                                item.library!,
                                               ),
                                             ],
                                             _buildIndexingProgressSection(
@@ -1579,60 +1715,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          if (!item.isLocal) ...[
-                                            IconButton(
-                                              padding: EdgeInsets.zero,
-                                              constraints:
-                                                  const BoxConstraints
-                                                      .tightFor(
-                                                width: 32,
-                                                height: 32,
-                                              ),
-                                              icon: Icon(
-                                                Icons.cloud_download,
-                                                size: 20,
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .onSurfaceVariant
-                                                    .withValues(alpha: 0.55),
-                                              ),
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              tooltip:
-                                                  'Récupérer depuis Drive',
-                                              onPressed: _isSyncBusy
-                                                  ? null
-                                                  : () => _pullDriveLibrary(
-                                                        item.library!,
-                                                      ),
+                                          if (!item.isLocal)
+                                            _buildDriveSyncMenu(
+                                              item.library!,
                                             ),
-                                            IconButton(
-                                              padding: EdgeInsets.zero,
-                                              constraints:
-                                                  const BoxConstraints
-                                                      .tightFor(
-                                                width: 32,
-                                                height: 32,
-                                              ),
-                                              icon: Icon(
-                                                Icons.cloud_upload,
-                                                size: 20,
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .onSurfaceVariant
-                                                    .withValues(alpha: 0.55),
-                                              ),
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              tooltip:
-                                                  'Synchroniser vers Drive',
-                                              onPressed: _isSyncBusy
-                                                  ? null
-                                                  : () => _syncDriveLibrary(
-                                                        item.library!,
-                                                      ),
-                                            ),
-                                          ],
                                           SizedBox(width: 8),
                                           IconButton(
                                             padding: EdgeInsets.zero,
@@ -1730,6 +1816,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
+
+enum _DriveSyncAction { pull, push }
 
 class _IndexedFolderItem {
   const _IndexedFolderItem.local(this.watchedPath) : library = null;

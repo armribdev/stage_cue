@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:path/path.dart' as p;
 
 import '../database/database.dart' as db;
 import '../database/sounds.dart' show PadPlayMode, SoundType;
@@ -67,7 +68,7 @@ class LibrarySnapshotStore {
         INNER JOIN snap.tag_items ti ON ti.id = ta.tag_id
       ''');
     } finally {
-      await _database.customStatement('DETACH DATABASE snap');
+      await _detachSnapshot();
     }
 
     return target.length();
@@ -84,12 +85,14 @@ class LibrarySnapshotStore {
   }) async {
     if (!await File(sourcePath).exists()) return;
 
-    await _database.transaction(() async {
-      await _purgeLibraryData(libraryId);
+    final escaped = _escapePath(sourcePath);
+    await _database.customStatement("ATTACH DATABASE '$escaped' AS snap");
+    try {
+      // ATTACH/DETACH doivent rester hors de la transaction Drift : un DETACH
+      // avant COMMIT provoque « database snap is locked » sous SQLite.
+      await _database.transaction(() async {
+        await _purgeLibraryData(libraryId);
 
-      final escaped = _escapePath(sourcePath);
-      await _database.customStatement("ATTACH DATABASE '$escaped' AS snap");
-      try {
         if (!await _snapHasTable('sounds')) return;
         final legacy = await _snapHasTable('libraries');
         await _importSounds(
@@ -110,10 +113,10 @@ class LibrarySnapshotStore {
         if (await _snapHasTable('sound_tags')) {
           await _importSoundTags();
         }
-      } finally {
-        await _database.customStatement('DETACH DATABASE snap');
-      }
-    });
+      });
+    } finally {
+      await _detachSnapshot();
+    }
   }
 
   Future<void> _purgeLibraryData(int libraryId) async {
@@ -398,5 +401,10 @@ class LibrarySnapshotStore {
     return rows.isNotEmpty;
   }
 
-  String _escapePath(String path) => path.replaceAll("'", "''");
+  Future<void> _detachSnapshot() async {
+    await _database.customStatement('DETACH DATABASE snap');
+  }
+
+  String _escapePath(String path) =>
+      p.normalize(path).replaceAll('\\', '/').replaceAll("'", "''");
 }
