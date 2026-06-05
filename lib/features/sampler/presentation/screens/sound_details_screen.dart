@@ -5,6 +5,7 @@ import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
+import '../utils/sound_type_ui.dart';
 
 /// Écran d'édition d'un son dans la bibliothèque.
 class SoundDetailsScreen extends StatefulWidget {
@@ -352,67 +353,12 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
     return color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
   }
 
-  String _soundTypeLabel(SoundType type) {
-    switch (type) {
-      case SoundType.soundEffect:
-        return 'Bruitage';
-      case SoundType.music:
-        return 'Musique';
-      case SoundType.ambiance:
-        return 'Son d\'ambiance';
-    }
-  }
-
-  IconData _soundTypeIcon(SoundType type) {
-    switch (type) {
-      case SoundType.soundEffect:
-        return Icons.graphic_eq_rounded;
-      case SoundType.music:
-        return Icons.music_note_rounded;
-      case SoundType.ambiance:
-        return Icons.waves_rounded;
-    }
-  }
-
-  ({Color background, Color foreground}) _soundTypeAvatarColors(
-    BuildContext context,
-    SoundType type,
-  ) {
-    final scheme = Theme.of(context).colorScheme;
-    switch (type) {
-      case SoundType.soundEffect:
-        return (
-          background: scheme.tertiaryContainer,
-          foreground: scheme.onTertiaryContainer,
-        );
-      case SoundType.music:
-        return (
-          background: scheme.primaryContainer,
-          foreground: scheme.onPrimaryContainer,
-        );
-      case SoundType.ambiance:
-        return (
-          background: scheme.secondaryContainer,
-          foreground: scheme.onSecondaryContainer,
-        );
-    }
-  }
-
   Widget _buildSoundTypeHeader(BuildContext context) {
     final type = widget.sound.type;
-    final colors = _soundTypeAvatarColors(context, type);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        CircleAvatar(
-          radius: 32,
-          backgroundColor: colors.background,
-          child: Icon(
-            _soundTypeIcon(type),
-            size: 32,
-            color: colors.foreground,
-          ),
-        ),
+        SoundTypeAvatar(type: type, radius: 32, iconSize: 32),
         const SizedBox(width: 16),
         Expanded(
           child: Column(
@@ -424,7 +370,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                _soundTypeLabel(type),
+                type.label,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),

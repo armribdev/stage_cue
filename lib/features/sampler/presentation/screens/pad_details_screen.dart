@@ -5,6 +5,7 @@ import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
+import '../utils/sound_type_ui.dart';
 
 /// Écran de détails d'un pad — réglages, sons, mode de lecture.
 class PadDetailsScreen extends StatefulWidget {
@@ -120,12 +121,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     if (!mounted) return;
     setState(() {});
   }
-
-  String _soundTypeLabel(SoundType type) => switch (type) {
-        SoundType.soundEffect => 'Bruitage',
-        SoundType.music => 'Musique',
-        SoundType.ambiance => 'Ambiance',
-      };
 
   @override
   Widget build(BuildContext context) {
@@ -281,7 +276,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                             _SoundRow(
                               sound: sound,
                               canRemove: sounds.length > 1,
-                              typeLabel: _soundTypeLabel(sound.type),
+                              typeLabel: sound.type.label,
                               tagCatalog: _tagCatalog,
                               isTagsLoading: _isTagsLoading,
                               notifier: widget.notifier,
@@ -459,6 +454,8 @@ class _SoundRowState extends State<_SoundRow> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          SoundTypeAvatar(type: sound.type, radius: 16, iconSize: 18),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -578,8 +575,9 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
                     itemBuilder: (_, i) {
                       final s = _sounds[i];
                       return ListTile(
+                        leading: SoundTypeAvatar(type: s.type, radius: 18),
                         title: Text(s.displayName ?? s.title),
-                        subtitle: Text(_typeLabel(s.type)),
+                        subtitle: Text(s.type.label),
                         onTap: () async {
                           await widget.notifier.addSoundToPad(
                             widget.padId,
@@ -597,9 +595,4 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
     );
   }
 
-  String _typeLabel(SoundType type) => switch (type) {
-        SoundType.soundEffect => 'Bruitage',
-        SoundType.music => 'Musique',
-        SoundType.ambiance => 'Ambiance',
-      };
 }

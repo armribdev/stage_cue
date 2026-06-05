@@ -11,6 +11,7 @@ import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
+import '../utils/sound_type_ui.dart';
 
 /// Écran bibliothèque dédié à l'édition des propriétés des sons.
 class SoundLibraryManageScreen extends StatefulWidget {
@@ -669,7 +670,6 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final isDesktopPlatform =
         defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.macOS ||
@@ -723,13 +723,7 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8.0),
                             child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: scheme.primaryContainer,
-                                child: Icon(
-                                  Icons.music_note,
-                                  color: scheme.primary,
-                                ),
-                              ),
+                              leading: SoundTypeAvatar(type: sound.type),
                               title: Text(sound.displayName ?? sound.title),
                               subtitle: tags.isNotEmpty
                                   ? Column(
