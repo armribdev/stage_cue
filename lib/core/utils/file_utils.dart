@@ -14,6 +14,59 @@ bool isAudioFile(String filePath) {
   return audioExtensions.contains(extension);
 }
 
+/// Calcule une empreinte rapide et déterministe du contenu d'un fichier.
+///
+/// Combine la taille + un échantillon de début/fin via FNV-1a 64 bits. Permet
+/// de réidentifier un fichier déplacé ou renommé sans lire tout le fichier
+/// (suffisant pour la déduplication et la résolution de bibliothèque, pas un
+/// usage cryptographique). Retourne `null` si le fichier est illisible.
+Future<String?> computeQuickHash(File file, {int sampleSize = 65536}) async {
+  try {
+    final length = await file.length();
+    const int offsetBasis = 0xcbf29ce484222325;
+    const int prime = 0x100000001b3;
+
+    int hash = offsetBasis;
+    void mix(int byte) {
+      hash ^= byte;
+      hash = hash * prime; // débordement 64 bits (int natif Dart)
+    }
+
+    // Intègre la taille dans l'empreinte.
+    for (var shift = 0; shift < 64; shift += 8) {
+      mix((length >> shift) & 0xff);
+    }
+
+    final raf = await file.open();
+    try {
+      // Échantillon de début.
+      final head = await raf.read(sampleSize);
+      for (final b in head) {
+        mix(b);
+      }
+      // Échantillon de fin (si le fichier dépasse l'échantillon de début).
+      if (length > sampleSize) {
+        final tailStart = length - sampleSize < sampleSize
+            ? sampleSize
+            : length - sampleSize;
+        await raf.setPosition(tailStart);
+        final tail = await raf.read(sampleSize);
+        for (final b in tail) {
+          mix(b);
+        }
+      }
+    } finally {
+      await raf.close();
+    }
+
+    final unsigned = hash.toUnsigned(64);
+    return '${length.toRadixString(16)}-${unsigned.toRadixString(16)}';
+  } catch (e) {
+    debugPrint('Impossible de calculer le hash de ${file.path}: $e');
+    return null;
+  }
+}
+
 /// Scanne récursivement un dossier et retourne tous les fichiers audio
 Future<List<File>> scanDirectoryForAudioFiles(Directory directory) async {
   final List<File> audioFiles = [];

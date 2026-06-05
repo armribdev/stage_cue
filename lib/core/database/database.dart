@@ -10,6 +10,7 @@ part 'database.g.dart';
 
 @DriftDatabase(
   tables: [
+    Libraries,
     Sounds,
     SoundBoards,
     WatchedPaths,
@@ -26,7 +27,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration {
@@ -106,6 +107,15 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 10) {
           await _migrateToPads(m);
+        }
+        if (from < 11) {
+          // Socle des bibliothèques portables : table + colonnes de portabilité
+          // sur sounds. Les sons existants restent locaux (library_id NULL,
+          // relative_path NULL → filePath demeure la source de vérité).
+          await m.createTable(libraries);
+          await m.addColumn(sounds, sounds.libraryId);
+          await m.addColumn(sounds, sounds.relativePath);
+          await m.addColumn(sounds, sounds.contentHash);
         }
       },
       beforeOpen: (details) async {

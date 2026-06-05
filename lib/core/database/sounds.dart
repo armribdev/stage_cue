@@ -11,15 +11,39 @@ enum PadPlayMode {
   sequential,
 }
 
+/// Bibliothèque portable : un dossier (potentiellement synchronisé via Drive)
+/// qui regroupe des fichiers audio + leurs métadonnées. Sert de racine pour
+/// résoudre les chemins relatifs des sons sur n'importe quel appareil.
+class Libraries extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  // Racine locale (cache) où les fichiers de la bibliothèque sont matérialisés.
+  TextColumn get localRootPath => text()();
+  // Identifiant du dossier distant (Google Drive) — null tant que non connecté.
+  TextColumn get driveFolderId => text().nullable()();
+  // Dernière révision de snapshot DB connue localement (cf. sync).
+  IntColumn get lastSyncedRevision => integer().withDefault(const Constant(0))();
+  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
 class Sounds extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get title => text()(); // Chemin complet du fichier
   TextColumn get displayName => text().nullable()(); // Nom affiché sur le pad
-  TextColumn get filePath => text()(); // Chemin complet du fichier
+  TextColumn get filePath => text()(); // Chemin local résolu (cache à l'exécution)
   IntColumn get type => intEnum<SoundType>()();
   IntColumn get color => integer().nullable()(); // Couleur personnalisée (ARGB)
   RealColumn get volume => real().withDefault(const Constant(1.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  // ── Portabilité (bibliothèques synchronisables) ──────────────────────────
+  // Bibliothèque d'appartenance ; null = son purement local (legacy).
+  IntColumn get libraryId =>
+      integer().nullable().references(Libraries, #id, onDelete: KeyAction.setNull)();
+  // Chemin relatif à la racine de la bibliothèque ; null pour les sons locaux.
+  TextColumn get relativePath => text().nullable()();
+  // Empreinte de contenu (FNV-1a) pour réidentifier un fichier déplacé/renommé.
+  TextColumn get contentHash => text().nullable()();
 }
 
 class SoundBoards extends Table {
