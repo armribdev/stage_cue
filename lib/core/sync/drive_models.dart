@@ -6,6 +6,17 @@
 /// Type MIME d'un dossier Google Drive.
 const String driveFolderMimeType = 'application/vnd.google-apps.folder';
 
+/// Drive d'équipe (partagé) accessible via l'API `drives.list`.
+class DriveSharedDrive {
+  final String id;
+  final String name;
+
+  const DriveSharedDrive({
+    required this.id,
+    required this.name,
+  });
+}
+
 /// Référence vers un fichier ou dossier distant.
 class DriveFile {
   final String id;

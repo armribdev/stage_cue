@@ -10,6 +10,9 @@ class LibraryModel {
       name: row.name,
       localRootPath: row.localRootPath,
       driveFolderId: row.driveFolderId,
+      drivePath: row.drivePath,
+      ownerEmail: row.ownerEmail,
+      sharedDriveId: row.sharedDriveId,
       lastSyncedRevision: row.lastSyncedRevision,
       lastSyncedAt: row.lastSyncedAt,
       createdAt: row.createdAt,
@@ -20,11 +23,17 @@ class LibraryModel {
     required String name,
     required String localRootPath,
     String? driveFolderId,
+    String? drivePath,
+    String? ownerEmail,
+    String? sharedDriveId,
   }) {
     return db.LibrariesCompanion.insert(
       name: name,
       localRootPath: localRootPath,
       driveFolderId: Value(driveFolderId),
+      drivePath: Value(drivePath),
+      ownerEmail: Value(ownerEmail),
+      sharedDriveId: Value(sharedDriveId),
     );
   }
 }

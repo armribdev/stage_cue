@@ -6,9 +6,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/platform/saf_directory_bridge.dart';
+import '../../../../core/sync/google_oauth_config.dart';
+import '../../../../core/sync/google_oauth_setup_dialog.dart';
+import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../widgets/app_form_dialog.dart';
 import '../widgets/app_modal.dart';
+import '../widgets/drive_folder_picker.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../data/models/indexing_progress.dart';
@@ -218,8 +222,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     db.WatchedPath watchedPath,
     SafTreeInfo? info,
   ) async {
-    final folderName =
-        info?.displayName ?? _watchedPathTitle(watchedPath);
+    final folderName = _labelsForWatchedPath(watchedPath, info).title;
     final ownerEmail = await widget.libraryRepository.resolveSafFolderOwnerEmail(
       driveFileId: watchedPath.driveFileId ?? info?.driveFileId,
       folderName: folderName,
@@ -459,44 +462,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<String?> _promptDriveFolderName() async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Dossier Drive'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Nom du dossier Drive',
-              hintText: 'Ex. Spectacle 2026',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Annuler'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-              child: const Text('Connecter'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Future<void> _addDriveDirectory() async {
-    final name = await _promptDriveFolderName();
-    if (name == null || name.trim().isEmpty) {
+    if (!await ensureGoogleOAuthConfigured(context)) {
+      return;
+    }
+    if (!mounted) {
       return;
     }
 
-    final trimmedName = name.trim();
-    if (_libraries.any((library) => library.name == trimmedName)) {
+    final selection = await DriveFolderPicker.show(
+      context,
+      repository: widget.libraryRepository,
+    );
+    if (!mounted || selection == null) {
+      return;
+    }
+
+    final folderName = selection.name;
+    if (_libraries.any(
+      (library) => library.driveFolderId == selection.folderId,
+    )) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ce dossier Drive est déjà indexé')),
@@ -505,20 +490,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    final pendingKey = _driveProgressKey(-1, trimmedName);
+    final pendingKey = _driveProgressKey(-1, folderName);
     final now = DateTime.now();
     setState(() {
       _libraries = [
         ..._libraries,
         domain.Library(
           id: -1,
-          name: trimmedName,
+          name: folderName,
           localRootPath: '',
+          drivePath: selection.relativeDrivePath,
+          sharedDriveId: selection.sharedDriveId,
           createdAt: now,
         ),
       ];
       _indexingProgress[pendingKey] = IndexingProgress(
-        path: trimmedName,
+        path: folderName,
         current: 0,
         total: 0,
         isComplete: false,
@@ -526,24 +513,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
-      final library = await widget.libraryRepository.connectAndCreateLibrary(
-        name: trimmedName,
+      final library = await widget.libraryRepository.linkDriveFolder(
+        driveFolderId: selection.folderId,
+        name: folderName,
+        drivePath: selection.relativeDrivePath,
+        ownerEmail: widget.libraryRepository.connectedAccountEmail,
+        sharedDriveId: selection.sharedDriveId,
       );
 
       if (!mounted) {
-        return;
-      }
-
-      if (library == null) {
-        setState(() {
-          _libraries = _libraries
-              .where((item) => item.name != trimmedName || item.id != -1)
-              .toList();
-          _indexingProgress.remove(pendingKey);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Connexion Drive annulée')),
-        );
         return;
       }
 
@@ -551,7 +529,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _libraries = [
           for (final item in _libraries)
-            if (item.id == -1 && item.name == trimmedName) library else item,
+            if (item.id == -1 && item.name == folderName) library else item,
         ];
         final pending = _indexingProgress.remove(pendingKey);
         if (pending != null) {
@@ -573,18 +551,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Dossier Drive « $trimmedName » indexé'),
+            content: Text('Dossier Drive « $folderName » indexé'),
             duration: const Duration(seconds: 2),
           ),
         );
       }
 
       await _loadDatabaseInfo();
+    } on GoogleOAuthNotConfiguredException catch (e) {
+      if (mounted) {
+        setState(() {
+          _libraries = _libraries
+              .where((item) => item.name != folderName || item.id != -1)
+              .toList();
+          _indexingProgress.remove(pendingKey);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
           _libraries = _libraries
-              .where((item) => item.name != trimmedName || item.id != -1)
+              .where((item) => item.name != folderName || item.id != -1)
               .toList();
           _indexingProgress.remove(pendingKey);
         });
@@ -596,7 +589,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _confirmRemoveWatchedPath(db.WatchedPath watchedPath) async {
-    final label = _watchedPathTitle(watchedPath);
+    final label = _labelsForWatchedPath(watchedPath).title;
     final type = SafDirectoryBridge.isSafTreeUri(watchedPath.path)
         ? 'dossier cloud'
         : 'dossier local';
@@ -748,24 +741,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return _countSoundsInDirectory(watchedPath.path);
   }
 
-  String _watchedPathTitle(db.WatchedPath watchedPath) {
-    if (SafDirectoryBridge.isSafTreeUri(watchedPath.path)) {
-      return _safFolderInfo[watchedPath.path]?.displayName ?? 'Dossier cloud';
-    }
-    return p.basename(watchedPath.path);
+  IndexedFolderLabels _labelsForWatchedPath(
+    db.WatchedPath watchedPath, [
+    SafTreeInfo? safInfo,
+  ]) {
+    final info = safInfo ?? _safFolderInfo[watchedPath.path];
+    return IndexedFolderLabels.forWatchedPath(
+      path: watchedPath.path,
+      accountEmail: watchedPath.accountEmail,
+      safDisplayName: info?.displayName,
+      safDisplayPath: info?.displayPath,
+    );
   }
 
-  String _watchedPathSubtitle(db.WatchedPath watchedPath) {
-    if (SafDirectoryBridge.isSafTreeUri(watchedPath.path)) {
-      final path =
-          _safFolderInfo[watchedPath.path]?.displayPath ?? 'Dossier cloud';
-      final email = watchedPath.accountEmail;
-      if (email != null && email.isNotEmpty) {
-        return '$email/$path';
-      }
-      return path;
+  IndexedFolderLabels _labelsForItem(_IndexedFolderItem item) {
+    if (item.isLocal) {
+      return _labelsForWatchedPath(item.watchedPath!);
     }
-    return watchedPath.path;
+
+    final library = item.library!;
+    return IndexedFolderLabels.forLibrary(
+      name: library.name,
+      drivePath: library.drivePath,
+      ownerEmail: library.ownerEmail,
+      sessionOwnerEmail: widget.libraryRepository.connectedAccountEmail,
+    );
   }
 
   String _driveProgressKey(int libraryId, [String? pendingName]) {
@@ -1021,6 +1021,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               itemCount: _indexedFolderItems().length,
                               itemBuilder: (context, index) {
                                 final item = _indexedFolderItems()[index];
+                                final labels = _labelsForItem(item);
                                 final progress = _progressForItem(item);
                                 final isIndexing = !progress.isComplete;
 
@@ -1068,11 +1069,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   Text(
-                                                    item.isLocal
-                                                        ? _watchedPathTitle(
-                                                            item.watchedPath!,
-                                                          )
-                                                        : item.title,
+                                                    labels.title,
                                                     style: const TextStyle(
                                                       fontWeight:
                                                           FontWeight.bold,
@@ -1080,16 +1077,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                                   ),
                                                   const SizedBox(height: 4),
                                                   Text(
-                                                    item.isLocal
-                                                        ? _watchedPathSubtitle(
-                                                            item.watchedPath!,
-                                                          )
-                                                        : widget
-                                                                  .libraryRepository
-                                                                  .connectedAccountEmail ??
-                                                              'Bibliothèque Drive',
-                                                    style: const TextStyle(
+                                                    labels.subtitle,
+                                                    style: TextStyle(
                                                       fontSize: 11,
+                                                      color: Colors.grey[600],
                                                     ),
                                                     maxLines: 2,
                                                     overflow:
@@ -1200,10 +1191,6 @@ class _IndexedFolderItem {
   final domain.Library? library;
 
   bool get isLocal => watchedPath != null;
-
-  String get title => isLocal ? '' : library!.name;
-
-  String get typeLabel => isLocal ? '' : 'Dossier Drive';
 
   DateTime get addedAt =>
       isLocal ? watchedPath!.addedAt : library!.createdAt;

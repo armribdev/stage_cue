@@ -96,6 +96,96 @@ class LibraryRepository {
 
   Future<List<Library>> getLibraries() => _dataSource.getAllLibraries();
 
+  /// Établit une session Drive (silencieuse puis interactive si besoin).
+  /// Retourne false si l'utilisateur annule la connexion.
+  Future<bool> ensureDriveConnected() async {
+    if (_activeClient != null) {
+      return true;
+    }
+
+    final client =
+        await _authenticator.connectSilently() ?? await _authenticator.connect();
+    if (client == null) {
+      return false;
+    }
+    _activeClient = client;
+    return true;
+  }
+
+  /// Drives d'équipe accessibles par l'utilisateur connecté.
+  Future<List<DriveSharedDrive>> listDriveSharedDrives() async {
+    final client = _activeClient;
+    if (client == null) {
+      throw StateError('Bibliothèque non connectée à Drive');
+    }
+    return client.listSharedDrives();
+  }
+
+  /// Dossiers du filtre « Partagés avec moi ».
+  Future<List<DriveFile>> listDriveSharedWithMeFolders() async {
+    final client = _activeClient;
+    if (client == null) {
+      throw StateError('Bibliothèque non connectée à Drive');
+    }
+    final folders = await client.listSharedWithMeFolders();
+    return folders
+      ..sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
+  }
+
+  /// Liste les sous-dossiers d'un dossier Drive (triés par nom).
+  Future<List<DriveFile>> listDriveChildFolders(
+    String parentId, {
+    String? sharedDriveId,
+  }) async {
+    final client = _activeClient;
+    if (client == null) {
+      throw StateError('Bibliothèque non connectée à Drive');
+    }
+
+    final children = await client.listFolder(
+      parentId,
+      sharedDriveId: sharedDriveId,
+    );
+    return children.where((file) => file.isFolder).toList()
+      ..sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
+  }
+
+  /// Lie un dossier Drive existant (sans le créer) et enregistre la bibliothèque.
+  Future<Library> linkDriveFolder({
+    required String driveFolderId,
+    required String name,
+    String? drivePath,
+    String? ownerEmail,
+    String? sharedDriveId,
+  }) async {
+    final client = _activeClient;
+    if (client == null) {
+      throw StateError('Bibliothèque non connectée à Drive');
+    }
+
+    final folder = await client.getFile(
+      driveFolderId,
+      sharedDriveId: sharedDriveId,
+    );
+    if (folder == null || !folder.isFolder) {
+      throw ArgumentError('Dossier Drive introuvable');
+    }
+
+    final localRoot = await _createLocalRoot();
+    return _dataSource.insertLibrary(
+      name: name,
+      localRootPath: localRoot,
+      driveFolderId: driveFolderId,
+      drivePath: drivePath,
+      ownerEmail: ownerEmail ?? _authenticator.accountEmail,
+      sharedDriveId: sharedDriveId,
+    );
+  }
+
   /// Lance le consentement OAuth puis crée une bibliothèque : dossier Drive
   /// (réutilisé s'il existe déjà) + dossier de cache local + ligne en base.
   /// Retourne null si l'utilisateur annule la connexion.
@@ -113,6 +203,8 @@ class LibraryRepository {
       name: name,
       localRootPath: localRoot,
       driveFolderId: folder.id,
+      drivePath: name,
+      ownerEmail: _authenticator.accountEmail,
     );
   }
 
@@ -132,7 +224,10 @@ class LibraryRepository {
     if (client == null || folderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
-    return client.listFolder(folderId);
+    return client.listFolder(
+      folderId,
+      sharedDriveId: library.sharedDriveId,
+    );
   }
 
   /// Pousse l'état local de [library] vers Drive. En cas de succès, met à jour
@@ -261,7 +356,12 @@ class LibraryRepository {
         ),
       );
 
-      final audioFiles = await _collectDriveAudioFiles(client, folderId, '');
+      final audioFiles = await _collectDriveAudioFiles(
+        client,
+        folderId,
+        '',
+        sharedDriveId: library.sharedDriveId,
+      );
       onProgress?.call(
         IndexingProgress(
           path: library.name,
@@ -344,10 +444,14 @@ class LibraryRepository {
   Future<List<({String relativePath})>> _collectDriveAudioFiles(
     DriveClient client,
     String folderId,
-    String relativePrefix,
-  ) async {
+    String relativePrefix, {
+    String? sharedDriveId,
+  }) async {
     final results = <({String relativePath})>[];
-    final children = await client.listFolder(folderId);
+    final children = await client.listFolder(
+      folderId,
+      sharedDriveId: sharedDriveId,
+    );
 
     for (final child in children) {
       if (child.isFolder) {
@@ -355,7 +459,12 @@ class LibraryRepository {
             ? child.name
             : '$relativePrefix/${child.name}';
         results.addAll(
-          await _collectDriveAudioFiles(client, child.id, subPrefix),
+          await _collectDriveAudioFiles(
+            client,
+            child.id,
+            subPrefix,
+            sharedDriveId: sharedDriveId,
+          ),
         );
       } else if (isAudioFile(child.name)) {
         final relativePath = relativePrefix.isEmpty

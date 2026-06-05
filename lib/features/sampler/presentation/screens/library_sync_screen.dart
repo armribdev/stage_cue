@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/sync/google_oauth_config.dart';
+import '../../../../core/sync/google_oauth_setup_dialog.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../domain/entities/library.dart';
 import '../providers/sync_controller.dart';
@@ -78,6 +80,13 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
   }
 
   Future<void> _connect() async {
+    if (!await ensureGoogleOAuthConfigured(context)) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+
     final name = await _promptLibraryName();
     if (name == null || name.trim().isEmpty) return;
 
@@ -93,6 +102,8 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
         _snack('Bibliothèque « ${library.name} » connectée');
         await _loadLibraries();
       }
+    } on GoogleOAuthNotConfiguredException catch (e) {
+      if (mounted) _snack(e.message);
     } catch (e) {
       if (mounted) _snack('Erreur de connexion : $e');
     } finally {

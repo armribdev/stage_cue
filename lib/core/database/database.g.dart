@@ -53,6 +53,39 @@ class $LibrariesTable extends Libraries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _drivePathMeta = const VerificationMeta(
+    'drivePath',
+  );
+  @override
+  late final GeneratedColumn<String> drivePath = GeneratedColumn<String>(
+    'drive_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _ownerEmailMeta = const VerificationMeta(
+    'ownerEmail',
+  );
+  @override
+  late final GeneratedColumn<String> ownerEmail = GeneratedColumn<String>(
+    'owner_email',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sharedDriveIdMeta = const VerificationMeta(
+    'sharedDriveId',
+  );
+  @override
+  late final GeneratedColumn<String> sharedDriveId = GeneratedColumn<String>(
+    'shared_drive_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _lastSyncedRevisionMeta =
       const VerificationMeta('lastSyncedRevision');
   @override
@@ -93,6 +126,9 @@ class $LibrariesTable extends Libraries
     name,
     localRootPath,
     driveFolderId,
+    drivePath,
+    ownerEmail,
+    sharedDriveId,
     lastSyncedRevision,
     lastSyncedAt,
     createdAt,
@@ -137,6 +173,27 @@ class $LibrariesTable extends Libraries
         driveFolderId.isAcceptableOrUnknown(
           data['drive_folder_id']!,
           _driveFolderIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('drive_path')) {
+      context.handle(
+        _drivePathMeta,
+        drivePath.isAcceptableOrUnknown(data['drive_path']!, _drivePathMeta),
+      );
+    }
+    if (data.containsKey('owner_email')) {
+      context.handle(
+        _ownerEmailMeta,
+        ownerEmail.isAcceptableOrUnknown(data['owner_email']!, _ownerEmailMeta),
+      );
+    }
+    if (data.containsKey('shared_drive_id')) {
+      context.handle(
+        _sharedDriveIdMeta,
+        sharedDriveId.isAcceptableOrUnknown(
+          data['shared_drive_id']!,
+          _sharedDriveIdMeta,
         ),
       );
     }
@@ -189,6 +246,18 @@ class $LibrariesTable extends Libraries
         DriftSqlType.string,
         data['${effectivePrefix}drive_folder_id'],
       ),
+      drivePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}drive_path'],
+      ),
+      ownerEmail: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner_email'],
+      ),
+      sharedDriveId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shared_drive_id'],
+      ),
       lastSyncedRevision: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}last_synced_revision'],
@@ -215,6 +284,15 @@ class Library extends DataClass implements Insertable<Library> {
   final String name;
   final String localRootPath;
   final String? driveFolderId;
+
+  /// Chemin relatif dans Drive (sans e-mail propriétaire).
+  final String? drivePath;
+
+  /// E-mail du propriétaire du dossier Drive lié.
+  final String? ownerEmail;
+
+  /// Drive d'équipe parent, si le dossier est dans un drive partagé.
+  final String? sharedDriveId;
   final int lastSyncedRevision;
   final DateTime? lastSyncedAt;
   final DateTime createdAt;
@@ -223,6 +301,9 @@ class Library extends DataClass implements Insertable<Library> {
     required this.name,
     required this.localRootPath,
     this.driveFolderId,
+    this.drivePath,
+    this.ownerEmail,
+    this.sharedDriveId,
     required this.lastSyncedRevision,
     this.lastSyncedAt,
     required this.createdAt,
@@ -235,6 +316,15 @@ class Library extends DataClass implements Insertable<Library> {
     map['local_root_path'] = Variable<String>(localRootPath);
     if (!nullToAbsent || driveFolderId != null) {
       map['drive_folder_id'] = Variable<String>(driveFolderId);
+    }
+    if (!nullToAbsent || drivePath != null) {
+      map['drive_path'] = Variable<String>(drivePath);
+    }
+    if (!nullToAbsent || ownerEmail != null) {
+      map['owner_email'] = Variable<String>(ownerEmail);
+    }
+    if (!nullToAbsent || sharedDriveId != null) {
+      map['shared_drive_id'] = Variable<String>(sharedDriveId);
     }
     map['last_synced_revision'] = Variable<int>(lastSyncedRevision);
     if (!nullToAbsent || lastSyncedAt != null) {
@@ -252,6 +342,15 @@ class Library extends DataClass implements Insertable<Library> {
       driveFolderId: driveFolderId == null && nullToAbsent
           ? const Value.absent()
           : Value(driveFolderId),
+      drivePath: drivePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(drivePath),
+      ownerEmail: ownerEmail == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ownerEmail),
+      sharedDriveId: sharedDriveId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sharedDriveId),
       lastSyncedRevision: Value(lastSyncedRevision),
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
           ? const Value.absent()
@@ -270,6 +369,9 @@ class Library extends DataClass implements Insertable<Library> {
       name: serializer.fromJson<String>(json['name']),
       localRootPath: serializer.fromJson<String>(json['localRootPath']),
       driveFolderId: serializer.fromJson<String?>(json['driveFolderId']),
+      drivePath: serializer.fromJson<String?>(json['drivePath']),
+      ownerEmail: serializer.fromJson<String?>(json['ownerEmail']),
+      sharedDriveId: serializer.fromJson<String?>(json['sharedDriveId']),
       lastSyncedRevision: serializer.fromJson<int>(json['lastSyncedRevision']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -283,6 +385,9 @@ class Library extends DataClass implements Insertable<Library> {
       'name': serializer.toJson<String>(name),
       'localRootPath': serializer.toJson<String>(localRootPath),
       'driveFolderId': serializer.toJson<String?>(driveFolderId),
+      'drivePath': serializer.toJson<String?>(drivePath),
+      'ownerEmail': serializer.toJson<String?>(ownerEmail),
+      'sharedDriveId': serializer.toJson<String?>(sharedDriveId),
       'lastSyncedRevision': serializer.toJson<int>(lastSyncedRevision),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -294,6 +399,9 @@ class Library extends DataClass implements Insertable<Library> {
     String? name,
     String? localRootPath,
     Value<String?> driveFolderId = const Value.absent(),
+    Value<String?> drivePath = const Value.absent(),
+    Value<String?> ownerEmail = const Value.absent(),
+    Value<String?> sharedDriveId = const Value.absent(),
     int? lastSyncedRevision,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
     DateTime? createdAt,
@@ -304,6 +412,11 @@ class Library extends DataClass implements Insertable<Library> {
     driveFolderId: driveFolderId.present
         ? driveFolderId.value
         : this.driveFolderId,
+    drivePath: drivePath.present ? drivePath.value : this.drivePath,
+    ownerEmail: ownerEmail.present ? ownerEmail.value : this.ownerEmail,
+    sharedDriveId: sharedDriveId.present
+        ? sharedDriveId.value
+        : this.sharedDriveId,
     lastSyncedRevision: lastSyncedRevision ?? this.lastSyncedRevision,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
     createdAt: createdAt ?? this.createdAt,
@@ -318,6 +431,13 @@ class Library extends DataClass implements Insertable<Library> {
       driveFolderId: data.driveFolderId.present
           ? data.driveFolderId.value
           : this.driveFolderId,
+      drivePath: data.drivePath.present ? data.drivePath.value : this.drivePath,
+      ownerEmail: data.ownerEmail.present
+          ? data.ownerEmail.value
+          : this.ownerEmail,
+      sharedDriveId: data.sharedDriveId.present
+          ? data.sharedDriveId.value
+          : this.sharedDriveId,
       lastSyncedRevision: data.lastSyncedRevision.present
           ? data.lastSyncedRevision.value
           : this.lastSyncedRevision,
@@ -335,6 +455,9 @@ class Library extends DataClass implements Insertable<Library> {
           ..write('name: $name, ')
           ..write('localRootPath: $localRootPath, ')
           ..write('driveFolderId: $driveFolderId, ')
+          ..write('drivePath: $drivePath, ')
+          ..write('ownerEmail: $ownerEmail, ')
+          ..write('sharedDriveId: $sharedDriveId, ')
           ..write('lastSyncedRevision: $lastSyncedRevision, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt')
@@ -348,6 +471,9 @@ class Library extends DataClass implements Insertable<Library> {
     name,
     localRootPath,
     driveFolderId,
+    drivePath,
+    ownerEmail,
+    sharedDriveId,
     lastSyncedRevision,
     lastSyncedAt,
     createdAt,
@@ -360,6 +486,9 @@ class Library extends DataClass implements Insertable<Library> {
           other.name == this.name &&
           other.localRootPath == this.localRootPath &&
           other.driveFolderId == this.driveFolderId &&
+          other.drivePath == this.drivePath &&
+          other.ownerEmail == this.ownerEmail &&
+          other.sharedDriveId == this.sharedDriveId &&
           other.lastSyncedRevision == this.lastSyncedRevision &&
           other.lastSyncedAt == this.lastSyncedAt &&
           other.createdAt == this.createdAt);
@@ -370,6 +499,9 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
   final Value<String> name;
   final Value<String> localRootPath;
   final Value<String?> driveFolderId;
+  final Value<String?> drivePath;
+  final Value<String?> ownerEmail;
+  final Value<String?> sharedDriveId;
   final Value<int> lastSyncedRevision;
   final Value<DateTime?> lastSyncedAt;
   final Value<DateTime> createdAt;
@@ -378,6 +510,9 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     this.name = const Value.absent(),
     this.localRootPath = const Value.absent(),
     this.driveFolderId = const Value.absent(),
+    this.drivePath = const Value.absent(),
+    this.ownerEmail = const Value.absent(),
+    this.sharedDriveId = const Value.absent(),
     this.lastSyncedRevision = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -387,6 +522,9 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     required String name,
     required String localRootPath,
     this.driveFolderId = const Value.absent(),
+    this.drivePath = const Value.absent(),
+    this.ownerEmail = const Value.absent(),
+    this.sharedDriveId = const Value.absent(),
     this.lastSyncedRevision = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -397,6 +535,9 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     Expression<String>? name,
     Expression<String>? localRootPath,
     Expression<String>? driveFolderId,
+    Expression<String>? drivePath,
+    Expression<String>? ownerEmail,
+    Expression<String>? sharedDriveId,
     Expression<int>? lastSyncedRevision,
     Expression<DateTime>? lastSyncedAt,
     Expression<DateTime>? createdAt,
@@ -406,6 +547,9 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
       if (name != null) 'name': name,
       if (localRootPath != null) 'local_root_path': localRootPath,
       if (driveFolderId != null) 'drive_folder_id': driveFolderId,
+      if (drivePath != null) 'drive_path': drivePath,
+      if (ownerEmail != null) 'owner_email': ownerEmail,
+      if (sharedDriveId != null) 'shared_drive_id': sharedDriveId,
       if (lastSyncedRevision != null)
         'last_synced_revision': lastSyncedRevision,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
@@ -418,6 +562,9 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     Value<String>? name,
     Value<String>? localRootPath,
     Value<String?>? driveFolderId,
+    Value<String?>? drivePath,
+    Value<String?>? ownerEmail,
+    Value<String?>? sharedDriveId,
     Value<int>? lastSyncedRevision,
     Value<DateTime?>? lastSyncedAt,
     Value<DateTime>? createdAt,
@@ -427,6 +574,9 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
       name: name ?? this.name,
       localRootPath: localRootPath ?? this.localRootPath,
       driveFolderId: driveFolderId ?? this.driveFolderId,
+      drivePath: drivePath ?? this.drivePath,
+      ownerEmail: ownerEmail ?? this.ownerEmail,
+      sharedDriveId: sharedDriveId ?? this.sharedDriveId,
       lastSyncedRevision: lastSyncedRevision ?? this.lastSyncedRevision,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -448,6 +598,15 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     if (driveFolderId.present) {
       map['drive_folder_id'] = Variable<String>(driveFolderId.value);
     }
+    if (drivePath.present) {
+      map['drive_path'] = Variable<String>(drivePath.value);
+    }
+    if (ownerEmail.present) {
+      map['owner_email'] = Variable<String>(ownerEmail.value);
+    }
+    if (sharedDriveId.present) {
+      map['shared_drive_id'] = Variable<String>(sharedDriveId.value);
+    }
     if (lastSyncedRevision.present) {
       map['last_synced_revision'] = Variable<int>(lastSyncedRevision.value);
     }
@@ -467,6 +626,9 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
           ..write('name: $name, ')
           ..write('localRootPath: $localRootPath, ')
           ..write('driveFolderId: $driveFolderId, ')
+          ..write('drivePath: $drivePath, ')
+          ..write('ownerEmail: $ownerEmail, ')
+          ..write('sharedDriveId: $sharedDriveId, ')
           ..write('lastSyncedRevision: $lastSyncedRevision, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt')
@@ -4337,6 +4499,9 @@ typedef $$LibrariesTableCreateCompanionBuilder =
       required String name,
       required String localRootPath,
       Value<String?> driveFolderId,
+      Value<String?> drivePath,
+      Value<String?> ownerEmail,
+      Value<String?> sharedDriveId,
       Value<int> lastSyncedRevision,
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
@@ -4347,6 +4512,9 @@ typedef $$LibrariesTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String> localRootPath,
       Value<String?> driveFolderId,
+      Value<String?> drivePath,
+      Value<String?> ownerEmail,
+      Value<String?> sharedDriveId,
       Value<int> lastSyncedRevision,
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
@@ -4402,6 +4570,21 @@ class $$LibrariesTableFilterComposer
 
   ColumnFilters<String> get driveFolderId => $composableBuilder(
     column: $table.driveFolderId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get drivePath => $composableBuilder(
+    column: $table.drivePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ownerEmail => $composableBuilder(
+    column: $table.ownerEmail,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sharedDriveId => $composableBuilder(
+    column: $table.sharedDriveId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4475,6 +4658,21 @@ class $$LibrariesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get drivePath => $composableBuilder(
+    column: $table.drivePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ownerEmail => $composableBuilder(
+    column: $table.ownerEmail,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sharedDriveId => $composableBuilder(
+    column: $table.sharedDriveId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get lastSyncedRevision => $composableBuilder(
     column: $table.lastSyncedRevision,
     builder: (column) => ColumnOrderings(column),
@@ -4513,6 +4711,19 @@ class $$LibrariesTableAnnotationComposer
 
   GeneratedColumn<String> get driveFolderId => $composableBuilder(
     column: $table.driveFolderId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get drivePath =>
+      $composableBuilder(column: $table.drivePath, builder: (column) => column);
+
+  GeneratedColumn<String> get ownerEmail => $composableBuilder(
+    column: $table.ownerEmail,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sharedDriveId => $composableBuilder(
+    column: $table.sharedDriveId,
     builder: (column) => column,
   );
 
@@ -4587,6 +4798,9 @@ class $$LibrariesTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String> localRootPath = const Value.absent(),
                 Value<String?> driveFolderId = const Value.absent(),
+                Value<String?> drivePath = const Value.absent(),
+                Value<String?> ownerEmail = const Value.absent(),
+                Value<String?> sharedDriveId = const Value.absent(),
                 Value<int> lastSyncedRevision = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -4595,6 +4809,9 @@ class $$LibrariesTableTableManager
                 name: name,
                 localRootPath: localRootPath,
                 driveFolderId: driveFolderId,
+                drivePath: drivePath,
+                ownerEmail: ownerEmail,
+                sharedDriveId: sharedDriveId,
                 lastSyncedRevision: lastSyncedRevision,
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,
@@ -4605,6 +4822,9 @@ class $$LibrariesTableTableManager
                 required String name,
                 required String localRootPath,
                 Value<String?> driveFolderId = const Value.absent(),
+                Value<String?> drivePath = const Value.absent(),
+                Value<String?> ownerEmail = const Value.absent(),
+                Value<String?> sharedDriveId = const Value.absent(),
                 Value<int> lastSyncedRevision = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -4613,6 +4833,9 @@ class $$LibrariesTableTableManager
                 name: name,
                 localRootPath: localRootPath,
                 driveFolderId: driveFolderId,
+                drivePath: drivePath,
+                ownerEmail: ownerEmail,
+                sharedDriveId: sharedDriveId,
                 lastSyncedRevision: lastSyncedRevision,
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,

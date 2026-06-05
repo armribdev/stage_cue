@@ -27,7 +27,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration {
@@ -121,6 +121,14 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(watchedPaths, watchedPaths.accountEmail);
           await m.addColumn(watchedPaths, watchedPaths.driveFileId);
         }
+        if (from < 13) {
+          await m.addColumn(libraries, libraries.drivePath);
+          await m.addColumn(libraries, libraries.ownerEmail);
+          await _migrateLibraryDisplayFields();
+        }
+        if (from < 14) {
+          await m.addColumn(libraries, libraries.sharedDriveId);
+        }
       },
       beforeOpen: (details) async {
         // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
@@ -184,6 +192,37 @@ class AppDatabase extends _$AppDatabase {
 
     await customStatement('DROP TABLE IF EXISTS board_sound_settings');
     await customStatement('DROP TABLE IF EXISTS board_sounds');
+  }
+
+  Future<void> _migrateLibraryDisplayFields() async {
+    final rows = await customSelect('SELECT id, name FROM libraries').get();
+    for (final row in rows) {
+      final id = row.read<int>('id');
+      final storedName = row.read<String>('name').trim();
+      if (storedName.isEmpty) {
+        continue;
+      }
+
+      String name = storedName;
+      String? drivePath;
+
+      const root = 'Mon Drive';
+      if (storedName.startsWith('$root / ')) {
+        drivePath = storedName.substring(root.length + 3);
+        final segments = drivePath.split(' / ');
+        name = segments.isNotEmpty ? segments.last : storedName;
+      } else if (storedName.contains(' / ')) {
+        drivePath = storedName;
+        name = storedName.split(' / ').last;
+      }
+
+      await (update(libraries)..where((l) => l.id.equals(id))).write(
+        LibrariesCompanion(
+          name: Value(name),
+          drivePath: Value(drivePath),
+        ),
+      );
+    }
   }
 
   Future<void> _seedDefaultTagsIfEmpty() async {

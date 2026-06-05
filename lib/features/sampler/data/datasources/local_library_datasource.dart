@@ -26,12 +26,18 @@ class LocalLibraryDataSource {
     required String name,
     required String localRootPath,
     String? driveFolderId,
+    String? drivePath,
+    String? ownerEmail,
+    String? sharedDriveId,
   }) async {
     final id = await _database.into(_database.libraries).insert(
           LibraryModel.toInsertCompanion(
             name: name,
             localRootPath: localRootPath,
             driveFolderId: driveFolderId,
+            drivePath: drivePath,
+            ownerEmail: ownerEmail,
+            sharedDriveId: sharedDriveId,
           ),
         );
     final created = await getLibraryById(id);
