@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -22,6 +23,9 @@ class SamplerState {
   final SoundBoard? selectedBoard;
   final bool isBoardsLoading;
   final String? boardsError;
+  final PadItem? currentMusicPad;
+  final List<int> musicQueuePadIds;
+  final bool isMusicPanelExpanded;
 
   SamplerState({
     required this.pads,
@@ -31,7 +35,37 @@ class SamplerState {
     this.selectedBoard,
     this.isBoardsLoading = false,
     this.boardsError,
+    this.currentMusicPad,
+    this.musicQueuePadIds = const [],
+    this.isMusicPanelExpanded = false,
   });
+
+  /// Pads musique de la scène, dans l'ordre d'affichage.
+  List<PadItem> get musicPads =>
+      pads.where((padItem) => padItem.pad.isMusicPad).toList();
+
+  /// Prochaine musique en file d'attente.
+  PadItem? queuedMusicPad(PadItem? Function(int padId) resolve) {
+    if (musicQueuePadIds.isEmpty) return null;
+    return resolve(musicQueuePadIds.first);
+  }
+
+  /// File d'attente résolue.
+  List<PadItem> musicQueue(PadItem? Function(int padId) resolve) {
+    return musicQueuePadIds
+        .map(resolve)
+        .whereType<PadItem>()
+        .toList(growable: false);
+  }
+
+  /// Musiques disponibles sur la scène (hors en cours et file).
+  List<PadItem> upcomingMusicPads(PadItem? Function(int padId) resolve) {
+    final excluded = <int>{
+      if (currentMusicPad != null) currentMusicPad!.pad.id,
+      ...musicQueuePadIds,
+    };
+    return musicPads.where((pad) => !excluded.contains(pad.pad.id)).toList();
+  }
 
   SamplerState copyWith({
     List<PadItem>? pads,
@@ -41,6 +75,11 @@ class SamplerState {
     Object? selectedBoard = _unset,
     bool? isBoardsLoading,
     Object? boardsError = _unset,
+    Object? currentMusicPad = _unset,
+    List<int>? musicQueuePadIds,
+    bool? isMusicPanelExpanded,
+    bool clearCurrentMusicPad = false,
+    bool clearMusicQueue = false,
   }) {
     return SamplerState(
       pads: pads ?? this.pads,
@@ -54,6 +93,16 @@ class SamplerState {
       boardsError: identical(boardsError, _unset)
           ? this.boardsError
           : boardsError as String?,
+      currentMusicPad: clearCurrentMusicPad
+          ? null
+          : identical(currentMusicPad, _unset)
+          ? this.currentMusicPad
+          : currentMusicPad as PadItem?,
+      musicQueuePadIds: clearMusicQueue
+          ? const []
+          : musicQueuePadIds ?? this.musicQueuePadIds,
+      isMusicPanelExpanded:
+          isMusicPanelExpanded ?? this.isMusicPanelExpanded,
     );
   }
 }
@@ -104,6 +153,7 @@ class SamplerNotifier extends ChangeNotifier {
   double _masterVolume = 1.0;
   _RemovedPadSnapshot? _lastRemovedPad;
   final _random = Random();
+  bool _skipMusicAutoAdvance = false;
 
   SamplerState _state = SamplerState(pads: []);
   SamplerState get state => _state;
@@ -341,9 +391,15 @@ class SamplerNotifier extends ChangeNotifier {
             if (playing) {
               padItem._currentPlayerIndex = idx;
               padItem.isPlaying = true;
+              if (padItem.pad.isMusicPad) {
+                _state = _state.copyWith(currentMusicPad: padItem);
+              }
             } else if (padItem._currentPlayerIndex == idx) {
               padItem.isPlaying = false;
               padItem._currentPlayerIndex = null;
+              if (padItem.pad.isMusicPad) {
+                _handleMusicPlaybackEnded(padItem);
+              }
             }
             notifyListeners();
           });
@@ -359,6 +415,7 @@ class SamplerNotifier extends ChangeNotifier {
       final removedItems =
           previousItems.where((item) => !keptIds.contains(item.pad.id)).toList();
       _disposePadItems(removedItems);
+      _syncMusicStateWithPads();
     } catch (e) {
       _state = _state.copyWith(isLoading: false, error: e.toString());
     }
@@ -367,6 +424,11 @@ class SamplerNotifier extends ChangeNotifier {
 
   /// Joue ou arrête le pad selon son mode de lecture.
   Future<void> toggleSound(PadItem padItem) async {
+    if (padItem.pad.isMusicPad) {
+      await _toggleMusicPad(padItem);
+      return;
+    }
+
     if (padItem.isPlaying) {
       await padItem.currentPlayer?.stop();
       return;
@@ -374,7 +436,15 @@ class SamplerNotifier extends ChangeNotifier {
 
     if (padItem.players.isEmpty) return;
 
-    final soundIndex = switch (padItem.pad.playMode) {
+    final soundIndex = _pickSoundIndex(padItem);
+    final player = padItem.players[soundIndex];
+    player.setVolume(padItem.pad.volume * _masterVolume);
+    await player.play();
+    notifyListeners();
+  }
+
+  int _pickSoundIndex(PadItem padItem) {
+    return switch (padItem.pad.playMode) {
       PadPlayMode.random => padItem.players.length == 1
           ? 0
           : _random.nextInt(padItem.players.length),
@@ -384,11 +454,307 @@ class SamplerNotifier extends ChangeNotifier {
           return idx;
         }(),
     };
+  }
 
+  Future<void> _toggleMusicPad(PadItem padItem) async {
+    if (padItem.players.isEmpty) return;
+
+    final currentMusic = _state.currentMusicPad;
+
+    if (padItem.isPlaying) {
+      await _stopMusicPad(padItem, manual: true);
+      return;
+    }
+
+    if (_state.musicQueuePadIds.contains(padItem.pad.id)) {
+      _removeFromMusicQueue(padItem.pad.id);
+      return;
+    }
+
+    if (currentMusic != null &&
+        currentMusic.pad.id != padItem.pad.id &&
+        currentMusic.isPlaying) {
+      enqueueMusicPad(padItem);
+      return;
+    }
+
+    await playMusicNow(padItem);
+  }
+
+  void _removeFromMusicQueue(int padId) {
+    final nextQueue =
+        _state.musicQueuePadIds.where((id) => id != padId).toList();
+    if (nextQueue.length == _state.musicQueuePadIds.length) return;
+    _state = _state.copyWith(musicQueuePadIds: nextQueue);
+    notifyListeners();
+  }
+
+  void enqueueMusicPad(PadItem padItem) {
+    if (padItem.pad.id == _state.currentMusicPad?.pad.id) return;
+    if (_state.musicQueuePadIds.contains(padItem.pad.id)) return;
+    _state = _state.copyWith(
+      musicQueuePadIds: [..._state.musicQueuePadIds, padItem.pad.id],
+    );
+    notifyListeners();
+  }
+
+  Future<void> playMusicNow(PadItem padItem) async {
+    if (padItem.players.isEmpty) return;
+
+    final current = _state.currentMusicPad;
+    if (current != null &&
+        current.pad.id != padItem.pad.id &&
+        current.isPlaying) {
+      await _stopMusicPad(current, manual: true);
+    }
+
+    _state = _state.copyWith(
+      musicQueuePadIds: _state.musicQueuePadIds
+          .where((id) => id != padItem.pad.id)
+          .toList(),
+    );
+    await _playMusicPad(padItem);
+  }
+
+  Future<PadItem?> playMusicBySoundId(int soundId) async {
+    final padItem = await _ensureMusicPadForSound(soundId);
+    if (padItem == null) return null;
+    await playMusicNow(padItem);
+    return padItem;
+  }
+
+  Future<PadItem?> enqueueMusicBySoundId(int soundId) async {
+    final padItem = await _ensureMusicPadForSound(soundId);
+    if (padItem == null) return null;
+
+    if (_state.currentMusicPad?.pad.id == padItem.pad.id &&
+        (_state.currentMusicPad?.isPlaying ?? false)) {
+      return padItem;
+    }
+
+    final current = _state.currentMusicPad;
+    if (current != null &&
+        current.isPlaying &&
+        current.pad.id != padItem.pad.id) {
+      enqueueMusicPad(padItem);
+      return padItem;
+    }
+
+    await playMusicNow(padItem);
+    return padItem;
+  }
+
+  Future<PadItem?> _ensureMusicPadForSound(int soundId) async {
+    final boardId = _activeBoardId;
+    if (boardId == null) return null;
+
+    final existing = _findPadItemForSound(soundId);
+    if (existing != null) return existing;
+
+    try {
+      await _repository.createPad(boardId, soundId);
+      await loadSounds(boardId: boardId);
+      return _findPadItemForSound(soundId);
+    } catch (e) {
+      debugPrint('Impossible d\'ajouter la musique à la scène: $e');
+      _state = _state.copyWith(error: 'Impossible d\'ajouter cette musique.');
+      notifyListeners();
+      return null;
+    }
+  }
+
+  PadItem? _findPadItemForSound(int soundId) {
+    for (final padItem in _state.pads) {
+      if (padItem.pad.sounds.any((sound) => sound.id == soundId)) {
+        return padItem;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _playMusicPad(PadItem padItem) async {
+    if (padItem.players.isEmpty) return;
+
+    _state = _state.copyWith(
+      currentMusicPad: padItem,
+      musicQueuePadIds: _state.musicQueuePadIds
+          .where((id) => id != padItem.pad.id)
+          .toList(),
+    );
+
+    final soundIndex = _pickSoundIndex(padItem);
     final player = padItem.players[soundIndex];
     player.setVolume(padItem.pad.volume * _masterVolume);
     await player.play();
     notifyListeners();
+  }
+
+  Future<void> _stopMusicPad(PadItem padItem, {required bool manual}) async {
+    if (manual) {
+      _skipMusicAutoAdvance = true;
+    }
+    try {
+      await padItem.currentPlayer?.stop();
+    } finally {
+      if (manual) {
+        _skipMusicAutoAdvance = false;
+      }
+    }
+
+    var nextState = _state;
+    if (_state.currentMusicPad?.pad.id == padItem.pad.id) {
+      nextState = nextState.copyWith(clearCurrentMusicPad: true);
+    }
+    if (_state.musicQueuePadIds.contains(padItem.pad.id)) {
+      nextState = nextState.copyWith(
+        musicQueuePadIds: nextState.musicQueuePadIds
+            .where((id) => id != padItem.pad.id)
+            .toList(),
+      );
+    }
+    _state = nextState;
+    notifyListeners();
+  }
+
+  void _handleMusicPlaybackEnded(PadItem padItem) {
+    if (_skipMusicAutoAdvance) return;
+    if (_state.currentMusicPad?.pad.id != padItem.pad.id) return;
+
+    final queue = _state.musicQueuePadIds;
+    _state = _state.copyWith(clearCurrentMusicPad: true);
+    notifyListeners();
+
+    if (queue.isEmpty) return;
+
+    final nextId = queue.first;
+    final next = _resolvePadItem(nextId);
+    _state = _state.copyWith(musicQueuePadIds: queue.sublist(1));
+    notifyListeners();
+    if (next != null) {
+      unawaited(_playMusicPad(next));
+    }
+  }
+
+  void setMusicPanelExpanded(bool expanded) {
+    if (_state.isMusicPanelExpanded == expanded) return;
+    _state = _state.copyWith(isMusicPanelExpanded: expanded);
+    notifyListeners();
+  }
+
+  Future<void> removeFromMusicQueue(int padId) async {
+    _removeFromMusicQueue(padId);
+  }
+
+  Future<void> clearMusicQueue() async {
+    if (_state.musicQueuePadIds.isEmpty) return;
+    _state = _state.copyWith(clearMusicQueue: true);
+    notifyListeners();
+  }
+
+  Future<void> playNextInQueueNow() async {
+    if (_state.musicQueuePadIds.isEmpty) return;
+
+    final nextId = _state.musicQueuePadIds.first;
+    final next = _resolvePadItem(nextId);
+    if (next == null) {
+      _state = _state.copyWith(musicQueuePadIds: _state.musicQueuePadIds.sublist(1));
+      notifyListeners();
+      return;
+    }
+
+    final current = _state.currentMusicPad;
+    if (current != null && current.isPlaying) {
+      await _stopMusicPad(current, manual: true);
+    }
+
+    _state = _state.copyWith(musicQueuePadIds: _state.musicQueuePadIds.sublist(1));
+    await _playMusicPad(next);
+  }
+
+  Future<void> stopCurrentMusic() async {
+    final current = _state.currentMusicPad;
+    if (current == null || !current.isPlaying) return;
+    await _stopMusicPad(current, manual: true);
+  }
+
+  Future<void> toggleCurrentMusicPlayback() async {
+    final current = _state.currentMusicPad;
+    if (current == null) {
+      if (_state.musicQueuePadIds.isNotEmpty) {
+        await playNextInQueueNow();
+      }
+      return;
+    }
+    if (current.isPlaying) {
+      await _stopMusicPad(current, manual: true);
+      return;
+    }
+    await playMusicNow(current);
+  }
+
+  Future<void> restartCurrentMusic() async {
+    final current = _state.currentMusicPad;
+    if (current == null || current.players.isEmpty) return;
+    if (current.isPlaying) {
+      _skipMusicAutoAdvance = true;
+      try {
+        await current.currentPlayer?.stop();
+      } finally {
+        _skipMusicAutoAdvance = false;
+      }
+    }
+    await _playMusicPad(current);
+  }
+
+  Future<void> skipToNextMusic() async {
+    if (_state.musicQueuePadIds.isEmpty) {
+      await stopCurrentMusic();
+      return;
+    }
+    await playNextInQueueNow();
+  }
+
+  void _clearMusicState() {
+    _state = _state.copyWith(
+      clearCurrentMusicPad: true,
+      clearMusicQueue: true,
+      isMusicPanelExpanded: false,
+    );
+  }
+
+  PadItem? _resolvePadItem(int? padId) {
+    if (padId == null) return null;
+    for (final padItem in _state.pads) {
+      if (padItem.pad.id == padId) return padItem;
+    }
+    return null;
+  }
+
+  void _syncMusicStateWithPads() {
+    final currentId = _state.currentMusicPad?.pad.id;
+    final nextCurrent = _resolvePadItem(currentId);
+    final nextQueue = _state.musicQueuePadIds
+        .where((id) => _resolvePadItem(id) != null && id != nextCurrent?.pad.id)
+        .toList();
+
+    if (nextCurrent == _state.currentMusicPad &&
+        _listEquals(nextQueue, _state.musicQueuePadIds)) {
+      return;
+    }
+
+    _state = _state.copyWith(
+      currentMusicPad: nextCurrent,
+      musicQueuePadIds: nextQueue,
+      clearCurrentMusicPad: nextCurrent == null && currentId != null,
+    );
+  }
+
+  bool _listEquals(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   /// Met à jour les réglages d'un pad et persiste en base.
@@ -467,13 +833,19 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<void> stopAllSounds() async {
-    for (final padItem in _state.pads) {
-      if (padItem.isPlaying) {
-        await padItem.currentPlayer?.stop();
-        padItem.isPlaying = false;
-        padItem._currentPlayerIndex = null;
+    _skipMusicAutoAdvance = true;
+    try {
+      for (final padItem in _state.pads) {
+        if (padItem.isPlaying) {
+          await padItem.currentPlayer?.stop();
+          padItem.isPlaying = false;
+          padItem._currentPlayerIndex = null;
+        }
       }
+    } finally {
+      _skipMusicAutoAdvance = false;
     }
+    _clearMusicState();
     notifyListeners();
   }
 
@@ -529,6 +901,7 @@ class SamplerNotifier extends ChangeNotifier {
       pads: _state.pads.where((p) => p != padItem).toList(),
       error: null,
     );
+    _syncMusicStateWithPads();
     notifyListeners();
     return true;
   }
