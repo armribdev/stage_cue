@@ -4,10 +4,13 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/database/database.dart' as db;
 import '../../../../core/sync/audio_cache_manager.dart';
 import '../../../../core/sync/drive_client.dart';
 import '../../../../core/sync/drive_models.dart';
+import '../../../../core/sync/google_drive_client.dart';
 import '../../../../core/sync/library_sync_service.dart';
+import '../../../../core/sync/snapshot_store.dart';
 import '../../domain/entities/library.dart';
 import '../../domain/entities/sound.dart';
 import '../datasources/local_library_datasource.dart';
@@ -31,6 +34,16 @@ class LibraryRepository {
     this._syncService,
     this._cacheManager,
   );
+
+  /// Assemble le repository avec ses dépendances Drive par défaut.
+  factory LibraryRepository.fromDatabase(db.AppDatabase database) {
+    return LibraryRepository(
+      LocalLibraryDataSource(database),
+      GoogleDriveAuthenticator(),
+      LibrarySyncService(DriftSnapshotStore(database)),
+      AudioCacheManager(),
+    );
+  }
 
   DriveClient? get activeClient => _activeClient;
   String? get connectedAccountEmail => _authenticator.accountEmail;
