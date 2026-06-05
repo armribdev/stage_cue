@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import '../providers/sampler_provider.dart';
 import '../widgets/pad_item.dart' show PadCard;
+import '../widgets/music_preview_panel.dart';
+import '../widgets/music_picker_sheet.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/database/database.dart' as db;
@@ -706,6 +708,177 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
+  Widget _buildSamplerContent(BuildContext context, SamplerState state) {
+    final selectedBoard = state.selectedBoard;
+    final isBoardsLoading = state.isBoardsLoading;
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 260),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.02),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
+          ),
+        );
+      },
+      child: Builder(
+        key: ValueKey<String>(
+          selectedBoard == null
+              ? (isBoardsLoading ? 'boards_loading' : 'boards_empty')
+              : state.isLoading
+              ? 'sounds_loading'
+              : state.error != null
+              ? 'sounds_error'
+              : state.pads.isEmpty
+              ? 'sounds_empty'
+              : 'sounds_grid',
+        ),
+        builder: (context) {
+          if (selectedBoard == null) {
+            return Center(
+              child: isBoardsLoading
+                  ? const CircularProgressIndicator()
+                  : const Text('Aucune scène disponible'),
+            );
+          }
+          if (state.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (state.error != null) {
+            return Center(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Erreur: ${state.error}',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+          if (state.pads.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.graphic_eq_rounded,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Aucun son dans la scène',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Ajoutez des sons depuis la bibliothèque',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: () => _openSoundLibrary(selectedBoard),
+                      icon: const Icon(Icons.library_music_rounded),
+                      label: const Text('Ouvrir la bibliothèque'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          return _buildPadsGrid(context, state, selectedBoard);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openMusicPicker() async {
+    await MusicPickerSheet.show(
+      context,
+      repository: widget.services.soundRepository,
+      notifier: _notifier,
+    );
+  }
+
+  Widget _buildMusicPreviewPanel(BuildContext context, SamplerState state) {
+    return MusicPreviewPanel(
+      state: state,
+      isLandscapeExpanded:
+          MediaQuery.orientationOf(context) == Orientation.landscape,
+      onToggleExpanded: () => _notifier.setMusicPanelExpanded(
+        !state.isMusicPanelExpanded,
+      ),
+      onChooseMusic: () => unawaited(_openMusicPicker()),
+      onTogglePlayPause: () =>
+          unawaited(_notifier.toggleCurrentMusicPlayback()),
+      onRestart: () => unawaited(_notifier.restartCurrentMusic()),
+      onSkipNext: () => unawaited(_notifier.skipToNextMusic()),
+      onStopCurrent: () => unawaited(_notifier.stopCurrentMusic()),
+      onClearQueue: () => unawaited(_notifier.clearMusicQueue()),
+      onPlayNextInQueue: () => unawaited(_notifier.playNextInQueueNow()),
+      onRemoveFromQueue: (padId) =>
+          unawaited(_notifier.removeFromMusicQueue(padId)),
+      onSelectMusicPad: (padItem) => unawaited(_notifier.toggleSound(padItem)),
+    );
+  }
+
+  Widget _buildBodyLayout(BuildContext context, SamplerState state) {
+    final content = _buildSamplerContent(context, state);
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+
+    if (state.isMusicPanelExpanded && isLandscape) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: content),
+          SizedBox(
+            width: 340,
+            child: _buildMusicPreviewPanel(context, state),
+          ),
+        ],
+      );
+    }
+
+    if (state.isMusicPanelExpanded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(flex: 3, child: content),
+          Expanded(
+            flex: 2,
+            child: _buildMusicPreviewPanel(context, state),
+          ),
+        ],
+      );
+    }
+
+    return content;
+  }
+
   @override
   void dispose() {
     _normalGridScrollController.dispose();
@@ -796,113 +969,18 @@ class _SamplerScreenState extends State<SamplerScreen> {
               },
             ),
             body: SafeArea(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 260),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.02),
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: child,
-                    ),
-                  );
-                },
-                child: Builder(
-                  key: ValueKey<String>(
-                    selectedBoard == null
-                        ? (isBoardsLoading ? 'boards_loading' : 'boards_empty')
-                        : state.isLoading
-                        ? 'sounds_loading'
-                        : state.error != null
-                        ? 'sounds_error'
-                        : state.pads.isEmpty
-                        ? 'sounds_empty'
-                        : 'sounds_grid',
-                  ),
-                  builder: (context) {
-                    if (selectedBoard == null) {
-                      return Center(
-                        child: isBoardsLoading
-                            ? const CircularProgressIndicator()
-                            : const Text('Aucune scène disponible'),
-                      );
-                    }
-                    if (state.isLoading) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (state.error != null) {
-                      return Center(
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.error_outline_rounded,
-                                  size: 48,
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'Erreur: ${state.error}',
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-                    if (state.pads.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.graphic_eq_rounded,
-                                size: 48,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              const SizedBox(height: 14),
-                              Text(
-                                'Aucun son dans la scène',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Ajoutez des sons depuis la bibliothèque',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                              const SizedBox(height: 20),
-                              ElevatedButton.icon(
-                                onPressed: () => _openSoundLibrary(selectedBoard),
-                                icon: const Icon(Icons.library_music_rounded),
-                                label: const Text('Ouvrir la bibliothèque'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-                    return _buildPadsGrid(context, state, selectedBoard);
-                  },
-                ),
-              ),
+              child: _buildBodyLayout(context, state),
             ),
-            bottomNavigationBar: _MasterVolumeBar(
-              masterVolume: masterVolume,
-              onChanged: (value) => _notifier.setMasterVolume(value),
+            bottomNavigationBar: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!state.isMusicPanelExpanded)
+                  _buildMusicPreviewPanel(context, state),
+                _MasterVolumeBar(
+                  masterVolume: masterVolume,
+                  onChanged: (value) => _notifier.setMasterVolume(value),
+                ),
+              ],
             ),
           ),
         ),
