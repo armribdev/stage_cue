@@ -8,6 +8,7 @@ import '../../../../core/database/database.dart' as db;
 import '../../data/repositories/sound_repository.dart';
 import '../../data/models/indexing_progress.dart';
 import '../../domain/entities/watched_path.dart' as domain;
+import 'library_sync_screen.dart';
 
 /// Écran des paramètres
 class SettingsScreen extends StatefulWidget {
@@ -335,6 +336,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                             ],
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Card(
+                        child: ListTile(
+                          leading: Icon(
+                            Icons.cloud_sync,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          title: const Text('Bibliothèque Drive'),
+                          subtitle: const Text(
+                            'Synchroniser les sons et métadonnées entre appareils',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => LibrarySyncScreen(
+                                  database: widget.database,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(height: 16),
