@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:google_sign_in_all_platforms/google_sign_in_all_platforms.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:http/http.dart' as http;
 
+import 'drive_account_profile.dart';
 import 'drive_client.dart';
 import 'google_drive_client.dart';
 import 'google_oauth_config.dart';
@@ -14,7 +16,7 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
 
   final GoogleSignIn? _googleSignIn;
   GoogleSignIn? _resolvedSignIn;
-  String? _cachedAccountEmail;
+  DriveAccountProfile? _cachedProfile;
 
   GoogleSignIn get _signIn => _resolvedSignIn ??= _googleSignIn ?? _createSignIn();
 
@@ -28,6 +30,8 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
         clientId: GoogleOAuthConfig.clientId,
         clientSecret: GoogleOAuthConfig.clientSecret,
         scopes: const [
+          'openid',
+          drive.DriveApi.driveScope,
           drive.DriveApi.driveFileScope,
           drive.DriveApi.driveReadonlyScope,
           'https://www.googleapis.com/auth/userinfo.email',
@@ -38,12 +42,15 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
   }
 
   @override
-  String? get accountEmail => _cachedAccountEmail;
+  String? get accountEmail => _cachedProfile?.email;
+
+  @override
+  DriveAccountProfile? get accountProfile => _cachedProfile;
 
   Future<DriveClient?> _clientForCredentials(
     GoogleSignInCredentials credentials,
   ) async {
-    _cachedAccountEmail ??= _emailFromIdToken(credentials.idToken);
+    _cachedProfile = await _resolveProfile(credentials);
     final authClient = await _signIn.authenticatedClient;
     if (authClient == null) {
       return null;
@@ -71,11 +78,62 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
 
   @override
   Future<void> signOut() async {
-    _cachedAccountEmail = null;
+    _cachedProfile = null;
     await _signIn.signOut();
   }
 
-  static String? _emailFromIdToken(String? idToken) {
+  static Future<DriveAccountProfile?> _resolveProfile(
+    GoogleSignInCredentials credentials,
+  ) async {
+    final fromIdToken = _profileFromIdToken(credentials.idToken);
+    if (fromIdToken != null && fromIdToken.photoUrl?.isNotEmpty == true) {
+      return fromIdToken;
+    }
+
+    final fromUserInfo = await _profileFromUserInfo(credentials.accessToken);
+    if (fromIdToken == null) {
+      return fromUserInfo;
+    }
+    if (fromUserInfo == null) {
+      return fromIdToken;
+    }
+
+    return DriveAccountProfile(
+      email: fromIdToken.email,
+      displayName: fromIdToken.displayName ?? fromUserInfo.displayName,
+      photoUrl: fromUserInfo.photoUrl ?? fromIdToken.photoUrl,
+    );
+  }
+
+  static Future<DriveAccountProfile?> _profileFromUserInfo(
+    String accessToken,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.https('www.googleapis.com', '/oauth2/v3/userinfo'),
+        headers: {'Authorization': 'Bearer $accessToken'},
+      );
+      if (response.statusCode != 200) {
+        return null;
+      }
+
+      final payload = jsonDecode(response.body) as Map<String, dynamic>;
+      final email = payload['email'] as String?;
+      if (email == null || email.isEmpty) {
+        return null;
+      }
+
+      return DriveAccountProfile(
+        email: email,
+        displayName: payload['name'] as String?,
+        photoUrl: payload['picture'] as String?,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static DriveAccountProfile? _profileFromIdToken(String? idToken) {
     if (idToken == null) {
       return null;
     }
@@ -88,7 +146,15 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
       final normalized = base64Url.normalize(parts[1]);
       final payload = jsonDecode(utf8.decode(base64Url.decode(normalized)))
           as Map<String, dynamic>;
-      return payload['email'] as String?;
+      final email = payload['email'] as String?;
+      if (email == null || email.isEmpty) {
+        return null;
+      }
+      return DriveAccountProfile(
+        email: email,
+        displayName: payload['name'] as String?,
+        photoUrl: payload['picture'] as String?,
+      );
     } catch (_) {
       return null;
     }

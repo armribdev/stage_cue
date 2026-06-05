@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/platform/saf_directory_bridge.dart';
+import '../../../../core/sync/drive_account_profile.dart';
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
@@ -19,7 +20,6 @@ import '../../data/models/indexing_progress.dart';
 import '../../domain/entities/library.dart' as domain;
 import '../../domain/entities/watched_path.dart' as domain;
 import '../providers/sync_controller.dart';
-import 'library_sync_screen.dart';
 
 /// Écran des paramètres
 class SettingsScreen extends StatefulWidget {
@@ -70,6 +70,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final Map<String, IndexingProgress> _indexingProgress = {};
   final Map<String, SafTreeInfo> _safFolderInfo = {};
   bool _isInitialLoad = true;
+  bool _isSyncBusy = false;
+  bool _isDriveAuthBusy = false;
+  DriveAccountProfile? _driveAccount;
 
   @override
   void initState() {
@@ -116,6 +119,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     try {
+      await widget.libraryRepository.reconnectSilently();
+      final driveAccount = widget.libraryRepository.connectedAccountProfile;
+
       // Charger les dossiers locaux surveillés et les bibliothèques Drive
       final watchedPaths = await widget.database
           .select(widget.database.watchedPaths)
@@ -140,6 +146,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _sounds = sounds;
         _dbPath = dbFile.path;
         _dbSize = dbSize;
+        _driveAccount = driveAccount;
         _isLoading = false;
         _isInitialLoad = false;
       });
@@ -155,6 +162,231 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     }
+  }
+
+  Future<void> _connectDriveAccount() async {
+    if (!await ensureGoogleOAuthConfigured(context)) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _isDriveAuthBusy = true);
+    try {
+      final connected = await widget.libraryRepository.ensureDriveConnected();
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _driveAccount = widget.libraryRepository.connectedAccountProfile;
+      });
+
+      if (!connected) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Connexion Google annulée')),
+        );
+      }
+    } on GoogleOAuthNotConfiguredException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), duration: const Duration(seconds: 8)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur de connexion Google : $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDriveAuthBusy = false);
+    }
+  }
+
+  Future<void> _disconnectDriveAccount() async {
+    final account = _driveAccount;
+    if (account == null) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Déconnecter Google Drive'),
+          content: Text(
+            'Déconnecter le compte ${account.email} ?\n\n'
+            'Les dossiers Drive indexés restent enregistrés localement, '
+            'mais la synchronisation et l\'ajout de dossiers Drive '
+            'nécessiteront une nouvelle connexion.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Déconnecter'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() => _isDriveAuthBusy = true);
+    try {
+      await widget.libraryRepository.disconnect();
+      if (mounted) {
+        setState(() => _driveAccount = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Compte Google déconnecté'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de la déconnexion : $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDriveAuthBusy = false);
+    }
+  }
+
+  Widget _buildGoogleAccountAvatar(DriveAccountProfile account, {double radius = 22}) {
+    final photoUrl = account.photoUrl;
+    final size = radius * 2;
+
+    Widget initialsAvatar() {
+      return CircleAvatar(
+        radius: radius,
+        child: Text(
+          account.initials,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      );
+    }
+
+    if (photoUrl == null || photoUrl.isEmpty) {
+      return initialsAvatar();
+    }
+
+    return ClipOval(
+      child: Image.network(
+        photoUrl,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => initialsAvatar(),
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) {
+            return child;
+          }
+          return SizedBox(
+            width: size,
+            height: size,
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAccountMenu(BuildContext context) {
+    if (_isDriveAuthBusy) {
+      return const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    final account = _driveAccount;
+    final scheme = Theme.of(context).colorScheme;
+
+    if (account == null) {
+      return IconButton(
+        tooltip: 'Se connecter à Google Drive',
+        onPressed: _connectDriveAccount,
+        icon: Icon(Icons.account_circle_outlined, color: scheme.primary),
+      );
+    }
+
+    const avatarRadius = 16.0;
+    const avatarSize = avatarRadius * 2;
+
+    return PopupMenuButton<String>(
+      tooltip: 'Compte Google',
+      offset: const Offset(0, 44),
+      padding: EdgeInsets.zero,
+      menuPadding: const EdgeInsets.symmetric(vertical: 4),
+      splashRadius: avatarRadius,
+      borderRadius: BorderRadius.circular(avatarRadius),
+      itemBuilder: (menuContext) => [
+        PopupMenuItem<String>(
+          height: 44,
+          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+          onTap: () {},
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      account.label,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      account.email,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Déconnecter',
+                onPressed: () {
+                  Navigator.of(menuContext).pop();
+                  unawaited(_disconnectDriveAccount());
+                },
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                icon: Icon(
+                  Icons.logout_outlined,
+                  size: 20,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+      child: SizedBox(
+        width: avatarSize,
+        height: avatarSize,
+        child: _buildGoogleAccountAvatar(account, radius: avatarRadius),
+      ),
+    );
   }
 
   Future<void> _onAddFolderPressed() async {
@@ -173,6 +405,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           _safFolderInfo[pickResult.uri] = pickResult.treeInfo;
         });
+
+        if (pickResult.isGoogleDrive) {
+          await _addDriveDirectoryFromSafPick(pickResult);
+          return;
+        }
+
         await _indexWatchedDirectory(
           pickResult.uri,
           safInfo: pickResult.treeInfo,
@@ -185,6 +423,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     }
+  }
+
+  /// Lie un dossier Drive choisi via le sélecteur système Android (SAF).
+  Future<void> _addDriveDirectoryFromSafPick(SafPickResult pickResult) async {
+    if (!await ensureGoogleOAuthConfigured(context)) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+
+    if (!await widget.libraryRepository.ensureDriveConnected()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Connexion Google Drive requise pour indexer un dossier Drive',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    final folderName = pickResult.displayName;
+    final relativeDrivePath = pickResult.displayPath.trim().isNotEmpty
+        ? pickResult.displayPath.trim()
+        : null;
+
+    final driveFolderId = await widget.libraryRepository.resolveSafDriveFolderId(
+      driveFileId: pickResult.driveFileId,
+      folderName: folderName,
+      relativeDrivePath: relativeDrivePath,
+    );
+
+    if (driveFolderId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Impossible d\'identifier le dossier Drive. '
+              'Vérifiez votre connexion Google puis réessayez.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    await _linkAndInitializeDriveFolder(
+      driveFolderId: driveFolderId,
+      folderName: folderName,
+      relativeDrivePath: relativeDrivePath,
+    );
   }
 
   Future<void> _loadSafFolderInfo() async {
@@ -348,19 +640,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             driveFileId: driveFileId,
             folderName: safInfo?.displayName ?? 'Dossier',
           );
-          if (accountEmail == null &&
-              mounted &&
-              !widget.libraryRepository.isConnected) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Connectez-vous via « Bibliothèque Drive » pour afficher '
-                  'l\'e-mail du propriétaire du dossier.',
-                ),
-                duration: Duration(seconds: 4),
-              ),
-            );
-          }
         }
         // Vérifier si le dossier n'est pas déjà surveillé
         final existing = await (widget.database.select(
@@ -478,9 +757,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    final folderName = selection.name;
+    await _linkAndInitializeDriveFolder(
+      driveFolderId: selection.folderId,
+      folderName: selection.name,
+      relativeDrivePath: selection.relativeDrivePath,
+      sharedDriveId: selection.sharedDriveId,
+    );
+  }
+
+  Future<void> _linkAndInitializeDriveFolder({
+    required String driveFolderId,
+    required String folderName,
+    String? relativeDrivePath,
+    String? sharedDriveId,
+  }) async {
     if (_libraries.any(
-      (library) => library.driveFolderId == selection.folderId,
+      (library) => library.driveFolderId == driveFolderId,
     )) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -499,8 +791,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           id: -1,
           name: folderName,
           localRootPath: '',
-          drivePath: selection.relativeDrivePath,
-          sharedDriveId: selection.sharedDriveId,
+          drivePath: relativeDrivePath,
+          sharedDriveId: sharedDriveId,
           createdAt: now,
         ),
       ];
@@ -513,12 +805,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
+      if (!await widget.libraryRepository.ensureDriveConnected()) {
+        if (mounted) {
+          setState(() {
+            _libraries = _libraries
+                .where((item) => item.name != folderName || item.id != -1)
+                .toList();
+            _indexingProgress.remove(pendingKey);
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Connexion Google Drive annulée')),
+          );
+        }
+        return;
+      }
+
       final library = await widget.libraryRepository.linkDriveFolder(
-        driveFolderId: selection.folderId,
+        driveFolderId: driveFolderId,
         name: folderName,
-        drivePath: selection.relativeDrivePath,
+        drivePath: relativeDrivePath,
         ownerEmail: widget.libraryRepository.connectedAccountEmail,
-        sharedDriveId: selection.sharedDriveId,
+        sharedDriveId: sharedDriveId,
       );
 
       if (!mounted) {
@@ -537,7 +844,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       });
 
-      await widget.libraryRepository.indexDriveFolder(
+      final init = await widget.libraryRepository.initializeLinkedDriveFolder(
         library: library,
         onProgress: (progress) {
           if (mounted) {
@@ -548,11 +855,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
         },
       );
 
+      var uploadSucceeded = false;
+      if (init.shouldUpload && mounted) {
+        final currentLibrary =
+            await widget.libraryRepository.getLibraryById(library.id) ??
+                library;
+        await widget.syncController.syncNow(currentLibrary);
+
+        if (!mounted) return;
+
+        final syncStatus = widget.syncController.state.status;
+        uploadSucceeded = syncStatus == SyncStatus.synced;
+
+        if (syncStatus == SyncStatus.conflict) {
+          await _showSyncConflictDialog(currentLibrary);
+          uploadSucceeded =
+              widget.syncController.state.status == SyncStatus.synced;
+        } else if (syncStatus == SyncStatus.offline) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Impossible d\'envoyer vers Drive : session Google expirée',
+              ),
+            ),
+          );
+        } else if (syncStatus == SyncStatus.error) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                widget.syncController.state.message ??
+                    'Erreur lors de l\'envoi vers Drive',
+              ),
+            ),
+          );
+        }
+      }
+
       if (mounted) {
+        final String message;
+        if (init.shouldUpload && !uploadSucceeded) {
+          message = init.indexedNewFiles > 0
+              ? 'Dossier Drive « $folderName » indexé localement, '
+                  'mais l\'envoi vers Drive a échoué'
+              : 'Dossier Drive « $folderName » lié, '
+                  'mais la BDD n\'a pas pu être créée sur Drive';
+        } else if (!init.hadRemoteSnapshot && uploadSucceeded) {
+          message = 'Dossier Drive « $folderName » configuré et synchronisé';
+        } else if (init.indexedNewFiles > 0) {
+          message = 'Dossier Drive « $folderName » mis à jour '
+              '(${init.indexedNewFiles} nouveau(x) fichier(s))';
+        } else {
+          message = 'Dossier Drive « $folderName » lié';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Dossier Drive « $folderName » indexé'),
-            duration: const Duration(seconds: 2),
+            content: Text(message),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -623,6 +981,138 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     await _removeWatchedPath(watchedPath);
+  }
+
+  Future<void> _pullDriveLibrary(domain.Library library) async {
+    setState(() => _isSyncBusy = true);
+    try {
+      await widget.syncController.pullForLaunch(library);
+      await _loadDatabaseInfo();
+
+      if (!mounted) return;
+
+      final progressKey = _driveProgressKey(library.id);
+      await widget.libraryRepository.indexDriveFolder(
+        library: library,
+        onProgress: (progress) {
+          if (mounted) {
+            setState(() {
+              _indexingProgress[progressKey] = progress;
+            });
+          }
+        },
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('« ${library.name} » est à jour'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        await _loadDatabaseInfo();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de la récupération : $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncBusy = false);
+    }
+  }
+
+  Future<void> _syncDriveLibrary(domain.Library library) async {
+    setState(() => _isSyncBusy = true);
+    try {
+      await widget.syncController.syncNow(library);
+      await _loadDatabaseInfo();
+
+      if (!mounted) return;
+
+      if (widget.syncController.state.status == SyncStatus.conflict) {
+        await _showSyncConflictDialog(library);
+        return;
+      }
+
+      if (widget.syncController.state.status == SyncStatus.error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.syncController.state.message ??
+                  'Erreur lors de la synchronisation',
+            ),
+          ),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('« ${library.name} » synchronisé vers Drive'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de la synchronisation : $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncBusy = false);
+    }
+  }
+
+  Future<void> _showSyncConflictDialog(domain.Library library) async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Conflit de synchronisation'),
+          content: const Text(
+            'Une version plus récente existe sur Drive. Quelle version garder ?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop('remote'),
+              child: const Text('Prendre Drive'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop('local'),
+              child: const Text('Garder local'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || choice == null) return;
+
+    setState(() => _isSyncBusy = true);
+    try {
+      if (choice == 'local') {
+        await widget.syncController.keepLocal(library);
+      } else if (choice == 'remote') {
+        await widget.syncController.takeRemote(library);
+      }
+      await _loadDatabaseInfo();
+    } finally {
+      if (mounted) setState(() => _isSyncBusy = false);
+    }
+  }
+
+  String _driveSyncStatusLabel(domain.Library library) {
+    final lastSync = library.lastSyncedAt;
+    if (lastSync == null) {
+      return 'Jamais synchronisé';
+    }
+    final local = lastSync.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return 'Révision ${library.lastSyncedRevision} · '
+        '${two(local.day)}/${two(local.month)} '
+        '${two(local.hour)}:${two(local.minute)}';
   }
 
   Future<void> _confirmRemoveDriveLibrary(domain.Library library) async {
@@ -842,6 +1332,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '$count fichiers indexés';
   }
 
+  Widget _buildSettingsSectionCard({
+    required Widget title,
+    required Widget child,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            title,
+            const Divider(),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitleRow({
+    required IconData icon,
+    required String title,
+    List<Widget>? trailing,
+  }) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        if (trailing != null) ...[
+          const Spacer(),
+          ...trailing,
+        ],
+      ],
+    );
+  }
+
   Widget _buildIndexingProgressSection(
     BuildContext context,
     IndexingProgress progress,
@@ -884,9 +1417,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         duration: const Duration(milliseconds: 240),
         layoutBuilder: (currentChild, previousChildren) {
           return Stack(
-            alignment: widget.isModal
-                ? Alignment.topCenter
-                : Alignment.center,
+            fit: StackFit.expand,
+            alignment: Alignment.topCenter,
             children: [
               ...previousChildren,
               if (currentChild != null) currentChild,
@@ -904,100 +1436,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.storage,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'État de la base de données',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleLarge,
-                                  ),
-                                ],
-                              ),
-                              const Divider(),
-                              _buildInfoRow(
-                                'Nombre total de sons',
-                                '${_sounds.length}',
-                              ),
-                              const SizedBox(height: 8),
-                              _buildInfoRow(
-                                'Taille de la base de données',
-                                _formatBytes(_dbSize),
-                              ),
-                              const SizedBox(height: 8),
-                              _buildInfoRow(
-                                'Chemin de la base de données',
-                                _dbPath,
-                                isPath: true,
-                              ),
-                            ],
-                          ),
+                      _buildSettingsSectionCard(
+                        title: _buildSectionTitleRow(
+                          icon: Icons.storage,
+                          title: 'État de la base de données',
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildInfoRow(
+                              'Nombre total de sons',
+                              '${_sounds.length}',
+                            ),
+                            const SizedBox(height: 8),
+                            _buildInfoRow(
+                              'Taille de la base de données',
+                              _formatBytes(_dbSize),
+                            ),
+                            const SizedBox(height: 8),
+                            _buildInfoRow(
+                              'Chemin de la base de données',
+                              _dbPath,
+                              isPath: true,
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 16),
-                      AppNavigationCard(
-                        icon: Icons.cloud_sync,
-                        title: 'Bibliothèque Drive',
-                        subtitle:
-                            'Synchroniser les sons et métadonnées entre appareils',
-                        onTap: () {
-                          LibrarySyncScreen.open(
-                            context,
-                            libraryRepository: widget.libraryRepository,
-                            syncController: widget.syncController,
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Éléments indexés',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.add),
-                                tooltip: Platform.isAndroid
-                                    ? 'Ajouter un dossier'
-                                    : 'Ajouter un dossier local ou Drive',
-                                onPressed: _onAddFolderPressed,
+                      _buildSettingsSectionCard(
+                        title: _buildSectionTitleRow(
+                          icon: Icons.folder_copy,
+                          title: 'Éléments indexés',
+                          trailing: [
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(
+                                width: 32,
+                                height: 32,
                               ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      _indexedFolderItems().isEmpty
-                          ? Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(24),
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.add),
+                              tooltip: Platform.isAndroid
+                                  ? 'Ajouter un dossier'
+                                  : 'Ajouter un dossier local ou Drive',
+                              onPressed: _onAddFolderPressed,
+                            ),
+                          ],
+                        ),
+                        child: _indexedFolderItems().isEmpty
+                            ? SizedBox(
+                                width: double.infinity,
                                 child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     Icon(
                                       Icons.folder_off,
                                       size: 48,
                                       color: Colors.grey[600],
                                     ),
-                                    const SizedBox(height: 16),
+                                    const SizedBox(height: 8),
                                     Text(
                                       'Aucun dossier indexé',
+                                      textAlign: TextAlign.center,
                                       style: TextStyle(
                                         fontSize: 16,
                                         color: Colors.grey[600],
@@ -1006,6 +1506,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     const SizedBox(height: 8),
                                     Text(
                                       'Ajoutez un dossier local ou un dossier Drive',
+                                      textAlign: TextAlign.center,
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: Colors.grey[500],
@@ -1013,129 +1514,185 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     ),
                                   ],
                                 ),
-                              ),
-                            )
-                          : ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _indexedFolderItems().length,
-                              itemBuilder: (context, index) {
-                                final item = _indexedFolderItems()[index];
-                                final labels = _labelsForItem(item);
-                                final progress = _progressForItem(item);
-                                final isIndexing = !progress.isComplete;
+                              )
+                            : ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: _indexedFolderItems().length,
+                                separatorBuilder: (context, index) => Divider(
+                                  height: 17,
+                                  thickness: 1,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outlineVariant
+                                      .withValues(alpha: 0.45),
+                                ),
+                                itemBuilder: (context, index) {
+                                  final item = _indexedFolderItems()[index];
+                                  final labels = _labelsForItem(item);
+                                  final progress = _progressForItem(item);
+                                  final isIndexing = !progress.isComplete;
 
-                                return Card(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: Stack(
+                                  return Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
                                     children: [
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                          16,
-                                          12,
-                                          44,
-                                          12,
+                                      CircleAvatar(
+                                        backgroundColor: Theme.of(
+                                          context,
+                                        ).colorScheme.primaryContainer,
+                                        child: Icon(
+                                          item.isLocal &&
+                                                  SafDirectoryBridge
+                                                      .isSafTreeUri(
+                                                    item.watchedPath!.path,
+                                                  )
+                                              ? Icons.cloud
+                                              : item.isLocal
+                                              ? Icons.folder
+                                              : Icons.cloud,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
                                         ),
-                                        child: Row(
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            CircleAvatar(
-                                              backgroundColor: Theme.of(
-                                                context,
-                                              ).colorScheme.primaryContainer,
-                                              child: Icon(
-                                                item.isLocal &&
-                                                        SafDirectoryBridge
-                                                            .isSafTreeUri(
-                                                          item
-                                                              .watchedPath!
-                                                              .path,
-                                                        )
-                                                    ? Icons.cloud
-                                                    : item.isLocal
-                                                    ? Icons.folder
-                                                    : Icons.cloud,
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.primary,
+                                            Text(
+                                              labels.title,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
                                               ),
                                             ),
-                                            const SizedBox(width: 16),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    labels.title,
-                                                    style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    labels.subtitle,
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      color: Colors.grey[600],
-                                                    ),
-                                                    maxLines: 2,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                  _buildIndexingProgressSection(
-                                                    context,
-                                                    progress,
-                                                    isIndexing,
-                                                  ),
-                                                ],
+                                            Text(
+                                              labels.subtitle,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey[600],
                                               ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            if (!item.isLocal) ...[
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                _driveSyncStatusLabel(
+                                                  item.library!,
+                                                ),
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.grey[500],
+                                                ),
+                                              ),
+                                            ],
+                                            _buildIndexingProgressSection(
+                                              context,
+                                              progress,
+                                              isIndexing,
                                             ),
                                           ],
                                         ),
                                       ),
-                                      Positioned(
-                                        top: 10,
-                                        right: 10,
-                                        child: IconButton(
-                                          padding: EdgeInsets.zero,
-                                          constraints:
-                                              const BoxConstraints.tightFor(
-                                            width: 32,
-                                            height: 32,
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (!item.isLocal) ...[
+                                            IconButton(
+                                              padding: EdgeInsets.zero,
+                                              constraints:
+                                                  const BoxConstraints
+                                                      .tightFor(
+                                                width: 32,
+                                                height: 32,
+                                              ),
+                                              icon: Icon(
+                                                Icons.cloud_download,
+                                                size: 20,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant
+                                                    .withValues(alpha: 0.55),
+                                              ),
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              tooltip:
+                                                  'Récupérer depuis Drive',
+                                              onPressed: _isSyncBusy
+                                                  ? null
+                                                  : () => _pullDriveLibrary(
+                                                        item.library!,
+                                                      ),
+                                            ),
+                                            IconButton(
+                                              padding: EdgeInsets.zero,
+                                              constraints:
+                                                  const BoxConstraints
+                                                      .tightFor(
+                                                width: 32,
+                                                height: 32,
+                                              ),
+                                              icon: Icon(
+                                                Icons.cloud_upload,
+                                                size: 20,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant
+                                                    .withValues(alpha: 0.55),
+                                              ),
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              tooltip:
+                                                  'Synchroniser vers Drive',
+                                              onPressed: _isSyncBusy
+                                                  ? null
+                                                  : () => _syncDriveLibrary(
+                                                        item.library!,
+                                                      ),
+                                            ),
+                                          ],
+                                          SizedBox(width: 8),
+                                          IconButton(
+                                            padding: EdgeInsets.zero,
+                                            constraints:
+                                                const BoxConstraints.tightFor(
+                                              width: 32,
+                                              height: 32,
+                                            ),
+                                            icon: Icon(
+                                              Icons.delete_outline,
+                                              size: 20,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant
+                                                  .withValues(alpha: 0.55),
+                                            ),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            onPressed: () {
+                                              if (item.isLocal) {
+                                                _confirmRemoveWatchedPath(
+                                                  item.watchedPath!,
+                                                );
+                                              } else {
+                                                _confirmRemoveDriveLibrary(
+                                                  item.library!,
+                                                );
+                                              }
+                                            },
+                                            tooltip: 'Retirer',
                                           ),
-                                          icon: Icon(
-                                            Icons.delete_outline,
-                                            size: 20,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant
-                                                .withValues(alpha: 0.55),
-                                          ),
-                                          visualDensity:
-                                              VisualDensity.compact,
-                                          onPressed: () {
-                                            if (item.isLocal) {
-                                              _confirmRemoveWatchedPath(
-                                                item.watchedPath!,
-                                              );
-                                            } else {
-                                              _confirmRemoveDriveLibrary(
-                                                item.library!,
-                                              );
-                                            }
-                                          },
-                                          tooltip: 'Retirer',
-                                        ),
+                                        ],
                                       ),
                                     ],
-                                  ),
-                                );
-                              },
-                            ),
+                                  );
+                                },
+                              ),
+                      ),
                     ],
                   ),
                 ),
@@ -1147,12 +1704,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final body = _buildSettingsBody();
 
+    final accountAction = _buildAccountMenu(context);
+
     if (widget.isModal) {
-      return AppModalShell(title: 'Paramètres', body: body);
+      return AppModalShell(
+        title: 'Paramètres',
+        actions: [accountAction],
+        body: body,
+      );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Paramètres')),
+      appBar: AppBar(
+        title: const Text('Paramètres'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: accountAction,
+          ),
+        ],
+      ),
       body: body,
     );
   }
@@ -1237,127 +1808,118 @@ class _SettingsLoadingViewState extends State<_SettingsLoadingView>
     );
   }
 
-  Widget _databaseCard(Color color) {
+  Widget _sectionCardSkeleton({
+    required Widget title,
+    required Widget child,
+  }) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                _bar(color, width: 20, height: 20),
-                const SizedBox(width: 8),
-                _bar(color, width: 210, height: 18),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _bar(color, height: 1),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _bar(color, width: 180),
-                const SizedBox(width: 12),
-                Expanded(child: _bar(color)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _bar(color, width: 180),
-                const SizedBox(width: 12),
-                Expanded(child: _bar(color, width: 120)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _bar(color, width: 180),
-                const SizedBox(width: 12),
-                Expanded(child: _bar(color)),
-              ],
-            ),
+            title,
+            const Divider(),
+            child,
           ],
         ),
       ),
     );
   }
 
-  Widget _driveLibraryCard(Color color) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            _bar(color, width: 24, height: 24),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _bar(color, width: 140, height: 14),
-                  const SizedBox(height: 8),
-                  _bar(color, height: 10),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            _bar(color, width: 16, height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _indexedHeader(Color color) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        _bar(color, width: 150, height: 20),
-        _bar(color, width: 28, height: 28),
-      ],
-    );
-  }
-
-  Widget _indexedItemCard(Color color) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Stack(
+  Widget _databaseCard(Color color) {
+    return _sectionCardSkeleton(
+      title: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 44, 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: color,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _bar(color, width: 150, height: 14),
-                      const SizedBox(height: 8),
-                      _bar(color, height: 10),
-                      const SizedBox(height: 8),
-                      _bar(color, height: 4),
-                      const SizedBox(height: 4),
-                      _bar(color, width: 72, height: 10),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          _bar(color, width: 20, height: 20),
+          const SizedBox(width: 8),
+          _bar(color, width: 210, height: 18),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _bar(color, width: 180),
+              const SizedBox(width: 12),
+              Expanded(child: _bar(color)),
+            ],
           ),
-          Positioned(
-            top: 10,
-            right: 10,
-            child: _bar(color, width: 20, height: 20),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _bar(color, width: 180),
+              const SizedBox(width: 12),
+              Expanded(child: _bar(color, width: 120)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _bar(color, width: 180),
+              const SizedBox(width: 12),
+              Expanded(child: _bar(color)),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _indexedCard(Color color) {
+    return _sectionCardSkeleton(
+      title: Row(
+        children: [
+          _bar(color, width: 20, height: 20),
+          const SizedBox(width: 8),
+          _bar(color, width: 150, height: 18),
+          const Spacer(),
+          _bar(color, width: 28, height: 28),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _indexedItemRow(color),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: _bar(
+              color.withValues(alpha: 0.35),
+              height: 1,
+            ),
+          ),
+          _indexedItemRow(color),
+        ],
+      ),
+    );
+  }
+
+  Widget _indexedItemRow(Color color) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        CircleAvatar(
+          radius: 20,
+          backgroundColor: color,
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _bar(color, width: 150, height: 14),
+              const SizedBox(height: 4),
+              _bar(color, height: 10),
+              const SizedBox(height: 8),
+              _bar(color, height: 4),
+              const SizedBox(height: 4),
+              _bar(color, width: 72, height: 10),
+            ],
+          ),
+        ),
+        _bar(color, width: 20, height: 20),
+      ],
     );
   }
 
@@ -1378,12 +1940,7 @@ class _SettingsLoadingViewState extends State<_SettingsLoadingView>
             children: [
               _databaseCard(color),
               const SizedBox(height: 16),
-              _driveLibraryCard(color),
-              const SizedBox(height: 16),
-              _indexedHeader(color),
-              const SizedBox(height: 8),
-              _indexedItemCard(color),
-              _indexedItemCard(color),
+              _indexedCard(color),
             ],
           ),
         );

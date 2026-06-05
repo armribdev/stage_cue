@@ -8,6 +8,7 @@ class SoundBoardModel {
     return domain.SoundBoard(
       id: board.id,
       name: board.name,
+      libraryId: board.libraryId,
       createdAt: board.createdAt,
     );
   }

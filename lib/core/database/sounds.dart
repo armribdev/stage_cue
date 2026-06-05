@@ -55,6 +55,9 @@ class Sounds extends Table {
 class SoundBoards extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
+  /// Bibliothèque Drive propriétaire ; null = scène locale non synchronisée.
+  IntColumn get libraryId =>
+      integer().nullable().references(Libraries, #id, onDelete: KeyAction.cascade)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 

@@ -30,8 +30,15 @@ void main() {
     service = LibrarySyncService(store, deviceId: 'device-1', tempDir: tempDir);
 
     when(() => store.schemaVersion).thenReturn(11);
-    when(() => store.exportSnapshot(any())).thenAnswer((_) async => 1024);
-    when(() => store.stageForImport(any())).thenAnswer((_) async {});
+    when(() => store.exportLibrarySnapshot(any(), any()))
+        .thenAnswer((_) async => 1024);
+    when(
+      () => store.mergeLibrarySnapshot(
+        any(),
+        any(),
+        driveFolderId: any(named: 'driveFolderId'),
+      ),
+    ).thenAnswer((_) async {});
   });
 
   tearDown(() {
@@ -71,13 +78,14 @@ void main() {
 
       final outcome = await service.push(
         client: client,
+        libraryId: 1,
         libraryFolderId: 'lib',
         knownRevision: 0,
       );
 
       expect(outcome, isA<PushSuccess>());
       expect((outcome as PushSuccess).revision, 1);
-      verify(() => store.exportSnapshot(any())).called(1);
+      verify(() => store.exportLibrarySnapshot(1, any())).called(1);
       verify(() => client.uploadFile(
             name: 'library.db',
             parentId: 'stage',
@@ -113,6 +121,7 @@ void main() {
 
       final outcome = await service.push(
         client: client,
+        libraryId: 1,
         libraryFolderId: 'lib',
         knownRevision: 3,
       );
@@ -144,13 +153,14 @@ void main() {
 
       final outcome = await service.push(
         client: client,
+        libraryId: 1,
         libraryFolderId: 'lib',
         knownRevision: 2,
       );
 
       expect(outcome, isA<PushConflict>());
       expect((outcome as PushConflict).remote.revision, 5);
-      verifyNever(() => store.exportSnapshot(any()));
+      verifyNever(() => store.exportLibrarySnapshot(any(), any()));
     });
   });
 
@@ -161,12 +171,15 @@ void main() {
 
       final outcome = await service.pull(
         client: client,
+        libraryId: 1,
         libraryFolderId: 'lib',
         knownRevision: 0,
       );
 
       expect(outcome, isA<PullUpToDate>());
-      verifyNever(() => store.stageForImport(any()));
+      verifyNever(
+        () => store.mergeLibrarySnapshot(any(), any(), driveFolderId: any(named: 'driveFolderId')),
+      );
     });
 
     test('révision distante <= connue : à jour', () async {
@@ -185,15 +198,18 @@ void main() {
 
       final outcome = await service.pull(
         client: client,
+        libraryId: 1,
         libraryFolderId: 'lib',
         knownRevision: 2,
       );
 
       expect(outcome, isA<PullUpToDate>());
-      verifyNever(() => store.stageForImport(any()));
+      verifyNever(
+        () => store.mergeLibrarySnapshot(any(), any(), driveFolderId: any(named: 'driveFolderId')),
+      );
     });
 
-    test('révision distante plus récente : télécharge et met en attente',
+    test('révision distante plus récente : télécharge et fusionne',
         () async {
       final remote = SyncManifest(
         revision: 7,
@@ -216,13 +232,20 @@ void main() {
 
       final outcome = await service.pull(
         client: client,
+        libraryId: 1,
         libraryFolderId: 'lib',
         knownRevision: 2,
       );
 
       expect(outcome, isA<PullStaged>());
       expect((outcome as PullStaged).revision, 7);
-      verify(() => store.stageForImport(any())).called(1);
+      verify(
+        () => store.mergeLibrarySnapshot(
+          1,
+          any(),
+          driveFolderId: 'lib',
+        ),
+      ).called(1);
     });
   });
 }
