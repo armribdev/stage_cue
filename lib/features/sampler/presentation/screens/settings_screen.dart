@@ -5,9 +5,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../../../core/database/database.dart' as db;
+import '../../../../core/platform/saf_directory_bridge.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../data/models/indexing_progress.dart';
+import '../../domain/entities/library.dart' as domain;
 import '../../domain/entities/watched_path.dart' as domain;
 import '../providers/sync_controller.dart';
 import 'library_sync_screen.dart';
@@ -31,13 +33,16 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   List<db.WatchedPath> _watchedPaths = [];
+  List<domain.Library> _libraries = [];
   List<db.Sound> _sounds = [];
   bool _isLoading = true;
   String _dbPath = '';
   int _dbSize = 0;
   late final SoundRepository _repository;
-  // Suivi de la progression d'indexation par chemin
+  // Suivi de la progression d'indexation par chemin (clé normalisée)
   final Map<String, IndexingProgress> _indexingProgress = {};
+  final Map<String, SafTreeInfo> _safFolderInfo = {};
+  bool _isInitialLoad = true;
 
   @override
   void initState() {
@@ -47,6 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Laisse la transition de navigation se terminer avant de lancer
       // les lectures DB pour éviter les à-coups à l'ouverture.
       unawaited(_startInitialLoad());
+      unawaited(widget.libraryRepository.reconnectSilently());
     });
   }
 
@@ -62,16 +68,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _repository = SoundRepository.fromDatabase(widget.database);
   }
 
+  Future<void> _reloadWatchedPaths() async {
+    final watchedPaths = await widget.database
+        .select(widget.database.watchedPaths)
+        .get();
+
+    if (mounted) {
+      setState(() {
+        _watchedPaths = watchedPaths;
+      });
+    }
+  }
+
   Future<void> _loadDatabaseInfo() async {
-    setState(() {
-      _isLoading = true;
-    });
+    final showSkeleton = _isInitialLoad;
+    if (showSkeleton) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     try {
-      // Charger tous les dossiers/fichiers surveillés
+      // Charger les dossiers locaux surveillés et les bibliothèques Drive
       final watchedPaths = await widget.database
           .select(widget.database.watchedPaths)
           .get();
+      final libraries = await widget.libraryRepository.getLibraries();
 
       // Charger tous les sons de la base de données
       final sounds = await widget.database.select(widget.database.sounds).get();
@@ -87,14 +109,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       setState(() {
         _watchedPaths = watchedPaths;
+        _libraries = libraries;
         _sounds = sounds;
         _dbPath = dbFile.path;
         _dbSize = dbSize;
         _isLoading = false;
+        _isInitialLoad = false;
       });
+      unawaited(_loadSafFolderInfo());
     } catch (e) {
       setState(() {
         _isLoading = false;
+        _isInitialLoad = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -104,148 +130,490 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _addDirectory() async {
-    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+  Future<void> _onAddFolderPressed() async {
+    if (Platform.isAndroid) {
+      await _addDirectoryFromIntegratedPicker();
+      return;
+    }
+    await _showAddFolderMenu();
+  }
 
-    if (selectedDirectory != null) {
-      try {
-        final directory = Directory(selectedDirectory);
-        if (await directory.exists()) {
-          // Vérifier si le dossier n'est pas déjà surveillé
-          final existing = await (widget.database.select(
-            widget.database.watchedPaths,
-          )..where((w) => w.path.equals(selectedDirectory))).get();
-
-          if (existing.isNotEmpty) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Ce dossier est déjà surveillé')),
-              );
-            }
-            return;
-          }
-
-          // Ajouter le chemin surveillé
-          final watchedPath = domain.WatchedPath(
-            id: 0, // Sera généré par la base de données
-            path: selectedDirectory,
-            isDirectory: true,
-            addedAt: DateTime.now(),
-          );
-
-          // Ajouter le dossier avec suivi de progression
-          await _repository.addWatchedPath(
-            watchedPath,
-            onProgress: (progress) {
-              if (mounted) {
-                setState(() {
-                  _indexingProgress[selectedDirectory] = progress;
-                });
-              }
-            },
-          );
-
-          // Nettoyer la progression après un court délai
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted) {
-              setState(() {
-                _indexingProgress.remove(selectedDirectory);
-              });
-            }
-          });
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Dossier ajouté et indexé'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
-
-          await _loadDatabaseInfo();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur lors de l\'ajout du dossier: $e')),
-          );
-        }
+  /// Sur Android, le sélecteur SAF propose stockage local et Drive (URI persistée).
+  Future<void> _addDirectoryFromIntegratedPicker() async {
+    try {
+      final pickResult = await SafDirectoryBridge.pickDirectory();
+      if (pickResult != null) {
+        setState(() {
+          _safFolderInfo[pickResult.uri] = pickResult.treeInfo;
+        });
+        await _indexWatchedDirectory(
+          pickResult.uri,
+          safInfo: pickResult.treeInfo,
+        );
+      }
+    } on SafDirectoryUnavailableException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
       }
     }
   }
 
-  Future<void> _addFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: [
-        'mp3',
-        'wav',
-        'm4a',
-        'aac',
-        'ogg',
-        'flac',
-        'wma',
-        'opus',
-      ],
-      allowMultiple: true, // Permettre la sélection multiple
+  Future<void> _loadSafFolderInfo() async {
+    if (!SafDirectoryBridge.isSupported) {
+      return;
+    }
+
+    final infoByUri = <String, SafTreeInfo>{};
+    for (final watchedPath in _watchedPaths) {
+      if (!SafDirectoryBridge.isSafTreeUri(watchedPath.path)) {
+        continue;
+      }
+      final info = await SafDirectoryBridge.getTreeInfo(watchedPath.path);
+      if (info != null) {
+        infoByUri[watchedPath.path] = info;
+      }
+
+      final isDrive = info?.isGoogleDrive ??
+          SafDirectoryBridge.isGoogleDriveUri(watchedPath.path);
+      if (isDrive && watchedPath.accountEmail == null) {
+        unawaited(_resolveAndStoreOwnerEmail(watchedPath, info));
+      }
+    }
+
+    if (!mounted || infoByUri.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _safFolderInfo.addAll(infoByUri);
+    });
+  }
+
+  Future<void> _resolveAndStoreOwnerEmail(
+    db.WatchedPath watchedPath,
+    SafTreeInfo? info,
+  ) async {
+    final folderName =
+        info?.displayName ?? _watchedPathTitle(watchedPath);
+    final ownerEmail = await widget.libraryRepository.resolveSafFolderOwnerEmail(
+      driveFileId: watchedPath.driveFileId ?? info?.driveFileId,
+      folderName: folderName,
+    );
+    if (ownerEmail == null || !mounted) {
+      return;
+    }
+
+    await _repository.updateWatchedPathAccount(
+      id: watchedPath.id,
+      accountEmail: ownerEmail,
+      driveFileId: watchedPath.driveFileId ?? info?.driveFileId,
+    );
+    await _reloadWatchedPaths();
+  }
+
+  Future<void> _showAddFolderMenu() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: const Text('Dossier local'),
+                onTap: () => Navigator.of(sheetContext).pop('local'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cloud_outlined),
+                title: const Text('Dossier Drive'),
+                onTap: () => Navigator.of(sheetContext).pop('drive'),
+              ),
+            ],
+          ),
+        );
+      },
     );
 
-    if (result != null && result.files.isNotEmpty) {
-      try {
-        int addedCount = 0;
-        int skippedCount = 0;
+    if (!mounted || choice == null) {
+      return;
+    }
 
-        for (final pickedFile in result.files) {
-          if (pickedFile.path == null) continue;
+    if (choice == 'local') {
+      await _addLocalDirectory();
+    } else if (choice == 'drive') {
+      await _addDriveDirectory();
+    }
+  }
 
-          final filePath = pickedFile.path!;
-          final file = File(filePath);
+  Future<void> _addLocalDirectory() async {
+    final selectedDirectory = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choisir un dossier local',
+    );
+    if (selectedDirectory != null) {
+      await _indexWatchedDirectory(selectedDirectory);
+    }
+  }
 
-          if (await file.exists()) {
-            // Vérifier si le fichier n'est pas déjà surveillé
-            final existing = await (widget.database.select(
-              widget.database.watchedPaths,
-            )..where((w) => w.path.equals(filePath))).get();
+  Future<void> _indexWatchedDirectory(
+    String selectedDirectory, {
+    SafTreeInfo? safInfo,
+  }) async {
+    try {
+      final isSafTree = SafDirectoryBridge.isSafTreeUri(selectedDirectory);
+      final directoryExists = isSafTree ||
+          await Directory(selectedDirectory).exists();
 
-            if (existing.isNotEmpty) {
-              skippedCount++;
-              continue;
-            }
+      if (directoryExists) {
+        String? accountEmail;
+        String? driveFileId;
+        final isGoogleDrive = safInfo?.isGoogleDrive ??
+            SafDirectoryBridge.isGoogleDriveUri(selectedDirectory);
 
-            // Ajouter le chemin surveillé
-            final watchedPath = domain.WatchedPath(
-              id: 0, // Sera généré par la base de données
-              path: filePath,
-              isDirectory: false,
-              addedAt: DateTime.now(),
+        if (isSafTree && isGoogleDrive) {
+          driveFileId = safInfo?.driveFileId;
+          accountEmail =
+              await widget.libraryRepository.resolveSafFolderOwnerEmail(
+            driveFileId: driveFileId,
+            folderName: safInfo?.displayName ?? 'Dossier',
+          );
+          if (accountEmail == null &&
+              mounted &&
+              !widget.libraryRepository.isConnected) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Connectez-vous via « Bibliothèque Drive » pour afficher '
+                  'l\'e-mail du propriétaire du dossier.',
+                ),
+                duration: Duration(seconds: 4),
+              ),
             );
-
-            await _repository.addWatchedPath(watchedPath);
-            addedCount++;
           }
         }
+        // Vérifier si le dossier n'est pas déjà surveillé
+        final existing = await (widget.database.select(
+          widget.database.watchedPaths,
+        )..where((w) => w.path.equals(selectedDirectory))).get();
+
+        if (existing.isNotEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Ce dossier est déjà surveillé')),
+            );
+          }
+          return;
+        }
+
+        // Ajouter le chemin surveillé
+        final watchedPath = domain.WatchedPath(
+          id: 0, // Sera généré par la base de données
+          path: selectedDirectory,
+          isDirectory: true,
+          accountEmail: accountEmail,
+          driveFileId: driveFileId,
+          addedAt: DateTime.now(),
+        );
+
+        final normalizedPath = _normalizeWatchedPath(selectedDirectory);
+        setState(() {
+          _watchedPaths = [
+            ..._watchedPaths,
+            db.WatchedPath(
+              id: -1,
+              path: selectedDirectory,
+              isDirectory: true,
+              accountEmail: accountEmail,
+              driveFileId: driveFileId,
+              addedAt: DateTime.now(),
+            ),
+          ];
+          _indexingProgress[normalizedPath] = IndexingProgress(
+            path: selectedDirectory,
+            current: 0,
+            total: 0,
+            isComplete: false,
+          );
+        });
+
+        // Ajouter le dossier avec suivi de progression
+        await _repository.addWatchedPath(
+          watchedPath,
+          onInserted: () {
+            if (mounted) {
+              unawaited(_reloadWatchedPaths());
+            }
+          },
+          onProgress: (progress) {
+            if (mounted) {
+              setState(() {
+                _indexingProgress[_normalizeWatchedPath(progress.path)] =
+                    progress;
+              });
+            }
+          },
+        );
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                addedCount > 0
-                    ? '$addedCount fichier(s) indexé(s)${skippedCount > 0 ? ", $skippedCount déjà présent(s)" : ""}'
-                    : 'Aucun nouveau fichier ajouté',
-              ),
-              duration: const Duration(seconds: 2),
+            const SnackBar(
+              content: Text('Dossier ajouté et indexé'),
+              duration: Duration(seconds: 2),
             ),
           );
         }
 
-        await _loadDatabaseInfo();
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur lors de l\'ajout des fichiers: $e')),
-          );
+        if (isSafTree && safInfo == null) {
+          final info = await SafDirectoryBridge.getTreeInfo(selectedDirectory);
+          if (info != null && mounted) {
+            setState(() {
+              _safFolderInfo[selectedDirectory] = info;
+            });
+          }
         }
+
+        await _loadDatabaseInfo();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Dossier inaccessible. Réessayez ou choisissez un autre emplacement.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de l\'ajout du dossier: $e')),
+        );
+      }
+    }
+  }
+
+  Future<String?> _promptDriveFolderName() async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Dossier Drive'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Nom du dossier Drive',
+              hintText: 'Ex. Spectacle 2026',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+              child: const Text('Connecter'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _addDriveDirectory() async {
+    final name = await _promptDriveFolderName();
+    if (name == null || name.trim().isEmpty) {
+      return;
+    }
+
+    final trimmedName = name.trim();
+    if (_libraries.any((library) => library.name == trimmedName)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ce dossier Drive est déjà indexé')),
+        );
+      }
+      return;
+    }
+
+    final pendingKey = _driveProgressKey(-1, trimmedName);
+    final now = DateTime.now();
+    setState(() {
+      _libraries = [
+        ..._libraries,
+        domain.Library(
+          id: -1,
+          name: trimmedName,
+          localRootPath: '',
+          createdAt: now,
+        ),
+      ];
+      _indexingProgress[pendingKey] = IndexingProgress(
+        path: trimmedName,
+        current: 0,
+        total: 0,
+        isComplete: false,
+      );
+    });
+
+    try {
+      final library = await widget.libraryRepository.connectAndCreateLibrary(
+        name: trimmedName,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      if (library == null) {
+        setState(() {
+          _libraries = _libraries
+              .where((item) => item.name != trimmedName || item.id != -1)
+              .toList();
+          _indexingProgress.remove(pendingKey);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Connexion Drive annulée')),
+        );
+        return;
+      }
+
+      final progressKey = _driveProgressKey(library.id);
+      setState(() {
+        _libraries = [
+          for (final item in _libraries)
+            if (item.id == -1 && item.name == trimmedName) library else item,
+        ];
+        final pending = _indexingProgress.remove(pendingKey);
+        if (pending != null) {
+          _indexingProgress[progressKey] = pending;
+        }
+      });
+
+      await widget.libraryRepository.indexDriveFolder(
+        library: library,
+        onProgress: (progress) {
+          if (mounted) {
+            setState(() {
+              _indexingProgress[progressKey] = progress;
+            });
+          }
+        },
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Dossier Drive « $trimmedName » indexé'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      await _loadDatabaseInfo();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _libraries = _libraries
+              .where((item) => item.name != trimmedName || item.id != -1)
+              .toList();
+          _indexingProgress.remove(pendingKey);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de l\'ajout Drive : $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmRemoveWatchedPath(db.WatchedPath watchedPath) async {
+    final label = _watchedPathTitle(watchedPath);
+    final type = SafDirectoryBridge.isSafTreeUri(watchedPath.path)
+        ? 'dossier cloud'
+        : 'dossier local';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Retirer l\'élément indexé'),
+          content: Text(
+            'Retirer le $type "$label" ? '
+            'Les sons importés depuis cet élément seront supprimés '
+            'de la bibliothèque et retirés des scènes.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Retirer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    await _removeWatchedPath(watchedPath);
+  }
+
+  Future<void> _confirmRemoveDriveLibrary(domain.Library library) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Retirer l\'élément indexé'),
+          content: Text(
+            'Retirer le dossier Drive « ${library.name} » ? '
+            'Les sons importés depuis cet élément seront supprimés '
+            'de la bibliothèque et retirés des scènes.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Retirer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    try {
+      await widget.libraryRepository.removeLibrary(library);
+      _indexingProgress.remove(_driveProgressKey(library.id));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Dossier Drive retiré avec succès'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      await _loadDatabaseInfo();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de la suppression : $e')),
+        );
       }
     }
   }
@@ -260,6 +628,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
 
       await _repository.removeWatchedPath(watchedPathEntity);
+
+      _indexingProgress.remove(_normalizeWatchedPath(watchedPath.path));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -286,6 +656,162 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
   }
 
+  String _normalizeWatchedPath(String path) {
+    return p.normalize(path).replaceAll('\\', '/');
+  }
+
+  int _countSoundsInDirectory(String directoryPath) {
+    final prefix = _normalizeWatchedPath(directoryPath);
+    final pathPrefix = prefix.endsWith('/') ? prefix : '$prefix/';
+
+    return _sounds.where((sound) {
+      final soundPath = _normalizeWatchedPath(sound.filePath);
+      return soundPath.startsWith(pathPrefix) || soundPath == prefix;
+    }).length;
+  }
+
+  int _countSoundsForWatchedPath(db.WatchedPath watchedPath) {
+    if (SafDirectoryBridge.isSafTreeUri(watchedPath.path)) {
+      final marker = '/saf_watch/${watchedPath.id}/';
+      return _sounds
+          .where(
+            (sound) => sound.filePath.replaceAll('\\', '/').contains(marker),
+          )
+          .length;
+    }
+    return _countSoundsInDirectory(watchedPath.path);
+  }
+
+  String _watchedPathTitle(db.WatchedPath watchedPath) {
+    if (SafDirectoryBridge.isSafTreeUri(watchedPath.path)) {
+      return _safFolderInfo[watchedPath.path]?.displayName ?? 'Dossier cloud';
+    }
+    return p.basename(watchedPath.path);
+  }
+
+  String _watchedPathSubtitle(db.WatchedPath watchedPath) {
+    if (SafDirectoryBridge.isSafTreeUri(watchedPath.path)) {
+      final path =
+          _safFolderInfo[watchedPath.path]?.displayPath ?? 'Dossier cloud';
+      final email = watchedPath.accountEmail;
+      if (email != null && email.isNotEmpty) {
+        return '$email/$path';
+      }
+      return path;
+    }
+    return watchedPath.path;
+  }
+
+  String _driveProgressKey(int libraryId, [String? pendingName]) {
+    if (libraryId < 0 && pendingName != null) {
+      return 'drive:pending:$pendingName';
+    }
+    return 'drive:$libraryId';
+  }
+
+  int _countSoundsInLibrary(int libraryId) {
+    return _sounds.where((sound) => sound.libraryId == libraryId).length;
+  }
+
+  List<_IndexedFolderItem> _indexedFolderItems() {
+    final items = <_IndexedFolderItem>[
+      for (final watchedPath in _watchedPaths)
+        if (watchedPath.isDirectory) _IndexedFolderItem.local(watchedPath),
+      for (final library in _libraries)
+        _IndexedFolderItem.drive(library),
+    ];
+    items.sort((a, b) => b.addedAt.compareTo(a.addedAt));
+    return items;
+  }
+
+  IndexingProgress _progressForItem(_IndexedFolderItem item) {
+    final key = item.isLocal
+        ? _normalizeWatchedPath(item.watchedPath!.path)
+        : _driveProgressKey(item.library!.id, item.library!.name);
+
+    final live = _indexingProgress[key] ??
+        (item.isLocal
+            ? null
+            : _indexingProgress[_driveProgressKey(-1, item.library!.name)]);
+
+    if (live != null) {
+      return live;
+    }
+
+    if (item.isLocal) {
+      final soundCount = _countSoundsForWatchedPath(item.watchedPath!);
+      return IndexingProgress(
+        path: item.watchedPath!.path,
+        current: soundCount,
+        total: soundCount,
+        isComplete: true,
+      );
+    }
+
+    final soundCount = _countSoundsInLibrary(item.library!.id);
+    return IndexingProgress(
+      path: item.library!.name,
+      current: soundCount,
+      total: soundCount,
+      isComplete: true,
+    );
+  }
+
+  double? _indexingBarValue(IndexingProgress progress, bool isIndexing) {
+    if (isIndexing) {
+      return progress.total > 0 ? progress.progress : null;
+    }
+    return 1.0;
+  }
+
+  String _indexingStatusLabel(IndexingProgress progress, bool isIndexing) {
+    if (isIndexing) {
+      return 'Indexation de ${progress.current}/${progress.total > 0 ? progress.total : '…'} fichiers';
+    }
+
+    final count = progress.total > 0 ? progress.total : progress.current;
+    if (count == 1) {
+      return '1 fichier indexé';
+    }
+    return '$count fichiers indexés';
+  }
+
+  Widget _buildIndexingProgressSection(
+    BuildContext context,
+    IndexingProgress progress,
+    bool isIndexing,
+  ) {
+    final barColor = progress.error != null
+        ? Colors.red.shade600
+        : Colors.green.shade600;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: _indexingBarValue(progress, isIndexing),
+            backgroundColor: Colors.grey.shade300,
+            valueColor: AlwaysStoppedAnimation<Color>(barColor),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          progress.error != null
+              ? 'Erreur: ${progress.error}'
+              : _indexingStatusLabel(progress, isIndexing),
+          style: TextStyle(
+            fontSize: 11,
+            color: progress.error != null
+                ? Colors.red.shade700
+                : Colors.grey.shade600,
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -382,259 +908,166 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Row(
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.folder),
-                                tooltip: 'Ajouter un dossier',
-                                onPressed: _addDirectory,
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.audio_file),
-                                tooltip:
-                                    'Ajouter des fichiers audio (sélection multiple)',
-                                onPressed: _addFile,
+                                icon: const Icon(Icons.add),
+                                tooltip: Platform.isAndroid
+                                    ? 'Ajouter un dossier'
+                                    : 'Ajouter un dossier local ou Drive',
+                                onPressed: _onAddFolderPressed,
                               ),
                             ],
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      _watchedPaths.isEmpty
+                      _indexedFolderItems().isEmpty
                           ? Card(
                               child: Padding(
                                 padding: const EdgeInsets.all(24),
-                                child: Center(
-                                  child: Column(
-                                    children: [
-                                      Icon(
-                                        Icons.folder_off,
-                                        size: 48,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.folder_off,
+                                      size: 48,
+                                      color: Colors.grey[600],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Aucun dossier indexé',
+                                      style: TextStyle(
+                                        fontSize: 16,
                                         color: Colors.grey[600],
                                       ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        'Aucun dossier ou fichier surveillé',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          color: Colors.grey[600],
-                                        ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Ajoutez un dossier local ou un dossier Drive',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[500],
                                       ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Ajoutez un dossier ou un fichier pour commencer',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[500],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             )
                           : ListView.builder(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _watchedPaths.length,
+                              itemCount: _indexedFolderItems().length,
                               itemBuilder: (context, index) {
-                                final watchedPath = _watchedPaths[index];
-                                final progress =
-                                    _indexingProgress[watchedPath.path];
-                                final isIndexing =
-                                    progress != null && !progress.isComplete;
+                                final item = _indexedFolderItems()[index];
+                                final progress = _progressForItem(item);
+                                final isIndexing = !progress.isComplete;
 
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 8),
-                                  child: Column(
-                                    children: [
-                                      ListTile(
-                                        leading: CircleAvatar(
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      12,
+                                      8,
+                                      12,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        CircleAvatar(
                                           backgroundColor: Theme.of(
                                             context,
                                           ).colorScheme.primaryContainer,
                                           child: Icon(
-                                            watchedPath.isDirectory
+                                            item.isLocal &&
+                                                    SafDirectoryBridge
+                                                        .isSafTreeUri(
+                                                      item.watchedPath!.path,
+                                                    )
+                                                ? Icons.cloud
+                                                : item.isLocal
                                                 ? Icons.folder
-                                                : Icons.audio_file,
+                                                : Icons.cloud,
                                             color: Theme.of(
                                               context,
                                             ).colorScheme.primary,
                                           ),
                                         ),
-                                        title: Text(
-                                          p.basename(watchedPath.path),
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        subtitle: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              watchedPath.path,
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              watchedPath.isDirectory
-                                                  ? 'Dossier'
-                                                  : 'Fichier',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        trailing: IconButton(
-                                          icon: const Icon(
-                                            Icons.delete,
-                                            color: Colors.red,
-                                          ),
-                                          onPressed: () =>
-                                              _removeWatchedPath(watchedPath),
-                                          tooltip: 'Retirer',
-                                        ),
-                                        isThreeLine: true,
-                                      ),
-                                      // Barre de progression pour les dossiers en cours d'indexation
-                                      if (watchedPath.isDirectory &&
-                                          progress != null)
-                                        Padding(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            16,
-                                            0,
-                                            16,
-                                            16,
-                                          ),
+                                        const SizedBox(width: 16),
+                                        Expanded(
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              if (isIndexing)
-                                                LinearProgressIndicator(
-                                                  value: progress.progress,
-                                                  backgroundColor:
-                                                      Colors.grey[300],
-                                                  valueColor:
-                                                      AlwaysStoppedAnimation<
-                                                        Color
-                                                      >(
-                                                        Theme.of(
-                                                          context,
-                                                        ).colorScheme.primary,
-                                                      ),
-                                                )
-                                              else if (progress.error != null)
-                                                Container(
-                                                  padding: const EdgeInsets.all(
-                                                    8,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.red[50],
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          4,
-                                                        ),
-                                                  ),
-                                                  child: Row(
-                                                    children: [
-                                                      Icon(
-                                                        Icons.error_outline,
-                                                        color: Colors.red[700],
-                                                        size: 16,
-                                                      ),
-                                                      const SizedBox(width: 8),
-                                                      Expanded(
-                                                        child: Text(
-                                                          'Erreur: ${progress.error}',
-                                                          style: TextStyle(
-                                                            fontSize: 12,
-                                                            color:
-                                                                Colors.red[700],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                )
-                                              else
-                                                Container(
-                                                  padding: const EdgeInsets.all(
-                                                    8,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: progress.total == 0
-                                                        ? Colors.orange[50]
-                                                        : Colors.green[50],
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          4,
-                                                        ),
-                                                  ),
-                                                  child: Row(
-                                                    children: [
-                                                      Icon(
-                                                        progress.total == 0
-                                                            ? Icons
-                                                                  .warning_amber_rounded
-                                                            : Icons
-                                                                  .check_circle,
-                                                        color:
-                                                            progress.total == 0
-                                                            ? Colors.orange[700]
-                                                            : Colors.green[700],
-                                                        size: 16,
-                                                      ),
-                                                      const SizedBox(width: 8),
-                                                      Expanded(
-                                                        child: Text(
-                                                          progress.total == 0
-                                                              ? 'Aucun fichier audio trouvé dans ce dossier'
-                                                              : 'Indexation terminée: ${progress.current}/${progress.total} fichier(s)',
-                                                          style: TextStyle(
-                                                            fontSize: 12,
-                                                            color:
-                                                                progress.total ==
-                                                                    0
-                                                                ? Colors
-                                                                      .orange[700]
-                                                                : Colors
-                                                                      .green[700],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
+                                              Text(
+                                                item.isLocal
+                                                    ? _watchedPathTitle(
+                                                        item.watchedPath!,
+                                                      )
+                                                    : item.title,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
                                                 ),
-                                              if (isIndexing &&
-                                                  progress.total > 0)
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                        top: 4,
-                                                      ),
-                                                  child: Text(
-                                                    'Indexation en cours: ${progress.current}/${progress.total} fichier(s)',
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      color: Colors.grey[600],
-                                                    ),
-                                                  ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                item.isLocal
+                                                    ? _watchedPathSubtitle(
+                                                        item.watchedPath!,
+                                                      )
+                                                    : widget
+                                                              .libraryRepository
+                                                              .connectedAccountEmail ??
+                                                          'Bibliothèque Drive',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
                                                 ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              _buildIndexingProgressSection(
+                                                context,
+                                                progress,
+                                                isIndexing,
+                                              ),
                                             ],
                                           ),
                                         ),
-                                    ],
+                                        IconButton(
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints.tightFor(
+                                            width: 32,
+                                            height: 32,
+                                          ),
+                                          icon: Icon(
+                                            Icons.delete_outline,
+                                            size: 20,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant
+                                                .withValues(alpha: 0.55),
+                                          ),
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () {
+                                            if (item.isLocal) {
+                                              _confirmRemoveWatchedPath(
+                                                item.watchedPath!,
+                                              );
+                                            } else {
+                                              _confirmRemoveDriveLibrary(
+                                                item.library!,
+                                              );
+                                            }
+                                          },
+                                          tooltip: 'Retirer',
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 );
                               },
                             ),
-                            ],
+                    ],
                   ),
                 ),
               ),
@@ -665,6 +1098,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ],
     );
   }
+}
+
+class _IndexedFolderItem {
+  const _IndexedFolderItem.local(this.watchedPath) : library = null;
+
+  const _IndexedFolderItem.drive(this.library) : watchedPath = null;
+
+  final db.WatchedPath? watchedPath;
+  final domain.Library? library;
+
+  bool get isLocal => watchedPath != null;
+
+  String get title => isLocal ? '' : library!.name;
+
+  String get typeLabel => isLocal ? '' : 'Dossier Drive';
+
+  DateTime get addedAt =>
+      isLocal ? watchedPath!.addedAt : library!.createdAt;
 }
 
 class _SettingsLoadingView extends StatefulWidget {

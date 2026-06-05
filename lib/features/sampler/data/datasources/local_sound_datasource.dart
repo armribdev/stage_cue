@@ -5,8 +5,11 @@ import 'package:drift/drift.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/database/sounds.dart' as db_sounds;
+import 'package:path_provider/path_provider.dart';
+
+import '../../../../core/platform/saf_directory_bridge.dart';
 import '../../../../core/utils/file_utils.dart'
-    show scanDirectoryForAudioFiles, isAudioFile, computeQuickHash;
+    show scanDirectoryForAudioFiles, computeQuickHash;
 import '../models/sound_model.dart';
 import '../models/sound_board_model.dart';
 import '../models/watched_path_model.dart';
@@ -467,16 +470,125 @@ class LocalSoundDataSource {
     }
   }
 
-  /// Supprime les sons associés à un chemin surveillé
-  Future<void> deleteSoundsByPath(String path, bool isDirectory) async {
-    if (isDirectory) {
-      final directory = Directory(path);
-      final directoryPath = directory.path.replaceAll('\\', '/');
-      // Récupérer tous les sons et filtrer ceux qui commencent par le chemin du dossier
+  /// Indexe les fichiers audio d'un dossier via SAF (Android : Drive, stockage…).
+  Future<int> indexContentTree(
+    String treeUri, {
+    required int watchedPathId,
+    void Function(IndexingProgress)? onProgress,
+  }) async {
+    try {
+      onProgress?.call(
+        IndexingProgress(
+          path: treeUri,
+          current: 0,
+          total: 0,
+          isComplete: false,
+        ),
+      );
+
+      final entries = await SafDirectoryBridge.listAudioFiles(treeUri);
+      onProgress?.call(
+        IndexingProgress(
+          path: treeUri,
+          current: 0,
+          total: entries.length,
+          isComplete: false,
+        ),
+      );
+
+      final docs = await getApplicationDocumentsDirectory();
+      final cacheRoot = SafDirectoryBridge.cacheRootForWatchedPath(
+        watchedPathId,
+        docs.path,
+      );
+
+      var indexedCount = 0;
+      var processedCount = 0;
+
+      for (final entry in entries) {
+        processedCount++;
+        try {
+          final localPath = p.join(cacheRoot, entry.relativePath);
+          final localFile = File(localPath);
+          final existingSounds = await (_database.select(
+            _database.sounds,
+          )..where((s) => s.filePath.equals(localPath))).get();
+          if (existingSounds.isNotEmpty) {
+            continue;
+          }
+
+          await SafDirectoryBridge.copyToFile(
+            documentUri: entry.uri,
+            destinationPath: localPath,
+          );
+          await indexAudioFile(localFile);
+          indexedCount++;
+        } catch (e) {
+          debugPrint(
+            'Erreur lors de l\'indexation SAF de ${entry.relativePath}: $e',
+          );
+        }
+
+        onProgress?.call(
+          IndexingProgress(
+            path: treeUri,
+            current: processedCount,
+            total: entries.length,
+            isComplete: false,
+          ),
+        );
+      }
+
+      onProgress?.call(
+        IndexingProgress(
+          path: treeUri,
+          current: processedCount,
+          total: entries.length,
+          isComplete: true,
+        ),
+      );
+
+      return indexedCount;
+    } catch (e) {
+      onProgress?.call(
+        IndexingProgress(
+          path: treeUri,
+          current: 0,
+          total: 0,
+          isComplete: true,
+          error: e.toString(),
+        ),
+      );
+      rethrow;
+    }
+  }
+
+  /// Supprime tous les sons d'une bibliothèque Drive.
+  Future<void> deleteSoundsByLibraryId(int libraryId) async {
+    await (_database.delete(
+      _database.sounds,
+    )..where((s) => s.libraryId.equals(libraryId))).go();
+  }
+
+  /// Supprime les sons associés à un chemin surveillé.
+  Future<void> deleteSoundsForWatchedPath({
+    required String path,
+    required int watchedPathId,
+    required bool isDirectory,
+  }) async {
+    if (!isDirectory) {
+      await (_database.delete(
+        _database.sounds,
+      )..where((s) => s.filePath.equals(path))).go();
+      return;
+    }
+
+    if (SafDirectoryBridge.isSafTreeUri(path)) {
+      final marker = '/saf_watch/$watchedPathId/';
       final allSounds = await _database.select(_database.sounds).get();
       final soundsToDelete = allSounds.where((sound) {
         final soundPath = sound.filePath.replaceAll('\\', '/');
-        return soundPath.startsWith(directoryPath);
+        return soundPath.contains(marker);
       }).toList();
 
       for (final sound in soundsToDelete) {
@@ -484,10 +596,28 @@ class LocalSoundDataSource {
           _database.sounds,
         )..where((s) => s.id.equals(sound.id))).go();
       }
-    } else {
+
+      final docs = await getApplicationDocumentsDirectory();
+      final cacheDir = Directory(
+        SafDirectoryBridge.cacheRootForWatchedPath(watchedPathId, docs.path),
+      );
+      if (await cacheDir.exists()) {
+        await cacheDir.delete(recursive: true);
+      }
+      return;
+    }
+
+    final directoryPath = Directory(path).path.replaceAll('\\', '/');
+    final allSounds = await _database.select(_database.sounds).get();
+    final soundsToDelete = allSounds.where((sound) {
+      final soundPath = sound.filePath.replaceAll('\\', '/');
+      return soundPath.startsWith(directoryPath);
+    }).toList();
+
+    for (final sound in soundsToDelete) {
       await (_database.delete(
         _database.sounds,
-      )..where((s) => s.filePath.equals(path))).go();
+      )..where((s) => s.id.equals(sound.id))).go();
     }
   }
 }
@@ -559,6 +689,20 @@ class LocalWatchedPathDataSource {
     )..where((w) => w.id.equals(id))).go();
   }
 
+  Future<void> updateWatchedPathAccount({
+    required int id,
+    String? accountEmail,
+    String? driveFileId,
+  }) async {
+    await (_database.update(_database.watchedPaths)..where((w) => w.id.equals(id)))
+        .write(
+      db.WatchedPathsCompanion(
+        accountEmail: Value(accountEmail),
+        driveFileId: Value(driveFileId),
+      ),
+    );
+  }
+
   /// Scanne tous les chemins surveillés et indexe les nouveaux fichiers
   Future<int> scanAllWatchedPaths(LocalSoundDataSource soundDataSource) async {
     final watchedPaths = await getAllWatchedPaths();
@@ -569,8 +713,24 @@ class LocalWatchedPathDataSource {
 
     for (final watchedPath in watchedPaths) {
       try {
-        if (watchedPath.isDirectory) {
-          debugPrint('Scan du dossier: ${watchedPath.path}');
+        if (!watchedPath.isDirectory) {
+          debugPrint(
+            'Chemin ignoré (fichier individuel non supporté): ${watchedPath.path}',
+          );
+          continue;
+        }
+
+        debugPrint('Scan du dossier: ${watchedPath.path}');
+        if (SafDirectoryBridge.isSafTreeUri(watchedPath.path)) {
+          final count = await soundDataSource.indexContentTree(
+            watchedPath.path,
+            watchedPathId: watchedPath.id,
+          );
+          totalIndexed += count;
+          debugPrint(
+            'Dossier SAF ${watchedPath.path}: $count nouveau(x) fichier(s) indexé(s)',
+          );
+        } else {
           final directory = Directory(watchedPath.path);
           if (await directory.exists()) {
             final count = await soundDataSource.indexDirectory(directory);
@@ -580,22 +740,6 @@ class LocalWatchedPathDataSource {
             );
           } else {
             debugPrint('Le dossier n\'existe pas: ${watchedPath.path}');
-          }
-        } else {
-          debugPrint('Indexation du fichier: ${watchedPath.path}');
-          final file = File(watchedPath.path);
-          if (await file.exists() && isAudioFile(file.path)) {
-            await soundDataSource.indexAudioFile(file);
-            totalIndexed++;
-            debugPrint('Fichier indexé: ${watchedPath.path}');
-          } else {
-            if (!await file.exists()) {
-              debugPrint('Le fichier n\'existe pas: ${watchedPath.path}');
-            } else if (!isAudioFile(file.path)) {
-              debugPrint(
-                'Le fichier n\'est pas un fichier audio: ${watchedPath.path}',
-              );
-            }
           }
         }
       } catch (e) {

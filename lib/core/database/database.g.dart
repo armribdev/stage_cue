@@ -1424,6 +1424,28 @@ class $WatchedPathsTable extends WatchedPaths
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _accountEmailMeta = const VerificationMeta(
+    'accountEmail',
+  );
+  @override
+  late final GeneratedColumn<String> accountEmail = GeneratedColumn<String>(
+    'account_email',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _driveFileIdMeta = const VerificationMeta(
+    'driveFileId',
+  );
+  @override
+  late final GeneratedColumn<String> driveFileId = GeneratedColumn<String>(
+    'drive_file_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _addedAtMeta = const VerificationMeta(
     'addedAt',
   );
@@ -1437,7 +1459,14 @@ class $WatchedPathsTable extends WatchedPaths
     defaultValue: currentDateAndTime,
   );
   @override
-  List<GeneratedColumn> get $columns => [id, path, isDirectory, addedAt];
+  List<GeneratedColumn> get $columns => [
+    id,
+    path,
+    isDirectory,
+    accountEmail,
+    driveFileId,
+    addedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1470,6 +1499,24 @@ class $WatchedPathsTable extends WatchedPaths
         ),
       );
     }
+    if (data.containsKey('account_email')) {
+      context.handle(
+        _accountEmailMeta,
+        accountEmail.isAcceptableOrUnknown(
+          data['account_email']!,
+          _accountEmailMeta,
+        ),
+      );
+    }
+    if (data.containsKey('drive_file_id')) {
+      context.handle(
+        _driveFileIdMeta,
+        driveFileId.isAcceptableOrUnknown(
+          data['drive_file_id']!,
+          _driveFileIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('added_at')) {
       context.handle(
         _addedAtMeta,
@@ -1497,6 +1544,14 @@ class $WatchedPathsTable extends WatchedPaths
         DriftSqlType.bool,
         data['${effectivePrefix}is_directory'],
       )!,
+      accountEmail: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_email'],
+      ),
+      driveFileId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}drive_file_id'],
+      ),
       addedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}added_at'],
@@ -1514,11 +1569,19 @@ class WatchedPath extends DataClass implements Insertable<WatchedPath> {
   final int id;
   final String path;
   final bool isDirectory;
+
+  /// E-mail du propriétaire Drive (dossiers SAF cloud), si résolu.
+  final String? accountEmail;
+
+  /// Identifiant fichier Drive extrait de l'URI SAF, pour résolution API.
+  final String? driveFileId;
   final DateTime addedAt;
   const WatchedPath({
     required this.id,
     required this.path,
     required this.isDirectory,
+    this.accountEmail,
+    this.driveFileId,
     required this.addedAt,
   });
   @override
@@ -1527,6 +1590,12 @@ class WatchedPath extends DataClass implements Insertable<WatchedPath> {
     map['id'] = Variable<int>(id);
     map['path'] = Variable<String>(path);
     map['is_directory'] = Variable<bool>(isDirectory);
+    if (!nullToAbsent || accountEmail != null) {
+      map['account_email'] = Variable<String>(accountEmail);
+    }
+    if (!nullToAbsent || driveFileId != null) {
+      map['drive_file_id'] = Variable<String>(driveFileId);
+    }
     map['added_at'] = Variable<DateTime>(addedAt);
     return map;
   }
@@ -1536,6 +1605,12 @@ class WatchedPath extends DataClass implements Insertable<WatchedPath> {
       id: Value(id),
       path: Value(path),
       isDirectory: Value(isDirectory),
+      accountEmail: accountEmail == null && nullToAbsent
+          ? const Value.absent()
+          : Value(accountEmail),
+      driveFileId: driveFileId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driveFileId),
       addedAt: Value(addedAt),
     );
   }
@@ -1549,6 +1624,8 @@ class WatchedPath extends DataClass implements Insertable<WatchedPath> {
       id: serializer.fromJson<int>(json['id']),
       path: serializer.fromJson<String>(json['path']),
       isDirectory: serializer.fromJson<bool>(json['isDirectory']),
+      accountEmail: serializer.fromJson<String?>(json['accountEmail']),
+      driveFileId: serializer.fromJson<String?>(json['driveFileId']),
       addedAt: serializer.fromJson<DateTime>(json['addedAt']),
     );
   }
@@ -1559,6 +1636,8 @@ class WatchedPath extends DataClass implements Insertable<WatchedPath> {
       'id': serializer.toJson<int>(id),
       'path': serializer.toJson<String>(path),
       'isDirectory': serializer.toJson<bool>(isDirectory),
+      'accountEmail': serializer.toJson<String?>(accountEmail),
+      'driveFileId': serializer.toJson<String?>(driveFileId),
       'addedAt': serializer.toJson<DateTime>(addedAt),
     };
   }
@@ -1567,11 +1646,15 @@ class WatchedPath extends DataClass implements Insertable<WatchedPath> {
     int? id,
     String? path,
     bool? isDirectory,
+    Value<String?> accountEmail = const Value.absent(),
+    Value<String?> driveFileId = const Value.absent(),
     DateTime? addedAt,
   }) => WatchedPath(
     id: id ?? this.id,
     path: path ?? this.path,
     isDirectory: isDirectory ?? this.isDirectory,
+    accountEmail: accountEmail.present ? accountEmail.value : this.accountEmail,
+    driveFileId: driveFileId.present ? driveFileId.value : this.driveFileId,
     addedAt: addedAt ?? this.addedAt,
   );
   WatchedPath copyWithCompanion(WatchedPathsCompanion data) {
@@ -1581,6 +1664,12 @@ class WatchedPath extends DataClass implements Insertable<WatchedPath> {
       isDirectory: data.isDirectory.present
           ? data.isDirectory.value
           : this.isDirectory,
+      accountEmail: data.accountEmail.present
+          ? data.accountEmail.value
+          : this.accountEmail,
+      driveFileId: data.driveFileId.present
+          ? data.driveFileId.value
+          : this.driveFileId,
       addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
     );
   }
@@ -1591,13 +1680,16 @@ class WatchedPath extends DataClass implements Insertable<WatchedPath> {
           ..write('id: $id, ')
           ..write('path: $path, ')
           ..write('isDirectory: $isDirectory, ')
+          ..write('accountEmail: $accountEmail, ')
+          ..write('driveFileId: $driveFileId, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, path, isDirectory, addedAt);
+  int get hashCode =>
+      Object.hash(id, path, isDirectory, accountEmail, driveFileId, addedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1605,6 +1697,8 @@ class WatchedPath extends DataClass implements Insertable<WatchedPath> {
           other.id == this.id &&
           other.path == this.path &&
           other.isDirectory == this.isDirectory &&
+          other.accountEmail == this.accountEmail &&
+          other.driveFileId == this.driveFileId &&
           other.addedAt == this.addedAt);
 }
 
@@ -1612,29 +1706,39 @@ class WatchedPathsCompanion extends UpdateCompanion<WatchedPath> {
   final Value<int> id;
   final Value<String> path;
   final Value<bool> isDirectory;
+  final Value<String?> accountEmail;
+  final Value<String?> driveFileId;
   final Value<DateTime> addedAt;
   const WatchedPathsCompanion({
     this.id = const Value.absent(),
     this.path = const Value.absent(),
     this.isDirectory = const Value.absent(),
+    this.accountEmail = const Value.absent(),
+    this.driveFileId = const Value.absent(),
     this.addedAt = const Value.absent(),
   });
   WatchedPathsCompanion.insert({
     this.id = const Value.absent(),
     required String path,
     this.isDirectory = const Value.absent(),
+    this.accountEmail = const Value.absent(),
+    this.driveFileId = const Value.absent(),
     this.addedAt = const Value.absent(),
   }) : path = Value(path);
   static Insertable<WatchedPath> custom({
     Expression<int>? id,
     Expression<String>? path,
     Expression<bool>? isDirectory,
+    Expression<String>? accountEmail,
+    Expression<String>? driveFileId,
     Expression<DateTime>? addedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (path != null) 'path': path,
       if (isDirectory != null) 'is_directory': isDirectory,
+      if (accountEmail != null) 'account_email': accountEmail,
+      if (driveFileId != null) 'drive_file_id': driveFileId,
       if (addedAt != null) 'added_at': addedAt,
     });
   }
@@ -1643,12 +1747,16 @@ class WatchedPathsCompanion extends UpdateCompanion<WatchedPath> {
     Value<int>? id,
     Value<String>? path,
     Value<bool>? isDirectory,
+    Value<String?>? accountEmail,
+    Value<String?>? driveFileId,
     Value<DateTime>? addedAt,
   }) {
     return WatchedPathsCompanion(
       id: id ?? this.id,
       path: path ?? this.path,
       isDirectory: isDirectory ?? this.isDirectory,
+      accountEmail: accountEmail ?? this.accountEmail,
+      driveFileId: driveFileId ?? this.driveFileId,
       addedAt: addedAt ?? this.addedAt,
     );
   }
@@ -1665,6 +1773,12 @@ class WatchedPathsCompanion extends UpdateCompanion<WatchedPath> {
     if (isDirectory.present) {
       map['is_directory'] = Variable<bool>(isDirectory.value);
     }
+    if (accountEmail.present) {
+      map['account_email'] = Variable<String>(accountEmail.value);
+    }
+    if (driveFileId.present) {
+      map['drive_file_id'] = Variable<String>(driveFileId.value);
+    }
     if (addedAt.present) {
       map['added_at'] = Variable<DateTime>(addedAt.value);
     }
@@ -1677,6 +1791,8 @@ class WatchedPathsCompanion extends UpdateCompanion<WatchedPath> {
           ..write('id: $id, ')
           ..write('path: $path, ')
           ..write('isDirectory: $isDirectory, ')
+          ..write('accountEmail: $accountEmail, ')
+          ..write('driveFileId: $driveFileId, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
@@ -5616,6 +5732,8 @@ typedef $$WatchedPathsTableCreateCompanionBuilder =
       Value<int> id,
       required String path,
       Value<bool> isDirectory,
+      Value<String?> accountEmail,
+      Value<String?> driveFileId,
       Value<DateTime> addedAt,
     });
 typedef $$WatchedPathsTableUpdateCompanionBuilder =
@@ -5623,6 +5741,8 @@ typedef $$WatchedPathsTableUpdateCompanionBuilder =
       Value<int> id,
       Value<String> path,
       Value<bool> isDirectory,
+      Value<String?> accountEmail,
+      Value<String?> driveFileId,
       Value<DateTime> addedAt,
     });
 
@@ -5647,6 +5767,16 @@ class $$WatchedPathsTableFilterComposer
 
   ColumnFilters<bool> get isDirectory => $composableBuilder(
     column: $table.isDirectory,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accountEmail => $composableBuilder(
+    column: $table.accountEmail,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get driveFileId => $composableBuilder(
+    column: $table.driveFileId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5680,6 +5810,16 @@ class $$WatchedPathsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get accountEmail => $composableBuilder(
+    column: $table.accountEmail,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get driveFileId => $composableBuilder(
+    column: $table.driveFileId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get addedAt => $composableBuilder(
     column: $table.addedAt,
     builder: (column) => ColumnOrderings(column),
@@ -5703,6 +5843,16 @@ class $$WatchedPathsTableAnnotationComposer
 
   GeneratedColumn<bool> get isDirectory => $composableBuilder(
     column: $table.isDirectory,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get accountEmail => $composableBuilder(
+    column: $table.accountEmail,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get driveFileId => $composableBuilder(
+    column: $table.driveFileId,
     builder: (column) => column,
   );
 
@@ -5744,11 +5894,15 @@ class $$WatchedPathsTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<String> path = const Value.absent(),
                 Value<bool> isDirectory = const Value.absent(),
+                Value<String?> accountEmail = const Value.absent(),
+                Value<String?> driveFileId = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
               }) => WatchedPathsCompanion(
                 id: id,
                 path: path,
                 isDirectory: isDirectory,
+                accountEmail: accountEmail,
+                driveFileId: driveFileId,
                 addedAt: addedAt,
               ),
           createCompanionCallback:
@@ -5756,11 +5910,15 @@ class $$WatchedPathsTableTableManager
                 Value<int> id = const Value.absent(),
                 required String path,
                 Value<bool> isDirectory = const Value.absent(),
+                Value<String?> accountEmail = const Value.absent(),
+                Value<String?> driveFileId = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
               }) => WatchedPathsCompanion.insert(
                 id: id,
                 path: path,
                 isDirectory: isDirectory,
+                accountEmail: accountEmail,
+                driveFileId: driveFileId,
                 addedAt: addedAt,
               ),
           withReferenceMapper: (p0) => p0

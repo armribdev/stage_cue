@@ -10,6 +10,8 @@ class WatchedPathModel {
       id: watchedPath.id,
       path: watchedPath.path,
       isDirectory: watchedPath.isDirectory,
+      accountEmail: watchedPath.accountEmail,
+      driveFileId: watchedPath.driveFileId,
       addedAt: watchedPath.addedAt,
     );
   }
@@ -19,6 +21,8 @@ class WatchedPathModel {
     return db.WatchedPathsCompanion.insert(
       path: watchedPath.path,
       isDirectory: Value(watchedPath.isDirectory),
+      accountEmail: Value(watchedPath.accountEmail),
+      driveFileId: Value(watchedPath.driveFileId),
     );
   }
 }

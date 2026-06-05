@@ -54,8 +54,12 @@ class SoundBoards extends Table {
 
 class WatchedPaths extends Table {
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get path => text()(); // Chemin du dossier ou fichier surveillé
+  TextColumn get path => text()(); // Chemin du dossier local surveillé
   BoolColumn get isDirectory => boolean().withDefault(const Constant(true))();
+  /// E-mail du propriétaire Drive (dossiers SAF cloud), si résolu.
+  TextColumn get accountEmail => text().nullable()();
+  /// Identifiant fichier Drive extrait de l'URI SAF, pour résolution API.
+  TextColumn get driveFileId => text().nullable()();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
 }
 

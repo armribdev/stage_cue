@@ -3,6 +3,7 @@ import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../domain/entities/watched_path.dart';
+import '../../../../core/platform/saf_directory_bridge.dart';
 import '../datasources/local_sound_datasource.dart';
 import '../datasources/local_tag_datasource.dart';
 import '../models/indexing_progress.dart';
@@ -101,23 +102,27 @@ class SoundRepository {
   Future<int> addWatchedPath(
     WatchedPath watchedPath, {
     void Function(IndexingProgress)? onProgress,
+    void Function()? onInserted,
   }) async {
     final id = await _watchedPathDataSource.insertWatchedPath(watchedPath);
+    onInserted?.call();
+    if (!watchedPath.isDirectory) {
+      throw ArgumentError(
+        'Seuls les dossiers peuvent être indexés : ${watchedPath.path}',
+      );
+    }
+
     try {
-      if (watchedPath.isDirectory) {
-        await _soundDataSource.indexDirectory(
-          Directory(watchedPath.path),
+      if (SafDirectoryBridge.isSafTreeUri(watchedPath.path)) {
+        await _soundDataSource.indexContentTree(
+          watchedPath.path,
+          watchedPathId: id,
           onProgress: onProgress,
         );
       } else {
-        await _soundDataSource.indexAudioFile(File(watchedPath.path));
-        onProgress?.call(
-          IndexingProgress(
-            path: watchedPath.path,
-            current: 1,
-            total: 1,
-            isComplete: true,
-          ),
+        await _soundDataSource.indexDirectory(
+          Directory(watchedPath.path),
+          onProgress: onProgress,
         );
       }
     } catch (e) {
@@ -134,11 +139,24 @@ class SoundRepository {
     return id;
   }
 
+  Future<void> updateWatchedPathAccount({
+    required int id,
+    String? accountEmail,
+    String? driveFileId,
+  }) async {
+    await _watchedPathDataSource.updateWatchedPathAccount(
+      id: id,
+      accountEmail: accountEmail,
+      driveFileId: driveFileId,
+    );
+  }
+
   Future<void> removeWatchedPath(WatchedPath watchedPath) async {
     await _watchedPathDataSource.deleteWatchedPath(watchedPath.id);
-    await _soundDataSource.deleteSoundsByPath(
-      watchedPath.path,
-      watchedPath.isDirectory,
+    await _soundDataSource.deleteSoundsForWatchedPath(
+      path: watchedPath.path,
+      watchedPathId: watchedPath.id,
+      isDirectory: watchedPath.isDirectory,
     );
   }
 

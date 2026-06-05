@@ -9,12 +9,15 @@ import '../../../../core/sync/audio_cache_manager.dart';
 import '../../../../core/sync/drive_client.dart';
 import '../../../../core/sync/drive_models.dart';
 import '../../../../core/sync/google_drive_client.dart';
+import '../../../../core/sync/saf_drive_owner_resolver.dart';
 import '../../../../core/sync/library_sync_service.dart';
 import '../../../../core/sync/snapshot_store.dart';
+import '../../../../core/utils/file_utils.dart' show isAudioFile;
 import '../../domain/entities/library.dart';
 import '../../domain/entities/sound.dart';
 import '../datasources/local_library_datasource.dart';
 import '../datasources/local_sound_datasource.dart';
+import '../models/indexing_progress.dart';
 
 /// Orchestration des bibliothèques portables : relie l'authentification Drive
 /// (infra `core/sync`) à la persistance locale (table Libraries).
@@ -52,6 +55,44 @@ class LibraryRepository {
   DriveClient? get activeClient => _activeClient;
   String? get connectedAccountEmail => _authenticator.accountEmail;
   bool get isConnected => _activeClient != null;
+
+  /// Résout l'e-mail propriétaire d'un dossier Drive choisi via SAF.
+  ///
+  /// Réutilise [activeClient] (session Bibliothèque Drive) si déjà connecté.
+  Future<String?> resolveSafFolderOwnerEmail({
+    required String? driveFileId,
+    required String folderName,
+  }) async {
+    if (_authenticator is! GoogleDriveAuthenticator) {
+      return null;
+    }
+
+    final client = await _ensureDriveClient();
+    if (client == null) {
+      return null;
+    }
+
+    return SafDriveOwnerResolver(_authenticator).resolveOwnerEmail(
+      driveFileId: driveFileId,
+      folderName: folderName,
+      existingClient: client,
+    );
+  }
+
+  /// Client Drive actif ou reconnexion silencieuse (sans nouveau consentement).
+  Future<GoogleDriveClient?> _ensureDriveClient() async {
+    if (_activeClient is GoogleDriveClient) {
+      return _activeClient as GoogleDriveClient;
+    }
+
+    final client = await _authenticator.connectSilently();
+    if (client is GoogleDriveClient) {
+      _activeClient = client;
+      return client;
+    }
+
+    return null;
+  }
 
   Future<List<Library>> getLibraries() => _dataSource.getAllLibraries();
 
@@ -199,44 +240,132 @@ class LibraryRepository {
     );
   }
 
-  /// Ajoute des fichiers audio à une bibliothèque : upload Drive + cache local +
-  /// indexation en sons de bibliothèque (synchronisables). Retourne le nombre de
-  /// nouveaux sons créés. [onProgress] rapporte l'avancement (index, total).
-  Future<int> addSoundsToLibrary({
+  /// Indexe récursivement les fichiers audio d'un dossier Drive (bibliothèque).
+  Future<int> indexDriveFolder({
     required Library library,
-    required List<File> sources,
-    void Function(int current, int total)? onProgress,
+    void Function(IndexingProgress)? onProgress,
   }) async {
-    if (_activeClient == null) {
+    final client = _activeClient;
+    final folderId = library.driveFolderId;
+    if (client == null || folderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
 
-    var created = 0;
-    for (var i = 0; i < sources.length; i++) {
-      final source = sources[i];
-      onProgress?.call(i + 1, sources.length);
-
-      // Chemin portable sous `sounds/`, basé sur le nom de fichier.
-      final relativePath = 'sounds/${p.basename(source.path)}';
-      final imported = await importAudioToLibrary(
-        library: library,
-        source: source,
-        relativePath: relativePath,
+    try {
+      onProgress?.call(
+        IndexingProgress(
+          path: library.name,
+          current: 0,
+          total: 0,
+          isComplete: false,
+        ),
       );
 
-      // Le fichier est désormais matérialisé dans le cache local.
-      final localPath = _cacheManager.localPathFor(
-        library,
-        imported.relativePath,
+      final audioFiles = await _collectDriveAudioFiles(client, folderId, '');
+      onProgress?.call(
+        IndexingProgress(
+          path: library.name,
+          current: 0,
+          total: audioFiles.length,
+          isComplete: false,
+        ),
       );
-      final isNew = await _soundDataSource.indexLibraryAudioFile(
-        File(localPath),
-        libraryId: library.id,
-        relativePath: imported.relativePath,
+
+      var processedCount = 0;
+      var indexedCount = 0;
+
+      for (final audio in audioFiles) {
+        processedCount++;
+        try {
+          final localPath = await _cacheManager.ensureCached(
+            client: client,
+            library: library,
+            relativePath: audio.relativePath,
+          );
+          final isNew = await _soundDataSource.indexLibraryAudioFile(
+            File(localPath),
+            libraryId: library.id,
+            relativePath: audio.relativePath,
+          );
+          if (isNew) indexedCount++;
+        } catch (_) {
+          // Continue avec les autres fichiers.
+        }
+
+        onProgress?.call(
+          IndexingProgress(
+            path: library.name,
+            current: processedCount,
+            total: audioFiles.length,
+            isComplete: false,
+          ),
+        );
+      }
+
+      onProgress?.call(
+        IndexingProgress(
+          path: library.name,
+          current: processedCount,
+          total: audioFiles.length,
+          isComplete: true,
+        ),
       );
-      if (isNew) created++;
+
+      return indexedCount;
+    } catch (e) {
+      onProgress?.call(
+        IndexingProgress(
+          path: library.name,
+          current: 0,
+          total: 0,
+          isComplete: true,
+          error: e.toString(),
+        ),
+      );
+      rethrow;
     }
-    return created;
+  }
+
+  /// Retire une bibliothèque Drive indexée, ses sons et son cache local.
+  Future<void> removeLibrary(Library library) async {
+    await _soundDataSource.deleteSoundsByLibraryId(library.id);
+    await _dataSource.deleteLibrary(library.id);
+
+    try {
+      final cacheDir = Directory(library.localRootPath);
+      if (await cacheDir.exists()) {
+        await cacheDir.delete(recursive: true);
+      }
+    } catch (_) {
+      // Le cache local est optionnel à la suppression.
+    }
+  }
+
+  Future<List<({String relativePath})>> _collectDriveAudioFiles(
+    DriveClient client,
+    String folderId,
+    String relativePrefix,
+  ) async {
+    final results = <({String relativePath})>[];
+    final children = await client.listFolder(folderId);
+
+    for (final child in children) {
+      if (child.isFolder) {
+        final subPrefix = relativePrefix.isEmpty
+            ? child.name
+            : '$relativePrefix/${child.name}';
+        results.addAll(
+          await _collectDriveAudioFiles(client, child.id, subPrefix),
+        );
+      } else if (isAudioFile(child.name)) {
+        final relativePath = relativePrefix.isEmpty
+            ? 'sounds/${child.name}'
+            : 'sounds/$relativePrefix/${child.name}';
+        results.add((relativePath: relativePath));
+      }
+    }
+
+    return results;
   }
 
   /// Ferme la session Drive et révoque la connexion du compte.
