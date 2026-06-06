@@ -792,7 +792,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
         onReorderMusicQueue: _notifier.reorderMusicQueue,
         onMusicVolumeChanged: (value) =>
             unawaited(_notifier.setMusicVolume(value, smooth: true)),
-        onToggleMusicMute: () => unawaited(_notifier.toggleMusicMute()),
         onFadeOut: (duration) =>
             unawaited(_notifier.fadeOutCurrentMusic(duration)),
         onTransitionToNext: (duration) =>
