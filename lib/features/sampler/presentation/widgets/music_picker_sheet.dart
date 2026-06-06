@@ -122,12 +122,7 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
   }
 
   PadItem? _padItemForSound(Sound sound) {
-    for (final padItem in widget.notifier.state.pads) {
-      if (padItem.pad.sounds.any((s) => s.id == sound.id)) {
-        return padItem;
-      }
-    }
-    return null;
+    return widget.notifier.findMusicPadForSound(sound.id);
   }
 
   @override
@@ -237,7 +232,7 @@ class _PickerTrackRow extends StatelessWidget {
         : musicChipColor(sound.id, scheme);
     final subtitle = queued
         ? 'En file de passage'
-        : (onBoard ? 'Pad sur la scène' : 'Hors scène — sera ajoutée');
+        : (onBoard ? 'Pad sur la scène' : 'Lecture directe en régie');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),

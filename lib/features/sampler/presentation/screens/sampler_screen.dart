@@ -13,7 +13,6 @@ import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
-import '../../../../core/audio/music_transition.dart';
 import '../../../../core/database/database.dart' as db;
 import 'settings_screen.dart';
 import 'pad_details_screen.dart';
@@ -57,6 +56,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
   int? _recentlyRestoredSoundId;
   int? _highlightedPadId;
   bool _didAutoOpenCreateForCurrentEmptyState = false;
+  bool _isMusicRegieAdvanced = false;
+
+  static const _musicRegieTapGroup = 'music-regie-dismiss';
+
   bool get _isDesktopPlatform =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.windows ||
@@ -577,38 +580,40 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   Widget _buildAddButtonCard(BuildContext context, SoundBoard selectedBoard) {
     final scheme = Theme.of(context).colorScheme;
-    return Card(
-      key: const ValueKey('add_button'),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-          style: BorderStyle.solid,
-          width: 1.0,
+    return _wrapMusicRegieTapTarget(
+      Card(
+        key: const ValueKey('add_button'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: scheme.outlineVariant.withValues(alpha: 0.55),
+            style: BorderStyle.solid,
+            width: 1.0,
+          ),
         ),
-      ),
-      color: scheme.surfaceContainerHighest.withValues(alpha: 0.22),
-      child: InkWell(
-        onTap: () => _openSoundLibrary(selectedBoard),
-        borderRadius: BorderRadius.circular(14),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.add_circle_outline_rounded,
-                size: 28,
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Ajouter un son',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: scheme.onSurfaceVariant,
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.22),
+        child: InkWell(
+          onTap: () => _openSoundLibrary(selectedBoard),
+          borderRadius: BorderRadius.circular(14),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.add_circle_outline_rounded,
+                  size: 28,
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  'Ajouter un son',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -685,38 +690,48 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
+  Widget _wrapMusicRegieTapTarget(Widget child) {
+    if (!_isMusicRegieAdvanced) return child;
+    return TapRegion(
+      groupId: _musicRegieTapGroup,
+      child: child,
+    );
+  }
+
   Widget _buildPadWidget(
     BuildContext context,
     SamplerState state,
     PadItem padItem,
   ) {
     // ValueKey sur la racine : requis par ReorderableGridView (ne pas utiliser GlobalKey ici).
-    return PadCard(
-      key: ValueKey<int>(padItem.pad.id),
-      padItem: padItem,
-      isEditMode: _isEditMode,
-      animateOnRestore: _recentlyRestoredSoundId == padItem.pad.id,
-      isHighlighted: _highlightedPadId == padItem.pad.id,
-      onTap: _isEditMode ? null : () => _notifier.toggleSound(padItem),
-      onLongPress: _isEditMode
-          ? null
-          : () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => PadDetailsScreen(
-                    padItem: padItem,
-                    notifier: _notifier,
+    return _wrapMusicRegieTapTarget(
+      PadCard(
+        key: ValueKey<int>(padItem.pad.id),
+        padItem: padItem,
+        isEditMode: _isEditMode,
+        animateOnRestore: _recentlyRestoredSoundId == padItem.pad.id,
+        isHighlighted: _highlightedPadId == padItem.pad.id,
+        onTap: _isEditMode ? null : () => _notifier.toggleSound(padItem),
+        onLongPress: _isEditMode
+            ? null
+            : () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PadDetailsScreen(
+                      padItem: padItem,
+                      notifier: _notifier,
+                    ),
                   ),
-                ),
-              );
-            },
-      onRemove: _isEditMode
-          ? () async {
-              final removed = await _notifier.removeSound(padItem);
-              if (!mounted || !removed) return;
-            }
-          : null,
+                );
+              },
+        onRemove: _isEditMode
+            ? () async {
+                final removed = await _notifier.removeSound(padItem);
+                if (!mounted || !removed) return;
+              }
+            : null,
+      ),
     );
   }
 
@@ -836,9 +851,19 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   Widget _buildMusicPreviewPanel(BuildContext context, SamplerState state) {
-    return MusicPreviewPanel(
-      state: state,
-      onChooseMusic: () => unawaited(_openMusicPicker()),
+    return TapRegion(
+      groupId: _musicRegieTapGroup,
+      onTapOutside: _isMusicRegieAdvanced
+          ? (_) => setState(() => _isMusicRegieAdvanced = false)
+          : null,
+      child: MusicPreviewPanel(
+        state: state,
+        musicVolume: _notifier.musicVolume,
+        resolveMusicPad: _notifier.resolveMusicPad,
+        isAdvanced: _isMusicRegieAdvanced,
+        onAdvancedChanged: (isAdvanced) =>
+            setState(() => _isMusicRegieAdvanced = isAdvanced),
+        onChooseMusic: () => unawaited(_openMusicPicker()),
       onTogglePlayPause: () =>
           unawaited(_notifier.toggleCurrentMusicPlayback()),
       onRestart: () => unawaited(_notifier.restartCurrentMusic()),
@@ -848,18 +873,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
       onPlayNextInQueue: () => unawaited(_notifier.playNextInQueueNow()),
       onRemoveFromQueue: (padId) =>
           unawaited(_notifier.removeFromMusicQueue(padId)),
-      onSelectMusicPad: (padItem) => unawaited(_notifier.toggleSound(padItem)),
-      onFadeOutShort: () => unawaited(
-        _notifier.fadeOutCurrentMusic(MusicTransitionDuration.short),
-      ),
-      onFadeOutLong: () => unawaited(
-        _notifier.fadeOutCurrentMusic(MusicTransitionDuration.long),
-      ),
-      onCrossfadeShort: () => unawaited(
-        _notifier.crossfadeToNextMusic(MusicCrossfadeDuration.short),
-      ),
-      onCrossfadeLong: () => unawaited(
-        _notifier.crossfadeToNextMusic(MusicCrossfadeDuration.long),
+      onMusicVolumeChanged: (value) => unawaited(_notifier.setMusicVolume(value)),
+      onFadeOut: (duration) =>
+          unawaited(_notifier.fadeOutCurrentMusic(duration)),
+      onTransitionToNext: (duration) =>
+          unawaited(_notifier.crossfadeToNextMusic(duration)),
       ),
     );
   }
@@ -880,7 +898,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final selectedBoard = state.selectedBoard;
     final boards = state.boards;
     final isBoardsLoading = state.isBoardsLoading;
-    final masterVolume = _notifier.masterVolume;
 
     if (!isBoardsLoading &&
         boards.isEmpty &&
@@ -955,22 +972,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
               },
             ),
             body: SafeArea(
-              child: Column(
+              child: Stack(
                 children: [
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: _buildSamplerContent(context, state),
-                        ),
-                        _buildMusicPreviewPanel(context, state),
-                      ],
-                    ),
+                  Positioned.fill(
+                    child: _buildSamplerContent(context, state),
                   ),
-                  _MasterVolumeBar(
-                    masterVolume: masterVolume,
-                    onChanged: (value) => _notifier.setMasterVolume(value),
-                  ),
+                  _buildMusicPreviewPanel(context, state),
                 ],
               ),
             ),
@@ -1130,49 +1137,6 @@ class _BoardsDrawer extends StatelessWidget {
               },
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MasterVolumeBar extends StatelessWidget {
-  final double masterVolume;
-  final ValueChanged<double> onChanged;
-
-  const _MasterVolumeBar({required this.masterVolume, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return BottomAppBar(
-      shape: const CircularNotchedRectangle(),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Icon(Icons.volume_up, color: scheme.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Slider(
-                  value: masterVolume,
-                  min: 0.0,
-                  max: 1.0,
-                  label: '${(masterVolume * 100).round()}%',
-                  onChanged: onChanged,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${(masterVolume * 100).round()}%',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
         ),
       ),
     );

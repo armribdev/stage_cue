@@ -3,9 +3,13 @@ import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
 
-/// Panneau régie musique — tiroir glissable depuis le bas de l'écran.
-class MusicPreviewPanel extends StatelessWidget {
+/// Panneau régie musique — deux modes : réduit et avancé.
+class MusicPreviewPanel extends StatefulWidget {
   final SamplerState state;
+  final double musicVolume;
+
+  /// Résout un pad musique par id — sur la scène ou hors-scène (régie seule).
+  final PadItem? Function(int padId) resolveMusicPad;
   final VoidCallback onChooseMusic;
   final VoidCallback? onTogglePlayPause;
   final VoidCallback? onRestart;
@@ -14,15 +18,19 @@ class MusicPreviewPanel extends StatelessWidget {
   final VoidCallback? onClearQueue;
   final VoidCallback? onPlayNextInQueue;
   final ValueChanged<int>? onRemoveFromQueue;
-  final ValueChanged<PadItem>? onSelectMusicPad;
-  final VoidCallback? onFadeOutShort;
-  final VoidCallback? onFadeOutLong;
-  final VoidCallback? onCrossfadeShort;
-  final VoidCallback? onCrossfadeLong;
+  final ValueChanged<double>? onMusicVolumeChanged;
+  final ValueChanged<Duration>? onFadeOut;
+  final ValueChanged<Duration>? onTransitionToNext;
+  final bool isAdvanced;
+  final ValueChanged<bool> onAdvancedChanged;
 
   const MusicPreviewPanel({
     super.key,
     required this.state,
+    required this.musicVolume,
+    required this.resolveMusicPad,
+    required this.isAdvanced,
+    required this.onAdvancedChanged,
     required this.onChooseMusic,
     this.onTogglePlayPause,
     this.onRestart,
@@ -31,52 +39,67 @@ class MusicPreviewPanel extends StatelessWidget {
     this.onClearQueue,
     this.onPlayNextInQueue,
     this.onRemoveFromQueue,
-    this.onSelectMusicPad,
-    this.onFadeOutShort,
-    this.onFadeOutLong,
-    this.onCrossfadeShort,
-    this.onCrossfadeLong,
+    this.onMusicVolumeChanged,
+    this.onFadeOut,
+    this.onTransitionToNext,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final isLandscape =
-        MediaQuery.orientationOf(context) == Orientation.landscape;
-    final minSize = isLandscape ? 0.20 : 0.24;
-    final maxSize = isLandscape ? 0.72 : 0.58;
+  State<MusicPreviewPanel> createState() => _MusicPreviewPanelState();
+}
 
-    return DraggableScrollableSheet(
-      initialChildSize: minSize,
-      minChildSize: minSize,
-      maxChildSize: maxSize,
-      snap: true,
-      snapSizes: [minSize, maxSize],
-      builder: (context, scrollController) {
-        return _MusicRegieDrawer(
-          state: state,
-          scrollController: scrollController,
-          onChooseMusic: onChooseMusic,
-          onTogglePlayPause: onTogglePlayPause,
-          onRestart: onRestart,
-          onSkipNext: onSkipNext,
-          onStopCurrent: onStopCurrent,
-          onClearQueue: onClearQueue,
-          onPlayNextInQueue: onPlayNextInQueue,
-          onRemoveFromQueue: onRemoveFromQueue,
-          onSelectMusicPad: onSelectMusicPad,
-          onFadeOutShort: onFadeOutShort,
-          onFadeOutLong: onFadeOutLong,
-          onCrossfadeShort: onCrossfadeShort,
-          onCrossfadeLong: onCrossfadeLong,
-        );
-      },
+class _MusicPreviewPanelState extends State<MusicPreviewPanel> {
+  /// Durée de fondu/enchaînement choisie pour la régie — partagée entre
+  /// le fondu (passage en pause) et l'enchaînement (passage à la suivante).
+  Duration _transitionDuration = const Duration(seconds: 3);
+
+  void _setTransitionDuration(Duration duration) {
+    setState(() => _transitionDuration = duration);
+  }
+
+  void _toggleMode() {
+    widget.onAdvancedChanged(!widget.isAdvanced);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOut,
+        alignment: Alignment.topCenter,
+        child: _MusicRegieDrawer(
+          state: widget.state,
+          musicVolume: widget.musicVolume,
+          resolveMusicPad: widget.resolveMusicPad,
+          isAdvanced: widget.isAdvanced,
+          onModeToggle: _toggleMode,
+          onChooseMusic: widget.onChooseMusic,
+          onTogglePlayPause: widget.onTogglePlayPause,
+          onRestart: widget.onRestart,
+          onSkipNext: widget.onSkipNext,
+          onStopCurrent: widget.onStopCurrent,
+          onClearQueue: widget.onClearQueue,
+          onPlayNextInQueue: widget.onPlayNextInQueue,
+          onRemoveFromQueue: widget.onRemoveFromQueue,
+          onMusicVolumeChanged: widget.onMusicVolumeChanged,
+          transitionDuration: _transitionDuration,
+          onTransitionDurationChanged: _setTransitionDuration,
+          onFadeOut: widget.onFadeOut,
+          onTransitionToNext: widget.onTransitionToNext,
+        ),
+      ),
     );
   }
 }
 
 class _MusicRegieDrawer extends StatelessWidget {
   final SamplerState state;
-  final ScrollController scrollController;
+  final double musicVolume;
+  final PadItem? Function(int padId) resolveMusicPad;
+  final bool isAdvanced;
+  final VoidCallback onModeToggle;
   final VoidCallback onChooseMusic;
   final VoidCallback? onTogglePlayPause;
   final VoidCallback? onRestart;
@@ -85,15 +108,18 @@ class _MusicRegieDrawer extends StatelessWidget {
   final VoidCallback? onClearQueue;
   final VoidCallback? onPlayNextInQueue;
   final ValueChanged<int>? onRemoveFromQueue;
-  final ValueChanged<PadItem>? onSelectMusicPad;
-  final VoidCallback? onFadeOutShort;
-  final VoidCallback? onFadeOutLong;
-  final VoidCallback? onCrossfadeShort;
-  final VoidCallback? onCrossfadeLong;
+  final ValueChanged<double>? onMusicVolumeChanged;
+  final Duration transitionDuration;
+  final ValueChanged<Duration> onTransitionDurationChanged;
+  final ValueChanged<Duration>? onFadeOut;
+  final ValueChanged<Duration>? onTransitionToNext;
 
   const _MusicRegieDrawer({
     required this.state,
-    required this.scrollController,
+    required this.musicVolume,
+    required this.resolveMusicPad,
+    required this.isAdvanced,
+    required this.onModeToggle,
     required this.onChooseMusic,
     this.onTogglePlayPause,
     this.onRestart,
@@ -102,201 +128,366 @@ class _MusicRegieDrawer extends StatelessWidget {
     this.onClearQueue,
     this.onPlayNextInQueue,
     this.onRemoveFromQueue,
-    this.onSelectMusicPad,
-    this.onFadeOutShort,
-    this.onFadeOutLong,
-    this.onCrossfadeShort,
-    this.onCrossfadeLong,
+    this.onMusicVolumeChanged,
+    required this.transitionDuration,
+    required this.onTransitionDurationChanged,
+    this.onFadeOut,
+    this.onTransitionToNext,
   });
-
-  PadItem? _resolve(int padId) {
-    for (final padItem in state.pads) {
-      if (padItem.pad.id == padId) return padItem;
-    }
-    return null;
-  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final current = state.currentMusicPad;
     final isPlaying = current?.isPlaying ?? false;
-    final queue = state.musicQueue(_resolve);
-    final upcoming = state.upcomingMusicPads(_resolve);
+    final queue = state.musicQueue(resolveMusicPad);
     final next = queue.isNotEmpty ? queue.first : null;
 
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      child: Material(
-        color: scheme.surfaceContainerLow,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(
-                color: scheme.outlineVariant.withValues(alpha: 0.5),
+    void handlePauseToggle() {
+      if (isPlaying && current != null) {
+        onFadeOut?.call(transitionDuration);
+      } else {
+        onTogglePlayPause?.call();
+      }
+    }
+
+    void handleSkipNext() {
+      if (isPlaying && queue.isNotEmpty) {
+        onTransitionToNext?.call(transitionDuration);
+      } else {
+        onSkipNext?.call();
+      }
+    }
+
+    return Material(
+      color: scheme.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      clipBehavior: Clip.none,
+      child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!isAdvanced && isPlaying && current != null)
+              _RegieProgressBar(
+                padItem: current,
+                isPlaying: true,
+                height: 3,
               ),
-            ),
-          ),
-          child: CustomScrollView(
-            controller: scrollController,
-            slivers: [
-              SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (isPlaying && current != null)
-                      _RegieProgressBar(
-                        padItem: current,
-                        isPlaying: true,
-                        height: 3,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        SoundType.music.icon,
+                        size: 18,
+                        color: scheme.primary,
                       ),
-                    _DrawerDragHandle(scheme: scheme),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                SoundType.music.icon,
-                                size: 18,
-                                color: scheme.primary,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'RÉGIE MUSIQUE',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelSmall
-                                    ?.copyWith(
-                                      color: scheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.8,
-                                    ),
-                              ),
-                              if (isPlaying) ...[
-                                const SizedBox(width: 8),
-                                const _LiveBadge(compact: true),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: _CueSlot(
-                                  label: 'À l\'antenne',
-                                  padItem: current,
-                                  isActive: isPlaying,
-                                  emptyLabel: '—',
-                                ),
-                              ),
-                              Container(
-                                width: 1,
-                                height: 40,
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                ),
-                                color: scheme.outlineVariant.withValues(
-                                  alpha: 0.45,
-                                ),
-                              ),
-                              Expanded(
-                                child: _CueSlot(
-                                  label: 'Prévu ensuite',
-                                  padItem: next,
-                                  isActive: next != null,
-                                  emptyLabel: '—',
-                                  accentColor: scheme.secondary,
-                                  suffix: queue.length > 1
-                                      ? '+${queue.length - 1}'
-                                      : null,
-                                  onTap: onChooseMusic,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          _RegieControlBar(
-                            compact: true,
-                            isPlaying: isPlaying,
-                            hasCurrent: current != null,
-                            hasQueue: queue.isNotEmpty,
-                            onChooseMusic: onChooseMusic,
-                            onStop: onStopCurrent,
-                            onTogglePlayPause: onTogglePlayPause,
-                            onSkipNext: onSkipNext,
-                          ),
-                          if (isPlaying || queue.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            _MusicTransitionBar(
-                              compact: true,
-                              canFadeOut: isPlaying,
-                              canCrossfade: isPlaying && queue.isNotEmpty,
-                              onFadeOutShort: onFadeOutShort,
-                              onFadeOutLong: onFadeOutLong,
-                              onCrossfadeShort: onCrossfadeShort,
-                              onCrossfadeLong: onCrossfadeLong,
+                      const SizedBox(width: 6),
+                      Text(
+                        'RÉGIE MUSIQUE',
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelSmall
+                            ?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
                             ),
-                          ],
-                        ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
+                      if (isPlaying) ...[
+                        const SizedBox(width: 8),
+                        const _LiveBadge(compact: true),
+                      ],
+                      const Spacer(),
+                      _DrawerExpandButton(
+                        scheme: scheme,
+                        isExpanded: isAdvanced,
+                        onTap: onModeToggle,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (!isAdvanced)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _CueSlot(
+                            label: 'À l\'antenne',
+                            padItem: current,
+                            isActive: isPlaying,
+                            emptyLabel: '—',
+                          ),
+                        ),
+                        Container(
+                          width: 1,
+                          height: 40,
+                          margin: const EdgeInsets.symmetric(horizontal: 10),
+                          color: scheme.outlineVariant.withValues(alpha: 0.45),
+                        ),
+                        Expanded(
+                          child: _CueSlot(
+                            label: 'Prévu ensuite',
+                            padItem: next,
+                            isActive: next != null,
+                            emptyLabel: '—',
+                            accentColor: scheme.secondary,
+                            suffix: queue.length > 1
+                                ? '+${queue.length - 1}'
+                                : null,
+                            onTap: onChooseMusic,
+                          ),
+                        ),
+                      ],
+                    )
+                  else ...[
                     _OnAirCard(
                       padItem: current,
                       isPlaying: isPlaying,
                       onStop: onStopCurrent,
                       onRestart: onRestart,
                     ),
-                    if (isPlaying || queue.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      _MusicTransitionBar(
-                        canFadeOut: isPlaying,
-                        canCrossfade: isPlaying && queue.isNotEmpty,
-                        onFadeOutShort: onFadeOutShort,
-                        onFadeOutLong: onFadeOutLong,
-                        onCrossfadeShort: onCrossfadeShort,
-                        onCrossfadeLong: onCrossfadeLong,
-                      ),
-                    ],
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     _PassageQueueSection(
                       queue: queue,
-                      onPlayNext: queue.isNotEmpty ? onPlayNextInQueue : null,
+                      onPlayNext:
+                          queue.isNotEmpty ? onPlayNextInQueue : null,
                       onClear: queue.isNotEmpty ? onClearQueue : null,
                       onRemove: onRemoveFromQueue,
+                      onChooseMusic: onChooseMusic,
                     ),
-                    if (upcoming.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        'Pads musique sur la scène',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ...upcoming.map(
-                        (padItem) => _ScenePadTile(
-                          padItem: padItem,
-                          onTap: onSelectMusicPad == null
-                              ? null
-                              : () => onSelectMusicPad!(padItem),
-                        ),
-                      ),
-                    ],
-                  ]),
+                  ],
+                  const SizedBox(height: 8),
+                  _RegieToolbarRow(
+                    volume: musicVolume,
+                    onVolumeChanged: onMusicVolumeChanged,
+                    isPlaying: isPlaying,
+                    hasCurrent: current != null,
+                    hasQueue: queue.isNotEmpty,
+                    showTransition: isPlaying || queue.isNotEmpty,
+                    transitionDuration: transitionDuration,
+                    onTransitionDurationChanged: onTransitionDurationChanged,
+                    onChooseMusic: onChooseMusic,
+                    onTogglePlayPause: handlePauseToggle,
+                    onSkipNext: handleSkipNext,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+    );
+  }
+}
+
+class _DrawerExpandButton extends StatelessWidget {
+  final ColorScheme scheme;
+  final bool isExpanded;
+  final VoidCallback? onTap;
+
+  const _DrawerExpandButton({
+    required this.scheme,
+    required this.isExpanded,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: isExpanded ? 'Mode réduit' : 'Mode avancé',
+      onPressed: onTap,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+      icon: Icon(
+        isExpanded
+            ? Icons.keyboard_arrow_down_rounded
+            : Icons.keyboard_arrow_up_rounded,
+        size: 22,
+        color: scheme.onSurfaceVariant.withValues(alpha: 0.75),
+      ),
+    );
+  }
+}
+
+/// Barre compacte : volume, contrôles et durée de transition sur une seule ligne.
+class _RegieToolbarRow extends StatelessWidget {
+  final double volume;
+  final ValueChanged<double>? onVolumeChanged;
+  final bool isPlaying;
+  final bool hasCurrent;
+  final bool hasQueue;
+  final bool showTransition;
+  final Duration transitionDuration;
+  final ValueChanged<Duration> onTransitionDurationChanged;
+  final VoidCallback onChooseMusic;
+  final VoidCallback? onTogglePlayPause;
+  final VoidCallback? onSkipNext;
+
+  const _RegieToolbarRow({
+    required this.volume,
+    this.onVolumeChanged,
+    required this.isPlaying,
+    required this.hasCurrent,
+    required this.hasQueue,
+    required this.showTransition,
+    required this.transitionDuration,
+    required this.onTransitionDurationChanged,
+    required this.onChooseMusic,
+    this.onTogglePlayPause,
+    this.onSkipNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final canControl = hasCurrent || hasQueue;
+
+    return Row(
+      children: [
+        Icon(
+          Icons.volume_up_rounded,
+          size: 16,
+          color: scheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: _CompactVolumeSlider(
+            value: volume,
+            onChanged: onVolumeChanged,
+          ),
+        ),
+        const SizedBox(width: 8),
+        _RegieControlButtons(
+          isPlaying: isPlaying,
+          canControl: canControl,
+          onChooseMusic: onChooseMusic,
+          onTogglePlayPause: onTogglePlayPause,
+          onSkipNext: onSkipNext,
+        ),
+        if (showTransition) ...[
+          const SizedBox(width: 8),
+          _CompactTransitionPicker(
+            selected: transitionDuration,
+            onChanged: onTransitionDurationChanged,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Slider volume avec bulle au-dessus du curseur (compatible tactile).
+class _CompactVolumeSlider extends StatefulWidget {
+  final double value;
+  final ValueChanged<double>? onChanged;
+
+  const _CompactVolumeSlider({
+    required this.value,
+    this.onChanged,
+  });
+
+  @override
+  State<_CompactVolumeSlider> createState() => _CompactVolumeSliderState();
+}
+
+class _CompactVolumeSliderState extends State<_CompactVolumeSlider> {
+  bool _isActive = false;
+  double? _localValue;
+
+  double get _displayValue => _localValue ?? widget.value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final fraction = _displayValue.clamp(0.0, 1.0);
+
+    return SizedBox(
+      height: 28,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          if (_isActive)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 30,
+              child: Align(
+                alignment: Alignment((fraction * 2) - 1, 0),
+                child: _VolumeDragBubble(
+                  label: '${(fraction * 100).round()}%',
+                  scheme: scheme,
                 ),
               ),
-            ],
+            ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 2,
+              thumbShape: const RoundSliderThumbShape(
+                enabledThumbRadius: 8,
+                disabledThumbRadius: 8,
+              ),
+              overlayShape: SliderComponentShape.noOverlay,
+              showValueIndicator: ShowValueIndicator.never,
+            ),
+            child: Slider(
+              value: widget.value,
+              min: 0.0,
+              max: 1.0,
+              onChangeStart: widget.onChanged == null
+                  ? null
+                  : (_) => setState(() => _isActive = true),
+              onChanged: widget.onChanged == null
+                  ? null
+                  : (value) {
+                      setState(() => _localValue = value);
+                      widget.onChanged!(value);
+                    },
+              onChangeEnd: widget.onChanged == null
+                  ? null
+                  : (_) => setState(() {
+                      _isActive = false;
+                      _localValue = null;
+                    }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VolumeDragBubble extends StatelessWidget {
+  final String label;
+  final ColorScheme scheme;
+
+  const _VolumeDragBubble({
+    required this.label,
+    required this.scheme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 2,
+      color: scheme.inverseSurface,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: scheme.onInverseSurface,
+            fontWeight: FontWeight.w700,
+            fontSize: 10,
+            height: 1.1,
           ),
         ),
       ),
@@ -304,26 +495,151 @@ class _MusicRegieDrawer extends StatelessWidget {
   }
 }
 
-class _DrawerDragHandle extends StatelessWidget {
-  final ColorScheme scheme;
+/// Sélecteur minimal de durée (0 / 1 / 3 / 5 s).
+class _CompactTransitionPicker extends StatelessWidget {
+  final Duration selected;
+  final ValueChanged<Duration> onChanged;
 
-  const _DrawerDragHandle({required this.scheme});
+  static const _options = <Duration>[
+    Duration.zero,
+    Duration(seconds: 1),
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+  ];
+
+  const _CompactTransitionPicker({
+    required this.selected,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 6),
-        child: Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: scheme.onSurfaceVariant.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(2),
+    final scheme = Theme.of(context).colorScheme;
+    final labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+      fontSize: 10,
+      fontWeight: FontWeight.w600,
+      height: 1,
+    );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < _options.length; i++) ...[
+              if (i > 0)
+                VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: scheme.outlineVariant.withValues(alpha: 0.6),
+                ),
+              _TransitionCell(
+                label: '${_options[i].inSeconds}',
+                isSelected: selected == _options[i],
+                onTap: () => onChanged(_options[i]),
+                labelStyle: labelStyle,
+                scheme: scheme,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TransitionCell extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final TextStyle? labelStyle;
+  final ColorScheme scheme;
+
+  const _TransitionCell({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    required this.labelStyle,
+    required this.scheme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: isSelected
+          ? scheme.primaryContainer.withValues(alpha: 0.55)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+          child: Text(
+            label,
+            style: labelStyle?.copyWith(
+              color: isSelected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            ),
           ),
         ),
       ),
     );
+  }
+}
+
+class _RegieControlButtons extends StatelessWidget {
+  final bool isPlaying;
+  final bool canControl;
+  final VoidCallback onChooseMusic;
+  final VoidCallback? onTogglePlayPause;
+  final VoidCallback? onSkipNext;
+
+  const _RegieControlButtons({
+    required this.isPlaying,
+    required this.canControl,
+    required this.onChooseMusic,
+    this.onTogglePlayPause,
+    this.onSkipNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: _playTooltip(),
+          onPressed: canControl ? onTogglePlayPause : onChooseMusic,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          icon: Icon(
+            canControl
+                ? (isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded)
+                : Icons.play_arrow_rounded,
+            size: 22,
+          ),
+        ),
+        IconButton(
+          tooltip: 'Suivant',
+          onPressed: canControl ? onSkipNext : null,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          icon: const Icon(Icons.skip_next_rounded, size: 22),
+        ),
+      ],
+    );
+  }
+
+  String _playTooltip() {
+    if (!canControl) return 'Lancer';
+    return isPlaying ? 'Pause' : 'Reprendre';
   }
 }
 
@@ -571,270 +887,6 @@ class _OnAirCard extends StatelessWidget {
   }
 }
 
-class _RegieControlBar extends StatelessWidget {
-  final bool compact;
-  final bool isPlaying;
-  final bool hasCurrent;
-  final bool hasQueue;
-  final VoidCallback onChooseMusic;
-  final VoidCallback? onStop;
-  final VoidCallback? onTogglePlayPause;
-  final VoidCallback? onSkipNext;
-
-  const _RegieControlBar({
-    this.compact = false,
-    required this.isPlaying,
-    required this.hasCurrent,
-    required this.hasQueue,
-    required this.onChooseMusic,
-    this.onStop,
-    this.onTogglePlayPause,
-    this.onSkipNext,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (compact) {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          IconButton.filledTonal(
-            tooltip: 'Couper',
-            onPressed: hasCurrent && isPlaying ? onStop : null,
-            icon: const Icon(Icons.stop_rounded),
-          ),
-          const SizedBox(width: 4),
-          IconButton.filled(
-            tooltip: hasCurrent
-                ? (isPlaying ? 'Pause' : 'Reprendre')
-                : 'Lancer',
-            onPressed: hasCurrent || hasQueue ? onTogglePlayPause : onChooseMusic,
-            icon: Icon(
-              hasCurrent
-                  ? (isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded)
-                  : Icons.play_arrow_rounded,
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton.filledTonal(
-            tooltip: 'Suivant',
-            onPressed: (hasCurrent || hasQueue) ? onSkipNext : null,
-            icon: const Icon(Icons.skip_next_rounded),
-          ),
-        ],
-      );
-    }
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      alignment: WrapAlignment.center,
-      children: [
-        if (hasCurrent && isPlaying)
-          OutlinedButton.icon(
-            onPressed: onStop,
-            icon: const Icon(Icons.stop_rounded),
-            label: const Text('Couper'),
-          ),
-        FilledButton.icon(
-          onPressed: hasCurrent || hasQueue ? onTogglePlayPause : onChooseMusic,
-          icon: Icon(
-            hasCurrent
-                ? (isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded)
-                : Icons.play_arrow_rounded,
-          ),
-          label: Text(
-            hasCurrent
-                ? (isPlaying ? 'Pause' : 'Reprendre')
-                : 'Lancer',
-          ),
-        ),
-        FilledButton.tonalIcon(
-          onPressed: (hasCurrent || hasQueue) ? onSkipNext : null,
-          icon: const Icon(Icons.skip_next_rounded),
-          label: const Text('Suivant'),
-        ),
-      ],
-    );
-  }
-}
-
-class _MusicTransitionBar extends StatelessWidget {
-  final bool compact;
-  final bool canFadeOut;
-  final bool canCrossfade;
-  final VoidCallback? onFadeOutShort;
-  final VoidCallback? onFadeOutLong;
-  final VoidCallback? onCrossfadeShort;
-  final VoidCallback? onCrossfadeLong;
-
-  const _MusicTransitionBar({
-    this.compact = false,
-    required this.canFadeOut,
-    required this.canCrossfade,
-    this.onFadeOutShort,
-    this.onFadeOutLong,
-    this.onCrossfadeShort,
-    this.onCrossfadeLong,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    if (compact) {
-      return Row(
-        children: [
-          _TransitionIconButton(
-            tooltip: 'Fade out court (2 s)',
-            icon: Icons.volume_down_rounded,
-            enabled: canFadeOut,
-            onPressed: onFadeOutShort,
-          ),
-          _TransitionIconButton(
-            tooltip: 'Fade out long (8 s)',
-            icon: Icons.volume_mute_rounded,
-            enabled: canFadeOut,
-            onPressed: onFadeOutLong,
-          ),
-          const SizedBox(width: 4),
-          _TransitionIconButton(
-            tooltip: 'Enchaînement court (3 s)',
-            icon: Icons.swap_horiz_rounded,
-            enabled: canCrossfade,
-            onPressed: onCrossfadeShort,
-          ),
-          _TransitionIconButton(
-            tooltip: 'Enchaînement long (10 s)',
-            icon: Icons.sync_alt_rounded,
-            enabled: canCrossfade,
-            onPressed: onCrossfadeLong,
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Transitions',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: scheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _TransitionButton(
-              label: 'Fade court',
-              subtitle: '2 s',
-              icon: Icons.volume_down_rounded,
-              enabled: canFadeOut,
-              onPressed: onFadeOutShort,
-            ),
-            _TransitionButton(
-              label: 'Fade long',
-              subtitle: '8 s',
-              icon: Icons.volume_mute_rounded,
-              enabled: canFadeOut,
-              onPressed: onFadeOutLong,
-            ),
-            _TransitionButton(
-              label: 'Enchaînement court',
-              subtitle: '3 s',
-              icon: Icons.swap_horiz_rounded,
-              enabled: canCrossfade,
-              onPressed: onCrossfadeShort,
-            ),
-            _TransitionButton(
-              label: 'Enchaînement long',
-              subtitle: '10 s',
-              icon: Icons.sync_alt_rounded,
-              enabled: canCrossfade,
-              onPressed: onCrossfadeLong,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _TransitionButton extends StatelessWidget {
-  final String label;
-  final String subtitle;
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback? onPressed;
-
-  const _TransitionButton({
-    required this.label,
-    required this.subtitle,
-    required this.icon,
-    required this.enabled,
-    this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: enabled ? onPressed : null,
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.labelLarge),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TransitionIconButton extends StatelessWidget {
-  final String tooltip;
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback? onPressed;
-
-  const _TransitionIconButton({
-    required this.tooltip,
-    required this.icon,
-    required this.enabled,
-    this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: enabled ? onPressed : null,
-      icon: Icon(icon, size: 20),
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-    );
-  }
-}
-
 class _RegieProgressBar extends StatelessWidget {
   final PadItem? padItem;
   final bool isPlaying;
@@ -918,12 +970,14 @@ class _PassageQueueSection extends StatelessWidget {
   final VoidCallback? onPlayNext;
   final VoidCallback? onClear;
   final ValueChanged<int>? onRemove;
+  final VoidCallback? onChooseMusic;
 
   const _PassageQueueSection({
     required this.queue,
     this.onPlayNext,
     this.onClear,
     this.onRemove,
+    this.onChooseMusic,
   });
 
   @override
@@ -965,11 +1019,24 @@ class _PassageQueueSection extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             if (queue.isEmpty)
-              Text(
-                'Préparez la musique suivante sans interrompre celle en cours.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Préparez la musique suivante sans interrompre celle en cours.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (onChooseMusic != null) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: onChooseMusic,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Choisir une musique'),
+                    ),
+                  ],
+                ],
               )
             else
               ...queue.asMap().entries.map(
@@ -1037,53 +1104,6 @@ class _QueueRow extends StatelessWidget {
               visualDensity: VisualDensity.compact,
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _ScenePadTile extends StatelessWidget {
-  final PadItem padItem;
-  final VoidCallback? onTap;
-
-  const _ScenePadTile({
-    required this.padItem,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Material(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                _PadColorChip(padItem: padItem, size: 36),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    padItem.pad.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Icon(Icons.touch_app_rounded, size: 18, color: scheme.onSurfaceVariant),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
