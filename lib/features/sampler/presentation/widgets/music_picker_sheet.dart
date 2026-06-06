@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../../core/utils/sound_color_utils.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../utils/sound_type_ui.dart';
 import '../providers/sampler_provider.dart';
-import 'music_preview_panel.dart';
 
 /// Feuille modale pour choisir une musique à lancer ou mettre en file.
 class MusicPickerSheet extends StatefulWidget {
@@ -259,9 +259,7 @@ class _PickerTrackRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final title = sound.displayName ?? sound.title;
-    final chipColor = sound.colorValue != null
-        ? Color(sound.colorValue!)
-        : musicChipColor(sound.id, scheme);
+    final chipColor = soundEffectiveColor(sound, scheme);
     final subtitle = onAir
         ? 'À l\'antenne'
         : queued
@@ -284,8 +282,9 @@ class _PickerTrackRow extends StatelessWidget {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
               width: 40,
@@ -331,21 +330,26 @@ class _PickerTrackRow extends StatelessWidget {
                 ],
               ),
             ),
-            FilledButton(
-              onPressed: onAir ? null : onPlayNow,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-              child: const Text('GO'),
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              tooltip: canEnqueue ? 'Mettre en file' : 'Déjà planifié',
-              onPressed: canEnqueue ? onEnqueue : null,
-              icon: Icon(
-                queued ? Icons.check_rounded : Icons.playlist_add_rounded,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FilledButton(
+                  onPressed: onAir ? null : onPlayNow,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  child: const Text('GO'),
+                ),
+                IconButton(
+                  tooltip: canEnqueue ? 'Mettre en file' : 'Déjà planifié',
+                  onPressed: canEnqueue ? onEnqueue : null,
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    queued ? Icons.check_rounded : Icons.playlist_add_rounded,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

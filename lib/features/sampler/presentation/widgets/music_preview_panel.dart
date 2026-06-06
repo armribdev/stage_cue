@@ -1,10 +1,45 @@
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import '../../../../core/utils/sound_color_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
 
 enum _MusicTransitionKind { fadeOut, crossfade }
+
+const _queueDragBorderRadius = 8.0;
+const _drawerSnapDuration = Duration(milliseconds: 280);
+const _drawerSnapCurve = Curves.easeOut;
+const _drawerSnapVelocityThreshold = 500.0;
+
+/// Signale la taille mesurée d'un sous-arbre après layout.
+class _ReportSize extends StatefulWidget {
+  final Widget child;
+  final ValueChanged<Size> onChange;
+
+  const _ReportSize({required this.child, required this.onChange});
+
+  @override
+  State<_ReportSize> createState() => _ReportSizeState();
+}
+
+class _ReportSizeState extends State<_ReportSize> {
+  Size? _lastSize;
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final size = context.size;
+      if (size == null || size == _lastSize) return;
+      _lastSize = size;
+      widget.onChange(size);
+    });
+    return widget.child;
+  }
+}
 
 /// Panneau régie musique — deux modes : réduit et avancé.
 class MusicPreviewPanel extends StatefulWidget {
@@ -19,7 +54,6 @@ class MusicPreviewPanel extends StatefulWidget {
   final ValueChanged<int>? onRemoveFromQueue;
   final void Function(int oldIndex, int newIndex)? onReorderMusicQueue;
   final ValueChanged<double>? onMusicVolumeChanged;
-  final VoidCallback? onToggleMusicMute;
   final ValueChanged<Duration>? onFadeOut;
   final ValueChanged<Duration>? onTransitionToNext;
   final bool isAdvanced;
@@ -41,7 +75,6 @@ class MusicPreviewPanel extends StatefulWidget {
     this.onRemoveFromQueue,
     this.onReorderMusicQueue,
     this.onMusicVolumeChanged,
-    this.onToggleMusicMute,
     this.onFadeOut,
     this.onTransitionToNext,
     this.isDesktop = false,
@@ -66,12 +99,44 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
   AnimationController? _transitionProgressController;
   AnimationController? _transitionBlinkController;
   Animation<double>? _transitionBlinkOpacity;
+  late AnimationController _expandController;
+  double _compactHeight = 0;
+  double _expandedHeight = 0;
+  bool _isDrawerDragging = false;
+  double _drawerDragProgress = 0;
+  double _drawerDragStartProgress = 0;
+  double _drawerDragAccumulated = 0;
 
   Duration get _effectiveTransitionDuration =>
       _selectedTransitionDuration ?? _instantTransition;
 
   @override
+  void initState() {
+    super.initState();
+    _expandController = AnimationController(
+      vsync: this,
+      value: widget.isAdvanced ? 1.0 : 0.0,
+      duration: _drawerSnapDuration,
+    );
+  }
+
+  @override
+  void didUpdateWidget(MusicPreviewPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isDesktop ||
+        widget.isAdvanced == oldWidget.isAdvanced ||
+        _isDrawerDragging) {
+      return;
+    }
+    final target = widget.isAdvanced ? 1.0 : 0.0;
+    if ((_expandController.value - target).abs() > 0.01) {
+      _expandController.animateTo(target, curve: _drawerSnapCurve);
+    }
+  }
+
+  @override
   void dispose() {
+    _expandController.dispose();
     _transitionProgressController?.dispose();
     _transitionBlinkController?.dispose();
     super.dispose();
@@ -135,6 +200,201 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
     widget.onAdvancedChanged(!widget.isAdvanced);
   }
 
+  double get _drawerExpandProgress =>
+      _isDrawerDragging ? _drawerDragProgress : _expandController.value;
+
+  bool get _hasDrawerHeights =>
+      _compactHeight > 0 && _expandedHeight > _compactHeight;
+
+  double _snapDrawerTarget(double progress, double velocity) {
+    if (velocity < -_drawerSnapVelocityThreshold) return 1.0;
+    if (velocity > _drawerSnapVelocityThreshold) return 0.0;
+    return progress >= 0.5 ? 1.0 : 0.0;
+  }
+
+  void _handleDrawerDragStart() {
+    _drawerDragStartProgress = _expandController.value;
+    _drawerDragAccumulated = 0;
+    setState(() => _isDrawerDragging = true);
+  }
+
+  void _handleDrawerDragUpdate(DragUpdateDetails details) {
+    if (!_hasDrawerHeights) return;
+    final range = _expandedHeight - _compactHeight;
+    setState(() {
+      _drawerDragAccumulated += -details.delta.dy;
+      _drawerDragProgress =
+          (_drawerDragStartProgress + _drawerDragAccumulated / range).clamp(
+            0.0,
+            1.0,
+          );
+    });
+  }
+
+  void _handleDrawerDragEnd(DragEndDetails details) {
+    if (!_hasDrawerHeights) {
+      setState(() => _isDrawerDragging = false);
+      return;
+    }
+
+    final velocity = details.primaryVelocity ?? 0;
+    final target = _snapDrawerTarget(_drawerDragProgress, velocity);
+    _expandController.value = _drawerDragProgress;
+    setState(() => _isDrawerDragging = false);
+
+    _expandController
+        .animateTo(target, curve: _drawerSnapCurve)
+        .then((_) {
+          if (!mounted) return;
+          final isAdvanced = target >= 0.5;
+          if (isAdvanced != widget.isAdvanced) {
+            widget.onAdvancedChanged(isAdvanced);
+          }
+        });
+  }
+
+  void _handleDrawerDragCancel() {
+    if (!_isDrawerDragging) return;
+    setState(() => _isDrawerDragging = false);
+  }
+
+  void _reportCompactHeight(double height) {
+    if ((height - _compactHeight).abs() < 0.5) return;
+    setState(() => _compactHeight = height);
+  }
+
+  void _reportExpandedHeight(double height) {
+    if ((height - _expandedHeight).abs() < 0.5) return;
+    setState(() => _expandedHeight = height);
+  }
+
+  _MusicRegieDrawer _buildRegieDrawer({
+    required bool isAdvanced,
+    double? expandProgress,
+    VoidCallback? onVerticalDragStart,
+    ValueChanged<DragUpdateDetails>? onVerticalDragUpdate,
+    ValueChanged<DragEndDetails>? onVerticalDragEnd,
+    VoidCallback? onVerticalDragCancel,
+  }) {
+    return _MusicRegieDrawer(
+      state: widget.state,
+      musicVolume: widget.musicVolume,
+      resolveMusicPad: widget.resolveMusicPad,
+      isAdvanced: isAdvanced,
+      isDesktop: widget.isDesktop,
+      isLocked: widget.isLocked,
+      onLockedChanged: widget.onLockedChanged,
+      onModeToggle: _toggleMode,
+      onChooseMusic: widget.onChooseMusic,
+      onPauseToggle: _handlePauseToggle,
+      onSkipNext: _handleSkipNext,
+      onRemoveFromQueue: widget.onRemoveFromQueue,
+      onReorderMusicQueue: widget.onReorderMusicQueue,
+      onMusicVolumeChanged: widget.onMusicVolumeChanged,
+      selectedTransitionDuration: _selectedTransitionDuration,
+      onTransitionOptionTapped: _toggleTransitionOption,
+      activeTransitionKind: _activeTransitionKind,
+      transitionProgress: _transitionProgressController,
+      transitionBlinkOpacity: _transitionBlinkOpacity,
+      expandProgress: expandProgress,
+      onVerticalDragStart: onVerticalDragStart,
+      onVerticalDragUpdate: onVerticalDragUpdate,
+      onVerticalDragEnd: onVerticalDragEnd,
+      onVerticalDragCancel: onVerticalDragCancel,
+    );
+  }
+
+  Widget _buildDesktopPanel(double panelWidth) {
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: SizedBox(
+        width: panelWidth,
+        child: AnimatedSize(
+          duration: _drawerSnapDuration,
+          curve: _drawerSnapCurve,
+          alignment: Alignment.topCenter,
+          child: _buildRegieDrawer(isAdvanced: widget.isAdvanced),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTouchPanel(double panelWidth) {
+    final measurer = Offstage(
+      child: OverflowBox(
+        maxWidth: panelWidth,
+        alignment: Alignment.topCenter,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ReportSize(
+              onChange: (size) => _reportCompactHeight(size.height),
+              child: SizedBox(
+                width: panelWidth,
+                child: _buildRegieDrawer(isAdvanced: false),
+              ),
+            ),
+            _ReportSize(
+              onChange: (size) => _reportExpandedHeight(size.height),
+              child: SizedBox(
+                width: panelWidth,
+                child: _buildRegieDrawer(isAdvanced: true),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.bottomCenter,
+        children: [
+          measurer,
+          AnimatedBuilder(
+            animation: _expandController,
+            builder: (context, _) {
+              final progress = _drawerExpandProgress;
+              final drawer = _buildRegieDrawer(
+                isAdvanced: widget.isAdvanced,
+                expandProgress: progress,
+                onVerticalDragStart: _handleDrawerDragStart,
+                onVerticalDragUpdate: _handleDrawerDragUpdate,
+                onVerticalDragEnd: _handleDrawerDragEnd,
+                onVerticalDragCancel: _handleDrawerDragCancel,
+              );
+
+              if (!_hasDrawerHeights) {
+                return SizedBox(width: panelWidth, child: drawer);
+              }
+
+              final height = lerpDouble(
+                _compactHeight,
+                _expandedHeight,
+                progress,
+              )!;
+
+              return SizedBox(
+                width: panelWidth,
+                height: height,
+                child: ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.topCenter,
+                    minHeight: _expandedHeight,
+                    maxHeight: _expandedHeight,
+                    child: drawer,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   void _handlePauseToggle({
     required bool isPlaying,
     required bool hasCurrent,
@@ -172,45 +432,20 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
   @override
   Widget build(BuildContext context) {
     final panelWidth = MediaQuery.sizeOf(context).width;
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: SizedBox(
-        width: panelWidth,
-        child: AnimatedSize(
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeOut,
-          alignment: Alignment.topCenter,
-          child: _MusicRegieDrawer(
-            state: widget.state,
-            musicVolume: widget.musicVolume,
-            resolveMusicPad: widget.resolveMusicPad,
-            isAdvanced: widget.isAdvanced,
-            isDesktop: widget.isDesktop,
-            isLocked: widget.isLocked,
-            onLockedChanged: widget.onLockedChanged,
-            onModeToggle: _toggleMode,
-            onChooseMusic: widget.onChooseMusic,
-            onPauseToggle: _handlePauseToggle,
-            onSkipNext: _handleSkipNext,
-            onRemoveFromQueue: widget.onRemoveFromQueue,
-            onReorderMusicQueue: widget.onReorderMusicQueue,
-            onMusicVolumeChanged: widget.onMusicVolumeChanged,
-            onToggleMusicMute: widget.onToggleMusicMute,
-            selectedTransitionDuration: _selectedTransitionDuration,
-            onTransitionOptionTapped: _toggleTransitionOption,
-            activeTransitionKind: _activeTransitionKind,
-            transitionProgress: _transitionProgressController,
-            transitionBlinkOpacity: _transitionBlinkOpacity,
-          ),
-        ),
-      ),
-    );
+    if (widget.isDesktop) {
+      return _buildDesktopPanel(panelWidth);
+    }
+    return _buildTouchPanel(panelWidth);
   }
 }
 
-class _MusicRegieDrawer extends StatelessWidget {
+class _MusicRegieDrawer extends StatefulWidget {
   /// Largeur minimale pour afficher « À l'antenne » et file de passage côte à côte.
   static const _twoColumnMinWidth = 560.0;
+
+  /// Espacements du mode réduit — compact mais aéré.
+  static const _compactDrawerPadding = EdgeInsets.fromLTRB(16, 14, 16, 16);
+  static const _compactSectionGap = 10.0;
 
   final SamplerState state;
   final double musicVolume;
@@ -228,12 +463,16 @@ class _MusicRegieDrawer extends StatelessWidget {
   final ValueChanged<int>? onRemoveFromQueue;
   final void Function(int oldIndex, int newIndex)? onReorderMusicQueue;
   final ValueChanged<double>? onMusicVolumeChanged;
-  final VoidCallback? onToggleMusicMute;
   final Duration? selectedTransitionDuration;
   final ValueChanged<Duration> onTransitionOptionTapped;
   final _MusicTransitionKind? activeTransitionKind;
   final Animation<double>? transitionProgress;
   final Animation<double>? transitionBlinkOpacity;
+  final double? expandProgress;
+  final VoidCallback? onVerticalDragStart;
+  final ValueChanged<DragUpdateDetails>? onVerticalDragUpdate;
+  final ValueChanged<DragEndDetails>? onVerticalDragEnd;
+  final VoidCallback? onVerticalDragCancel;
 
   const _MusicRegieDrawer({
     required this.state,
@@ -250,47 +489,331 @@ class _MusicRegieDrawer extends StatelessWidget {
     this.onRemoveFromQueue,
     this.onReorderMusicQueue,
     this.onMusicVolumeChanged,
-    this.onToggleMusicMute,
     required this.selectedTransitionDuration,
     required this.onTransitionOptionTapped,
     this.activeTransitionKind,
     this.transitionProgress,
     this.transitionBlinkOpacity,
+    this.expandProgress,
+    this.onVerticalDragStart,
+    this.onVerticalDragUpdate,
+    this.onVerticalDragEnd,
+    this.onVerticalDragCancel,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final current = state.currentMusicPad;
-    final isPlaying = current?.isPlaying ?? false;
-    final queue = state.musicQueue(resolveMusicPad);
-    final next = queue.isNotEmpty ? queue.first : null;
-    final hasCurrent = current != null;
-    final hasQueue = queue.isNotEmpty;
+  State<_MusicRegieDrawer> createState() => _MusicRegieDrawerState();
+}
 
-    final onAirControls = _OnAirControls(
-      volume: musicVolume,
-      onVolumeChanged: onMusicVolumeChanged,
-      onToggleMute: onToggleMusicMute,
+class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
+  bool get _isInteractive => widget.expandProgress != null && !widget.isDesktop;
+
+  _OnAirControls _buildOnAirControls({
+    required bool isPlaying,
+    required bool hasCurrent,
+    required bool hasQueue,
+    required bool centered,
+  }) {
+    return _OnAirControls(
+      volume: widget.musicVolume,
+      onVolumeChanged: widget.onMusicVolumeChanged,
       isPlaying: isPlaying,
       hasCurrent: hasCurrent,
       hasQueue: hasQueue,
-      selectedTransitionDuration: selectedTransitionDuration,
-      onTransitionOptionTapped: onTransitionOptionTapped,
-      activeTransitionKind: activeTransitionKind,
-      transitionProgress: transitionProgress,
-      transitionBlinkOpacity: transitionBlinkOpacity,
-      onChooseMusic: onChooseMusic,
-      centered: !isAdvanced,
-      onTogglePlayPause: () => onPauseToggle(
+      selectedTransitionDuration: widget.selectedTransitionDuration,
+      onTransitionOptionTapped: widget.onTransitionOptionTapped,
+      activeTransitionKind: widget.activeTransitionKind,
+      transitionProgress: widget.transitionProgress,
+      transitionBlinkOpacity: widget.transitionBlinkOpacity,
+      onChooseMusic: widget.onChooseMusic,
+      centered: centered,
+      onTogglePlayPause: () => widget.onPauseToggle(
         isPlaying: isPlaying,
         hasCurrent: hasCurrent,
       ),
-      onSkipNext: () => onSkipNext(
+      onSkipNext: () => widget.onSkipNext(
         isPlaying: isPlaying,
         hasQueue: hasQueue,
       ),
     );
+  }
+
+  Widget _buildModeBody({
+    required BuildContext context,
+    required ColorScheme scheme,
+    required bool advanced,
+    required PadItem? current,
+    required bool isPlaying,
+    required PadItem? next,
+    required List<PadItem> queue,
+    required _OnAirControls onAirControls,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useTwoColumns =
+            constraints.maxWidth >= _MusicRegieDrawer._twoColumnMinWidth;
+
+        if (!advanced) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _CueSlot(
+                label: 'À l\'antenne',
+                padItem: current,
+                isActive: isPlaying,
+                emptyLabel: 'Aucune piste',
+              ),
+              const SizedBox(height: 10),
+              Visibility(
+                visible: current == null || isPlaying,
+                maintainSize: true,
+                maintainAnimation: true,
+                maintainState: true,
+                child: _RegieProgressBar(
+                  padItem: current,
+                  isPlaying: isPlaying && current != null,
+                  height: 4,
+                ),
+              ),
+              const SizedBox(height: 12),
+              onAirControls,
+              if (next != null) ...[
+                const SizedBox(height: _MusicRegieDrawer._compactSectionGap),
+                _CueSlot(
+                  label: 'Prévu ensuite',
+                  padItem: next,
+                  isActive: true,
+                  emptyLabel: '—',
+                ),
+              ],
+            ],
+          );
+        }
+
+        final onAirCard = _OnAirCard(
+          padItem: current,
+          isPlaying: isPlaying,
+          controls: onAirControls,
+        );
+        final queueSection = _PassageQueueSection(
+          queue: queue,
+          isDesktop: widget.isDesktop,
+          onRemove: widget.onRemoveFromQueue,
+          onReorder: widget.onReorderMusicQueue,
+          onChooseMusic: widget.onChooseMusic,
+        );
+
+        if (useTwoColumns) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: onAirCard),
+              const SizedBox(width: 12),
+              Expanded(child: queueSection),
+            ],
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            onAirCard,
+            const SizedBox(height: 12),
+            queueSection,
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDrawerInner({
+    required BuildContext context,
+    required ColorScheme scheme,
+    required bool advanced,
+    required double? progress,
+  }) {
+    final current = widget.state.currentMusicPad;
+    final isPlaying = current?.isPlaying ?? false;
+    final queue = widget.state.musicQueue(widget.resolveMusicPad);
+    final next = queue.isNotEmpty ? queue.first : null;
+    final hasCurrent = current != null;
+    final hasQueue = queue.isNotEmpty;
+    final onAirControls = _buildOnAirControls(
+      isPlaying: isPlaying,
+      hasCurrent: hasCurrent,
+      hasQueue: hasQueue,
+      centered: !advanced,
+    );
+    final showCompactHeaderBadge =
+        progress == null ? !advanced : (progress < 0.5);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: _MusicRegieDrawer._compactDrawerPadding,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    SoundType.music.icon,
+                    size: 18,
+                    color: scheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'RÉGIE MUSIQUE',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  if (isPlaying && showCompactHeaderBadge) ...[
+                    const SizedBox(width: 8),
+                    const _LiveBadge(compact: true),
+                  ],
+                  const Spacer(),
+                  if (widget.isDesktop &&
+                      widget.isAdvanced &&
+                      widget.onLockedChanged != null)
+                    _DrawerLockButton(
+                      scheme: scheme,
+                      isLocked: widget.isLocked,
+                      onTap: () => widget.onLockedChanged!(!widget.isLocked),
+                    ),
+                  if (widget.isDesktop)
+                    _DrawerExpandButton(
+                      scheme: scheme,
+                      isExpanded: widget.isAdvanced,
+                      onTap: widget.onModeToggle,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (progress == null)
+                _buildModeBody(
+                  context: context,
+                  scheme: scheme,
+                  advanced: advanced,
+                  current: current,
+                  isPlaying: isPlaying,
+                  next: next,
+                  queue: queue,
+                  onAirControls: onAirControls,
+                )
+              else
+                Stack(
+                  alignment: Alignment.topCenter,
+                  children: [
+                    IgnorePointer(
+                      ignoring: progress > 0.5,
+                      child: Opacity(
+                        opacity: (1 - progress).clamp(0.0, 1.0),
+                        child: _buildModeBody(
+                          context: context,
+                          scheme: scheme,
+                          advanced: false,
+                          current: current,
+                          isPlaying: isPlaying,
+                          next: next,
+                          queue: queue,
+                          onAirControls: _buildOnAirControls(
+                            isPlaying: isPlaying,
+                            hasCurrent: hasCurrent,
+                            hasQueue: hasQueue,
+                            centered: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                    IgnorePointer(
+                      ignoring: progress <= 0.5,
+                      child: Opacity(
+                        opacity: progress.clamp(0.0, 1.0),
+                        child: _buildModeBody(
+                          context: context,
+                          scheme: scheme,
+                          advanced: true,
+                          current: current,
+                          isPlaying: isPlaying,
+                          next: next,
+                          queue: queue,
+                          onAirControls: _buildOnAirControls(
+                            isPlaying: isPlaying,
+                            hasCurrent: hasCurrent,
+                            hasQueue: hasQueue,
+                            centered: false,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final progress = widget.expandProgress;
+    final drawerBody = _buildDrawerInner(
+      context: context,
+      scheme: scheme,
+      advanced: widget.isAdvanced,
+      progress: progress,
+    );
+
+    final drawerContent = _isInteractive
+        ? Semantics(
+            label: (progress ?? 0) >= 0.5
+                ? 'Réduire la régie'
+                : 'Développer la régie',
+            hint:
+                'Glisser vers le haut pour développer, '
+                'vers le bas pour réduire',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onVerticalDragStart: (_) => widget.onVerticalDragStart?.call(),
+              onVerticalDragUpdate: widget.onVerticalDragUpdate,
+              onVerticalDragEnd: widget.onVerticalDragEnd,
+              onVerticalDragCancel: widget.onVerticalDragCancel,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  drawerBody,
+                  Positioned(
+                    top: 4,
+                    left: 0,
+                    right: 0,
+                    child: IgnorePointer(
+                      child: Center(
+                        child: Container(
+                          width: 24,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: scheme.onSurfaceVariant.withValues(
+                              alpha: 0.35,
+                            ),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : drawerBody;
 
     return Material(
       color: scheme.surfaceContainerLow,
@@ -298,131 +821,7 @@ class _MusicRegieDrawer extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       clipBehavior: Clip.none,
-      child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        SoundType.music.icon,
-                        size: 18,
-                        color: scheme.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'RÉGIE MUSIQUE',
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelSmall
-                            ?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
-                            ),
-                      ),
-                      if (isPlaying) ...[
-                        const SizedBox(width: 8),
-                        const _LiveBadge(compact: true),
-                      ],
-                      const Spacer(),
-                      if (isDesktop && isAdvanced && onLockedChanged != null)
-                        _DrawerLockButton(
-                          scheme: scheme,
-                          isLocked: isLocked,
-                          onTap: () => onLockedChanged!(!isLocked),
-                        ),
-                      _DrawerExpandButton(
-                        scheme: scheme,
-                        isExpanded: isAdvanced,
-                        onTap: onModeToggle,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final useTwoColumns =
-                          constraints.maxWidth >= _twoColumnMinWidth;
-
-                      if (!isAdvanced) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _CueSlot(
-                              label: 'À l\'antenne',
-                              padItem: current,
-                              isActive: isPlaying,
-                              emptyLabel: '—',
-                            ),
-                            if (isPlaying && current != null) ...[
-                              const SizedBox(height: 6),
-                              _RegieProgressBar(
-                                padItem: current,
-                                isPlaying: true,
-                                height: 3,
-                              ),
-                            ],
-                            const SizedBox(height: 8),
-                            onAirControls,
-                            if (next != null) ...[
-                              const SizedBox(height: 10),
-                              _CueSlot(
-                                label: 'Prévu ensuite',
-                                padItem: next,
-                                isActive: true,
-                                emptyLabel: '—',
-                              ),
-                            ],
-                          ],
-                        );
-                      }
-
-                      final onAirCard = _OnAirCard(
-                        padItem: current,
-                        isPlaying: isPlaying,
-                        controls: onAirControls,
-                      );
-                      final queueSection = _PassageQueueSection(
-                        queue: queue,
-                        isDesktop: isDesktop,
-                        onRemove: onRemoveFromQueue,
-                        onReorder: onReorderMusicQueue,
-                        onChooseMusic: onChooseMusic,
-                      );
-
-                      if (useTwoColumns) {
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: onAirCard),
-                            const SizedBox(width: 12),
-                            Expanded(child: queueSection),
-                          ],
-                        );
-                      }
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          onAirCard,
-                          const SizedBox(height: 12),
-                          queueSection,
-                        ],
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+      child: drawerContent,
     );
   }
 }
@@ -491,17 +890,13 @@ class _DrawerExpandButton extends StatelessWidget {
 class _OnAirControls extends StatelessWidget {
   static const _volumeSliderMinWidth = 100.0;
   static const _volumeSliderMaxWidth = 150.0;
-  static const _muteButtonWidth = 32.0;
-  static const _inlineGap = 4.0;
-  static const _wrappedRowGap = 6.0;
-  static const _volumeGroupMinWidth =
-      _muteButtonWidth + _inlineGap + _volumeSliderMinWidth;
-  static const _volumeGroupMaxWidth =
-      _muteButtonWidth + _inlineGap + _volumeSliderMaxWidth;
+  static const _inlineGap = 8.0;
+  static const _wrappedRowGap = 10.0;
+  static const _volumeGroupMinWidth = _volumeSliderMinWidth;
+  static const _volumeGroupMaxWidth = _volumeSliderMaxWidth;
 
   final double volume;
   final ValueChanged<double>? onVolumeChanged;
-  final VoidCallback? onToggleMute;
   final bool isPlaying;
   final bool hasCurrent;
   final bool hasQueue;
@@ -518,7 +913,6 @@ class _OnAirControls extends StatelessWidget {
   const _OnAirControls({
     required this.volume,
     this.onVolumeChanged,
-    this.onToggleMute,
     required this.isPlaying,
     required this.hasCurrent,
     required this.hasQueue,
@@ -532,24 +926,6 @@ class _OnAirControls extends StatelessWidget {
     this.onSkipNext,
     this.centered = false,
   });
-
-  Widget _muteButton(ColorScheme scheme) {
-    return IconButton(
-      tooltip: volume > 0 ? 'Couper le son' : 'Rétablir le son',
-      onPressed: onToggleMute,
-      iconSize: 22,
-      padding: EdgeInsets.zero,
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(
-        minWidth: _muteButtonWidth,
-        minHeight: _muteButtonWidth,
-      ),
-      icon: Icon(
-        volume > 0 ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-        color: scheme.onSurfaceVariant,
-      ),
-    );
-  }
 
   double _resolveSliderWidth(double available) {
     if (available <= 0) return 0;
@@ -582,25 +958,12 @@ class _OnAirControls extends StatelessWidget {
     return slider;
   }
 
-  Widget _volumeRow(ColorScheme scheme, double maxWidth) {
-    final sliderWidth = _resolveSliderWidth(
-      maxWidth - _muteButtonWidth - _inlineGap,
-    );
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        _muteButton(scheme),
-        const SizedBox(width: _inlineGap),
-        _volumeSlider(width: sliderWidth),
-      ],
-    );
+  Widget _volumeRow(double maxWidth) {
+    return _volumeSlider(width: _resolveSliderWidth(maxWidth));
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final canControl = hasCurrent || hasQueue;
 
     final playbackControls = _GroupedPlaybackControls(
@@ -634,8 +997,6 @@ class _OnAirControls extends StatelessWidget {
             final sliderWidth = _resolveSliderWidth(
               maxWidth -
                   _GroupedPlaybackControls.minWidth -
-                  _inlineGap -
-                  _muteButtonWidth -
                   _inlineGap,
             );
             controls = Row(
@@ -643,8 +1004,6 @@ class _OnAirControls extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 playbackControls,
-                const SizedBox(width: _inlineGap),
-                _muteButton(scheme),
                 const SizedBox(width: _inlineGap),
                 _volumeSlider(width: sliderWidth),
               ],
@@ -654,8 +1013,6 @@ class _OnAirControls extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 playbackControls,
-                const SizedBox(width: _inlineGap),
-                _muteButton(scheme),
                 const SizedBox(width: _inlineGap),
                 Flexible(child: _volumeSlider(flexible: true)),
               ],
@@ -670,7 +1027,7 @@ class _OnAirControls extends StatelessWidget {
             children: [
               playbackControls,
               const SizedBox(height: _wrappedRowGap),
-              _volumeRow(scheme, maxWidth),
+              _volumeRow(maxWidth),
             ],
           );
         }
@@ -691,13 +1048,13 @@ class _GroupedPlaybackControls extends StatelessWidget {
   static const _actionButtonSize = 40.0;
   static const _progressBadgeSize = 11.0;
   static const _transitionPickerWidth = 3 * 18.0 + 2.0;
-  static const minWidth = 4.0 +
+  static const minWidth = 6.0 +
       2 * _actionButtonSize +
-      4.0 +
+      6.0 +
       1.0 +
-      2.0 +
+      4.0 +
       _transitionPickerWidth +
-      6.0;
+      8.0;
 
   final bool isPlaying;
   final bool canControl;
@@ -823,7 +1180,7 @@ class _GroupedPlaybackControls extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Padding(
-              padding: const EdgeInsets.only(left: 4),
+              padding: const EdgeInsets.only(left: 6),
               child: _actionButton(
                 context: context,
                 tooltip: _playTooltip(),
@@ -845,14 +1202,14 @@ class _GroupedPlaybackControls extends StatelessWidget {
               icon: Icons.skip_next_rounded,
               showTransitionFeedback: skipFeedback,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             Container(
               width: 1,
               height: 24,
               color: borderColor,
             ),
             Padding(
-              padding: const EdgeInsets.only(left: 2, right: 6),
+              padding: const EdgeInsets.only(left: 4, right: 8),
               child: _CompactTransitionPicker(
                 selected: selectedTransitionDuration,
                 onOptionTapped: onTransitionOptionTapped,
@@ -1137,14 +1494,14 @@ class _CueSlot extends StatelessWidget {
             fontSize: 10,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Row(
           children: [
             if (padItem != null)
               _PadColorChip(padItem: padItem!, size: 14)
             else
-              Icon(Icons.remove_rounded, size: 14, color: scheme.outline),
-            const SizedBox(width: 6),
+              const _OnAirEmptyChip(size: 14),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 title,
@@ -1207,52 +1564,66 @@ class _OnAirCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            if (padItem == null)
-              Text(
-                'Aucune musique lancée',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              )
-            else ...[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _PadColorChip(padItem: padItem!, size: 40),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (padItem != null)
+                  _PadColorChip(padItem: padItem!, size: 40)
+                else
+                  const _OnAirEmptyChip(size: 40),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        padItem?.pad.displayName ?? 'Aucune musique lancée',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: padItem != null
+                                  ? scheme.onSurface
+                                  : scheme.onSurfaceVariant,
+                            ),
+                      ),
+                      if (padItem != null && padItem!.pad.sounds.length > 1)
                         Text(
-                          padItem!.pad.displayName,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
+                          '${padItem!.pad.sounds.length} variantes',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        )
+                      else if (padItem == null)
+                        Text(
+                          'Choisissez une piste pour démarrer',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant
+                                .withValues(alpha: 0.75),
                           ),
                         ),
-                        if (padItem!.pad.sounds.length > 1)
-                          Text(
-                            '${padItem!.pad.sounds.length} variantes',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
-                ],
-              ),
-              if (isPlaying) ...[
-                const SizedBox(height: 14),
-                _RegieProgressBar(
-                  padItem: padItem!,
-                  isPlaying: true,
-                  showTimes: true,
                 ),
               ],
-            ],
+            ),
+            const SizedBox(height: 14),
+            Visibility(
+              visible: padItem == null || isPlaying,
+              maintainSize: true,
+              maintainAnimation: true,
+              maintainState: true,
+              child: _RegieProgressBar(
+                padItem: padItem,
+                isPlaying: isPlaying && padItem != null,
+                showTimes: true,
+              ),
+            ),
             const SizedBox(height: 12),
             controls,
           ],
@@ -1433,6 +1804,7 @@ class _PassageQueueSection extends StatelessWidget {
                   shrinkWrap: true,
                   buildDefaultDragHandles: false,
                   padding: EdgeInsets.zero,
+                  proxyDecorator: _queueDragProxyDecorator,
                   itemCount: queue.length,
                   onReorderItem: onReorder == null
                       ? null
@@ -1492,9 +1864,11 @@ class _QueueRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     Widget content = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+      padding: const EdgeInsets.all(4),
       child: Row(
         children: [
+          _PadColorChip(padItem: padItem, size: 32),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               padItem.pad.displayName,
@@ -1541,7 +1915,7 @@ class _QueueRow extends StatelessWidget {
         padding: const EdgeInsets.only(right: 16),
         decoration: BoxDecoration(
           color: scheme.errorContainer,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(_queueDragBorderRadius),
         ),
         child: Icon(
           Icons.delete_outline_rounded,
@@ -1550,6 +1924,37 @@ class _QueueRow extends StatelessWidget {
       ),
       onDismissed: (_) => onRemove!(),
       child: content,
+    );
+  }
+}
+
+/// Pastille vide affichée quand aucune piste n'est à l'antenne.
+class _OnAirEmptyChip extends StatelessWidget {
+  final double size;
+
+  const _OnAirEmptyChip({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(size > 20 ? 8 : 4),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+      ),
+      child: size >= 32
+          ? Icon(
+              Icons.music_note_outlined,
+              size: size * 0.45,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+            )
+          : null,
     );
   }
 }
@@ -1567,10 +1972,11 @@ class _PadColorChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final custom = padItem.pad.colorValue;
-    final color = custom != null
-        ? Color(custom)
-        : scheme.surfaceContainerHighest;
+    final color = padItem.pad.colorValue != null
+        ? Color(padItem.pad.colorValue!)
+        : padItem.pad.sounds.isNotEmpty
+            ? soundEffectiveColor(padItem.pad.sounds.first, scheme)
+            : scheme.surfaceContainerHighest;
 
     return Container(
       width: size,
@@ -1599,9 +2005,37 @@ class _PadColorChip extends StatelessWidget {
   }
 }
 
-/// Couleur de pastille pour les sons sans pad (sélecteur).
-Color musicChipColor(int seed, ColorScheme scheme) {
-  if (seed == 0) return scheme.primaryContainer;
-  final hue = (seed * 47) % 360;
-  return HSLColor.fromAHSL(1, hue.toDouble(), 0.45, 0.38).toColor();
+/// Apparence de l'élément pendant un appui long / glisser pour réordonner.
+/// Reprend la couleur de fond surélevée par défaut, sans ombre, avec coins arrondis.
+Widget _queueDragProxyDecorator(
+  Widget child,
+  int index,
+  Animation<double> animation,
+) {
+  return AnimatedBuilder(
+    animation: animation,
+    builder: (context, child) {
+      final theme = Theme.of(context);
+      final scheme = theme.colorScheme;
+      final baseColor = theme.canvasColor;
+      const dragElevation = 6.0;
+      final elevatedColor = ElevationOverlay.applySurfaceTint(
+        baseColor,
+        scheme.surfaceTint,
+        dragElevation,
+      );
+      final animValue = Curves.easeInOut.transform(animation.value);
+      return Material(
+        color: Color.lerp(baseColor, elevatedColor, animValue),
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        clipBehavior: Clip.antiAlias,
+        borderRadius: BorderRadius.circular(_queueDragBorderRadius),
+        child: child,
+      );
+    },
+    child: child,
+  );
 }
+
