@@ -93,13 +93,32 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
   }
 
   Future<void> _playNow(Sound sound) async {
-    await widget.notifier.playMusicBySoundId(sound.id);
-    if (mounted) Navigator.pop(context);
+    final padItem = await widget.notifier.playMusicBySoundId(sound.id);
+    if (!mounted) return;
+    if (padItem == null) {
+      _showPlaybackError();
+      return;
+    }
+    Navigator.pop(context);
   }
 
   Future<void> _enqueue(Sound sound) async {
-    await widget.notifier.enqueueMusicBySoundId(sound.id);
-    if (mounted) Navigator.pop(context);
+    final padItem = await widget.notifier.enqueueMusicBySoundId(sound.id);
+    if (!mounted) return;
+    if (padItem == null) {
+      _showPlaybackError();
+      return;
+    }
+    Navigator.pop(context);
+  }
+
+  void _showPlaybackError() {
+    final message =
+        widget.notifier.state.error ??
+        'Fichier audio introuvable ou indisponible hors-ligne.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   PadItem? _padItemForSound(Sound sound) {
@@ -132,7 +151,7 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
                 child: Row(
                   children: [
-                    Icon(Icons.piano_rounded, color: scheme.primary),
+                    Icon(SoundType.music.icon, color: scheme.primary),
                     const SizedBox(width: 8),
                     Text(
                       'Sélectionner une musique',

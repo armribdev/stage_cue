@@ -3,11 +3,9 @@ import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
 
-/// Panneau régie musique — bandeau compact + console étendue.
+/// Panneau régie musique — tiroir glissable depuis le bas de l'écran.
 class MusicPreviewPanel extends StatelessWidget {
   final SamplerState state;
-  final bool isLandscapeExpanded;
-  final VoidCallback onToggleExpanded;
   final VoidCallback onChooseMusic;
   final VoidCallback? onTogglePlayPause;
   final VoidCallback? onRestart;
@@ -25,8 +23,77 @@ class MusicPreviewPanel extends StatelessWidget {
   const MusicPreviewPanel({
     super.key,
     required this.state,
-    required this.isLandscapeExpanded,
-    required this.onToggleExpanded,
+    required this.onChooseMusic,
+    this.onTogglePlayPause,
+    this.onRestart,
+    this.onSkipNext,
+    this.onStopCurrent,
+    this.onClearQueue,
+    this.onPlayNextInQueue,
+    this.onRemoveFromQueue,
+    this.onSelectMusicPad,
+    this.onFadeOutShort,
+    this.onFadeOutLong,
+    this.onCrossfadeShort,
+    this.onCrossfadeLong,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final minSize = isLandscape ? 0.20 : 0.24;
+    final maxSize = isLandscape ? 0.72 : 0.58;
+
+    return DraggableScrollableSheet(
+      initialChildSize: minSize,
+      minChildSize: minSize,
+      maxChildSize: maxSize,
+      snap: true,
+      snapSizes: [minSize, maxSize],
+      builder: (context, scrollController) {
+        return _MusicRegieDrawer(
+          state: state,
+          scrollController: scrollController,
+          onChooseMusic: onChooseMusic,
+          onTogglePlayPause: onTogglePlayPause,
+          onRestart: onRestart,
+          onSkipNext: onSkipNext,
+          onStopCurrent: onStopCurrent,
+          onClearQueue: onClearQueue,
+          onPlayNextInQueue: onPlayNextInQueue,
+          onRemoveFromQueue: onRemoveFromQueue,
+          onSelectMusicPad: onSelectMusicPad,
+          onFadeOutShort: onFadeOutShort,
+          onFadeOutLong: onFadeOutLong,
+          onCrossfadeShort: onCrossfadeShort,
+          onCrossfadeLong: onCrossfadeLong,
+        );
+      },
+    );
+  }
+}
+
+class _MusicRegieDrawer extends StatelessWidget {
+  final SamplerState state;
+  final ScrollController scrollController;
+  final VoidCallback onChooseMusic;
+  final VoidCallback? onTogglePlayPause;
+  final VoidCallback? onRestart;
+  final VoidCallback? onSkipNext;
+  final VoidCallback? onStopCurrent;
+  final VoidCallback? onClearQueue;
+  final VoidCallback? onPlayNextInQueue;
+  final ValueChanged<int>? onRemoveFromQueue;
+  final ValueChanged<PadItem>? onSelectMusicPad;
+  final VoidCallback? onFadeOutShort;
+  final VoidCallback? onFadeOutLong;
+  final VoidCallback? onCrossfadeShort;
+  final VoidCallback? onCrossfadeLong;
+
+  const _MusicRegieDrawer({
+    required this.state,
+    required this.scrollController,
     required this.onChooseMusic,
     this.onTogglePlayPause,
     this.onRestart,
@@ -51,172 +118,147 @@ class MusicPreviewPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (state.isMusicPanelExpanded) {
-      return _RegieMusicConsole(
-        state: state,
-        resolvePad: _resolve,
-        isLandscapeExpanded: isLandscapeExpanded,
-        onCollapse: onToggleExpanded,
-        onChooseMusic: onChooseMusic,
-        onTogglePlayPause: onTogglePlayPause,
-        onRestart: onRestart,
-        onSkipNext: onSkipNext,
-        onStopCurrent: onStopCurrent,
-        onClearQueue: onClearQueue,
-        onPlayNextInQueue: onPlayNextInQueue,
-        onRemoveFromQueue: onRemoveFromQueue,
-        onSelectMusicPad: onSelectMusicPad,
-        onFadeOutShort: onFadeOutShort,
-        onFadeOutLong: onFadeOutLong,
-        onCrossfadeShort: onCrossfadeShort,
-        onCrossfadeLong: onCrossfadeLong,
-      );
-    }
-
-    return _RegieMusicStrip(
-      state: state,
-      resolvePad: _resolve,
-      onExpand: onToggleExpanded,
-      onChooseMusic: onChooseMusic,
-      onTogglePlayPause: onTogglePlayPause,
-      onStopCurrent: onStopCurrent,
-      onSkipNext: onSkipNext,
-      onFadeOutShort: onFadeOutShort,
-      onFadeOutLong: onFadeOutLong,
-      onCrossfadeShort: onCrossfadeShort,
-      onCrossfadeLong: onCrossfadeLong,
-    );
-  }
-}
-
-class _RegieMusicStrip extends StatelessWidget {
-  final SamplerState state;
-  final PadItem? Function(int padId) resolvePad;
-  final VoidCallback onExpand;
-  final VoidCallback onChooseMusic;
-  final VoidCallback? onTogglePlayPause;
-  final VoidCallback? onStopCurrent;
-  final VoidCallback? onSkipNext;
-  final VoidCallback? onFadeOutShort;
-  final VoidCallback? onFadeOutLong;
-  final VoidCallback? onCrossfadeShort;
-  final VoidCallback? onCrossfadeLong;
-
-  const _RegieMusicStrip({
-    required this.state,
-    required this.resolvePad,
-    required this.onExpand,
-    required this.onChooseMusic,
-    this.onTogglePlayPause,
-    this.onStopCurrent,
-    this.onSkipNext,
-    this.onFadeOutShort,
-    this.onFadeOutLong,
-    this.onCrossfadeShort,
-    this.onCrossfadeLong,
-  });
-
-  @override
-  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final current = state.currentMusicPad;
     final isPlaying = current?.isPlaying ?? false;
-    final queue = state.musicQueue(resolvePad);
+    final queue = state.musicQueue(_resolve);
+    final upcoming = state.upcomingMusicPads(_resolve);
     final next = queue.isNotEmpty ? queue.first : null;
 
-    return Material(
-      color: scheme.surfaceContainerLow,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      child: Material(
+        color: scheme.surfaceContainerLow,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
           ),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isPlaying && current != null)
-                _RegieProgressBar(
-                  padItem: current,
-                  isPlaying: true,
-                  height: 3,
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+          child: CustomScrollView(
+            controller: scrollController,
+            slivers: [
+              SliverToBoxAdapter(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.piano_rounded, size: 18, color: scheme.primary),
-                        const SizedBox(width: 6),
-                        Text(
-                          'RÉGIE MUSIQUE',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
+                    if (isPlaying && current != null)
+                      _RegieProgressBar(
+                        padItem: current,
+                        isPlaying: true,
+                        height: 3,
+                      ),
+                    _DrawerDragHandle(scheme: scheme),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                SoundType.music.icon,
+                                size: 18,
+                                color: scheme.primary,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'RÉGIE MUSIQUE',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.8,
+                                    ),
+                              ),
+                              if (isPlaying) ...[
+                                const SizedBox(width: 8),
+                                const _LiveBadge(compact: true),
+                              ],
+                            ],
                           ),
-                        ),
-                        if (isPlaying) ...[
-                          const SizedBox(width: 8),
-                          const _LiveBadge(compact: true),
+                          const SizedBox(height: 8),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: _CueSlot(
+                                  label: 'À l\'antenne',
+                                  padItem: current,
+                                  isActive: isPlaying,
+                                  emptyLabel: '—',
+                                ),
+                              ),
+                              Container(
+                                width: 1,
+                                height: 40,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                ),
+                                color: scheme.outlineVariant.withValues(
+                                  alpha: 0.45,
+                                ),
+                              ),
+                              Expanded(
+                                child: _CueSlot(
+                                  label: 'Prévu ensuite',
+                                  padItem: next,
+                                  isActive: next != null,
+                                  emptyLabel: '—',
+                                  accentColor: scheme.secondary,
+                                  suffix: queue.length > 1
+                                      ? '+${queue.length - 1}'
+                                      : null,
+                                  onTap: onChooseMusic,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          _RegieControlBar(
+                            compact: true,
+                            isPlaying: isPlaying,
+                            hasCurrent: current != null,
+                            hasQueue: queue.isNotEmpty,
+                            onChooseMusic: onChooseMusic,
+                            onStop: onStopCurrent,
+                            onTogglePlayPause: onTogglePlayPause,
+                            onSkipNext: onSkipNext,
+                          ),
+                          if (isPlaying || queue.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            _MusicTransitionBar(
+                              compact: true,
+                              canFadeOut: isPlaying,
+                              canCrossfade: isPlaying && queue.isNotEmpty,
+                              onFadeOutShort: onFadeOutShort,
+                              onFadeOutLong: onFadeOutLong,
+                              onCrossfadeShort: onCrossfadeShort,
+                              onCrossfadeLong: onCrossfadeLong,
+                            ),
+                          ],
                         ],
-                        const Spacer(),
-                        IconButton(
-                          tooltip: 'Console musique',
-                          onPressed: onExpand,
-                          icon: Icon(Icons.open_in_full_rounded, color: scheme.onSurfaceVariant),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ],
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: _CueSlot(
-                            label: 'À l\'antenne',
-                            padItem: current,
-                            isActive: isPlaying,
-                            emptyLabel: '—',
-                          ),
-                        ),
-                        Container(
-                          width: 1,
-                          height: 40,
-                          margin: const EdgeInsets.symmetric(horizontal: 10),
-                          color: scheme.outlineVariant.withValues(alpha: 0.45),
-                        ),
-                        Expanded(
-                          child: _CueSlot(
-                            label: 'Prévu ensuite',
-                            padItem: next,
-                            isActive: next != null,
-                            emptyLabel: '—',
-                            accentColor: scheme.secondary,
-                            suffix: queue.length > 1 ? '+${queue.length - 1}' : null,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _RegieControlBar(
-                      compact: true,
+                  ],
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    _OnAirCard(
+                      padItem: current,
                       isPlaying: isPlaying,
-                      hasCurrent: current != null,
-                      hasQueue: queue.isNotEmpty,
-                      onChooseMusic: onChooseMusic,
                       onStop: onStopCurrent,
-                      onTogglePlayPause: onTogglePlayPause,
-                      onSkipNext: onSkipNext,
+                      onRestart: onRestart,
                     ),
                     if (isPlaying || queue.isNotEmpty) ...[
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 12),
                       _MusicTransitionBar(
-                        compact: true,
                         canFadeOut: isPlaying,
                         canCrossfade: isPlaying && queue.isNotEmpty,
                         onFadeOutShort: onFadeOutShort,
@@ -225,7 +267,33 @@ class _RegieMusicStrip extends StatelessWidget {
                         onCrossfadeLong: onCrossfadeLong,
                       ),
                     ],
-                  ],
+                    const SizedBox(height: 16),
+                    _PassageQueueSection(
+                      queue: queue,
+                      onPlayNext: queue.isNotEmpty ? onPlayNextInQueue : null,
+                      onClear: queue.isNotEmpty ? onClearQueue : null,
+                      onRemove: onRemoveFromQueue,
+                    ),
+                    if (upcoming.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Pads musique sur la scène',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...upcoming.map(
+                        (padItem) => _ScenePadTile(
+                          padItem: padItem,
+                          onTap: onSelectMusicPad == null
+                              ? null
+                              : () => onSelectMusicPad!(padItem),
+                        ),
+                      ),
+                    ],
+                  ]),
                 ),
               ),
             ],
@@ -236,156 +304,23 @@ class _RegieMusicStrip extends StatelessWidget {
   }
 }
 
-class _RegieMusicConsole extends StatelessWidget {
-  final SamplerState state;
-  final PadItem? Function(int padId) resolvePad;
-  final bool isLandscapeExpanded;
-  final VoidCallback onCollapse;
-  final VoidCallback onChooseMusic;
-  final VoidCallback? onTogglePlayPause;
-  final VoidCallback? onRestart;
-  final VoidCallback? onSkipNext;
-  final VoidCallback? onStopCurrent;
-  final VoidCallback? onClearQueue;
-  final VoidCallback? onPlayNextInQueue;
-  final ValueChanged<int>? onRemoveFromQueue;
-  final ValueChanged<PadItem>? onSelectMusicPad;
-  final VoidCallback? onFadeOutShort;
-  final VoidCallback? onFadeOutLong;
-  final VoidCallback? onCrossfadeShort;
-  final VoidCallback? onCrossfadeLong;
+class _DrawerDragHandle extends StatelessWidget {
+  final ColorScheme scheme;
 
-  const _RegieMusicConsole({
-    required this.state,
-    required this.resolvePad,
-    required this.isLandscapeExpanded,
-    required this.onCollapse,
-    required this.onChooseMusic,
-    this.onTogglePlayPause,
-    this.onRestart,
-    this.onSkipNext,
-    this.onStopCurrent,
-    this.onClearQueue,
-    this.onPlayNextInQueue,
-    this.onRemoveFromQueue,
-    this.onSelectMusicPad,
-    this.onFadeOutShort,
-    this.onFadeOutLong,
-    this.onCrossfadeShort,
-    this.onCrossfadeLong,
-  });
+  const _DrawerDragHandle({required this.scheme});
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final current = state.currentMusicPad;
-    final queue = state.musicQueue(resolvePad);
-    final upcoming = state.upcomingMusicPads(resolvePad);
-    final isPlaying = current?.isPlaying ?? false;
-
-    return Material(
-      color: scheme.surfaceContainerLow,
-      child: SafeArea(
-        top: false,
-        left: !isLandscapeExpanded,
-        right: true,
-        bottom: !isLandscapeExpanded,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 8, 0),
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Réduire',
-                    onPressed: onCollapse,
-                    icon: Icon(
-                      isLandscapeExpanded
-                          ? Icons.close_rounded
-                          : Icons.expand_more_rounded,
-                    ),
-                  ),
-                  Icon(Icons.piano_rounded, size: 20, color: scheme.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Console musique',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  if (isPlaying) const _LiveBadge(),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  isLandscapeExpanded ? 12 : 16,
-                  8,
-                  isLandscapeExpanded ? 12 : 16,
-                  16,
-                ),
-                children: [
-                  _OnAirCard(
-                    padItem: current,
-                    isPlaying: isPlaying,
-                    onStop: onStopCurrent,
-                    onRestart: onRestart,
-                  ),
-                  const SizedBox(height: 12),
-                  _RegieControlBar(
-                    isPlaying: isPlaying,
-                    hasCurrent: current != null,
-                    hasQueue: queue.isNotEmpty,
-                    onChooseMusic: onChooseMusic,
-                    onStop: onStopCurrent,
-                    onTogglePlayPause: onTogglePlayPause,
-                    onSkipNext: onSkipNext,
-                  ),
-                  if (isPlaying || queue.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    _MusicTransitionBar(
-                      canFadeOut: isPlaying,
-                      canCrossfade: isPlaying && queue.isNotEmpty,
-                      onFadeOutShort: onFadeOutShort,
-                      onFadeOutLong: onFadeOutLong,
-                      onCrossfadeShort: onCrossfadeShort,
-                      onCrossfadeLong: onCrossfadeLong,
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  _PassageQueueSection(
-                    queue: queue,
-                    onPlayNext: queue.isNotEmpty ? onPlayNextInQueue : null,
-                    onClear: queue.isNotEmpty ? onClearQueue : null,
-                    onRemove: onRemoveFromQueue,
-                  ),
-                  if (upcoming.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      'Pads musique sur la scène',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ...upcoming.map(
-                      (padItem) => _ScenePadTile(
-                        padItem: padItem,
-                        onTap: onSelectMusicPad == null
-                            ? null
-                            : () => onSelectMusicPad!(padItem),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 6),
+        child: Container(
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: scheme.onSurfaceVariant.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(2),
+          ),
         ),
       ),
     );
@@ -437,6 +372,7 @@ class _CueSlot extends StatelessWidget {
   final String emptyLabel;
   final Color? accentColor;
   final String? suffix;
+  final VoidCallback? onTap;
 
   const _CueSlot({
     required this.label,
@@ -445,6 +381,7 @@ class _CueSlot extends StatelessWidget {
     required this.emptyLabel,
     this.accentColor,
     this.suffix,
+    this.onTap,
   });
 
   @override
@@ -453,7 +390,7 @@ class _CueSlot extends StatelessWidget {
     final color = accentColor ?? scheme.primary;
     final title = padItem?.pad.displayName ?? emptyLabel;
 
-    return Column(
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
@@ -470,6 +407,8 @@ class _CueSlot extends StatelessWidget {
           children: [
             if (padItem != null)
               _PadColorChip(padItem: padItem!, size: 14)
+            else if (onTap != null)
+              Icon(Icons.add_rounded, size: 14, color: color)
             else
               Icon(Icons.remove_rounded, size: 14, color: scheme.outline),
             const SizedBox(width: 6),
@@ -495,6 +434,20 @@ class _CueSlot extends StatelessWidget {
           ],
         ),
       ],
+    );
+
+    if (onTap == null) return content;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: content,
+        ),
+      ),
     );
   }
 }
@@ -643,15 +596,8 @@ class _RegieControlBar extends StatelessWidget {
   Widget build(BuildContext context) {
     if (compact) {
       return Row(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: onChooseMusic,
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Ajouter'),
-            ),
-          ),
-          const SizedBox(width: 6),
           IconButton.filledTonal(
             tooltip: 'Couper',
             onPressed: hasCurrent && isPlaying ? onStop : null,
@@ -684,11 +630,6 @@ class _RegieControlBar extends StatelessWidget {
       runSpacing: 8,
       alignment: WrapAlignment.center,
       children: [
-        FilledButton.tonalIcon(
-          onPressed: onChooseMusic,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Ajouter'),
-        ),
         if (hasCurrent && isPlaying)
           OutlinedButton.icon(
             onPressed: onStop,

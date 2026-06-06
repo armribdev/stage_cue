@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -27,7 +28,6 @@ class SamplerState {
   final String? boardsError;
   final PadItem? currentMusicPad;
   final List<int> musicQueuePadIds;
-  final bool isMusicPanelExpanded;
 
   SamplerState({
     required this.pads,
@@ -39,7 +39,6 @@ class SamplerState {
     this.boardsError,
     this.currentMusicPad,
     this.musicQueuePadIds = const [],
-    this.isMusicPanelExpanded = false,
   });
 
   /// Pads musique de la scène, dans l'ordre d'affichage.
@@ -79,7 +78,6 @@ class SamplerState {
     Object? boardsError = _unset,
     Object? currentMusicPad = _unset,
     List<int>? musicQueuePadIds,
-    bool? isMusicPanelExpanded,
     bool clearCurrentMusicPad = false,
     bool clearMusicQueue = false,
   }) {
@@ -103,8 +101,6 @@ class SamplerState {
       musicQueuePadIds: clearMusicQueue
           ? const []
           : musicQueuePadIds ?? this.musicQueuePadIds,
-      isMusicPanelExpanded:
-          isMusicPanelExpanded ?? this.isMusicPanelExpanded,
     );
   }
 }
@@ -175,17 +171,74 @@ class SamplerNotifier extends ChangeNotifier {
     this._libraryRepository,
   ]);
 
-  /// Résout le chemin local jouable d'un son (cache Drive si bibliothèque),
-  /// avec repli sur [Sound.filePath] en cas d'échec (hors-ligne non caché…).
+  /// Résout le chemin local jouable d'un son (cache Drive si bibliothèque).
   Future<String> _resolvePlayablePath(Sound sound) async {
     final libraryRepository = _libraryRepository;
-    if (libraryRepository == null) return sound.filePath;
-    try {
-      return await libraryRepository.resolvePlayablePath(sound);
-    } catch (e) {
-      debugPrint('Résolution du chemin échouée pour ${sound.title}: $e');
-      return sound.filePath;
+    String? resolved;
+    if (libraryRepository != null) {
+      try {
+        resolved = await libraryRepository.resolvePlayablePath(sound);
+      } catch (e) {
+        debugPrint('Résolution du chemin échouée pour ${sound.title}: $e');
+      }
     }
+    resolved ??= sound.filePath;
+
+    final file = File(resolved);
+    if (!await file.exists()) {
+      throw StateError(
+        'Fichier audio introuvable : ${sound.displayName ?? sound.title}',
+      );
+    }
+    return file.absolute.path;
+  }
+
+  Future<void> _loadPlayersForPad(PadItem padItem, Pad pad) async {
+    for (final player in padItem.players) {
+      player.dispose();
+    }
+    padItem.players.clear();
+
+    for (final sound in pad.sounds) {
+      try {
+        final path = await _resolvePlayablePath(sound);
+        padItem.players.add(await AudioPlayerService.create(path));
+      } catch (e) {
+        debugPrint('Échec du chargement de ${sound.filePath}: $e');
+      }
+    }
+    _attachPlayerListeners(padItem);
+  }
+
+  void _attachPlayerListeners(PadItem padItem) {
+    for (var i = 0; i < padItem.players.length; i++) {
+      final idx = i;
+      padItem.players[idx].onPlayerStateChanged.listen((playing) {
+        if (playing) {
+          padItem._currentPlayerIndex = idx;
+          padItem.isPlaying = true;
+          if (padItem.pad.isMusicPad) {
+            _state = _state.copyWith(currentMusicPad: padItem);
+          }
+        } else if (padItem._currentPlayerIndex == idx) {
+          padItem.isPlaying = false;
+          padItem._currentPlayerIndex = null;
+          if (padItem.pad.isMusicPad) {
+            _handleMusicPlaybackEnded(padItem);
+          }
+        }
+        notifyListeners();
+      });
+    }
+  }
+
+  bool _padSoundsChanged(PadItem existing, Pad updated) {
+    final previousSounds = existing.pad.sounds;
+    if (previousSounds.length != updated.sounds.length) return true;
+    for (var i = 0; i < updated.sounds.length; i++) {
+      if (previousSounds[i].id != updated.sounds[i].id) return true;
+    }
+    return false;
   }
 
   void _disposePadItems(List<PadItem> items) {
@@ -399,8 +452,14 @@ class SamplerNotifier extends ChangeNotifier {
       final loadFutures = pads.map((pad) async {
         final existing = previousItemsById[pad.id];
         if (existing != null) {
-          // Mettre à jour les données du pad sans recréer les players
+          final soundsChanged = _padSoundsChanged(existing, pad);
           existing.pad = pad;
+          if (soundsChanged) {
+            await _loadPlayersForPad(existing, pad);
+            if (existing.players.isEmpty && pad.sounds.isNotEmpty) {
+              return null;
+            }
+          }
           if (existing.isPlaying) {
             existing.currentPlayer
                 ?.setVolume(existing.pad.volume * _masterVolume);
@@ -408,37 +467,9 @@ class SamplerNotifier extends ChangeNotifier {
           return existing;
         }
 
-        final players = <AudioPlayerService>[];
-        for (final sound in pad.sounds) {
-          try {
-            final path = await _resolvePlayablePath(sound);
-            players.add(await AudioPlayerService.create(path));
-          } catch (e) {
-            debugPrint('Échec du chargement de ${sound.filePath}: $e');
-          }
-        }
-        if (players.isEmpty && pad.sounds.isNotEmpty) return null;
-
-        final padItem = PadItem(pad: pad, players: players);
-        for (var i = 0; i < players.length; i++) {
-          final idx = i;
-          players[idx].onPlayerStateChanged.listen((playing) {
-            if (playing) {
-              padItem._currentPlayerIndex = idx;
-              padItem.isPlaying = true;
-              if (padItem.pad.isMusicPad) {
-                _state = _state.copyWith(currentMusicPad: padItem);
-              }
-            } else if (padItem._currentPlayerIndex == idx) {
-              padItem.isPlaying = false;
-              padItem._currentPlayerIndex = null;
-              if (padItem.pad.isMusicPad) {
-                _handleMusicPlaybackEnded(padItem);
-              }
-            }
-            notifyListeners();
-          });
-        }
+        final padItem = PadItem(pad: pad, players: <AudioPlayerService>[]);
+        await _loadPlayersForPad(padItem, pad);
+        if (padItem.players.isEmpty && pad.sounds.isNotEmpty) return null;
         return padItem;
       });
 
@@ -583,19 +614,47 @@ class SamplerNotifier extends ChangeNotifier {
     final boardId = _activeBoardId;
     if (boardId == null) return null;
 
-    final existing = _findPadItemForSound(soundId);
-    if (existing != null) return existing;
+    var existing = _findPadItemForSound(soundId);
+    if (existing != null) {
+      if (existing.players.isEmpty) {
+        await _loadPlayersForPad(existing, existing.pad);
+        if (existing.players.isEmpty) {
+          _setMusicLoadError();
+          return null;
+        }
+      }
+      return existing;
+    }
+
+    final padIdBySound =
+        await _repository.getSoundIdToFirstPadIdInBoard(boardId);
+    if (padIdBySound.containsKey(soundId)) {
+      await loadSounds(boardId: boardId);
+      existing = _findPadItemForSound(soundId);
+      if (existing != null) return existing;
+    }
 
     try {
       await _repository.createPad(boardId, soundId);
       await loadSounds(boardId: boardId);
-      return _findPadItemForSound(soundId);
+      existing = _findPadItemForSound(soundId);
+      if (existing == null) {
+        _setMusicLoadError();
+      }
+      return existing;
     } catch (e) {
       debugPrint('Impossible d\'ajouter la musique à la scène: $e');
       _state = _state.copyWith(error: 'Impossible d\'ajouter cette musique.');
       notifyListeners();
       return null;
     }
+  }
+
+  void _setMusicLoadError() {
+    _state = _state.copyWith(
+      error: 'Fichier audio introuvable ou indisponible hors-ligne.',
+    );
+    notifyListeners();
   }
 
   PadItem? _findPadItemForSound(int soundId) {
@@ -608,7 +667,13 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<void> _playMusicPad(PadItem padItem) async {
-    if (padItem.players.isEmpty) return;
+    if (padItem.players.isEmpty) {
+      await _loadPlayersForPad(padItem, padItem.pad);
+      if (padItem.players.isEmpty) {
+        _setMusicLoadError();
+        return;
+      }
+    }
 
     _state = _state.copyWith(
       currentMusicPad: padItem,
@@ -668,12 +733,6 @@ class SamplerNotifier extends ChangeNotifier {
     if (next != null) {
       unawaited(_playMusicPad(next));
     }
-  }
-
-  void setMusicPanelExpanded(bool expanded) {
-    if (_state.isMusicPanelExpanded == expanded) return;
-    _state = _state.copyWith(isMusicPanelExpanded: expanded);
-    notifyListeners();
   }
 
   Future<void> removeFromMusicQueue(int padId) async {
@@ -833,7 +892,6 @@ class SamplerNotifier extends ChangeNotifier {
     _state = _state.copyWith(
       clearCurrentMusicPad: true,
       clearMusicQueue: true,
-      isMusicPanelExpanded: false,
     );
   }
 
