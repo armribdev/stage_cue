@@ -7,6 +7,7 @@ import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/utils/string_utils.dart';
 import 'sound_details_screen.dart';
 import '../widgets/app_form_dialog.dart';
+import '../widgets/app_modal.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -16,8 +17,27 @@ import '../utils/sound_type_ui.dart';
 /// Écran bibliothèque dédié à l'édition des propriétés des sons.
 class SoundLibraryManageScreen extends StatefulWidget {
   final db.AppDatabase database;
+  final bool isModal;
 
-  const SoundLibraryManageScreen({super.key, required this.database});
+  const SoundLibraryManageScreen({
+    super.key,
+    required this.database,
+    this.isModal = false,
+  });
+
+  /// Page plein écran sur téléphone, modale sur tablette et desktop.
+  static Future<void> open(
+    BuildContext context, {
+    required db.AppDatabase database,
+  }) {
+    return openAdaptiveScreen(
+      context: context,
+      builder: ({required isModal}) => SoundLibraryManageScreen(
+        database: database,
+        isModal: isModal,
+      ),
+    );
+  }
 
   @override
   State<SoundLibraryManageScreen> createState() =>
@@ -671,18 +691,56 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isDesktopPlatform =
-        defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.linux;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Gérer la bibliothèque')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
+  bool get _isDesktopPlatform =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
+
+  Widget _buildSoundTile(Sound sound) {
+    final tags = _soundTags[sound.id] ?? [];
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: ListTile(
+          leading: SoundTypeAvatar(type: sound.type),
+          title: Text(sound.displayName ?? sound.title),
+          subtitle: tags.isNotEmpty
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final tag in tags) _buildTagChip(tag),
+                      ],
+                    ),
+                  ],
+                )
+              : null,
+          trailing: IconButton(
+            icon: const Icon(Icons.edit_rounded),
+            tooltip: 'Modifier',
+            onPressed: () => _openSoundEdit(sound),
+          ),
+          onTap: _isDesktopPlatform ? null : () => _openSoundEdit(sound),
+          hoverColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          focusColor: Colors.transparent,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          sliver: SliverToBoxAdapter(
             child: TextField(
               decoration: InputDecoration(
                 hintText: 'Rechercher un son...',
@@ -699,73 +757,46 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
               },
             ),
           ),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _filteredSounds.isEmpty
-                  ? Center(
-                      child: Text(
-                        _searchQuery.isEmpty
-                            ? 'Aucun son disponible'
-                            : 'Aucun son trouvé',
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _filteredSounds.length,
-                      itemBuilder: (context, index) {
-                        final sound = _filteredSounds[index];
-                        final tags = _soundTags[sound.id] ?? [];
-                        // Correction : On retire le minVerticalPadding forcé pour uniformiser la hauteur entre tuiles avec/sans tags.
-                        return Card(
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 4,
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: ListTile(
-                              leading: SoundTypeAvatar(type: sound.type),
-                              title: Text(sound.displayName ?? sound.title),
-                              subtitle: tags.isNotEmpty
-                                  ? Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const SizedBox(height: 6),
-                                        Wrap(
-                                          spacing: 6,
-                                          runSpacing: -6,
-                                          children: [
-                                            for (final tag in tags) _buildTagChip(tag),
-                                          ],
-                                        ),
-                                      ],
-                                    )
-                                  : null,
-                              trailing: IconButton(
-                                icon: const Icon(Icons.edit_rounded),
-                                tooltip: 'Modifier',
-                                onPressed: () => _openSoundEdit(sound),
-                              ),
-                              onTap: isDesktopPlatform
-                                  ? null
-                                  : () => _openSoundEdit(sound),
-                              hoverColor: Colors.transparent,
-                              splashColor: Colors.transparent,
-                              focusColor: Colors.transparent,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
-                              // minVerticalPadding enlevé : hauteur homogène quelle que soit la présence de tags.
-                            ),
-                          ),
-                        );
-                      },
-           
-                    ),
+        ),
+        if (_isLoading)
+          const SliverFillRemaining(
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_filteredSounds.isEmpty)
+          SliverFillRemaining(
+            child: Center(
+              child: Text(
+                _searchQuery.isEmpty
+                    ? 'Aucun son disponible'
+                    : 'Aucun son trouvé',
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _buildSoundTile(_filteredSounds[index]),
+                childCount: _filteredSounds.length,
+              ),
             ),
           ),
-        ],
-      ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final body = _buildBody();
+
+    if (widget.isModal) {
+      return AppModalShell(title: 'Gérer la bibliothèque', body: body);
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Gérer la bibliothèque')),
+      body: body,
     );
   }
 
