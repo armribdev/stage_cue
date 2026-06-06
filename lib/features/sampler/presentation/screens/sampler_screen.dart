@@ -949,12 +949,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
               onBoardLongPress: _showBoardActions,
               onOpenLibrary: () async {
                       Navigator.pop(context);
-                      await Navigator.push(
+                      await SoundLibraryManageScreen.open(
                         context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              SoundLibraryManageScreen(database: _database),
-                        ),
+                        database: _database,
                       );
                       await _notifier.loadSounds();
                     },
