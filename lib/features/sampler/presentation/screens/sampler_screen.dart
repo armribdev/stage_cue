@@ -947,9 +947,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
               onCreateBoard: _createBoard,
               onSelectBoard: _selectBoard,
               onBoardLongPress: _showBoardActions,
-              onOpenLibrary: selectedBoard == null
-                  ? null
-                  : () async {
+              onOpenLibrary: () async {
                       Navigator.pop(context);
                       await Navigator.push(
                         context,
@@ -1121,8 +1119,8 @@ class _BoardsDrawer extends StatelessWidget {
             ),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.library_music),
-              title: const Text('Bibliothèque des sons'),
+              leading: const Icon(Icons.library_books_rounded),
+              title: const Text('Gérer la bibliothèque'),
               onTap: onOpenLibrary == null
                   ? null
                   : () async {
