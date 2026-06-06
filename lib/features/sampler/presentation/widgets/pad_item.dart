@@ -313,7 +313,7 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
-                    if (deleteButton != null) deleteButton,
+                    ?deleteButton,
                   ],
                 ),
               ),

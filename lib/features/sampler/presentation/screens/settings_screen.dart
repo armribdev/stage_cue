@@ -1541,7 +1541,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             alignment: Alignment.topCenter,
             children: [
               ...previousChildren,
-              if (currentChild != null) currentChild,
+              ?currentChild,
             ],
           );
         },
