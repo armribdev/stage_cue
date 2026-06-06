@@ -28,6 +28,12 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Cible arm64 uniquement : évite les échecs CMake sur armeabi-v7a (NDK r28)
+        // et réduit le temps de build. Suffisant pour les appareils récents (API 21+).
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {

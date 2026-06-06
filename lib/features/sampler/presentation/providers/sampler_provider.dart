@@ -4,7 +4,6 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import '../../../../core/audio/audio_player_service.dart';
-import '../../../../core/audio/music_transition.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/pad.dart';
@@ -41,10 +40,6 @@ class SamplerState {
     this.musicQueuePadIds = const [],
   });
 
-  /// Pads musique de la scène, dans l'ordre d'affichage.
-  List<PadItem> get musicPads =>
-      pads.where((padItem) => padItem.pad.isMusicPad).toList();
-
   /// Prochaine musique en file d'attente.
   PadItem? queuedMusicPad(PadItem? Function(int padId) resolve) {
     if (musicQueuePadIds.isEmpty) return null;
@@ -57,15 +52,6 @@ class SamplerState {
         .map(resolve)
         .whereType<PadItem>()
         .toList(growable: false);
-  }
-
-  /// Musiques disponibles sur la scène (hors en cours et file).
-  List<PadItem> upcomingMusicPads(PadItem? Function(int padId) resolve) {
-    final excluded = <int>{
-      if (currentMusicPad != null) currentMusicPad!.pad.id,
-      ...musicQueuePadIds,
-    };
-    return musicPads.where((pad) => !excluded.contains(pad.pad.id)).toList();
   }
 
   SamplerState copyWith({
@@ -153,14 +139,25 @@ class SamplerNotifier extends ChangeNotifier {
   final LibraryRepository? _libraryRepository;
 
   int? _activeBoardId;
-  double _masterVolume = 1.0;
+  double _musicVolume = 1.0;
   _RemovedPadSnapshot? _lastRemovedPad;
   final _random = Random();
   bool _skipMusicAutoAdvance = false;
 
+  /// Pads musique "hors-scène" : créés à la volée depuis le sélecteur pour
+  /// jouer une musique dans la régie sans l'ajouter au plateau.
+  final Map<int, PadItem> _offStageMusicPads = {};
+
   SamplerState _state = SamplerState(pads: []);
   SamplerState get state => _state;
-  double get masterVolume => _masterVolume;
+  double get musicVolume => _musicVolume;
+
+  /// Volume effectif d'un pad : les pads musique sont en plus soumis
+  /// au volume musique global, les autres pads jouent à leur volume propre.
+  double _effectiveVolume(PadItem padItem) =>
+      padItem.pad.isMusicPad
+          ? padItem.pad.volume * _musicVolume
+          : padItem.pad.volume;
   bool get canUndoLastRemoval =>
       _lastRemovedPad != null && _lastRemovedPad!.boardId == _activeBoardId;
 
@@ -461,8 +458,7 @@ class SamplerNotifier extends ChangeNotifier {
             }
           }
           if (existing.isPlaying) {
-            existing.currentPlayer
-                ?.setVolume(existing.pad.volume * _masterVolume);
+            existing.currentPlayer?.setVolume(_effectiveVolume(existing));
           }
           return existing;
         }
@@ -504,7 +500,7 @@ class SamplerNotifier extends ChangeNotifier {
 
     final soundIndex = _pickSoundIndex(padItem);
     final player = padItem.players[soundIndex];
-    player.setVolume(padItem.pad.volume * _masterVolume);
+    player.setVolume(_effectiveVolume(padItem));
     await player.play();
     notifyListeners();
   }
@@ -611,9 +607,6 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<PadItem?> _ensureMusicPadForSound(int soundId) async {
-    final boardId = _activeBoardId;
-    if (boardId == null) return null;
-
     var existing = _findPadItemForSound(soundId);
     if (existing != null) {
       if (existing.players.isEmpty) {
@@ -626,25 +619,48 @@ class SamplerNotifier extends ChangeNotifier {
       return existing;
     }
 
-    final padIdBySound =
-        await _repository.getSoundIdToFirstPadIdInBoard(boardId);
-    if (padIdBySound.containsKey(soundId)) {
-      await loadSounds(boardId: boardId);
-      existing = _findPadItemForSound(soundId);
-      if (existing != null) return existing;
+    final boardId = _activeBoardId;
+    if (boardId != null) {
+      final padIdBySound =
+          await _repository.getSoundIdToFirstPadIdInBoard(boardId);
+      if (padIdBySound.containsKey(soundId)) {
+        await loadSounds(boardId: boardId);
+        existing = _findPadItemForSound(soundId);
+        if (existing != null) return existing;
+      }
     }
 
+    return _createOffStageMusicPad(soundId);
+  }
+
+  /// Prépare une musique pour la régie sans l'ajouter au plateau — un son
+  /// peut être joué directement sans être lié à un pad sur la scène.
+  Future<PadItem?> _createOffStageMusicPad(int soundId) async {
     try {
-      await _repository.createPad(boardId, soundId);
-      await loadSounds(boardId: boardId);
-      existing = _findPadItemForSound(soundId);
-      if (existing == null) {
+      final sound = await _repository.getSoundById(soundId);
+      if (sound == null) {
         _setMusicLoadError();
+        return null;
       }
-      return existing;
+
+      final pad = Pad(
+        id: -soundId,
+        boardId: -1,
+        sortOrder: 0,
+        createdAt: DateTime.now(),
+        sounds: [sound],
+      );
+      final padItem = PadItem(pad: pad, players: <AudioPlayerService>[]);
+      await _loadPlayersForPad(padItem, pad);
+      if (padItem.players.isEmpty) {
+        _setMusicLoadError();
+        return null;
+      }
+      _offStageMusicPads[pad.id] = padItem;
+      return padItem;
     } catch (e) {
-      debugPrint('Impossible d\'ajouter la musique à la scène: $e');
-      _state = _state.copyWith(error: 'Impossible d\'ajouter cette musique.');
+      debugPrint('Impossible de préparer la musique pour la régie: $e');
+      _state = _state.copyWith(error: 'Impossible de préparer cette musique.');
       notifyListeners();
       return null;
     }
@@ -663,8 +679,16 @@ class SamplerNotifier extends ChangeNotifier {
         return padItem;
       }
     }
+    for (final padItem in _offStageMusicPads.values) {
+      if (padItem.pad.sounds.any((sound) => sound.id == soundId)) {
+        return padItem;
+      }
+    }
     return null;
   }
+
+  /// Pad musique correspondant à un son, sur la scène ou hors-scène.
+  PadItem? findMusicPadForSound(int soundId) => _findPadItemForSound(soundId);
 
   Future<void> _playMusicPad(PadItem padItem) async {
     if (padItem.players.isEmpty) {
@@ -684,7 +708,7 @@ class SamplerNotifier extends ChangeNotifier {
 
     final soundIndex = _pickSoundIndex(padItem);
     final player = padItem.players[soundIndex];
-    player.setVolume(padItem.pad.volume * _masterVolume);
+    player.setVolume(_effectiveVolume(padItem));
     await player.play();
     notifyListeners();
   }
@@ -772,15 +796,20 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   /// Fondu sortant de la musique en cours (sans lancer la file).
-  Future<void> fadeOutCurrentMusic(MusicTransitionDuration duration) async {
+  /// Une durée nulle coupe immédiatement.
+  Future<void> fadeOutCurrentMusic(Duration duration) async {
     final current = _state.currentMusicPad;
     if (current == null || !current.isPlaying) return;
+    if (duration == Duration.zero) {
+      await _stopMusicPad(current, manual: true);
+      return;
+    }
     final player = current.currentPlayer;
     if (player == null) return;
 
     _skipMusicAutoAdvance = true;
     try {
-      await player.fadeOutAndStop(duration.duration);
+      await player.fadeOutAndStop(duration);
     } finally {
       _skipMusicAutoAdvance = false;
     }
@@ -795,12 +824,13 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Crossfade vers la musique suivante en file.
-  Future<void> crossfadeToNextMusic(MusicCrossfadeDuration duration) async {
+  /// Enchaîne vers la musique suivante en file, avec un fondu enchaîné.
+  /// Une durée nulle passe directement à la suivante.
+  Future<void> crossfadeToNextMusic(Duration duration) async {
     if (_state.musicQueuePadIds.isEmpty) return;
 
     final current = _state.currentMusicPad;
-    if (current == null || !current.isPlaying) {
+    if (duration == Duration.zero || current == null || !current.isPlaying) {
       await playNextInQueueNow();
       return;
     }
@@ -820,8 +850,8 @@ class SamplerNotifier extends ChangeNotifier {
 
     final soundIndex = _pickSoundIndex(next);
     final nextPlayer = next.players[soundIndex];
-    final targetVolume = next.pad.volume * _masterVolume;
-    final crossfadeDuration = duration.duration;
+    final targetVolume = _effectiveVolume(next);
+    final crossfadeDuration = duration;
 
     _skipMusicAutoAdvance = true;
     try {
@@ -900,8 +930,11 @@ class SamplerNotifier extends ChangeNotifier {
     for (final padItem in _state.pads) {
       if (padItem.pad.id == padId) return padItem;
     }
-    return null;
+    return _offStageMusicPads[padId];
   }
+
+  /// Résout un pad musique par id — sur la scène ou hors-scène (régie seule).
+  PadItem? resolveMusicPad(int padId) => _resolvePadItem(padId);
 
   void _syncMusicStateWithPads() {
     final currentId = _state.currentMusicPad?.pad.id;
@@ -961,7 +994,10 @@ class SamplerNotifier extends ChangeNotifier {
         nextVolume = clamped;
         hasChanged = true;
         if (padItem.isPlaying) {
-          padItem.currentPlayer?.setVolume(nextVolume * _masterVolume);
+          final effective = padItem.pad.isMusicPad
+              ? nextVolume * _musicVolume
+              : nextVolume;
+          padItem.currentPlayer?.setVolume(effective);
         }
       }
     }
@@ -993,13 +1029,14 @@ class SamplerNotifier extends ChangeNotifier {
     );
   }
 
-  Future<void> setMasterVolume(double value) async {
+  /// Volume global de la musique — n'affecte que les pads musique.
+  Future<void> setMusicVolume(double value) async {
     final clamped = value.clamp(0.0, 1.0);
-    if (_masterVolume == clamped) return;
-    _masterVolume = clamped;
+    if (_musicVolume == clamped) return;
+    _musicVolume = clamped;
     for (final padItem in _state.pads) {
-      if (padItem.isPlaying) {
-        padItem.currentPlayer?.setVolume(padItem.pad.volume * _masterVolume);
+      if (padItem.isPlaying && padItem.pad.isMusicPad) {
+        padItem.currentPlayer?.setVolume(_effectiveVolume(padItem));
       }
     }
     notifyListeners();
@@ -1137,6 +1174,11 @@ class SamplerNotifier extends ChangeNotifier {
   @override
   void dispose() {
     for (final padItem in _state.pads) {
+      for (final player in padItem.players) {
+        player.dispose();
+      }
+    }
+    for (final padItem in _offStageMusicPads.values) {
       for (final player in padItem.players) {
         player.dispose();
       }
