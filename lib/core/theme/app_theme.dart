@@ -97,6 +97,16 @@ class AppTheme {
         actionTextColor: scheme.primary,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusMd),
       ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: _surfaceContainer,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.black54,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.radiusSm,
+          side: AppElevation.border(scheme),
+        ),
+      ),
     );
   }
 }

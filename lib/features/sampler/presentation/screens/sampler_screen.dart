@@ -15,6 +15,8 @@ import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/database/database.dart' as db;
+import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/utils/layout_utils.dart';
 import 'settings_screen.dart';
 import 'pad_details_screen.dart';
 import 'sound_library_screen.dart';
@@ -94,7 +96,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   void _initializeNotifier() {
-    // Initialiser les dépendances
     _notifier = SamplerNotifier(
       widget.services.soundRepository,
       widget.services.loadSoundsUseCase,
@@ -115,15 +116,19 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
   }
 
+  /// Sélectionne un board et ferme le drawer (mobile).
   Future<void> _selectBoard(SoundBoard board) async {
     Navigator.pop(context);
     await _notifier.selectBoard(board);
   }
 
+  /// Sélectionne un board sans fermer de drawer (sidebar desktop).
+  Future<void> _selectBoardDirect(SoundBoard board) async {
+    await _notifier.selectBoard(board);
+  }
+
   Future<void> _createBoard() async {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     final suggestedName = _buildSuggestedBoardName(_notifier.state.boards);
     final name = await AppTextInputDialog.show(
@@ -135,9 +140,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
 
     final trimmedName = name?.trim();
-    if (trimmedName == null || !mounted) {
-      return;
-    }
+    if (trimmedName == null || !mounted) return;
+    // Ferme le drawer s'il est ouvert (mobile — no-op si pas de drawer).
     final scaffoldState = _scaffoldKey.currentState;
     if (scaffoldState?.isDrawerOpen ?? false) {
       Navigator.of(context).pop();
@@ -145,9 +149,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     final finalName = trimmedName.isEmpty ? suggestedName : trimmedName;
     final newBoard = await _notifier.createBoard(finalName);
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     if (newBoard == null) {
       showCopyableSnackBar(context, 'Erreur lors de la création de la scène');
     }
@@ -184,6 +186,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     return '$baseName $index';
   }
 
+  /// Actions sur une scène via bottom sheet — pattern tactile (mobile/tablette).
   Future<void> _showBoardActions(SoundBoard board) async {
     await showModalBottomSheet<void>(
       context: context,
@@ -223,6 +226,69 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
+  /// Actions sur une scène via menu contextuel — clic droit sur le titre (desktop).
+  Future<void> _showBoardContextMenu(
+    SoundBoard board,
+    Offset globalPosition,
+  ) async {
+    if (!mounted) return;
+    final scheme = Theme.of(context).colorScheme;
+    final screenSize = MediaQuery.sizeOf(context);
+    final position = RelativeRect.fromLTRB(
+      globalPosition.dx,
+      globalPosition.dy,
+      screenSize.width - globalPosition.dx,
+      screenSize.height - globalPosition.dy,
+    );
+
+    final value = await showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem(
+          value: 'rename',
+          child: Row(
+            children: [
+              Icon(Icons.edit_rounded, size: 18, color: scheme.onSurface),
+              const SizedBox(width: AppSpacing.sm),
+              const Text('Renommer'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'duplicate',
+          child: Row(
+            children: [
+              Icon(Icons.copy_rounded, size: 18, color: scheme.onSurface),
+              const SizedBox(width: AppSpacing.sm),
+              const Text('Dupliquer'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline_rounded, size: 18, color: scheme.error),
+              const SizedBox(width: AppSpacing.sm),
+              Text('Supprimer', style: TextStyle(color: scheme.error)),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (!mounted) return;
+    if (value == 'rename') {
+      await _renameBoard(board);
+    } else if (value == 'duplicate') {
+      await _duplicateBoard(board);
+    } else if (value == 'delete') {
+      await _deleteBoard(board);
+    }
+  }
+
   Future<void> _renameBoard(SoundBoard board) async {
     final name = await AppTextInputDialog.show(
       context,
@@ -241,9 +307,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
 
     final ok = await _notifier.renameBoard(board, trimmedName);
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     if (!ok) {
       showCopyableSnackBar(context, 'Erreur lors du renommage de la scène');
     }
@@ -264,16 +328,15 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
 
     final trimmedName = name?.trim();
-    if (trimmedName == null || trimmedName.isEmpty) {
-      return;
-    }
+    if (trimmedName == null || trimmedName.isEmpty) return;
 
     final duplicated = await _notifier.duplicateBoard(board, trimmedName);
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     if (duplicated == null) {
-      showCopyableSnackBar(context, 'Erreur lors de la duplication de la scène');
+      showCopyableSnackBar(
+        context,
+        'Erreur lors de la duplication de la scène',
+      );
     }
   }
 
@@ -286,36 +349,49 @@ class _SamplerScreenState extends State<SamplerScreen> {
       isDestructive: true,
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     final ok = await _notifier.deleteBoard(board);
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     if (!ok) {
-      showCopyableSnackBar(context, 'Erreur lors de la suppression de la scène');
+      showCopyableSnackBar(
+        context,
+        'Erreur lors de la suppression de la scène',
+      );
     }
   }
 
+  /// Ouvre la bibliothèque sans fermer de drawer (base method).
+  Future<void> _openLibrary() async {
+    await SoundLibraryManageScreen.open(context, database: _database);
+    if (!mounted) return;
+    await _notifier.loadSounds();
+  }
+
+  /// Ouvre les paramètres sans fermer de drawer (base method).
+  Future<void> _openSettings() async {
+    if (!mounted) return;
+    await SettingsScreen.open(
+      context,
+      database: _database,
+      libraryRepository: widget.services.libraryRepository,
+      syncController: widget.services.syncController,
+    );
+    if (!mounted) return;
+    await _notifier.loadSounds();
+  }
+
   Future<void> _handleUndoShortcut() async {
-    if (!_isDesktopPlatform || !mounted) {
-      return;
-    }
+    if (!_isDesktopPlatform || !mounted) return;
     final restoredSoundId = await _notifier.undoLastRemoval();
-    if (!mounted || restoredSoundId == null) {
-      return;
-    }
+    if (!mounted || restoredSoundId == null) return;
     setState(() {
       _recentlyRestoredSoundId = restoredSoundId;
     });
     _scrollPadIntoView(restoredSoundId);
     unawaited(
       Future<void>.delayed(_padEmphasisDuration, () {
-        if (!mounted || _recentlyRestoredSoundId != restoredSoundId) {
-          return;
-        }
+        if (!mounted || _recentlyRestoredSoundId != restoredSoundId) return;
         setState(() {
           _recentlyRestoredSoundId = null;
         });
@@ -338,9 +414,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       ),
     );
     await _notifier.loadSounds();
-    if (!mounted || result == null) {
-      return;
-    }
+    if (!mounted || result == null) return;
     _emphasizePad(result.highlightPadId);
   }
 
@@ -348,9 +422,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     void tryScroll() {
       if (!mounted) return;
       final controller = _activeGridScrollController;
-      if (!controller.hasClients || controller.positions.length != 1) {
-        return;
-      }
+      if (!controller.hasClients || controller.positions.length != 1) return;
       final index = _notifier.state.pads.indexWhere((p) => p.pad.id == padId);
       if (index < 0 || _gridViewportWidth <= 0) return;
 
@@ -410,9 +482,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     _scrollPadIntoView(padId);
     unawaited(
       Future<void>.delayed(_padEmphasisDuration, () {
-        if (!mounted || _highlightedPadId != padId) {
-          return;
-        }
+        if (!mounted || _highlightedPadId != padId) return;
         setState(() {
           _highlightedPadId = null;
         });
@@ -706,20 +776,21 @@ class _SamplerScreenState extends State<SamplerScreen> {
         onAdvancedChanged: (isAdvanced) =>
             setState(() => _isMusicRegieAdvanced = isAdvanced),
         onChooseMusic: () => unawaited(_openMusicPicker()),
-      onTogglePlayPause: () =>
-          unawaited(_notifier.toggleCurrentMusicPlayback()),
-      onRestart: () => unawaited(_notifier.restartCurrentMusic()),
-      onSkipNext: () => unawaited(_notifier.skipToNextMusic()),
-      onStopCurrent: () => unawaited(_notifier.stopCurrentMusic()),
-      onClearQueue: () => unawaited(_notifier.clearMusicQueue()),
-      onPlayNextInQueue: () => unawaited(_notifier.playNextInQueueNow()),
-      onRemoveFromQueue: (padId) =>
-          unawaited(_notifier.removeFromMusicQueue(padId)),
-      onMusicVolumeChanged: (value) => unawaited(_notifier.setMusicVolume(value)),
-      onFadeOut: (duration) =>
-          unawaited(_notifier.fadeOutCurrentMusic(duration)),
-      onTransitionToNext: (duration) =>
-          unawaited(_notifier.crossfadeToNextMusic(duration)),
+        onTogglePlayPause: () =>
+            unawaited(_notifier.toggleCurrentMusicPlayback()),
+        onRestart: () => unawaited(_notifier.restartCurrentMusic()),
+        onSkipNext: () => unawaited(_notifier.skipToNextMusic()),
+        onStopCurrent: () => unawaited(_notifier.stopCurrentMusic()),
+        onClearQueue: () => unawaited(_notifier.clearMusicQueue()),
+        onPlayNextInQueue: () => unawaited(_notifier.playNextInQueueNow()),
+        onRemoveFromQueue: (padId) =>
+            unawaited(_notifier.removeFromMusicQueue(padId)),
+        onMusicVolumeChanged: (value) =>
+            unawaited(_notifier.setMusicVolume(value)),
+        onFadeOut: (duration) =>
+            unawaited(_notifier.fadeOutCurrentMusic(duration)),
+        onTransitionToNext: (duration) =>
+            unawaited(_notifier.crossfadeToNextMusic(duration)),
       ),
     );
   }
@@ -734,21 +805,22 @@ class _SamplerScreenState extends State<SamplerScreen> {
     super.dispose();
   }
 
+  // ---------- build ----------
+
   @override
   Widget build(BuildContext context) {
     final state = _notifier.state;
     final selectedBoard = state.selectedBoard;
     final boards = state.boards;
     final isBoardsLoading = state.isBoardsLoading;
+    final isDesktop = context.deviceClass.isDesktop;
 
     if (!isBoardsLoading &&
         boards.isEmpty &&
         !_didAutoOpenCreateForCurrentEmptyState) {
       _didAutoOpenCreateForCurrentEmptyState = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         unawaited(_createBoard());
       });
     } else if (boards.isNotEmpty && _didAutoOpenCreateForCurrentEmptyState) {
@@ -774,40 +846,49 @@ class _SamplerScreenState extends State<SamplerScreen> {
         child: Focus(
           autofocus: true,
           child: Scaffold(
-            key: _scaffoldKey,
-            appBar: _SamplerAppBar(
-              title: selectedBoard == null ? 'Scène' : selectedBoard.name,
-              isEditMode: _isEditMode,
-              canToggleEditMode: state.pads.isNotEmpty,
-              onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
-              onToggleEditMode: _toggleEditMode,
-            ),
-            drawer: _BoardsDrawer(
-              boards: boards,
-              selectedBoard: selectedBoard,
-              isBoardsLoading: isBoardsLoading,
-              onCreateBoard: _createBoard,
-              onSelectBoard: _selectBoard,
-              onBoardLongPress: _showBoardActions,
-              onOpenLibrary: () async {
+            key: isDesktop ? null : _scaffoldKey,
+            appBar: isDesktop
+                ? _SamplerDesktopAppBar(
+                    title: selectedBoard == null ? 'Scène' : selectedBoard.name,
+                    selectedBoard: selectedBoard,
+                    boards: boards,
+                    isBoardsLoading: isBoardsLoading,
+                    isEditMode: _isEditMode,
+                    canToggleEditMode: state.pads.isNotEmpty,
+                    onSelectBoard: _selectBoardDirect,
+                    onCreateBoard: _createBoard,
+                    onBoardContextMenu: selectedBoard != null
+                        ? (pos) => _showBoardContextMenu(selectedBoard, pos)
+                        : null,
+                    onToggleEditMode: _toggleEditMode,
+                    onOpenLibrary: _openLibrary,
+                    onOpenSettings: _openSettings,
+                  )
+                : _SamplerAppBar(
+                    title: selectedBoard == null ? 'Scène' : selectedBoard.name,
+                    isEditMode: _isEditMode,
+                    canToggleEditMode: state.pads.isNotEmpty,
+                    onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                    onToggleEditMode: _toggleEditMode,
+                  ),
+            drawer: isDesktop
+                ? null
+                : _BoardsDrawer(
+                    boards: boards,
+                    selectedBoard: selectedBoard,
+                    isBoardsLoading: isBoardsLoading,
+                    onSelectBoard: _selectBoard,
+                    onCreateBoard: _createBoard,
+                    onBoardLongPress: _showBoardActions,
+                    onOpenLibrary: () async {
                       Navigator.pop(context);
-                      await SoundLibraryManageScreen.open(
-                        context,
-                        database: _database,
-                      );
-                      await _notifier.loadSounds();
+                      await _openLibrary();
                     },
-              onOpenSettings: () async {
-                Navigator.pop(context);
-                await SettingsScreen.open(
-                  context,
-                  database: _database,
-                  libraryRepository: widget.services.libraryRepository,
-                  syncController: widget.services.syncController,
-                );
-                await _notifier.loadSounds();
-              },
-            ),
+                    onOpenSettings: () async {
+                      Navigator.pop(context);
+                      await _openSettings();
+                    },
+                  ),
             body: SafeArea(
               child: Stack(
                 children: [
@@ -823,7 +904,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
       ),
     );
   }
+
 }
+
+// ---------- AppBar (mobile/tablette) ----------
 
 class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -868,7 +952,7 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
             isEditMode ? Icons.done_rounded : Icons.grid_view_rounded,
             color: isEditMode ? scheme.primary : null,
           ),
-          tooltip: isEditMode ? 'Terminer l’édition' : 'Modifier la grille',
+          tooltip: isEditMode ? 'Terminer l\'édition' : 'Modifier la grille',
           onPressed: canToggleEditMode ? onToggleEditMode : null,
         ),
       ],
@@ -879,12 +963,110 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
 
+// ---------- Liste des scènes (drawer mobile/tablette) ----------
+
+class _BoardsList extends StatelessWidget {
+  final List<SoundBoard> boards;
+  final SoundBoard? selectedBoard;
+  final bool isBoardsLoading;
+  final Future<void> Function(SoundBoard board) onSelectBoard;
+  final Future<void> Function() onCreateBoard;
+  final Future<void> Function(SoundBoard board)? onBoardLongPress;
+  final Future<void> Function()? onOpenLibrary;
+  final Future<void> Function() onOpenSettings;
+
+  const _BoardsList({
+    required this.boards,
+    required this.selectedBoard,
+    required this.isBoardsLoading,
+    required this.onSelectBoard,
+    required this.onCreateBoard,
+    this.onBoardLongPress,
+    required this.onOpenLibrary,
+    required this.onOpenSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(
+            children: [
+              Icon(Icons.theater_comedy_rounded, color: scheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Scènes',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              if (isBoardsLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (boards.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Aucune scène',
+                    style: TextStyle(color: Colors.grey[700]),
+                  ),
+                )
+              else
+                ...boards.map(
+                  (board) => ListTile(
+                    title: Text(board.name),
+                    selected: selectedBoard?.id == board.id,
+                    onTap: () => onSelectBoard(board),
+                    onLongPress: onBoardLongPress == null
+                        ? null
+                        : () => onBoardLongPress!(board),
+                  ),
+                ),
+              ListTile(
+                leading: const Icon(Icons.add),
+                title: const Text('Nouvelle scène'),
+                onTap: () => onCreateBoard(),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        ListTile(
+          leading: const Icon(Icons.library_books_rounded),
+          title: const Text('Gérer la bibliothèque'),
+          onTap: onOpenLibrary == null ? null : () => onOpenLibrary!(),
+        ),
+        ListTile(
+          leading: const Icon(Icons.settings),
+          title: const Text('Paramètres'),
+          onTap: () => onOpenSettings(),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------- Drawer (mobile/tablette) ----------
+
 class _BoardsDrawer extends StatelessWidget {
   final List<SoundBoard> boards;
   final SoundBoard? selectedBoard;
   final bool isBoardsLoading;
-  final Future<void> Function() onCreateBoard;
   final Future<void> Function(SoundBoard board) onSelectBoard;
+  final Future<void> Function() onCreateBoard;
   final Future<void> Function(SoundBoard board) onBoardLongPress;
   final Future<void> Function()? onOpenLibrary;
   final Future<void> Function() onOpenSettings;
@@ -893,8 +1075,8 @@ class _BoardsDrawer extends StatelessWidget {
     required this.boards,
     required this.selectedBoard,
     required this.isBoardsLoading,
-    required this.onCreateBoard,
     required this.onSelectBoard,
+    required this.onCreateBoard,
     required this.onBoardLongPress,
     required this.onOpenLibrary,
     required this.onOpenSettings,
@@ -902,80 +1084,202 @@ class _BoardsDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Drawer(
       child: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Row(
-                children: [
-                  Icon(Icons.theater_comedy_rounded, color: scheme.primary),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Scènes',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  if (isBoardsLoading)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (boards.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        'Aucune scène',
-                        style: TextStyle(color: Colors.grey[700]),
-                      ),
-                    )
-                  else
-                    ...boards.map((board) {
-                      return ListTile(
-                        title: Text(board.name),
-                        selected: selectedBoard?.id == board.id,
-                        onLongPress: () => onBoardLongPress(board),
-                        onTap: () => onSelectBoard(board),
-                      );
-                    }),
-                  ListTile(
-                    leading: const Icon(Icons.add),
-                    title: const Text('Nouvelle scène'),
-                    onTap: () => onCreateBoard(),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.library_books_rounded),
-              title: const Text('Gérer la bibliothèque'),
-              onTap: onOpenLibrary == null
-                  ? null
-                  : () async {
-                      await onOpenLibrary!();
-                    },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Paramètres'),
-              onTap: () async {
-                await onOpenSettings();
-              },
-            ),
-          ],
+        child: _BoardsList(
+          boards: boards,
+          selectedBoard: selectedBoard,
+          isBoardsLoading: isBoardsLoading,
+          onSelectBoard: onSelectBoard,
+          onCreateBoard: onCreateBoard,
+          onBoardLongPress: onBoardLongPress,
+          onOpenLibrary: onOpenLibrary,
+          onOpenSettings: onOpenSettings,
         ),
       ),
     );
   }
 }
+
+// ---------- AppBar desktop ----------
+
+class _SamplerDesktopAppBar extends StatelessWidget
+    implements PreferredSizeWidget {
+  final String title;
+  final SoundBoard? selectedBoard;
+  final List<SoundBoard> boards;
+  final bool isBoardsLoading;
+  final bool isEditMode;
+  final bool canToggleEditMode;
+  final Future<void> Function(SoundBoard board) onSelectBoard;
+  final Future<void> Function() onCreateBoard;
+  final Future<void> Function(Offset position)? onBoardContextMenu;
+  final VoidCallback onToggleEditMode;
+  final Future<void> Function() onOpenLibrary;
+  final Future<void> Function() onOpenSettings;
+
+  const _SamplerDesktopAppBar({
+    required this.title,
+    required this.selectedBoard,
+    required this.boards,
+    required this.isBoardsLoading,
+    required this.isEditMode,
+    required this.canToggleEditMode,
+    required this.onSelectBoard,
+    required this.onCreateBoard,
+    required this.onBoardContextMenu,
+    required this.onToggleEditMode,
+    required this.onOpenLibrary,
+    required this.onOpenSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AppBar(
+      leading: _BoardsMenuButton(
+        boards: boards,
+        selectedBoard: selectedBoard,
+        isBoardsLoading: isBoardsLoading,
+        onSelectBoard: onSelectBoard,
+        onCreateBoard: onCreateBoard,
+        onOpenLibrary: onOpenLibrary,
+        onOpenSettings: onOpenSettings,
+      ),
+      title: GestureDetector(
+        onSecondaryTapDown: onBoardContextMenu != null
+            ? (details) => onBoardContextMenu!(details.globalPosition)
+            : null,
+        child: Tooltip(
+          message:
+              onBoardContextMenu != null ? 'Clic droit pour les actions…' : '',
+          child: Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(
+          color: scheme.outlineVariant.withValues(alpha: 0.35),
+          height: 1,
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: Icon(
+            isEditMode ? Icons.done_rounded : Icons.grid_view_rounded,
+            color: isEditMode ? scheme.primary : null,
+          ),
+          tooltip: isEditMode ? 'Terminer l\'édition' : 'Modifier la grille',
+          onPressed: canToggleEditMode ? onToggleEditMode : null,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+}
+
+// ---------- Menu popup scènes (desktop) ----------
+
+class _BoardsMenuButton extends StatelessWidget {
+  final List<SoundBoard> boards;
+  final SoundBoard? selectedBoard;
+  final bool isBoardsLoading;
+  final Future<void> Function(SoundBoard board) onSelectBoard;
+  final Future<void> Function() onCreateBoard;
+  final Future<void> Function() onOpenLibrary;
+  final Future<void> Function() onOpenSettings;
+
+  const _BoardsMenuButton({
+    required this.boards,
+    required this.selectedBoard,
+    required this.isBoardsLoading,
+    required this.onSelectBoard,
+    required this.onCreateBoard,
+    required this.onOpenLibrary,
+    required this.onOpenSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<Object>(
+      tooltip: 'Scènes',
+      icon: const Icon(Icons.menu_rounded),
+      itemBuilder: (context) => [
+        if (isBoardsLoading)
+          const PopupMenuItem<Object>(
+            enabled: false,
+            child: Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          )
+        else if (boards.isEmpty)
+          const PopupMenuItem<Object>(
+            enabled: false,
+            child: Text('Aucune scène'),
+          )
+        else
+          ...boards.map(
+            (board) => CheckedPopupMenuItem<Object>(
+              value: board,
+              checked: selectedBoard?.id == board.id,
+              child: Text(board.name),
+            ),
+          ),
+        const PopupMenuItem<Object>(
+          value: 'create',
+          child: Row(
+            children: [
+              Icon(Icons.add, size: 18),
+              SizedBox(width: AppSpacing.sm),
+              Text('Nouvelle scène'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem<Object>(
+          value: 'library',
+          child: Row(
+            children: [
+              Icon(Icons.library_books_rounded, size: 18),
+              SizedBox(width: AppSpacing.sm),
+              Text('Gérer la bibliothèque'),
+            ],
+          ),
+        ),
+        const PopupMenuItem<Object>(
+          value: 'settings',
+          child: Row(
+            children: [
+              Icon(Icons.settings, size: 18),
+              SizedBox(width: AppSpacing.sm),
+              Text('Paramètres'),
+            ],
+          ),
+        ),
+      ],
+      onSelected: (value) async {
+        if (value is SoundBoard) {
+          await onSelectBoard(value);
+        } else if (value == 'create') {
+          await onCreateBoard();
+        } else if (value == 'library') {
+          await onOpenLibrary();
+        } else if (value == 'settings') {
+          await onOpenSettings();
+        }
+      },
+    );
+  }
+}
+

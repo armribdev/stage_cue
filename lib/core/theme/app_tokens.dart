@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
 
-/// Échelle de rayons harmonisée — sobre, pensée pour un rendu "outil pro"
-/// plutôt que les arrondis prononcés du Material 3 mobile.
+/// Échelle de rayons harmonisée — sobre, desktop-first.
 ///
-/// Remplace les valeurs dispersées (4, 6, 8, 12, 14, 16, 18, 20) trouvées
-/// dans le code historique : toute nouvelle surface doit piocher ici.
+/// Valeurs intentionnellement basses : on évite le look "app mobile arrondie"
+/// au profit d'un rendu d'outil pro (proche VS Code / Figma).
 abstract final class AppRadius {
   /// Petits éléments : chips, badges, barres de progression.
-  static const double xs = 4;
+  static const double xs = 2;
 
   /// Champs de saisie, boutons, petites cartes.
-  static const double sm = 8;
+  static const double sm = 4;
 
   /// Cartes standard, pads, tuiles de liste.
-  static const double md = 10;
+  static const double md = 6;
 
   /// Conteneurs majeurs : dialogues, modales, panneaux.
-  static const double lg = 12;
+  static const double lg = 8;
 
   static const BorderRadius radiusXs = BorderRadius.all(Radius.circular(xs));
   static const BorderRadius radiusSm = BorderRadius.all(Radius.circular(sm));

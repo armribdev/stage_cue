@@ -67,6 +67,21 @@ raccourcis clavier pour les actions fréquentes (cf. `Shortcuts`/`Actions` déj�
 en place pour Ctrl+Z dans `sampler_screen.dart`), et tooltips sur les icônes
 sans libellé.
 
+## Pattern de référence : sampler_screen (desktop-first)
+
+Premier usage concret de `AdaptiveLayout`/`DeviceClass` dans l'app :
+
+| Aspect | Phone/Tablet | Desktop (≥1200px) |
+|---|---|---|
+| Navigation | `Drawer` plein écran + `AppBar` + bouton hamburger | Sidebar persistante `_SamplerSidebar` (264px) + `_SamplerToolbar` (48px) |
+| Changer de scène | Ouvrir le drawer, taper sur la scène, le drawer se ferme | Taper directement dans la sidebar (toujours visible) |
+| Actions scène (renommer…) | Long press → `showModalBottomSheet` | Clic droit → `showMenu` (popup contextuel) |
+| Structure | `Scaffold(appBar, drawer, body)` | `Scaffold(body: Row([sidebar, Expanded(Column([toolbar, content]))]))` |
+
+Les futures refontes d'écran (bibliothèque, settings, sync) doivent **suivre ce
+pattern** — `AdaptiveLayout(phone: ..., desktop: ...)`, sidebar ou contenu
+persistent sur desktop, menu contextuel à la place du long press.
+
 ## Quand documenter un nouveau pattern
 
 Dès qu'un écran introduit une nouvelle variante de layout responsive ou une
