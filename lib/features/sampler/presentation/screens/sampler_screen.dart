@@ -488,6 +488,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
         builder: (context) => SoundLibraryScreen(
           database: _database,
           boardId: board.id,
+          libraryRepository: widget.services.libraryRepository,
         ),
       ),
     );
@@ -837,11 +838,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
   Widget _buildMusicPreviewPanel(BuildContext context, SamplerState state) {
     return MusicPreviewPanel(
       state: state,
-      isLandscapeExpanded:
-          MediaQuery.orientationOf(context) == Orientation.landscape,
-      onToggleExpanded: () => _notifier.setMusicPanelExpanded(
-        !state.isMusicPanelExpanded,
-      ),
       onChooseMusic: () => unawaited(_openMusicPicker()),
       onTogglePlayPause: () =>
           unawaited(_notifier.toggleCurrentMusicPlayback()),
@@ -866,40 +862,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
         _notifier.crossfadeToNextMusic(MusicCrossfadeDuration.long),
       ),
     );
-  }
-
-  Widget _buildBodyLayout(BuildContext context, SamplerState state) {
-    final content = _buildSamplerContent(context, state);
-    final isLandscape =
-        MediaQuery.orientationOf(context) == Orientation.landscape;
-
-    if (state.isMusicPanelExpanded && isLandscape) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(child: content),
-          SizedBox(
-            width: 340,
-            child: _buildMusicPreviewPanel(context, state),
-          ),
-        ],
-      );
-    }
-
-    if (state.isMusicPanelExpanded) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(flex: 3, child: content),
-          Expanded(
-            flex: 2,
-            child: _buildMusicPreviewPanel(context, state),
-          ),
-        ],
-      );
-    }
-
-    return content;
   }
 
   @override
@@ -993,18 +955,24 @@ class _SamplerScreenState extends State<SamplerScreen> {
               },
             ),
             body: SafeArea(
-              child: _buildBodyLayout(context, state),
-            ),
-            bottomNavigationBar: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!state.isMusicPanelExpanded)
-                  _buildMusicPreviewPanel(context, state),
-                _MasterVolumeBar(
-                  masterVolume: masterVolume,
-                  onChanged: (value) => _notifier.setMasterVolume(value),
-                ),
-              ],
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: _buildSamplerContent(context, state),
+                        ),
+                        _buildMusicPreviewPanel(context, state),
+                      ],
+                    ),
+                  ),
+                  _MasterVolumeBar(
+                    masterVolume: masterVolume,
+                    onChanged: (value) => _notifier.setMasterVolume(value),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

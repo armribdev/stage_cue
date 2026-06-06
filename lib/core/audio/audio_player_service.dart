@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
@@ -22,11 +24,21 @@ class AudioPlayerService {
 
   /// Crée un service en préchargeant le fichier audio (latence minimale au play)
   static Future<AudioPlayerService> create(String filePath) async {
-    final source = await SoLoud.instance.loadFile(
-      filePath,
-      mode: LoadMode.memory,
-    );
-    return AudioPlayerService._(source);
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw StateError('Fichier audio introuvable : $filePath');
+    }
+
+    final path = file.absolute.path;
+    try {
+      final source = await SoLoud.instance.loadFile(
+        path,
+        mode: LoadMode.memory,
+      );
+      return AudioPlayerService._(source);
+    } catch (e) {
+      throw StateError('Impossible de charger le fichier audio : $path ($e)');
+    }
   }
 
   /// Joue le son (quasi instantané car préchargé)

@@ -4,6 +4,7 @@ import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/utils/string_utils.dart';
+import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -29,11 +30,13 @@ const int kMinPreciseSoundLibrarySearchLength = 5;
 class SoundLibraryScreen extends StatefulWidget {
   final db.AppDatabase database;
   final int boardId;
+  final LibraryRepository? libraryRepository;
 
   const SoundLibraryScreen({
     super.key,
     required this.database,
     required this.boardId,
+    this.libraryRepository,
   });
 
   @override
@@ -114,6 +117,12 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     _previewingSoundId = null;
   }
 
+  Future<String> _resolvePlayablePath(Sound sound) async {
+    final libraryRepository = widget.libraryRepository;
+    if (libraryRepository == null) return sound.filePath;
+    return libraryRepository.resolvePlayablePath(sound);
+  }
+
   Future<void> _playPreview(Sound sound) async {
     try {
       if (_previewingSoundId == sound.id && _previewPlayer?.isPlaying == true) {
@@ -122,7 +131,8 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
         return;
       }
       await _stopPreview();
-      final player = await AudioPlayerService.create(sound.filePath);
+      final path = await _resolvePlayablePath(sound);
+      final player = await AudioPlayerService.create(path);
       player.setVolume(sound.volume);
       await player.play();
       if (!mounted) {
