@@ -159,6 +159,20 @@ class _MusicRegieDrawer extends StatelessWidget {
       }
     }
 
+    final toolbar = _RegieToolbarRow(
+      volume: musicVolume,
+      onVolumeChanged: onMusicVolumeChanged,
+      isPlaying: isPlaying,
+      hasCurrent: current != null,
+      hasQueue: queue.isNotEmpty,
+      showTransition: isPlaying || queue.isNotEmpty,
+      transitionDuration: transitionDuration,
+      onTransitionDurationChanged: onTransitionDurationChanged,
+      onChooseMusic: onChooseMusic,
+      onTogglePlayPause: handlePauseToggle,
+      onSkipNext: handleSkipNext,
+    );
+
     return Material(
       color: scheme.surfaceContainerLow,
       shape: const RoundedRectangleBorder(
@@ -213,7 +227,7 @@ class _MusicRegieDrawer extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  if (!isAdvanced)
+                  if (!isAdvanced) ...[
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -245,38 +259,41 @@ class _MusicRegieDrawer extends StatelessWidget {
                           ),
                         ),
                       ],
-                    )
-                  else ...[
-                    _OnAirCard(
-                      padItem: current,
-                      isPlaying: isPlaying,
-                      onStop: onStopCurrent,
-                      onRestart: onRestart,
                     ),
-                    const SizedBox(height: 12),
-                    _PassageQueueSection(
-                      queue: queue,
-                      onPlayNext:
-                          queue.isNotEmpty ? onPlayNextInQueue : null,
-                      onClear: queue.isNotEmpty ? onClearQueue : null,
-                      onRemove: onRemoveFromQueue,
-                      onChooseMusic: onChooseMusic,
+                    const SizedBox(height: 8),
+                    toolbar,
+                  ] else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _OnAirCard(
+                                padItem: current,
+                                isPlaying: isPlaying,
+                                onStop: onStopCurrent,
+                                onRestart: onRestart,
+                              ),
+                              const SizedBox(height: 12),
+                              toolbar,
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _PassageQueueSection(
+                            queue: queue,
+                            onPlayNext:
+                                queue.isNotEmpty ? onPlayNextInQueue : null,
+                            onClear: queue.isNotEmpty ? onClearQueue : null,
+                            onRemove: onRemoveFromQueue,
+                            onChooseMusic: onChooseMusic,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                  const SizedBox(height: 8),
-                  _RegieToolbarRow(
-                    volume: musicVolume,
-                    onVolumeChanged: onMusicVolumeChanged,
-                    isPlaying: isPlaying,
-                    hasCurrent: current != null,
-                    hasQueue: queue.isNotEmpty,
-                    showTransition: isPlaying || queue.isNotEmpty,
-                    transitionDuration: transitionDuration,
-                    onTransitionDurationChanged: onTransitionDurationChanged,
-                    onChooseMusic: onChooseMusic,
-                    onTogglePlayPause: handlePauseToggle,
-                    onSkipNext: handleSkipNext,
-                  ),
                 ],
               ),
             ),
