@@ -42,22 +42,25 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
     _loadSounds();
   }
 
+  String _soundSortLabel(Sound sound) =>
+      normalizeForSearch(sound.displayName ?? sound.title);
+
   Future<void> _loadSounds() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final allSounds = await _repository.getAllSounds();
-      final availableSounds = allSounds
-          .where((sound) => sound.type == SoundType.soundEffect)
-          .toList();
+      final allSounds = List<Sound>.from(await _repository.getAllSounds())
+        ..sort(
+          (a, b) => _soundSortLabel(a).compareTo(_soundSortLabel(b)),
+        );
 
       setState(() {
-        _availableSounds = availableSounds;
+        _availableSounds = allSounds;
         _isLoading = false;
       });
-      await _loadTagsForSounds(availableSounds);
+      await _loadTagsForSounds(allSounds);
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -675,14 +678,14 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
         defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.linux;
     return Scaffold(
-      appBar: AppBar(title: const Text('Bibliothèque des sons')),
+      appBar: AppBar(title: const Text('Gérer la bibliothèque')),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
               decoration: InputDecoration(
-                hintText: 'Rechercher un bruitage...',
+                hintText: 'Rechercher un son...',
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -705,8 +708,8 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
                   ? Center(
                       child: Text(
                         _searchQuery.isEmpty
-                            ? 'Aucun bruitage disponible'
-                            : 'Aucun bruitage trouvé',
+                            ? 'Aucun son disponible'
+                            : 'Aucun son trouvé',
                       ),
                     )
                   : ListView.builder(
