@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' show max, min;
+import 'dart:math' show max;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +9,7 @@ import '../providers/sampler_provider.dart';
 import '../widgets/pad_item.dart' show PadCard;
 import '../widgets/music_preview_panel.dart';
 import '../widgets/music_picker_sheet.dart';
+import '../widgets/app_form_dialog.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
@@ -125,64 +126,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
 
     final suggestedName = _buildSuggestedBoardName(_notifier.state.boards);
-    final nameController = TextEditingController();
-    final nameFocusNode = FocusNode();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        final scheme = Theme.of(dialogContext).colorScheme;
-        final dialogWidth = min(
-          560.0,
-          MediaQuery.of(dialogContext).size.width - 48,
-        );
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (nameFocusNode.canRequestFocus && !nameFocusNode.hasFocus) {
-            nameFocusNode.requestFocus();
-          }
-        });
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 24,
-            vertical: 24,
-          ),
-          titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 10),
-          contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 10),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
-          buttonPadding: const EdgeInsets.symmetric(horizontal: 8),
-          title: const Text('Nouvelle scène'),
-          content: SizedBox(
-            width: dialogWidth,
-            child: TextField(
-              controller: nameController,
-              focusNode: nameFocusNode,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) =>
-                  Navigator.of(dialogContext).pop(nameController.text.trim()),
-              decoration: InputDecoration(
-                hintText: suggestedName,
-                prefixIcon: Icon(
-                  Icons.auto_awesome_rounded,
-                  color: scheme.primary.withValues(alpha: 0.9),
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(nameController.text.trim()),
-              child: const Text('Créer'),
-            ),
-          ],
-        );
-      },
+    final name = await AppTextInputDialog.show(
+      context,
+      title: 'Nouvelle scène',
+      confirmLabel: 'Créer',
+      hint: suggestedName,
+      icon: Icons.auto_awesome_rounded,
     );
-    nameController.dispose();
-    nameFocusNode.dispose();
 
     final trimmedName = name?.trim();
     if (trimmedName == null || !mounted) {
@@ -274,61 +224,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   Future<void> _renameBoard(SoundBoard board) async {
-    final nameController = TextEditingController(text: board.name);
-    final nameFocusNode = FocusNode();
-    final dialogWidth = min(560.0, MediaQuery.of(context).size.width - 48);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        final scheme = Theme.of(dialogContext).colorScheme;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (nameFocusNode.canRequestFocus && !nameFocusNode.hasFocus) {
-            nameFocusNode.requestFocus();
-          }
-        });
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 24,
-            vertical: 24,
-          ),
-          titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 10),
-          contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 10),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
-          buttonPadding: const EdgeInsets.symmetric(horizontal: 8),
-          title: const Text('Renommer la scène'),
-          content: SizedBox(
-            width: dialogWidth,
-            child: TextField(
-              controller: nameController,
-              focusNode: nameFocusNode,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) =>
-                  Navigator.of(dialogContext).pop(nameController.text.trim()),
-              decoration: InputDecoration(
-                hintText: board.name,
-                prefixIcon: Icon(
-                  Icons.text_fields_rounded,
-                  color: scheme.primary.withValues(alpha: 0.9),
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(nameController.text.trim()),
-              child: const Text('Renommer'),
-            ),
-          ],
-        );
-      },
+    final name = await AppTextInputDialog.show(
+      context,
+      title: 'Renommer la scène',
+      confirmLabel: 'Renommer',
+      initialValue: board.name,
+      hint: board.name,
+      icon: Icons.text_fields_rounded,
     );
-    nameController.dispose();
-    nameFocusNode.dispose();
 
     final trimmedName = name?.trim();
     if (trimmedName == null ||
@@ -351,61 +254,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
       board.name,
       _notifier.state.boards,
     );
-    final nameController = TextEditingController(text: suggestedName);
-    final nameFocusNode = FocusNode();
-    final dialogWidth = min(560.0, MediaQuery.of(context).size.width - 48);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        final scheme = Theme.of(dialogContext).colorScheme;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (nameFocusNode.canRequestFocus && !nameFocusNode.hasFocus) {
-            nameFocusNode.requestFocus();
-          }
-        });
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 24,
-            vertical: 24,
-          ),
-          titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 10),
-          contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 10),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
-          buttonPadding: const EdgeInsets.symmetric(horizontal: 8),
-          title: const Text('Dupliquer la scène'),
-          content: SizedBox(
-            width: dialogWidth,
-            child: TextField(
-              controller: nameController,
-              focusNode: nameFocusNode,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) =>
-                  Navigator.of(dialogContext).pop(nameController.text.trim()),
-              decoration: InputDecoration(
-                hintText: suggestedName,
-                prefixIcon: Icon(
-                  Icons.copy_rounded,
-                  color: scheme.primary.withValues(alpha: 0.9),
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(nameController.text.trim()),
-              child: const Text('Dupliquer'),
-            ),
-          ],
-        );
-      },
+    final name = await AppTextInputDialog.show(
+      context,
+      title: 'Dupliquer la scène',
+      confirmLabel: 'Dupliquer',
+      initialValue: suggestedName,
+      hint: suggestedName,
+      icon: Icons.copy_rounded,
     );
-    nameController.dispose();
-    nameFocusNode.dispose();
 
     final trimmedName = name?.trim();
     if (trimmedName == null || trimmedName.isEmpty) {
@@ -422,29 +278,15 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   Future<void> _deleteBoard(SoundBoard board) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Supprimer la scène'),
-          content: Text(
-            'Supprimer "${board.name}" ? Cette action est irréversible.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Annuler'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Supprimer'),
-            ),
-          ],
-        );
-      },
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: 'Supprimer la scène',
+      message: 'Supprimer "${board.name}" ? Cette action est irréversible.',
+      confirmLabel: 'Supprimer',
+      isDestructive: true,
     );
 
-    if (confirmed != true) {
+    if (!confirmed) {
       return;
     }
 
