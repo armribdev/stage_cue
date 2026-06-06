@@ -111,6 +111,12 @@ class AudioPlayerService {
   /// Obtient la durée du fichier audio
   Duration get duration => SoLoud.instance.getLength(_source);
 
+  /// Position actuelle de lecture (0 si aucun handle actif).
+  Duration get position {
+    if (!_hasActiveHandle) return Duration.zero;
+    return SoLoud.instance.getPosition(_currentHandle!);
+  }
+
   /// Indique si le son est actuellement en cours de lecture
   bool get isPlaying =>
       _currentHandle != null &&

@@ -60,6 +60,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   int? _highlightedPadId;
   bool _didAutoOpenCreateForCurrentEmptyState = false;
   bool _isMusicRegieAdvanced = false;
+  bool _isMusicRegieLocked = false;
 
   static const _musicRegieTapGroup = 'music-regie-dismiss';
 
@@ -765,7 +766,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   Widget _buildMusicPreviewPanel(BuildContext context, SamplerState state) {
     return TapRegion(
       groupId: _musicRegieTapGroup,
-      onTapOutside: _isMusicRegieAdvanced
+      onTapOutside: _isMusicRegieAdvanced && !_isMusicRegieLocked
           ? (_) => setState(() => _isMusicRegieAdvanced = false)
           : null,
       child: MusicPreviewPanel(
@@ -773,20 +774,25 @@ class _SamplerScreenState extends State<SamplerScreen> {
         musicVolume: _notifier.musicVolume,
         resolveMusicPad: _notifier.resolveMusicPad,
         isAdvanced: _isMusicRegieAdvanced,
-        onAdvancedChanged: (isAdvanced) =>
-            setState(() => _isMusicRegieAdvanced = isAdvanced),
+        isDesktop: _isDesktopPlatform,
+        isLocked: _isMusicRegieLocked,
+        onLockedChanged: _isDesktopPlatform
+            ? (locked) => setState(() => _isMusicRegieLocked = locked)
+            : null,
+        onAdvancedChanged: (isAdvanced) => setState(() {
+          _isMusicRegieAdvanced = isAdvanced;
+          if (!isAdvanced) _isMusicRegieLocked = false;
+        }),
         onChooseMusic: () => unawaited(_openMusicPicker()),
         onTogglePlayPause: () =>
             unawaited(_notifier.toggleCurrentMusicPlayback()),
-        onRestart: () => unawaited(_notifier.restartCurrentMusic()),
         onSkipNext: () => unawaited(_notifier.skipToNextMusic()),
-        onStopCurrent: () => unawaited(_notifier.stopCurrentMusic()),
-        onClearQueue: () => unawaited(_notifier.clearMusicQueue()),
-        onPlayNextInQueue: () => unawaited(_notifier.playNextInQueueNow()),
         onRemoveFromQueue: (padId) =>
             unawaited(_notifier.removeFromMusicQueue(padId)),
+        onReorderMusicQueue: _notifier.reorderMusicQueue,
         onMusicVolumeChanged: (value) =>
-            unawaited(_notifier.setMusicVolume(value)),
+            unawaited(_notifier.setMusicVolume(value, smooth: true)),
+        onToggleMusicMute: () => unawaited(_notifier.toggleMusicMute()),
         onFadeOut: (duration) =>
             unawaited(_notifier.fadeOutCurrentMusic(duration)),
         onTransitionToNext: (duration) =>

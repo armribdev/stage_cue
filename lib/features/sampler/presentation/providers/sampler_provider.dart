@@ -140,6 +140,8 @@ class SamplerNotifier extends ChangeNotifier {
 
   int? _activeBoardId;
   double _musicVolume = 1.0;
+  double _musicVolumeBeforeMute = 1.0;
+  static const _musicVolumeSliderFadeDuration = Duration(milliseconds: 120);
   _RemovedPadSnapshot? _lastRemovedPad;
   final _random = Random();
   bool _skipMusicAutoAdvance = false;
@@ -589,15 +591,19 @@ class SamplerNotifier extends ChangeNotifier {
     final padItem = await _ensureMusicPadForSound(soundId);
     if (padItem == null) return null;
 
-    if (_state.currentMusicPad?.pad.id == padItem.pad.id &&
-        (_state.currentMusicPad?.isPlaying ?? false)) {
+    final padId = padItem.pad.id;
+    final current = _state.currentMusicPad;
+
+    if (current?.pad.id == padId && (current?.isPlaying ?? false)) {
+      return padItem;
+    }
+    if (_state.musicQueuePadIds.contains(padId)) {
       return padItem;
     }
 
-    final current = _state.currentMusicPad;
-    if (current != null &&
-        current.isPlaying &&
-        current.pad.id != padItem.pad.id) {
+    final shouldEnqueue = (current != null && current.isPlaying) ||
+        _state.musicQueuePadIds.isNotEmpty;
+    if (shouldEnqueue) {
       enqueueMusicPad(padItem);
       return padItem;
     }
@@ -763,6 +769,18 @@ class SamplerNotifier extends ChangeNotifier {
     _removeFromMusicQueue(padId);
   }
 
+  void reorderMusicQueue(int oldIndex, int newIndex) {
+    final ids = List<int>.from(_state.musicQueuePadIds);
+    if (oldIndex < 0 || oldIndex >= ids.length) return;
+    if (newIndex < 0 || newIndex >= ids.length) return;
+    if (oldIndex == newIndex) return;
+
+    final moved = ids.removeAt(oldIndex);
+    ids.insert(newIndex, moved);
+    _state = _state.copyWith(musicQueuePadIds: ids);
+    notifyListeners();
+  }
+
   Future<void> clearMusicQueue() async {
     if (_state.musicQueuePadIds.isEmpty) return;
     _state = _state.copyWith(clearMusicQueue: true);
@@ -826,24 +844,24 @@ class SamplerNotifier extends ChangeNotifier {
 
   /// Enchaîne vers la musique suivante en file, avec un fondu enchaîné.
   /// Une durée nulle passe directement à la suivante.
+  /// « À l'antenne » n'est mis à jour qu'à la fin du fondu.
   Future<void> crossfadeToNextMusic(Duration duration) async {
     if (_state.musicQueuePadIds.isEmpty) return;
 
-    final current = _state.currentMusicPad;
-    if (duration == Duration.zero || current == null || !current.isPlaying) {
+    if (duration == Duration.zero) {
       await playNextInQueueNow();
       return;
     }
 
-    final nextId = _state.musicQueuePadIds.first;
-    final next = _resolvePadItem(nextId);
-    if (next == null || next.players.isEmpty) {
-      _state = _state.copyWith(
-        musicQueuePadIds: _state.musicQueuePadIds.sublist(1),
-      );
-      notifyListeners();
+    final current = _state.currentMusicPad;
+    if (current == null || !current.isPlaying) {
+      await _fadeInNextFromQueue(duration);
       return;
     }
+
+    final nextId = _state.musicQueuePadIds.first;
+    final next = await _prepareNextQueuedMusic(nextId);
+    if (next == null) return;
 
     final currentPlayer = current.currentPlayer;
     if (currentPlayer == null) return;
@@ -851,12 +869,10 @@ class SamplerNotifier extends ChangeNotifier {
     final soundIndex = _pickSoundIndex(next);
     final nextPlayer = next.players[soundIndex];
     final targetVolume = _effectiveVolume(next);
-    final crossfadeDuration = duration;
 
     _skipMusicAutoAdvance = true;
     try {
       _state = _state.copyWith(
-        currentMusicPad: next,
         musicQueuePadIds: _state.musicQueuePadIds.sublist(1),
       );
       notifyListeners();
@@ -865,20 +881,88 @@ class SamplerNotifier extends ChangeNotifier {
       next._currentPlayerIndex = soundIndex;
       next.isPlaying = true;
 
-      currentPlayer.fadeVolumeTo(0, crossfadeDuration);
-      nextPlayer.fadeVolumeTo(targetVolume, crossfadeDuration);
+      currentPlayer.fadeVolumeTo(0, duration);
+      nextPlayer.fadeVolumeTo(targetVolume, duration);
 
-      await Future<void>.delayed(crossfadeDuration);
+      await Future<void>.delayed(duration);
 
       if (currentPlayer.isPlaying) {
         await currentPlayer.stop();
       }
       current.isPlaying = false;
       current._currentPlayerIndex = null;
+
+      _state = _state.copyWith(currentMusicPad: next);
+      notifyListeners();
     } finally {
       _skipMusicAutoAdvance = false;
     }
-    notifyListeners();
+  }
+
+  /// Lance la tête de file avec fondu entrant — sans couper l'antenne avant la fin.
+  Future<void> _fadeInNextFromQueue(Duration duration) async {
+    if (_state.musicQueuePadIds.isEmpty) return;
+
+    final nextId = _state.musicQueuePadIds.first;
+    final next = await _prepareNextQueuedMusic(nextId);
+    if (next == null) return;
+
+    final previous = _state.currentMusicPad;
+
+    _skipMusicAutoAdvance = true;
+    try {
+      _state = _state.copyWith(
+        musicQueuePadIds: _state.musicQueuePadIds.sublist(1),
+      );
+      notifyListeners();
+
+      final soundIndex = _pickSoundIndex(next);
+      final nextPlayer = next.players[soundIndex];
+      final targetVolume = _effectiveVolume(next);
+
+      await nextPlayer.playAtVolume(0);
+      next._currentPlayerIndex = soundIndex;
+      next.isPlaying = true;
+      nextPlayer.fadeVolumeTo(targetVolume, duration);
+
+      await Future<void>.delayed(duration);
+
+      if (previous != null && previous.pad.id != next.pad.id) {
+        await previous.currentPlayer?.stop();
+        previous.isPlaying = false;
+        previous._currentPlayerIndex = null;
+      }
+
+      _state = _state.copyWith(currentMusicPad: next);
+      notifyListeners();
+    } finally {
+      _skipMusicAutoAdvance = false;
+    }
+  }
+
+  /// Retire [nextId] de la file si introuvable ; charge les lecteurs sinon.
+  Future<PadItem?> _prepareNextQueuedMusic(int nextId) async {
+    final next = _resolvePadItem(nextId);
+    if (next == null) {
+      _state = _state.copyWith(
+        musicQueuePadIds: _state.musicQueuePadIds.sublist(1),
+      );
+      notifyListeners();
+      return null;
+    }
+
+    if (next.players.isEmpty) {
+      await _loadPlayersForPad(next, next.pad);
+      if (next.players.isEmpty) {
+        _state = _state.copyWith(
+          musicQueuePadIds: _state.musicQueuePadIds.sublist(1),
+        );
+        notifyListeners();
+        return null;
+      }
+    }
+
+    return next;
   }
 
   Future<void> toggleCurrentMusicPlayback() async {
@@ -1029,17 +1113,58 @@ class SamplerNotifier extends ChangeNotifier {
     );
   }
 
-  /// Volume global de la musique — n'affecte que les pads musique.
-  Future<void> setMusicVolume(double value) async {
-    final clamped = value.clamp(0.0, 1.0);
-    if (_musicVolume == clamped) return;
-    _musicVolume = clamped;
+  void _applyMusicVolumeToPlayingPads({bool smooth = false}) {
     for (final padItem in _state.pads) {
       if (padItem.isPlaying && padItem.pad.isMusicPad) {
-        padItem.currentPlayer?.setVolume(_effectiveVolume(padItem));
+        _applyEffectiveVolumeToPlayer(padItem, smooth: smooth);
       }
     }
+    for (final padItem in _offStageMusicPads.values) {
+      if (padItem.isPlaying) {
+        _applyEffectiveVolumeToPlayer(padItem, smooth: smooth);
+      }
+    }
+  }
+
+  void _applyEffectiveVolumeToPlayer(
+    PadItem padItem, {
+    bool smooth = false,
+  }) {
+    final player = padItem.currentPlayer;
+    if (player == null) return;
+
+    final volume = _effectiveVolume(padItem);
+    if (smooth) {
+      player.fadeVolumeTo(volume, _musicVolumeSliderFadeDuration);
+    } else {
+      player.setVolume(volume);
+    }
+  }
+
+  /// Volume global de la musique — n'affecte que les pads musique.
+  ///
+  /// [smooth] : fondu court via SoLoud (slider) ; instantané pour mute, etc.
+  Future<void> setMusicVolume(double value, {bool smooth = false}) async {
+    final clamped = value.clamp(0.0, 1.0);
+    if (_musicVolume == clamped) return;
+    if (clamped > 0) {
+      _musicVolumeBeforeMute = clamped;
+    }
+    _musicVolume = clamped;
+    _applyMusicVolumeToPlayingPads(smooth: smooth);
     notifyListeners();
+  }
+
+  /// Coupe ou rétablit le volume musique global.
+  Future<void> toggleMusicMute() async {
+    if (_musicVolume > 0) {
+      _musicVolumeBeforeMute = _musicVolume;
+      await setMusicVolume(0);
+      return;
+    }
+    await setMusicVolume(
+      _musicVolumeBeforeMute > 0 ? _musicVolumeBeforeMute : 1.0,
+    );
   }
 
   Future<void> stopAllSounds() async {

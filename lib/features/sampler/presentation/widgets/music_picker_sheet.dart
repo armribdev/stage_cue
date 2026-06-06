@@ -86,6 +86,17 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
     );
   }
 
+  PadItem? _padItemForSound(Sound sound) {
+    return widget.notifier.findMusicPadForSound(sound.id);
+  }
+
+  bool _isOnAir(Sound sound) {
+    final padItem = _padItemForSound(sound);
+    if (padItem == null) return false;
+    final current = widget.notifier.state.currentMusicPad;
+    return current?.pad.id == padItem.pad.id && (current?.isPlaying ?? false);
+  }
+
   bool _isQueued(Sound sound) {
     final padItem = _padItemForSound(sound);
     if (padItem == null) return false;
@@ -103,13 +114,29 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
   }
 
   Future<void> _enqueue(Sound sound) async {
+    final wasOnAir = _isOnAir(sound);
+    final wasQueued = _isQueued(sound);
+
     final padItem = await widget.notifier.enqueueMusicBySoundId(sound.id);
     if (!mounted) return;
     if (padItem == null) {
       _showPlaybackError();
       return;
     }
-    Navigator.pop(context);
+
+    if (wasOnAir || wasQueued) return;
+
+    final title = sound.displayName ?? sound.title;
+    final message = _isOnAir(sound)
+        ? 'Lancé à l\'antenne : $title'
+        : '$title ajouté à la file';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _showPlaybackError() {
@@ -121,16 +148,11 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
     );
   }
 
-  PadItem? _padItemForSound(Sound sound) {
-    return widget.notifier.findMusicPadForSound(sound.id);
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final filtered = _filteredSounds;
-
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: DraggableScrollableSheet(
@@ -148,10 +170,12 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
                   children: [
                     Icon(SoundType.music.icon, color: scheme.primary),
                     const SizedBox(width: 8),
-                    Text(
-                      'Sélectionner une musique',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
+                    Expanded(
+                      child: Text(
+                        'Sélectionner une musique',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],
@@ -184,18 +208,24 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
                           ),
                         ),
                       )
-                    : ListView.builder(
-                        controller: scrollController,
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          final sound = filtered[index];
-                          return _PickerTrackRow(
-                            sound: sound,
-                            onBoard: _isOnBoard(sound),
-                            queued: _isQueued(sound),
-                            onPlayNow: () => _playNow(sound),
-                            onEnqueue: () => _enqueue(sound),
+                    : ListenableBuilder(
+                        listenable: widget.notifier,
+                        builder: (context, _) {
+                          return ListView.builder(
+                            controller: scrollController,
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final sound = filtered[index];
+                              return _PickerTrackRow(
+                                sound: sound,
+                                onBoard: _isOnBoard(sound),
+                                onAir: _isOnAir(sound),
+                                queued: _isQueued(sound),
+                                onPlayNow: () => _playNow(sound),
+                                onEnqueue: () => _enqueue(sound),
+                              );
+                            },
                           );
                         },
                       ),
@@ -211,6 +241,7 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
 class _PickerTrackRow extends StatelessWidget {
   final Sound sound;
   final bool onBoard;
+  final bool onAir;
   final bool queued;
   final VoidCallback onPlayNow;
   final VoidCallback onEnqueue;
@@ -218,6 +249,7 @@ class _PickerTrackRow extends StatelessWidget {
   const _PickerTrackRow({
     required this.sound,
     required this.onBoard,
+    required this.onAir,
     required this.queued,
     required this.onPlayNow,
     required this.onEnqueue,
@@ -230,16 +262,26 @@ class _PickerTrackRow extends StatelessWidget {
     final chipColor = sound.colorValue != null
         ? Color(sound.colorValue!)
         : musicChipColor(sound.id, scheme);
-    final subtitle = queued
+    final subtitle = onAir
+        ? 'À l\'antenne'
+        : queued
         ? 'En file de passage'
         : (onBoard ? 'Pad sur la scène' : 'Lecture directe en régie');
+    final canEnqueue = !onAir && !queued;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
+      color: onAir || queued
+          ? scheme.primaryContainer.withValues(alpha: 0.35)
+          : null,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        side: BorderSide(
+          color: onAir || queued
+              ? scheme.primary.withValues(alpha: 0.45)
+              : scheme.outlineVariant.withValues(alpha: 0.4),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
@@ -278,14 +320,19 @@ class _PickerTrackRow extends StatelessWidget {
                   Text(
                     subtitle,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
+                      color: onAir || queued
+                          ? scheme.primary
+                          : scheme.onSurfaceVariant,
+                      fontWeight: onAir || queued
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                     ),
                   ),
                 ],
               ),
             ),
             FilledButton(
-              onPressed: onPlayNow,
+              onPressed: onAir ? null : onPlayNow,
               style: FilledButton.styleFrom(
                 minimumSize: const Size(0, 36),
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -294,9 +341,11 @@ class _PickerTrackRow extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             IconButton(
-              tooltip: 'Mettre en file',
-              onPressed: onEnqueue,
-              icon: const Icon(Icons.playlist_add_rounded),
+              tooltip: canEnqueue ? 'Mettre en file' : 'Déjà planifié',
+              onPressed: canEnqueue ? onEnqueue : null,
+              icon: Icon(
+                queued ? Icons.check_rounded : Icons.playlist_add_rounded,
+              ),
             ),
           ],
         ),
