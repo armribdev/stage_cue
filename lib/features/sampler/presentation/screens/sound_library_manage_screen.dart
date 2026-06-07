@@ -4,11 +4,14 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/utils/copyable_snackbar.dart';
+import '../../../../core/utils/sound_display_paths.dart';
 import '../../../../core/utils/string_utils.dart';
 import 'sound_details_screen.dart';
 import '../widgets/app_form_dialog.dart';
 import '../widgets/app_modal.dart';
+import '../../data/datasources/local_library_datasource.dart';
 import '../../data/repositories/sound_repository.dart';
+import '../../domain/entities/library.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
@@ -49,6 +52,7 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
   List<Sound> _availableSounds = [];
   final Map<int, List<TagItem>> _soundTags = {};
   List<TagCategoryWithTags> _tagCatalog = [];
+  Map<int, Library> _librariesById = {};
   bool _isLoading = true;
   String _searchQuery = '';
   Set<int>? _searchMatchedSoundIds;
@@ -71,12 +75,15 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
     });
 
     try {
+      final libraries = await LocalLibraryDataSource(widget.database)
+          .getAllLibraries();
       final allSounds = List<Sound>.from(await _repository.getAllSounds())
         ..sort(
           (a, b) => _soundSortLabel(a).compareTo(_soundSortLabel(b)),
         );
 
       setState(() {
+        _librariesById = {for (final lib in libraries) lib.id: lib};
         _availableSounds = allSounds;
         _isLoading = false;
       });
@@ -132,6 +139,15 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
         .toList();
   }
 
+  String _displayPath(Sound sound) {
+    return SoundDisplayPaths.forSound(
+      sound,
+      library: sound.libraryId != null
+          ? _librariesById[sound.libraryId]
+          : null,
+    );
+  }
+
   bool _soundMatchesToken(Sound sound, String token) {
     final normalizedToken = normalizeForSearch(token);
     final matchInTitle = normalizeForSearch(
@@ -141,7 +157,7 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
         sound.displayName != null &&
         normalizeForSearch(sound.displayName!).contains(normalizedToken);
     final matchInPath = normalizeForSearch(
-      sound.filePath,
+      _displayPath(sound),
     ).contains(normalizedToken);
     return matchInTitle || matchInDisplayName || matchInPath;
   }
@@ -686,6 +702,7 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
 
   Widget _buildSoundTile(Sound sound) {
     final tags = _soundTags[sound.id] ?? [];
+    final pathLabel = _displayPath(sound);
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Padding(
@@ -693,21 +710,27 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
         child: ListTile(
           leading: SoundTypeAvatar(type: sound.type),
           title: Text(sound.displayName ?? sound.title),
-          subtitle: tags.isNotEmpty
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                pathLabel,
+                style: const TextStyle(fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (tags.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        for (final tag in tags) _buildTagChip(tag),
-                      ],
-                    ),
+                    for (final tag in tags) _buildTagChip(tag),
                   ],
-                )
-              : null,
+                ),
+              ],
+            ],
+          ),
           trailing: IconButton(
             icon: const Icon(Icons.edit_rounded),
             tooltip: 'Modifier',

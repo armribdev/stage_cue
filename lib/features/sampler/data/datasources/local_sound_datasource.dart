@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../../core/platform/saf_directory_bridge.dart';
 import '../../../../core/utils/file_utils.dart'
     show scanDirectoryForAudioFiles, computeQuickHash;
+import '../../../../core/audio/soloud_file_loader.dart';
 import '../models/sound_model.dart';
 import '../models/sound_board_model.dart';
 import '../models/watched_path_model.dart';
@@ -29,7 +30,7 @@ class LocalSoundDataSource {
   Future<db_sounds.SoundType> _resolveSoundTypeFromDuration(File file) async {
     AudioSource? source;
     try {
-      source = await SoLoud.instance.loadFile(file.path, mode: LoadMode.memory);
+      source = await loadAudioSourceFromFile(file);
       final duration = SoLoud.instance.getLength(source);
       if (duration > _musicThreshold) {
         return db_sounds.SoundType.music;
@@ -40,7 +41,11 @@ class LocalSoundDataSource {
       );
     } finally {
       if (source != null) {
-        SoLoud.instance.disposeSource(source);
+        try {
+          SoLoud.instance.disposeSource(source);
+        } catch (e) {
+          debugPrint('Dispose metadata SoLoud échoué: $e');
+        }
       }
     }
     return db_sounds.SoundType.soundEffect;
@@ -353,11 +358,23 @@ class LocalSoundDataSource {
         );
   }
 
-  /// Indexe un fichier audio distant par ses métadonnées seules, sans télécharger
-  /// le fichier. [localPath] est le chemin local calculé (cache cible) ; le
-  /// fichier n'existe pas encore. Type et hash seront mis à jour au premier
-  /// téléchargement. Retourne true si un nouveau son a été créé.
-  Future<bool> indexLibraryAudioFileMetadataOnly({
+  /// Met à jour le chemin local cache d'un son de bibliothèque si nécessaire.
+  Future<void> syncLibrarySoundLocalPath(int soundId, String localPath) async {
+    final row = await (_database.select(_database.sounds)
+          ..where((s) => s.id.equals(soundId)))
+        .getSingleOrNull();
+    if (row == null || row.filePath == localPath) return;
+
+    await (_database.update(_database.sounds)
+          ..where((s) => s.id.equals(soundId)))
+        .write(db.SoundsCompanion(filePath: Value(localPath)));
+  }
+
+  /// Synchronise un son de bibliothèque avec l'index Drive.
+  ///
+  /// Clé unique : `(libraryId, relativePath)`. Met à jour `filePath` si le son
+  /// existe déjà. Retourne `true` si un nouveau son a été créé.
+  Future<bool> syncLibrarySoundFromDriveIndex({
     required int libraryId,
     required String relativePath,
     required String localPath,
@@ -369,7 +386,11 @@ class LocalSoundDataSource {
                 s.relativePath.equals(relativePath),
           ))
         .get();
-    if (existing.isNotEmpty) return false;
+
+    if (existing.isNotEmpty) {
+      await syncLibrarySoundLocalPath(existing.first.id, localPath);
+      return false;
+    }
 
     final title = p.basenameWithoutExtension(relativePath);
 
@@ -613,6 +634,37 @@ class LocalSoundDataSource {
     }
   }
 
+  /// Retourne tous les sons appartenant à une bibliothèque Drive (relativePath non nul).
+  Future<List<domain.Sound>> getSoundsForLibrary(int libraryId) async {
+    final rows = await (_database.select(_database.sounds)
+          ..where(
+            (s) =>
+                s.libraryId.equals(libraryId) &
+                s.relativePath.isNotNull(),
+          ))
+        .get();
+    return rows.map((row) {
+      final soundType = switch (row.type) {
+        db_sounds.SoundType.music => domain.SoundType.music,
+        db_sounds.SoundType.ambiance => domain.SoundType.ambiance,
+        _ => domain.SoundType.soundEffect,
+      };
+      return domain.Sound(
+        id: row.id,
+        title: row.title,
+        displayName: row.displayName,
+        filePath: row.filePath,
+        type: soundType,
+        colorValue: row.color,
+        volume: row.volume,
+        createdAt: row.createdAt,
+        libraryId: row.libraryId,
+        relativePath: row.relativePath,
+        contentHash: row.contentHash,
+      );
+    }).toList();
+  }
+
   /// Supprime tous les sons d'une bibliothèque Drive.
   Future<void> deleteSoundsByLibraryId(int libraryId) async {
     await (_database.delete(
@@ -832,6 +884,9 @@ class LocalPadDataSource {
       colorValue: row.read<int?>('color'),
       volume: row.read<double>('volume'),
       createdAt: row.read<DateTime>('created_at'),
+      libraryId: row.read<int?>('library_id'),
+      relativePath: row.read<String?>('relative_path'),
+      contentHash: row.read<String?>('content_hash'),
     );
   }
 
@@ -852,7 +907,8 @@ class LocalPadDataSource {
       final soundRows = await _database.customSelect(
         '''
         SELECT s.id, s.title, s.display_name, s.file_path, s.type,
-               s.color, s.volume, s.created_at
+               s.color, s.volume, s.created_at,
+               s.library_id, s.relative_path, s.content_hash
         FROM pad_sounds ps
         INNER JOIN sounds s ON s.id = ps.sound_id
         WHERE ps.pad_id = ?

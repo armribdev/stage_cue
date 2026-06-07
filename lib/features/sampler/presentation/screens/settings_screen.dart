@@ -69,6 +69,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final SoundRepository _repository;
   // Suivi de la progression d'indexation par chemin (clé normalisée)
   final Map<String, IndexingProgress> _indexingProgress = {};
+  // Suivi de la progression de téléchargement audio par bibliothèque
+  final Map<int, IndexingProgress> _downloadProgress = {};
+  bool _cancelDownloadAll = false;
   final Map<String, SafTreeInfo> _safFolderInfo = {};
   bool _isInitialLoad = true;
   bool _isSyncBusy = false;
@@ -804,7 +807,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         driveFolderId: driveFolderId,
         name: folderName,
         drivePath: relativeDrivePath,
-        ownerEmail: widget.libraryRepository.connectedAccountEmail,
         sharedDriveId: sharedDriveId,
       );
 
@@ -1165,6 +1167,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             unawaited(_pullDriveLibrary(library));
           case _DriveSyncAction.push:
             unawaited(_syncDriveLibrary(library));
+          case _DriveSyncAction.downloadAll:
+            unawaited(_downloadAllLibraryAudio(library));
         }
       },
       itemBuilder: (menuContext) => [
@@ -1228,8 +1232,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
         ),
+        PopupMenuItem<_DriveSyncAction>(
+          value: _DriveSyncAction.downloadAll,
+          height: 48,
+          enabled: _downloadProgress[library.id] == null ||
+              _downloadProgress[library.id]!.isComplete,
+          child: Row(
+            children: [
+              Icon(
+                Icons.download_for_offline_outlined,
+                size: 20,
+                color: scheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Tout télécharger'),
+                    Text(
+                      'Rendre tous les sons disponibles hors-ligne',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
+  }
+
+  Future<void> _downloadAllLibraryAudio(domain.Library library) async {
+    _cancelDownloadAll = false;
+    setState(() {
+      _downloadProgress[library.id] = IndexingProgress(
+        path: library.name,
+        current: 0,
+        total: 0,
+        isComplete: false,
+      );
+    });
+
+    try {
+      await widget.libraryRepository.downloadAllLibraryAudio(
+        library: library,
+        isCancelled: () => _cancelDownloadAll,
+        onProgress: (progress) {
+          if (mounted) setState(() => _downloadProgress[library.id] = progress);
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _downloadProgress[library.id] = IndexingProgress(
+            path: library.name,
+            current: 0,
+            total: 0,
+            isComplete: true,
+            error: e.toString(),
+          );
+        });
+      }
+    }
   }
 
   Future<void> _confirmRemoveDriveLibrary(domain.Library library) async {
@@ -1367,7 +1437,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       name: library.name,
       drivePath: library.drivePath,
       ownerEmail: library.ownerEmail,
-      sessionOwnerEmail: widget.libraryRepository.connectedAccountEmail,
     );
   }
 
@@ -1484,6 +1553,95 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Spacer(),
           ...trailing,
         ],
+      ],
+    );
+  }
+
+  Widget _buildAutoDownloadToggle(domain.Library library) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        SizedBox(
+          width: 28,
+          height: 20,
+          child: Transform.scale(
+            scale: 0.65,
+            alignment: Alignment.centerLeft,
+            child: Switch(
+              value: library.autoDownload,
+              onChanged: (value) async {
+                await widget.libraryRepository.setAutoDownload(
+                  library,
+                  value: value,
+                );
+                if (mounted) await _loadDatabaseInfo();
+              },
+            ),
+          ),
+        ),
+        const SizedBox(width: 2),
+        Text(
+          'Téléchargement automatique',
+          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+
+  Widget? _buildDownloadProgressSection(domain.Library library) {
+    final progress = _downloadProgress[library.id];
+    if (progress == null) return null;
+    if (progress.isComplete && progress.error == null) return null;
+
+    final isDownloading = !progress.isComplete;
+    final barColor =
+        progress.error != null ? Colors.red.shade600 : Colors.blue.shade600;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: isDownloading
+                ? (progress.total > 0 ? progress.progress : null)
+                : 1.0,
+            backgroundColor: Colors.grey.shade300,
+            valueColor: AlwaysStoppedAnimation<Color>(barColor),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                progress.error != null
+                    ? 'Erreur: ${progress.error}'
+                    : isDownloading
+                    ? 'Téléchargement ${progress.current}/${progress.total > 0 ? progress.total : '…'} fichiers'
+                    : 'Téléchargement terminé',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: progress.error != null
+                      ? Colors.red.shade700
+                      : Colors.grey.shade600,
+                ),
+              ),
+            ),
+            if (isDownloading)
+              GestureDetector(
+                onTap: () => setState(() => _cancelDownloadAll = true),
+                child: Text(
+                  'Annuler',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -1696,12 +1854,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                               _buildDriveSyncStatus(
                                                 item.library!,
                                               ),
+                                              const SizedBox(height: 4),
+                                              _buildAutoDownloadToggle(
+                                                item.library!,
+                                              ),
                                             ],
                                             _buildIndexingProgressSection(
                                               context,
                                               progress,
                                               isIndexing,
                                             ),
+                                            if (!item.isLocal)
+                                              _buildDownloadProgressSection(
+                                                item.library!,
+                                              ) ??
+                                                  const SizedBox.shrink(),
                                           ],
                                         ),
                                       ),
@@ -1810,7 +1977,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-enum _DriveSyncAction { pull, push }
+enum _DriveSyncAction { pull, push, downloadAll }
 
 class _IndexedFolderItem {
   const _IndexedFolderItem.local(this.watchedPath) : library = null;

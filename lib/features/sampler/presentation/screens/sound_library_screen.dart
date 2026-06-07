@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/utils/copyable_snackbar.dart';
+import '../../../../core/utils/sound_display_paths.dart';
 import '../../../../core/utils/string_utils.dart';
+import '../../data/datasources/local_library_datasource.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
+import '../../domain/entities/library.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
@@ -57,6 +60,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   Set<int>? _searchMatchedSoundIds;
   final Map<int, List<TagItem>> _soundTags = {};
   List<TagCategoryWithTags> _tagCatalog = [];
+  Map<int, Library> _librariesById = {};
   bool _isLoading = true;
   String _searchQuery = '';
   Timer? _searchDebounce;
@@ -80,6 +84,9 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     });
 
     try {
+      await widget.libraryRepository?.refreshLibraryOwnerEmails();
+      final libraries = await LocalLibraryDataSource(widget.database)
+          .getAllLibraries();
       final allSounds = await _repository.getAllSounds();
       // Sons déjà présents dans un pad de la board (indicatif uniquement)
       final inBoard = await _repository.getSoundIdsInBoard(widget.boardId);
@@ -91,6 +98,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
           .toList();
 
       setState(() {
+        _librariesById = {for (final lib in libraries) lib.id: lib};
         _availableSounds = availableSounds;
         _soundsInBoard = inBoard;
         _soundIdToPadId = soundIdToPadId;
@@ -252,7 +260,16 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
         .toList();
   }
 
-  /// Vérifie si un son correspond à un token (tag/alias ou titre/displayName/filePath).
+  String _displayPath(Sound sound) {
+    return SoundDisplayPaths.forSound(
+      sound,
+      library: sound.libraryId != null
+          ? _librariesById[sound.libraryId]
+          : null,
+    );
+  }
+
+  /// Vérifie si un son correspond à un token (tag/alias ou titre/displayName/chemin).
   bool _soundMatchesToken(Sound sound, String token) {
     final normalizedToken = normalizeForSearch(token);
     final matchInTitle = normalizeForSearch(
@@ -262,7 +279,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
         sound.displayName != null &&
         normalizeForSearch(sound.displayName!).contains(normalizedToken);
     final matchInPath = normalizeForSearch(
-      sound.filePath,
+      _displayPath(sound),
     ).contains(normalizedToken);
     return matchInTitle || matchInDisplayName || matchInPath;
   }
@@ -439,7 +456,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                                   children: [
                                     const SizedBox(height: 4),
                                     Text(
-                                      sound.filePath,
+                                      _displayPath(sound),
                                       style: const TextStyle(fontSize: 11),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,

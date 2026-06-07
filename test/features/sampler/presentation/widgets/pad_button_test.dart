@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stage_cue/core/audio/audio_player_service.dart';
 import 'package:stage_cue/features/sampler/domain/entities/pad.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
+import 'package:stage_cue/features/sampler/presentation/models/pad_sound_slot.dart';
 import 'package:stage_cue/features/sampler/presentation/providers/sampler_provider.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/pad_button.dart';
 
@@ -66,7 +67,15 @@ PadItem buildPadItem({String? padName, required String soundTitle}) {
     createdAt: DateTime(2026, 1, 1),
     sounds: [sound],
   );
-  return PadItem(pad: pad, players: [FakeAudioPlayerService()]);
+  return PadItem(
+    pad: pad,
+    slots: [
+      PadSoundSlot(
+        availability: PadSoundAvailability.ready,
+        player: FakeAudioPlayerService(),
+      ),
+    ],
+  );
 }
 
 void main() {

@@ -167,16 +167,26 @@ class LibraryRepository {
 
   /// Établit une session Drive (silencieuse puis interactive si besoin).
   /// Retourne false si l'utilisateur annule la connexion.
+  ///
+  /// Le refresh silencieux est toujours tenté, même si [_activeClient] est
+  /// déjà défini : les tokens Google expirent après ~1 h et l'API renverrait
+  /// un 401 si on réutilisait un token périmé sans le renouveler.
   Future<bool> ensureDriveConnected() async {
-    if (_activeClient != null) {
+    final fresh = await _authenticator.connectSilently();
+    if (fresh != null) {
+      _activeClient?.dispose();
+      _activeClient = fresh;
       return true;
     }
 
-    final client =
-        await _authenticator.connectSilently() ?? await _authenticator.connect();
-    if (client == null) {
-      return false;
+    // Le refresh silencieux a échoué (session révoquée ou inexistante).
+    if (_activeClient != null) {
+      _activeClient!.dispose();
+      _activeClient = null;
     }
+
+    final client = await _authenticator.connect();
+    if (client == null) return false;
     _activeClient = client;
     return true;
   }
@@ -245,12 +255,16 @@ class LibraryRepository {
     }
 
     final localRoot = await _createLocalRoot();
+    final resolvedOwner = await _resolveOwnerEmailForFolder(
+      driveFolderId,
+      explicitOwnerEmail: ownerEmail,
+    );
     return _dataSource.insertLibrary(
       name: name,
       localRootPath: localRoot,
       driveFolderId: driveFolderId,
       drivePath: drivePath,
-      ownerEmail: ownerEmail ?? _authenticator.accountEmail,
+      ownerEmail: resolvedOwner,
       sharedDriveId: sharedDriveId,
     );
   }
@@ -283,7 +297,55 @@ class LibraryRepository {
     final client = await _authenticator.connectSilently();
     if (client == null) return false;
     _activeClient = client;
+    await refreshLibraryOwnerEmails();
     return true;
+  }
+
+  /// Met à jour [ownerEmail] des bibliothèques Drive depuis l'API (propriétaire
+  /// réel, y compris dossiers partagés).
+  Future<void> refreshLibraryOwnerEmails() async {
+    final client = await _ensureDriveClient();
+    if (client == null) return;
+
+    final libraries = await getLibraries();
+    for (final library in libraries) {
+      final folderId = library.driveFolderId;
+      if (folderId == null) continue;
+
+      try {
+        final owner = await client.getFolderOwnerEmail(folderId);
+        if (owner == null || owner.trim().isEmpty) continue;
+        final trimmed = owner.trim();
+        if (trimmed == library.ownerEmail?.trim()) continue;
+        await _dataSource.updateOwnerEmail(library.id, trimmed);
+      } catch (e) {
+        debugPrint(
+          'Refresh propriétaire Drive échoué pour ${library.name}: $e',
+        );
+      }
+    }
+  }
+
+  /// E-mail propriétaire d'un dossier Drive (via l'API).
+  Future<String?> resolveDriveFolderOwnerEmail(String driveFolderId) async {
+    final client = await _ensureDriveClient();
+    if (client == null) return null;
+    return client.getFolderOwnerEmail(driveFolderId);
+  }
+
+  Future<String?> _resolveOwnerEmailForFolder(
+    String driveFolderId, {
+    String? explicitOwnerEmail,
+  }) async {
+    final explicit = explicitOwnerEmail?.trim();
+    if (explicit != null && explicit.isNotEmpty) {
+      return explicit;
+    }
+    final fromDrive = await resolveDriveFolderOwnerEmail(driveFolderId);
+    if (fromDrive != null && fromDrive.trim().isNotEmpty) {
+      return fromDrive.trim();
+    }
+    return _authenticator.accountEmail;
   }
 
   /// Liste le contenu distant d'une bibliothèque connectée à Drive.
@@ -408,41 +470,60 @@ class LibraryRepository {
   }) async {
     final libraryId = sound.libraryId;
     final relativePath = sound.relativePath;
-    if (libraryId == null || relativePath == null) {
-      return sound.filePath;
-    }
 
-    final library = await _dataSource.getLibraryById(libraryId);
-    if (library == null) return sound.filePath;
-
-    final localPath = _cacheManager.localPathFor(library, relativePath);
-    final localFile = File(localPath);
-
-    if (await localFile.exists()) {
-      // Métadonnées manquantes (son indexé sans téléchargement) : mise à jour
-      // en arrière-plan sans bloquer la lecture.
-      if (sound.contentHash == null) {
-        unawaited(_refreshSoundMetadata(sound, localFile));
+    if (libraryId != null) {
+      if (relativePath == null || relativePath.isEmpty) {
+        throw SoundNotAvailableLocallyException(isOffline: false);
       }
-      return localPath;
+
+      final library = await _dataSource.getLibraryById(libraryId);
+      if (library == null) {
+        throw SoundNotAvailableLocallyException(isOffline: false);
+      }
+
+      final localPath = _cacheManager.localPathFor(library, relativePath);
+      final localFile = File(localPath);
+
+      if (await localFile.exists()) {
+        final length = await localFile.length();
+        if (length <= 0) {
+          throw SoundNotAvailableLocallyException(isOffline: false);
+        }
+        unawaited(_soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath));
+        if (sound.contentHash == null) {
+          unawaited(_refreshSoundMetadata(sound, localFile));
+        }
+        return p.normalize(localFile.absolute.path);
+      }
+
+      // Fichier absent du cache.
+      final client = await _ensureDriveClient();
+      if (client == null) {
+        throw SoundNotAvailableLocallyException(isOffline: true);
+      }
+      if (!downloadIfNeeded) {
+        throw SoundNotAvailableLocallyException(isOffline: false);
+      }
+
+      await _cacheManager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: relativePath,
+      );
+      unawaited(_soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath));
+      unawaited(_refreshSoundMetadata(sound, localFile));
+      return p.normalize(localFile.absolute.path);
     }
 
-    // Fichier absent du cache.
-    final client = _activeClient;
-    if (client == null) {
-      throw SoundNotAvailableLocallyException(isOffline: true);
-    }
-    if (!downloadIfNeeded) {
+    final legacyFile = File(sound.filePath);
+    if (!await legacyFile.exists()) {
       throw SoundNotAvailableLocallyException(isOffline: false);
     }
-
-    await _cacheManager.ensureCached(
-      client: client,
-      library: library,
-      relativePath: relativePath,
-    );
-    unawaited(_refreshSoundMetadata(sound, localFile));
-    return localPath;
+    final length = await legacyFile.length();
+    if (length <= 0) {
+      throw SoundNotAvailableLocallyException(isOffline: false);
+    }
+    return p.normalize(legacyFile.absolute.path);
   }
 
   Future<void> _refreshSoundMetadata(Sound sound, File file) async {
@@ -470,6 +551,88 @@ class LibraryRepository {
       source: source,
       relativePath: relativePath,
     );
+  }
+
+  /// Active ou désactive le téléchargement automatique des nouveaux fichiers.
+  Future<void> setAutoDownload(Library library, {required bool value}) async {
+    await _dataSource.setAutoDownload(library.id, value: value);
+  }
+
+  /// Télécharge tous les fichiers audio non encore présents dans le cache local.
+  ///
+  /// Appelle [onProgress] après chaque fichier. [isCancelled] permet
+  /// d'interrompre proprement entre deux téléchargements.
+  Future<int> downloadAllLibraryAudio({
+    required Library library,
+    void Function(IndexingProgress)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    final client = await _ensureDriveClient();
+    if (client == null) throw StateError('Bibliothèque non connectée à Drive');
+
+    final sounds = await _soundDataSource.getSoundsForLibrary(library.id);
+    final total = sounds.length;
+
+    onProgress?.call(
+      IndexingProgress(
+        path: library.name,
+        current: 0,
+        total: total,
+        isComplete: false,
+      ),
+    );
+
+    var downloaded = 0;
+    var failed = 0;
+
+    for (var i = 0; i < sounds.length; i++) {
+      if (isCancelled?.call() == true) break;
+
+      final sound = sounds[i];
+      final relativePath = sound.relativePath!;
+      final localPath = _cacheManager.localPathFor(library, relativePath);
+
+      try {
+        if (!await File(localPath).exists()) {
+          await _cacheManager.ensureCached(
+            client: client,
+            library: library,
+            relativePath: relativePath,
+          );
+          unawaited(
+            _soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath),
+          );
+          if (sound.contentHash == null) {
+            unawaited(_refreshSoundMetadata(sound, File(localPath)));
+          }
+          downloaded++;
+        }
+      } catch (e) {
+        failed++;
+        debugPrint('Téléchargement échoué pour ${sound.title}: $e');
+      }
+
+      onProgress?.call(
+        IndexingProgress(
+          path: library.name,
+          current: i + 1,
+          total: total,
+          isComplete: false,
+        ),
+      );
+    }
+
+    onProgress?.call(
+      IndexingProgress(
+        path: library.name,
+        current: total,
+        total: total,
+        isComplete: true,
+        error: failed > 0 ? '$failed fichier(s) ignoré(s)' : null,
+      ),
+    );
+
+    return downloaded;
   }
 
   /// Indexe récursivement les fichiers audio d'un dossier Drive (bibliothèque).
@@ -514,7 +677,7 @@ class LibraryRepository {
       for (final audio in audioFiles) {
         processedCount++;
         final localPath = _cacheManager.localPathFor(library, audio.relativePath);
-        final isNew = await _soundDataSource.indexLibraryAudioFileMetadataOnly(
+        final isNew = await _soundDataSource.syncLibrarySoundFromDriveIndex(
           libraryId: library.id,
           relativePath: audio.relativePath,
           localPath: localPath,

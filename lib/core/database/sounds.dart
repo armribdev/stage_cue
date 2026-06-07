@@ -31,13 +31,15 @@ class Libraries extends Table {
   IntColumn get lastSyncedRevision => integer().withDefault(const Constant(0))();
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  /// Si true, les nouveaux fichiers indexés sont téléchargés automatiquement.
+  BoolColumn get autoDownload => boolean().withDefault(const Constant(false))();
 }
 
 class Sounds extends Table {
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get title => text()(); // Chemin complet du fichier
+  TextColumn get title => text()(); // Nom de fichier sans extension
   TextColumn get displayName => text().nullable()(); // Nom affiché sur le pad
-  TextColumn get filePath => text()(); // Chemin local résolu (cache à l'exécution)
+  TextColumn get filePath => text()(); // Chemin local (legacy ou cache dérivé)
   IntColumn get type => intEnum<SoundType>()();
   IntColumn get color => integer().nullable()(); // Couleur personnalisée (ARGB)
   RealColumn get volume => real().withDefault(const Constant(1.0))();

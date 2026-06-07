@@ -120,6 +120,21 @@ class $LibrariesTable extends Libraries
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _autoDownloadMeta = const VerificationMeta(
+    'autoDownload',
+  );
+  @override
+  late final GeneratedColumn<bool> autoDownload = GeneratedColumn<bool>(
+    'auto_download',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("auto_download" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -132,6 +147,7 @@ class $LibrariesTable extends Libraries
     lastSyncedRevision,
     lastSyncedAt,
     createdAt,
+    autoDownload,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -221,6 +237,15 @@ class $LibrariesTable extends Libraries
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('auto_download')) {
+      context.handle(
+        _autoDownloadMeta,
+        autoDownload.isAcceptableOrUnknown(
+          data['auto_download']!,
+          _autoDownloadMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -270,6 +295,10 @@ class $LibrariesTable extends Libraries
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      autoDownload: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}auto_download'],
+      )!,
     );
   }
 
@@ -296,6 +325,9 @@ class Library extends DataClass implements Insertable<Library> {
   final int lastSyncedRevision;
   final DateTime? lastSyncedAt;
   final DateTime createdAt;
+
+  /// Si true, les nouveaux fichiers indexés sont téléchargés automatiquement.
+  final bool autoDownload;
   const Library({
     required this.id,
     required this.name,
@@ -307,6 +339,7 @@ class Library extends DataClass implements Insertable<Library> {
     required this.lastSyncedRevision,
     this.lastSyncedAt,
     required this.createdAt,
+    required this.autoDownload,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -331,6 +364,7 @@ class Library extends DataClass implements Insertable<Library> {
       map['last_synced_at'] = Variable<DateTime>(lastSyncedAt);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['auto_download'] = Variable<bool>(autoDownload);
     return map;
   }
 
@@ -356,6 +390,7 @@ class Library extends DataClass implements Insertable<Library> {
           ? const Value.absent()
           : Value(lastSyncedAt),
       createdAt: Value(createdAt),
+      autoDownload: Value(autoDownload),
     );
   }
 
@@ -375,6 +410,7 @@ class Library extends DataClass implements Insertable<Library> {
       lastSyncedRevision: serializer.fromJson<int>(json['lastSyncedRevision']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      autoDownload: serializer.fromJson<bool>(json['autoDownload']),
     );
   }
   @override
@@ -391,6 +427,7 @@ class Library extends DataClass implements Insertable<Library> {
       'lastSyncedRevision': serializer.toJson<int>(lastSyncedRevision),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'autoDownload': serializer.toJson<bool>(autoDownload),
     };
   }
 
@@ -405,6 +442,7 @@ class Library extends DataClass implements Insertable<Library> {
     int? lastSyncedRevision,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
     DateTime? createdAt,
+    bool? autoDownload,
   }) => Library(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -420,6 +458,7 @@ class Library extends DataClass implements Insertable<Library> {
     lastSyncedRevision: lastSyncedRevision ?? this.lastSyncedRevision,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
     createdAt: createdAt ?? this.createdAt,
+    autoDownload: autoDownload ?? this.autoDownload,
   );
   Library copyWithCompanion(LibrariesCompanion data) {
     return Library(
@@ -445,6 +484,9 @@ class Library extends DataClass implements Insertable<Library> {
           ? data.lastSyncedAt.value
           : this.lastSyncedAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      autoDownload: data.autoDownload.present
+          ? data.autoDownload.value
+          : this.autoDownload,
     );
   }
 
@@ -460,7 +502,8 @@ class Library extends DataClass implements Insertable<Library> {
           ..write('sharedDriveId: $sharedDriveId, ')
           ..write('lastSyncedRevision: $lastSyncedRevision, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('autoDownload: $autoDownload')
           ..write(')'))
         .toString();
   }
@@ -477,6 +520,7 @@ class Library extends DataClass implements Insertable<Library> {
     lastSyncedRevision,
     lastSyncedAt,
     createdAt,
+    autoDownload,
   );
   @override
   bool operator ==(Object other) =>
@@ -491,7 +535,8 @@ class Library extends DataClass implements Insertable<Library> {
           other.sharedDriveId == this.sharedDriveId &&
           other.lastSyncedRevision == this.lastSyncedRevision &&
           other.lastSyncedAt == this.lastSyncedAt &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.autoDownload == this.autoDownload);
 }
 
 class LibrariesCompanion extends UpdateCompanion<Library> {
@@ -505,6 +550,7 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
   final Value<int> lastSyncedRevision;
   final Value<DateTime?> lastSyncedAt;
   final Value<DateTime> createdAt;
+  final Value<bool> autoDownload;
   const LibrariesCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -516,6 +562,7 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     this.lastSyncedRevision = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.autoDownload = const Value.absent(),
   });
   LibrariesCompanion.insert({
     this.id = const Value.absent(),
@@ -528,6 +575,7 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     this.lastSyncedRevision = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.autoDownload = const Value.absent(),
   }) : name = Value(name),
        localRootPath = Value(localRootPath);
   static Insertable<Library> custom({
@@ -541,6 +589,7 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     Expression<int>? lastSyncedRevision,
     Expression<DateTime>? lastSyncedAt,
     Expression<DateTime>? createdAt,
+    Expression<bool>? autoDownload,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -554,6 +603,7 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
         'last_synced_revision': lastSyncedRevision,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
       if (createdAt != null) 'created_at': createdAt,
+      if (autoDownload != null) 'auto_download': autoDownload,
     });
   }
 
@@ -568,6 +618,7 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     Value<int>? lastSyncedRevision,
     Value<DateTime?>? lastSyncedAt,
     Value<DateTime>? createdAt,
+    Value<bool>? autoDownload,
   }) {
     return LibrariesCompanion(
       id: id ?? this.id,
@@ -580,6 +631,7 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
       lastSyncedRevision: lastSyncedRevision ?? this.lastSyncedRevision,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       createdAt: createdAt ?? this.createdAt,
+      autoDownload: autoDownload ?? this.autoDownload,
     );
   }
 
@@ -616,6 +668,9 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (autoDownload.present) {
+      map['auto_download'] = Variable<bool>(autoDownload.value);
+    }
     return map;
   }
 
@@ -631,7 +686,8 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
           ..write('sharedDriveId: $sharedDriveId, ')
           ..write('lastSyncedRevision: $lastSyncedRevision, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('autoDownload: $autoDownload')
           ..write(')'))
         .toString();
   }
@@ -4662,6 +4718,7 @@ typedef $$LibrariesTableCreateCompanionBuilder =
       Value<int> lastSyncedRevision,
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
+      Value<bool> autoDownload,
     });
 typedef $$LibrariesTableUpdateCompanionBuilder =
     LibrariesCompanion Function({
@@ -4675,6 +4732,7 @@ typedef $$LibrariesTableUpdateCompanionBuilder =
       Value<int> lastSyncedRevision,
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
+      Value<bool> autoDownload,
     });
 
 final class $$LibrariesTableReferences
@@ -4775,6 +4833,11 @@ class $$LibrariesTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get autoDownload => $composableBuilder(
+    column: $table.autoDownload,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4887,6 +4950,11 @@ class $$LibrariesTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get autoDownload => $composableBuilder(
+    column: $table.autoDownload,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$LibrariesTableAnnotationComposer
@@ -4939,6 +5007,11 @@ class $$LibrariesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get autoDownload => $composableBuilder(
+    column: $table.autoDownload,
+    builder: (column) => column,
+  );
 
   Expression<T> soundsRefs<T extends Object>(
     Expression<T> Function($$SoundsTableAnnotationComposer a) f,
@@ -5029,6 +5102,7 @@ class $$LibrariesTableTableManager
                 Value<int> lastSyncedRevision = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<bool> autoDownload = const Value.absent(),
               }) => LibrariesCompanion(
                 id: id,
                 name: name,
@@ -5040,6 +5114,7 @@ class $$LibrariesTableTableManager
                 lastSyncedRevision: lastSyncedRevision,
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,
+                autoDownload: autoDownload,
               ),
           createCompanionCallback:
               ({
@@ -5053,6 +5128,7 @@ class $$LibrariesTableTableManager
                 Value<int> lastSyncedRevision = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<bool> autoDownload = const Value.absent(),
               }) => LibrariesCompanion.insert(
                 id: id,
                 name: name,
@@ -5064,6 +5140,7 @@ class $$LibrariesTableTableManager
                 lastSyncedRevision: lastSyncedRevision,
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,
+                autoDownload: autoDownload,
               ),
           withReferenceMapper: (p0) => p0
               .map(

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'library_sound_paths.dart';
 import '../../features/sampler/domain/entities/library.dart';
 import 'drive_client.dart';
 import 'drive_models.dart';
@@ -39,7 +40,7 @@ class AudioCacheManager {
   /// Les chemins relatifs utilisent toujours `/` (portables) ; la conversion
   /// vers le séparateur de la plateforme se fait ici.
   String localPathFor(Library library, String relativePath) {
-    return p.joinAll([library.localRootPath, ...relativePath.split('/')]);
+    return LibrarySoundPaths.localPathFor(library.localRootPath, relativePath);
   }
 
   /// Garantit la présence locale du fichier ; le télécharge depuis Drive si
@@ -61,6 +62,7 @@ class AudioCacheManager {
     if (remote == null) {
       throw StateError('Fichier introuvable sur Drive : $relativePath');
     }
+    await localFile.parent.create(recursive: true);
     await client.downloadToFile(fileId: remote.id, destinationPath: localPath);
 
     final size = await File(localPath).length();

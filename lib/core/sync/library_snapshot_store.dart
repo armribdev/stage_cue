@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../database/database.dart' as db;
 import '../database/sounds.dart' show PadPlayMode, SoundType;
+import 'library_sound_paths.dart';
 
 /// Export et fusion de snapshots SQLite limités à une bibliothèque Drive
 /// (sons, scènes, pads, tags associés).
@@ -139,6 +140,12 @@ class LibrarySnapshotStore {
     String? driveFolderId,
   }) async {
     _soundIdMap.clear();
+
+    final libraryRow = await (_database.select(_database.libraries)
+          ..where((l) => l.id.equals(libraryId)))
+        .getSingleOrNull();
+    final localRootPath = libraryRow?.localRootPath;
+
     final rows = legacy && driveFolderId != null
         ? await _database.customSelect(
             '''
@@ -157,13 +164,19 @@ class LibrarySnapshotStore {
 
     for (final row in rows) {
       final snapId = row.read<int>('id');
-      final relativePath = row.read<String?>('relative_path');
+      final rawRelativePath = row.read<String?>('relative_path');
+      final relativePath = rawRelativePath != null
+          ? LibrarySoundPaths.normalizeRelativePath(rawRelativePath)
+          : null;
       final contentHash = row.read<String?>('content_hash');
+      final filePath = relativePath != null && localRootPath != null
+          ? LibrarySoundPaths.localPathFor(localRootPath, relativePath)
+          : row.read<String>('file_path');
 
       final newId = await _database.into(_database.sounds).insert(
             db.SoundsCompanion.insert(
               title: row.read<String>('title'),
-              filePath: row.read<String>('file_path'),
+              filePath: filePath,
               type: SoundType.values[row.read<int>('type')],
               displayName: Value(row.read<String?>('display_name')),
               color: Value(row.read<int?>('color')),
