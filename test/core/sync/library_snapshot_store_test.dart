@@ -26,18 +26,19 @@ void main() {
     }
   });
 
-  test('mergeLibrarySnapshot importe un export sans erreur DETACH', () async {
+  test('mergeLibrarySnapshot recalcule filePath depuis relativePath local', () async {
+    const localRoot = '/device/cache';
     final libraryId = await database.into(database.libraries).insert(
           db.LibrariesCompanion.insert(
             name: 'Test Drive',
-            localRootPath: p.join(tempDir.path, 'cache'),
+            localRootPath: localRoot,
           ),
         );
 
     await database.into(database.sounds).insert(
           db.SoundsCompanion.insert(
             title: 'clap.wav',
-            filePath: '/cache/clap.wav',
+            filePath: '/other/device/cache/clap.wav',
             type: SoundType.soundEffect,
             libraryId: Value(libraryId),
             relativePath: const Value('clap.wav'),
@@ -59,5 +60,55 @@ void main() {
 
     expect(sounds, hasLength(1));
     expect(sounds.first.title, 'clap.wav');
+    expect(
+      sounds.first.filePath,
+      p.join(localRoot, 'clap.wav'),
+    );
+    expect(sounds.first.relativePath, 'clap.wav');
+  });
+
+  test('mergeLibrarySnapshot normalise relativePath legacy sounds/', () async {
+    const localRoot = '/device/cache';
+    final libraryId = await database.into(database.libraries).insert(
+          db.LibrariesCompanion.insert(
+            name: 'Test Drive',
+            localRootPath: localRoot,
+          ),
+        );
+
+    // Simule un snapshot exporté avec un chemin legacy.
+    final legacyDb = db.AppDatabase.forTesting(NativeDatabase.memory());
+    final legacyLibraryId = await legacyDb.into(legacyDb.libraries).insert(
+          db.LibrariesCompanion.insert(
+            name: 'Legacy',
+            localRootPath: '/old/cache',
+          ),
+        );
+    await legacyDb.into(legacyDb.sounds).insert(
+          db.SoundsCompanion.insert(
+            title: 'Pistolet 4é',
+            filePath: '/old/cache/sounds/Pistolet 4é.mp3',
+            type: SoundType.soundEffect,
+            libraryId: Value(legacyLibraryId),
+            relativePath: const Value('sounds/Pistolet 4é.mp3'),
+          ),
+        );
+    final snapshotPath = p.join(tempDir.path, 'legacy-library.db');
+    await LibrarySnapshotStore(legacyDb)
+        .exportLibrarySnapshot(legacyLibraryId, snapshotPath);
+    await legacyDb.close();
+
+    await store.mergeLibrarySnapshot(libraryId, snapshotPath);
+
+    final sounds = await (database.select(database.sounds)
+          ..where((s) => s.libraryId.equals(libraryId)))
+        .get();
+
+    expect(sounds, hasLength(1));
+    expect(sounds.first.relativePath, 'Pistolet 4é.mp3');
+    expect(
+      sounds.first.filePath,
+      p.join(localRoot, 'Pistolet 4é.mp3'),
+    );
   });
 }

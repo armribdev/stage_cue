@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
+import '../sync/library_sound_paths.dart';
 import 'sounds.dart';
 
 part 'database.g.dart';
@@ -29,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration {
@@ -144,6 +145,14 @@ class AppDatabase extends _$AppDatabase {
             soundBoards.icon as GeneratedColumn<Object>,
           );
         }
+        if (from < 17) {
+          await customStatement(
+            'ALTER TABLE libraries ADD COLUMN auto_download INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+        if (from < 18) {
+          await _resyncLibrarySoundPaths();
+        }
       },
       beforeOpen: (details) async {
         // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
@@ -235,6 +244,32 @@ class AppDatabase extends _$AppDatabase {
         LibrariesCompanion(
           name: Value(name),
           drivePath: Value(drivePath),
+        ),
+      );
+    }
+  }
+
+  /// Recalcule `relative_path` (sans préfixe legacy) et `file_path` pour tous
+  /// les sons de bibliothèque — source de vérité : `(library_id, relative_path)`.
+  Future<void> _resyncLibrarySoundPaths() async {
+    final rows = await customSelect('''
+      SELECT s.id, s.relative_path, l.local_root_path
+      FROM sounds s
+      INNER JOIN libraries l ON l.id = s.library_id
+      WHERE s.relative_path IS NOT NULL
+    ''').get();
+
+    for (final row in rows) {
+      final soundId = row.read<int>('id');
+      final rawRelative = row.read<String>('relative_path');
+      final localRoot = row.read<String>('local_root_path');
+      final relativePath = LibrarySoundPaths.normalizeRelativePath(rawRelative);
+      final filePath = LibrarySoundPaths.localPathFor(localRoot, relativePath);
+
+      await (update(sounds)..where((s) => s.id.equals(soundId))).write(
+        SoundsCompanion(
+          relativePath: Value(relativePath),
+          filePath: Value(filePath),
         ),
       );
     }

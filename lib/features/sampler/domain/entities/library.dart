@@ -25,6 +25,9 @@ class Library {
   final DateTime? lastSyncedAt;
   final DateTime createdAt;
 
+  /// Si true, les nouveaux fichiers indexés sont téléchargés automatiquement.
+  final bool autoDownload;
+
   Library({
     required this.id,
     required this.name,
@@ -36,6 +39,7 @@ class Library {
     this.lastSyncedRevision = 0,
     this.lastSyncedAt,
     required this.createdAt,
+    this.autoDownload = false,
   });
 
   bool get isConnectedToDrive => driveFolderId != null;

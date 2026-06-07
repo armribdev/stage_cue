@@ -45,19 +45,18 @@ class IndexedFolderLabels {
     required String name,
     String? drivePath,
     String? ownerEmail,
-    String? sessionOwnerEmail,
   }) {
     final resolvedPath = drivePath?.trim() ?? '';
     final resolvedOwner = ownerEmail?.trim().isNotEmpty == true
         ? ownerEmail!.trim()
-        : sessionOwnerEmail?.trim();
+        : null;
 
     return IndexedFolderLabels(
       title: name.trim().isNotEmpty ? name.trim() : 'Dossier Drive',
       subtitle: _driveSubtitle(
         ownerEmail: resolvedOwner,
         drivePath: resolvedPath,
-        fallback: resolvedOwner ?? 'Drive',
+        fallback: resolvedPath.isNotEmpty ? resolvedPath : 'Drive',
       ),
     );
   }
@@ -67,19 +66,29 @@ class IndexedFolderLabels {
     required String drivePath,
     required String fallback,
   }) {
+    final normalizedPath = normalizeDrivePathForDisplay(drivePath);
     if (ownerEmail != null &&
         ownerEmail.isNotEmpty &&
-        drivePath.isNotEmpty) {
-      return '$ownerEmail/$drivePath';
+        normalizedPath.isNotEmpty) {
+      return '$ownerEmail/$normalizedPath';
     }
-    if (drivePath.isNotEmpty) {
-      return drivePath;
+    if (normalizedPath.isNotEmpty) {
+      return normalizedPath;
     }
     if (ownerEmail != null && ownerEmail.isNotEmpty) {
       return ownerEmail;
     }
     return fallback;
   }
+}
+
+/// Normalise un chemin Drive pour l'affichage (sans espaces autour des `/`).
+String normalizeDrivePathForDisplay(String path) {
+  return path
+      .replaceAll('\\', '/')
+      .split(RegExp(r'\s*/\s*'))
+      .where((segment) => segment.isNotEmpty)
+      .join('/');
 }
 
 /// Extrait le chemin relatif Drive depuis un fil d'Ariane « Mon Drive / … ».

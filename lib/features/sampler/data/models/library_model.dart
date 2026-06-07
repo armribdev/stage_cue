@@ -16,6 +16,7 @@ class LibraryModel {
       lastSyncedRevision: row.lastSyncedRevision,
       lastSyncedAt: row.lastSyncedAt,
       createdAt: row.createdAt,
+      autoDownload: row.autoDownload,
     );
   }
 

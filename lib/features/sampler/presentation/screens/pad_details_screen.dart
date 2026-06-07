@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
+import '../widgets/pad_button.dart' show padSoundAvailabilityIcon;
+import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
 
@@ -272,15 +274,18 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                     else
                       Column(
                         children: [
-                          for (final sound in sounds)
+                          for (var i = 0; i < sounds.length; i++)
                             _SoundRow(
-                              sound: sound,
+                              sound: sounds[i],
+                              availability: i < widget.padItem.slots.length
+                                  ? widget.padItem.slots[i].availability
+                                  : PadSoundAvailability.needsDownload,
                               canRemove: sounds.length > 1,
-                              typeLabel: sound.type.label,
+                              typeLabel: sounds[i].type.label,
                               tagCatalog: _tagCatalog,
                               isTagsLoading: _isTagsLoading,
                               notifier: widget.notifier,
-                              onRemove: () => _removeSound(sound.id),
+                              onRemove: () => _removeSound(sounds[i].id),
                             ),
                         ],
                       ),
@@ -404,6 +409,7 @@ class _PlayModeSelector extends StatelessWidget {
 
 class _SoundRow extends StatefulWidget {
   final Sound sound;
+  final PadSoundAvailability availability;
   final bool canRemove;
   final String typeLabel;
   final List<TagCategoryWithTags> tagCatalog;
@@ -413,6 +419,7 @@ class _SoundRow extends StatefulWidget {
 
   const _SoundRow({
     required this.sound,
+    required this.availability,
     required this.canRemove,
     required this.typeLabel,
     required this.tagCatalog,
@@ -454,6 +461,8 @@ class _SoundRowState extends State<_SoundRow> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          padSoundAvailabilityIcon(widget.availability, scheme, size: 20),
+          const SizedBox(width: 8),
           SoundTypeAvatar(type: sound.type, radius: 16, iconSize: 18),
           const SizedBox(width: 10),
           Expanded(

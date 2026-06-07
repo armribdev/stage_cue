@@ -13,6 +13,7 @@ class PadCard extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onRemove;
+  final VoidCallback? onBadgeTap;
 
   const PadCard({
     super.key,
@@ -23,6 +24,7 @@ class PadCard extends StatefulWidget {
     this.onTap,
     this.onLongPress,
     this.onRemove,
+    this.onBadgeTap,
   });
 
   @override
@@ -326,6 +328,7 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
         padItem: widget.padItem,
         onTap: widget.onTap,
         onLongPress: widget.onLongPress,
+        onBadgeTap: widget.onBadgeTap,
       ),
     );
   }

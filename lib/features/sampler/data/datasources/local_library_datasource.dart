@@ -66,6 +66,16 @@ class LocalLibraryDataSource {
     )..where((l) => l.id.equals(id))).write(companion);
   }
 
+  Future<void> setAutoDownload(int id, {required bool value}) async {
+    await (_database.update(_database.libraries)..where((l) => l.id.equals(id)))
+        .write(db.LibrariesCompanion(autoDownload: Value(value)));
+  }
+
+  Future<void> updateOwnerEmail(int id, String ownerEmail) async {
+    await (_database.update(_database.libraries)..where((l) => l.id.equals(id)))
+        .write(db.LibrariesCompanion(ownerEmail: Value(ownerEmail)));
+  }
+
   Future<void> deleteLibrary(int id) async {
     await (_database.delete(
       _database.libraries,

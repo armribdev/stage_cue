@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import 'soloud_file_loader.dart';
+
 /// Service de gestion des lecteurs audio (basé sur flutter_soloud)
 /// Préchargement des sources pour une latence minimale au déclenchement
 class AudioPlayerService {
@@ -25,19 +27,13 @@ class AudioPlayerService {
   /// Crée un service en préchargeant le fichier audio (latence minimale au play)
   static Future<AudioPlayerService> create(String filePath) async {
     final file = File(filePath);
-    if (!await file.exists()) {
-      throw StateError('Fichier audio introuvable : $filePath');
-    }
-
-    final path = file.absolute.path;
     try {
-      final source = await SoLoud.instance.loadFile(
-        path,
-        mode: LoadMode.memory,
-      );
+      final source = await loadAudioSourceFromFile(file);
       return AudioPlayerService._(source);
     } catch (e) {
-      throw StateError('Impossible de charger le fichier audio : $path ($e)');
+      throw StateError(
+        'Impossible de charger le fichier audio : ${file.absolute.path} ($e)',
+      );
     }
   }
 
@@ -118,7 +114,14 @@ class AudioPlayerService {
   Stream<bool> get onPlayerStateChanged => _stateController.stream;
 
   /// Obtient la durée du fichier audio
-  Duration get duration => SoLoud.instance.getLength(_source);
+  Duration get duration {
+    try {
+      return SoLoud.instance.getLength(_source);
+    } catch (e) {
+      debugPrint('Durée audio indisponible: $e');
+      return Duration.zero;
+    }
+  }
 
   /// Position actuelle de lecture (0 si aucun handle actif).
   Duration get position {
@@ -134,10 +137,15 @@ class AudioPlayerService {
   /// Dispose les ressources
   void dispose() {
     _soundEventsSubscription?.cancel();
-    if (_currentHandle != null && SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
-      SoLoud.instance.stop(_currentHandle!);
+    try {
+      if (_currentHandle != null &&
+          SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
+        SoLoud.instance.stop(_currentHandle!);
+      }
+      SoLoud.instance.disposeSource(_source);
+    } catch (e) {
+      debugPrint('Erreur lors du dispose audio: $e');
     }
-    SoLoud.instance.disposeSource(_source);
     _stateController.close();
   }
 }
