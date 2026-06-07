@@ -589,6 +589,48 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
+  void _showPadUnavailableSheet(BuildContext context, PadItem padItem) {
+    final reason = padItem.unavailabilityReason!;
+    final (title, body) = switch (reason) {
+      PadUnavailabilityReason.needsDownload => (
+          'Son non téléchargé',
+          'Ce pad n\'est pas disponible localement. Synchronisez la bibliothèque pour télécharger les fichiers audio.',
+        ),
+      PadUnavailabilityReason.offline => (
+          'Hors-ligne',
+          'Ce pad n\'est pas disponible sans connexion. Reconnectez-vous pour accéder aux fichiers audio.',
+        ),
+      PadUnavailabilityReason.missingFile => (
+          'Fichier introuvable',
+          'Le fichier audio de ce pad est introuvable. Re-synchronisez la bibliothèque.',
+        ),
+    };
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        if (reason != PadUnavailabilityReason.needsDownload) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(ctx).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(body, style: Theme.of(ctx).textTheme.bodyMedium),
+              ],
+            ),
+          );
+        }
+
+        // needsDownload : proposer le téléchargement.
+        return _PadDownloadSheet(padItem: padItem, notifier: _notifier);
+      },
+    );
+  }
+
   Widget _buildPadWidget(
     BuildContext context,
     SamplerState state,
@@ -602,7 +644,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
         isEditMode: _isEditMode,
         animateOnRestore: _recentlyRestoredSoundId == padItem.pad.id,
         isHighlighted: _highlightedPadId == padItem.pad.id,
-        onTap: _isEditMode ? null : () => _notifier.toggleSound(padItem),
+        onTap: _isEditMode
+            ? null
+            : padItem.unavailabilityReason != null
+                ? () => _showPadUnavailableSheet(context, padItem)
+                : () => _notifier.toggleSound(padItem),
         onLongPress: _isEditMode
             ? null
             : () async {
@@ -692,8 +738,86 @@ class _SamplerScreenState extends State<SamplerScreen> {
               ),
             );
           }
+          final downloadableCount = state.pads
+              .where(
+                (p) =>
+                    p.unavailabilityReason ==
+                    PadUnavailabilityReason.needsDownload,
+              )
+              .length;
+          if (downloadableCount > 0 || state.isBoardPreparing) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildPrepareBanner(context, state, downloadableCount),
+                Expanded(
+                  child: _buildPadsGrid(context, state, selectedBoard),
+                ),
+              ],
+            );
+          }
           return _buildPadsGrid(context, state, selectedBoard);
         },
+      ),
+    );
+  }
+
+  Widget _buildPrepareBanner(
+    BuildContext context,
+    SamplerState state,
+    int count,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHigh,
+      child: InkWell(
+        onTap: state.isBoardPreparing
+            ? null
+            : () => _notifier.prepareBoardForOffline(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              if (state.isBoardPreparing)
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                Icon(
+                  Icons.cloud_download_outlined,
+                  size: 16,
+                  color: scheme.onSurfaceVariant,
+                ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  state.isBoardPreparing
+                      ? 'Téléchargement en cours…'
+                      : '$count son${count > 1 ? 's' : ''} '
+                          'non téléchargé${count > 1 ? 's' : ''}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (!state.isBoardPreparing)
+                Text(
+                  'Préparer',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.primary,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1255,6 +1379,88 @@ class _BoardTitleLabel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ---------- Feuille de téléchargement d'un pad ----------
+
+class _PadDownloadSheet extends StatefulWidget {
+  final PadItem padItem;
+  final SamplerNotifier notifier;
+
+  const _PadDownloadSheet({required this.padItem, required this.notifier});
+
+  @override
+  State<_PadDownloadSheet> createState() => _PadDownloadSheetState();
+}
+
+class _PadDownloadSheetState extends State<_PadDownloadSheet> {
+  bool _isDownloading = false;
+  bool _failed = false;
+
+  Future<void> _download() async {
+    setState(() {
+      _isDownloading = true;
+      _failed = false;
+    });
+    final ok = await widget.notifier.downloadAndLoadPad(widget.padItem);
+    if (!mounted) return;
+    if (ok) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() {
+        _isDownloading = false;
+        _failed = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Son non téléchargé',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Ce pad n\'est pas encore disponible localement.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          if (_failed) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Téléchargement échoué. Vérifiez la connexion.',
+              style: TextStyle(color: scheme.error, fontSize: 13),
+            ),
+          ],
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _isDownloading ? null : _download,
+              icon: _isDownloading
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: scheme.onPrimary,
+                      ),
+                    )
+                  : const Icon(Icons.cloud_download_outlined, size: 18),
+              label: Text(_isDownloading ? 'Téléchargement…' : 'Télécharger'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

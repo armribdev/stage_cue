@@ -4,7 +4,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import '../../../../core/audio/audio_player_service.dart';
-import '../../data/repositories/library_repository.dart';
+import '../../data/repositories/library_repository.dart'
+    show LibraryRepository, SoundNotAvailableLocallyException;
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
@@ -13,6 +14,16 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../../domain/usecases/load_sounds_usecase.dart';
 import '../../domain/usecases/remove_sound_from_board_usecase.dart';
+
+/// Raison pour laquelle un pad ne peut pas être joué.
+enum PadUnavailabilityReason {
+  /// Sons présents en DB mais fichiers non encore téléchargés (connexion disponible).
+  needsDownload,
+  /// Appareil hors-ligne et fichiers absents du cache local.
+  offline,
+  /// Fichier local introuvable (supprimé ou déplacé).
+  missingFile,
+}
 
 /// État du sampler
 class SamplerState {
@@ -27,6 +38,8 @@ class SamplerState {
   final String? boardsError;
   final PadItem? currentMusicPad;
   final List<int> musicQueuePadIds;
+  /// true pendant la préparation hors-ligne du board (téléchargements en cours).
+  final bool isBoardPreparing;
 
   SamplerState({
     required this.pads,
@@ -38,6 +51,7 @@ class SamplerState {
     this.boardsError,
     this.currentMusicPad,
     this.musicQueuePadIds = const [],
+    this.isBoardPreparing = false,
   });
 
   /// Prochaine musique en file d'attente.
@@ -66,6 +80,7 @@ class SamplerState {
     List<int>? musicQueuePadIds,
     bool clearCurrentMusicPad = false,
     bool clearMusicQueue = false,
+    bool? isBoardPreparing,
   }) {
     return SamplerState(
       pads: pads ?? this.pads,
@@ -87,6 +102,7 @@ class SamplerState {
       musicQueuePadIds: clearMusicQueue
           ? const []
           : musicQueuePadIds ?? this.musicQueuePadIds,
+      isBoardPreparing: isBoardPreparing ?? this.isBoardPreparing,
     );
   }
 }
@@ -100,12 +116,14 @@ class PadItem {
   int? _currentPlayerIndex;
   int? pausedPlayerIndex;
   Duration? pausedPlaybackPosition;
+  PadUnavailabilityReason? unavailabilityReason;
 
   PadItem({
     required this.pad,
     required this.players,
     this.isPlaying = false,
     int nextSoundIndex = 0,
+    this.unavailabilityReason,
   }) : _nextSoundIndex = nextSoundIndex;
 
   /// Lecteur actuellement actif (celui qui joue ou vient de jouer).
@@ -190,19 +208,45 @@ class SamplerNotifier extends ChangeNotifier {
   ]);
 
   /// Résout le chemin local jouable d'un son (cache Drive si bibliothèque).
-  Future<String> _resolvePlayablePath(Sound sound) async {
+  ///
+  /// [downloadIfNeeded] false (défaut) : lève [SoundNotAvailableLocallyException]
+  /// si le fichier n'est pas en cache, sans déclencher de téléchargement.
+  /// [downloadIfNeeded] true : télécharge depuis Drive si nécessaire.
+  Future<String> _resolvePlayablePath(
+    Sound sound, {
+    bool downloadIfNeeded = false,
+  }) async {
     final libraryRepository = _libraryRepository;
-    String? resolved;
     if (libraryRepository != null) {
+      // SoundNotAvailableLocallyException remonte intentionnellement.
       try {
-        resolved = await libraryRepository.resolvePlayablePath(sound);
+        final resolved = await libraryRepository.resolvePlayablePath(
+          sound,
+          downloadIfNeeded: downloadIfNeeded,
+        );
+        final file = File(resolved);
+        if (!await file.exists()) {
+          throw StateError(
+            'Fichier audio introuvable : ${sound.displayName ?? sound.title}',
+          );
+        }
+        return file.absolute.path;
+      } on SoundNotAvailableLocallyException {
+        rethrow;
       } catch (e) {
         debugPrint('Résolution du chemin échouée pour ${sound.title}: $e');
+        // Fallback sur le chemin stocké en DB (sons locaux legacy).
+        final file = File(sound.filePath);
+        if (!await file.exists()) {
+          throw StateError(
+            'Fichier audio introuvable : ${sound.displayName ?? sound.title}',
+          );
+        }
+        return file.absolute.path;
       }
     }
-    resolved ??= sound.filePath;
 
-    final file = File(resolved);
+    final file = File(sound.filePath);
     if (!await file.exists()) {
       throw StateError(
         'Fichier audio introuvable : ${sound.displayName ?? sound.title}',
@@ -216,15 +260,28 @@ class SamplerNotifier extends ChangeNotifier {
       player.dispose();
     }
     padItem.players.clear();
+    padItem.unavailabilityReason = null;
+
+    PadUnavailabilityReason? reason;
 
     for (final sound in pad.sounds) {
       try {
         final path = await _resolvePlayablePath(sound);
         padItem.players.add(await AudioPlayerService.create(path));
+      } on SoundNotAvailableLocallyException catch (e) {
+        reason ??= e.isOffline
+            ? PadUnavailabilityReason.offline
+            : PadUnavailabilityReason.needsDownload;
       } catch (e) {
+        reason ??= PadUnavailabilityReason.missingFile;
         debugPrint('Échec du chargement de ${sound.filePath}: $e');
       }
     }
+
+    if (padItem.players.isEmpty && reason != null) {
+      padItem.unavailabilityReason = reason;
+    }
+
     _attachPlayerListeners(padItem);
   }
 
@@ -474,9 +531,6 @@ class SamplerNotifier extends ChangeNotifier {
           existing.pad = pad;
           if (soundsChanged) {
             await _loadPlayersForPad(existing, pad);
-            if (existing.players.isEmpty && pad.sounds.isNotEmpty) {
-              return null;
-            }
           }
           if (existing.isPlaying) {
             existing.currentPlayer?.setVolume(_effectiveVolume(existing));
@@ -486,12 +540,11 @@ class SamplerNotifier extends ChangeNotifier {
 
         final padItem = PadItem(pad: pad, players: <AudioPlayerService>[]);
         await _loadPlayersForPad(padItem, pad);
-        if (padItem.players.isEmpty && pad.sounds.isNotEmpty) return null;
         return padItem;
       });
 
       final items = await Future.wait(loadFutures);
-      final padItems = items.whereType<PadItem>().toList();
+      final padItems = items.toList();
 
       _state = _state.copyWith(pads: padItems, isLoading: false);
       final keptIds = padItems.map((item) => item.pad.id).toSet();
@@ -507,6 +560,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   /// Joue ou arrête le pad selon son mode de lecture.
   Future<void> toggleSound(PadItem padItem) async {
+    if (padItem.unavailabilityReason != null) return;
     if (padItem.pad.isMusicPad) {
       await _toggleMusicPad(padItem);
       return;
@@ -523,6 +577,57 @@ class SamplerNotifier extends ChangeNotifier {
     final player = padItem.players[soundIndex];
     player.setVolume(_effectiveVolume(padItem));
     await player.play();
+    notifyListeners();
+  }
+
+  /// Télécharge les sons manquants d'un pad indisponible puis charge les lecteurs.
+  /// Retourne true si au moins un lecteur a pu être créé.
+  Future<bool> downloadAndLoadPad(PadItem padItem) async {
+    for (final player in padItem.players) {
+      player.dispose();
+    }
+    padItem.players.clear();
+
+    for (final sound in padItem.pad.sounds) {
+      try {
+        final path = await _resolvePlayablePath(sound, downloadIfNeeded: true);
+        padItem.players.add(await AudioPlayerService.create(path));
+      } catch (e) {
+        debugPrint('Téléchargement échoué pour ${sound.title}: $e');
+      }
+    }
+
+    if (padItem.players.isNotEmpty) {
+      padItem.unavailabilityReason = null;
+      _attachPlayerListeners(padItem);
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  /// Télécharge tous les sons non-cachés du board actif (état needsDownload).
+  /// Met à jour la grille au fur et à mesure. Sans effet si déjà en cours.
+  Future<void> prepareBoardForOffline() async {
+    if (_state.isBoardPreparing) return;
+
+    final toDownload = _state.pads
+        .where(
+          (p) => p.unavailabilityReason == PadUnavailabilityReason.needsDownload,
+        )
+        .toList();
+    if (toDownload.isEmpty) return;
+
+    _state = _state.copyWith(isBoardPreparing: true);
+    notifyListeners();
+
+    for (final padItem in toDownload) {
+      await downloadAndLoadPad(padItem);
+      // downloadAndLoadPad appelle notifyListeners() si succès — la grille se met
+      // à jour pad par pad.
+    }
+
+    _state = _state.copyWith(isBoardPreparing: false);
     notifyListeners();
   }
 
