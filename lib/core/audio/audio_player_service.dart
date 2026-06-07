@@ -43,11 +43,20 @@ class AudioPlayerService {
 
   /// Joue le son (quasi instantané car préchargé)
   Future<void> play() async {
+    await playFromPosition(Duration.zero);
+  }
+
+  /// Lance la lecture à [position] (reprise après pause).
+  Future<void> playFromPosition(Duration position) async {
     try {
-      if (_currentHandle != null && SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
+      if (_currentHandle != null &&
+          SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
         await SoLoud.instance.stop(_currentHandle!);
       }
       _currentHandle = await SoLoud.instance.play(_source);
+      if (position > Duration.zero) {
+        SoLoud.instance.seek(_currentHandle!, position);
+      }
       _stateController.add(true);
     } catch (e) {
       debugPrint('Erreur lors de la lecture: $e');
