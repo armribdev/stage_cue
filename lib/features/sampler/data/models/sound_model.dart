@@ -19,6 +19,8 @@ class SoundModel {
       libraryId: sound.libraryId,
       relativePath: sound.relativePath,
       contentHash: sound.contentHash,
+      isFavorite: sound.isFavorite,
+      lastPlayedAt: sound.lastPlayedAt,
     );
   }
 

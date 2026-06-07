@@ -224,6 +224,18 @@ class LocalSoundDataSource {
     )..where((s) => s.id.equals(id))).write(companion);
   }
 
+  /// Marque ou démarque un son comme favori (accès rapide en recherche).
+  Future<void> setFavorite(int id, bool isFavorite) async {
+    await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
+        .write(db.SoundsCompanion(isFavorite: Value(isFavorite)));
+  }
+
+  /// Enregistre l'instant de dernière lecture (tri par récence).
+  Future<void> markPlayed(int id, {DateTime? at}) async {
+    await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
+        .write(db.SoundsCompanion(lastPlayedAt: Value(at ?? DateTime.now())));
+  }
+
   /// Met à jour les réglages d'un pad pour une board spécifique.
   Future<void> upsertBoardSoundSettings({
     required int boardId,
@@ -685,6 +697,23 @@ class LocalSoundDataSource {
         contentHash: row.contentHash,
       );
     }).toList();
+  }
+
+  /// Chemins relatifs des sons favoris d'une bibliothèque — pour épingler le
+  /// cache : ces fichiers ne doivent jamais être évincés par le LRU (P3).
+  Future<Set<String>> getFavoriteRelativePaths(int libraryId) async {
+    final rows = await (_database.select(_database.sounds)
+          ..where(
+            (s) =>
+                s.libraryId.equals(libraryId) &
+                s.isFavorite.equals(true) &
+                s.relativePath.isNotNull(),
+          ))
+        .get();
+    return {
+      for (final row in rows)
+        if (row.relativePath != null) row.relativePath!,
+    };
   }
 
   /// Supprime tous les sons d'une bibliothèque Drive.

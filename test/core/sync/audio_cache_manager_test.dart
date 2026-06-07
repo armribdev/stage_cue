@@ -168,4 +168,31 @@ void main() {
     expect(await File(manager.localPathFor(library, 'a.wav')).exists(), isFalse);
     expect(await File(manager.localPathFor(library, 'b.wav')).exists(), isTrue);
   });
+
+  test('éviction LRU : un favori épinglé n\'est jamais évincé', () async {
+    var tick = 0;
+    final manager = AudioCacheManager(
+      maxCacheBytes: 100,
+      clock: () => ++tick,
+      pinnedPaths: (_) async => {'a.wav'}, // a.wav = favori épinglé
+    );
+    when(() => client.findInFolder(
+          parentId: any(named: 'parentId'),
+          name: any(named: 'name'),
+        )).thenAnswer((_) async => file('remote', 'x'));
+    stubDownloadWriting(80);
+
+    // a (tick1), b (tick2), c (tick3) ; budget 100, 80 chacun.
+    await manager.ensureCached(
+        client: client, library: library, relativePath: 'a.wav');
+    await manager.ensureCached(
+        client: client, library: library, relativePath: 'b.wav');
+    await manager.ensureCached(
+        client: client, library: library, relativePath: 'c.wav');
+
+    // a.wav est le plus ancien mais épinglé -> conservé ; b évincé à sa place.
+    expect(await File(manager.localPathFor(library, 'a.wav')).exists(), isTrue);
+    expect(await File(manager.localPathFor(library, 'b.wav')).exists(), isFalse);
+    expect(await File(manager.localPathFor(library, 'c.wav')).exists(), isTrue);
+  });
 }

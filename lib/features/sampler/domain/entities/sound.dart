@@ -18,6 +18,12 @@ class Sound {
   /// Empreinte de contenu pour réidentifier un fichier déplacé/renommé.
   final String? contentHash;
 
+  /// Marqué favori par l'opérateur (accès rapide en recherche-éclair).
+  final bool isFavorite;
+
+  /// Dernière lecture (pré-écoute / déclenchement) — tri par récence.
+  final DateTime? lastPlayedAt;
+
   Sound({
     required this.id,
     required this.title,
@@ -30,6 +36,8 @@ class Sound {
     this.libraryId,
     this.relativePath,
     this.contentHash,
+    this.isFavorite = false,
+    this.lastPlayedAt,
   });
 }
 
