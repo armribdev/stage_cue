@@ -578,6 +578,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
                   padItem: next,
                   isActive: true,
                   emptyLabel: '—',
+                  showDownloadBar: true,
                 ),
               ],
             ],
@@ -1430,17 +1431,70 @@ class _LiveBadge extends StatelessWidget {
   }
 }
 
+/// Indicateur circulaire de téléchargement pour la régie musique.
+class _RegieDownloadRing extends StatelessWidget {
+  final PadItem padItem;
+  final double size;
+
+  const _RegieDownloadRing({
+    required this.padItem,
+    this.size = 24,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!padItem.showsRegieDownloadProgress) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CircularProgressIndicator(
+        strokeWidth: size >= 24 ? 2.5 : 2,
+        value: padItem.regieDownloadProgress,
+        color: scheme.tertiary,
+        backgroundColor: scheme.tertiary.withValues(alpha: 0.18),
+      ),
+    );
+  }
+}
+
+/// Barre de progression linéaire sous une piste en file.
+class _RegieDownloadBar extends StatelessWidget {
+  final PadItem padItem;
+
+  const _RegieDownloadBar({required this.padItem});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!padItem.showsRegieDownloadProgress) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: LinearProgressIndicator(
+        minHeight: 3,
+        value: padItem.regieDownloadProgress,
+        color: scheme.tertiary,
+        backgroundColor: scheme.tertiary.withValues(alpha: 0.15),
+      ),
+    );
+  }
+}
+
 class _CueSlot extends StatelessWidget {
   final String label;
   final PadItem? padItem;
   final bool isActive;
   final String emptyLabel;
+  final bool showDownloadBar;
 
   const _CueSlot({
     required this.label,
     required this.padItem,
     required this.isActive,
     required this.emptyLabel,
+    this.showDownloadBar = false,
   });
 
   @override
@@ -1479,8 +1533,14 @@ class _CueSlot extends StatelessWidget {
                 ),
               ),
             ),
+            if (padItem != null)
+              _RegieDownloadRing(padItem: padItem!, size: 22),
           ],
         ),
+        if (showDownloadBar && padItem != null) ...[
+          const SizedBox(height: 6),
+          _RegieDownloadBar(padItem: padItem!),
+        ],
       ],
     );
   }
@@ -1836,27 +1896,37 @@ class _QueueRow extends StatelessWidget {
 
     Widget content = Padding(
       padding: const EdgeInsets.all(4),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _PadColorChip(padItem: padItem, size: 32),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              padItem.pad.displayName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+          Row(
+            children: [
+              _PadColorChip(padItem: padItem, size: 32),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  padItem.pad.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
+              _RegieDownloadRing(padItem: padItem, size: 26),
+              if (onRemove != null && !enableSwipeToRemove)
+                IconButton(
+                  tooltip: 'Retirer',
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
           ),
-          if (onRemove != null && !enableSwipeToRemove)
-            IconButton(
-              tooltip: 'Retirer',
-              onPressed: onRemove,
-              icon: const Icon(Icons.close_rounded, size: 18),
-              visualDensity: VisualDensity.compact,
-            ),
+          if (padItem.showsRegieDownloadProgress) ...[
+            const SizedBox(height: 6),
+            _RegieDownloadBar(padItem: padItem),
+          ],
         ],
       ),
     );
