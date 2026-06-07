@@ -104,12 +104,11 @@ void main() {
       await controller.takeRemote(library);
 
       expect(controller.state.status, SyncStatus.synced);
-      expect(controller.state.pendingRestart, isFalse);
     });
   });
 
   group('pullForLaunch', () {
-    test('snapshot plus récent -> synced sans redémarrage', () async {
+    test('snapshot plus récent -> synced', () async {
       when(() => repo.pullLibrary(any()))
           .thenAnswer((_) async => const PullStaged(7));
       final controller = SyncController(repo);
@@ -117,10 +116,9 @@ void main() {
       await controller.pullForLaunch(library);
 
       expect(controller.state.status, SyncStatus.synced);
-      expect(controller.state.pendingRestart, isFalse);
     });
 
-    test('déjà à jour -> synced sans redémarrage', () async {
+    test('déjà à jour -> synced', () async {
       when(() => repo.pullLibrary(any()))
           .thenAnswer((_) async => const PullUpToDate());
       final controller = SyncController(repo);
@@ -128,7 +126,6 @@ void main() {
       await controller.pullForLaunch(library);
 
       expect(controller.state.status, SyncStatus.synced);
-      expect(controller.state.pendingRestart, isFalse);
     });
   });
 

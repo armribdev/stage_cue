@@ -125,16 +125,6 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
     }
 
     if (wasOnAir || wasQueued) return;
-
-    final title = sound.displayName ?? sound.title;
-    final message = '$title ajouté à la file';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   void _showPlaybackError() {

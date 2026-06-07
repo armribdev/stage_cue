@@ -182,11 +182,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _driveAccount = widget.libraryRepository.connectedAccountProfile;
       });
 
-      if (!connected) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Connexion Google annulée')),
-        );
-      }
+      if (!connected) return;
     } on GoogleOAuthNotConfiguredException catch (e) {
       if (mounted) {
         showCopyableSnackBar(
@@ -800,9 +796,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 .toList();
             _indexingProgress.remove(pendingKey);
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Connexion Google Drive annulée')),
-          );
         }
         return;
       }

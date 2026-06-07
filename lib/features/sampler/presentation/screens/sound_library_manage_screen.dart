@@ -592,12 +592,6 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
     }
 
     await _loadSounds();
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Son mis à jour')));
   }
 
   Future<void> _openEditPage(Sound sound) async {
@@ -621,12 +615,6 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
     }
 
     await _loadSounds();
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Son mis à jour')));
   }
 
   Future<void> _openSoundEdit(Sound sound) async {
