@@ -129,6 +129,27 @@ void main() {
     });
   });
 
+  group('markOffline', () {
+    test('passe à offline pour la pastille ambiante', () {
+      final controller = SyncController(repo);
+
+      controller.markOffline();
+
+      expect(controller.state.status, SyncStatus.offline);
+    });
+
+    test('idempotent : pas de notification redondante', () {
+      final controller = SyncController(repo);
+      var notifications = 0;
+      controller.addListener(() => notifications++);
+
+      controller.markOffline();
+      controller.markOffline();
+
+      expect(notifications, 1);
+    });
+  });
+
   group('schedulePush (anti-rebond)', () {
     test('plusieurs appels rapprochés -> un seul push', () async {
       when(() => repo.pushLibrary(any(),

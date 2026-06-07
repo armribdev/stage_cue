@@ -114,6 +114,14 @@ class SyncController extends ChangeNotifier {
     }
   }
 
+  /// Signale l'état hors-ligne : une bibliothèque Drive est configurée mais
+  /// aucune session n'a pu être restaurée. Permet à la pastille ambiante
+  /// d'indiquer le travail local au lieu de rester muette (statut `idle`).
+  void markOffline() {
+    if (_state.status == SyncStatus.offline) return;
+    _set(_state.copyWith(status: SyncStatus.offline));
+  }
+
   /// Au lancement : reconnexion silencieuse puis pull/fusion du snapshot distant.
   Future<void> pullForLaunch(Library library) async {
     if (!await _ensureConnected()) {

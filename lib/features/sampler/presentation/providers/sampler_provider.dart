@@ -254,8 +254,17 @@ class SamplerNotifier extends ChangeNotifier {
   /// jouer une musique dans la régie sans l'ajouter au plateau.
   final Map<int, PadItem> _offStageMusicPads = {};
 
+  /// Lecteur dédié à la pré-écoute (recherche-éclair) : indépendant des pads,
+  /// du master musique et de la file — auditionner ou déclencher un son sans
+  /// l'ajouter au plateau.
+  AudioPlayerService? _previewPlayer;
+
   /// Évite les téléchargements concurrents sur un même pad.
   final Map<int, Future<bool>> _padDownloadTasks = {};
+
+  /// Génération de préchargement courante : tout changement de plateau ou
+  /// rechargement l'incrémente, ce qui annule le prefetch en cours.
+  int _prefetchGeneration = 0;
 
   /// Sérialise les rechargements de plateau pour éviter les courses async.
   Future<void>? _loadSoundsChain;
@@ -737,10 +746,45 @@ class SamplerNotifier extends ChangeNotifier {
           previousItems.where((item) => !keptIds.contains(item.pad.id)).toList();
       _disposePadItems(removedItems);
       _syncMusicStateWithPads();
+      // Précharge la scène en arrière-plan : l'opérateur n'a pas à demander.
+      unawaited(_prefetchActiveBoard());
     } catch (e) {
       _state = _state.copyWith(isLoading: false, error: e.toString());
     }
     notifyListeners();
+  }
+
+  /// Précharge en arrière-plan les pads téléchargeables du plateau courant, dans
+  /// l'ordre de la grille (les plus accessibles d'abord), pour que l'opérateur
+  /// trouve des pads PRÊT sans rien demander (refonte UX P1 — « le système
+  /// anticipe »).
+  ///
+  /// Silencieux et non bloquant ; annulé dès qu'on change de plateau ou qu'un
+  /// nouveau chargement démarre (garde de génération) ; inopérant hors-ligne —
+  /// seuls les pads `needsDownload` sont visés, les `offline`/`missingFile` sont
+  /// ignorés. Séquentiel pour ne pas marteler Drive : la file priorisée à
+  /// concurrence limitée (et la priorité aux favoris) viendra avec le
+  /// DownloadQueueManager (P2/P3).
+  Future<void> _prefetchActiveBoard() async {
+    final libraryRepository = _libraryRepository;
+    if (libraryRepository == null) return;
+
+    final generation = ++_prefetchGeneration;
+    final boardId = _activeBoardId;
+    if (boardId == null) return;
+    if (_state.isBoardPreparing) return; // la préparation manuelle prime.
+
+    // Une seule vérification de connexion : inutile de marteler Drive hors-ligne.
+    if (!await libraryRepository.ensureDriveConnected()) return;
+    if (generation != _prefetchGeneration || _activeBoardId != boardId) return;
+
+    for (final padItem in List<PadItem>.from(_state.pads)) {
+      if (generation != _prefetchGeneration || _activeBoardId != boardId) {
+        return;
+      }
+      if (padItem.pendingDownloadCount == 0) continue; // déjà prêt ou bloqué.
+      await downloadAndLoadPad(padItem);
+    }
   }
 
   /// Recharge les lecteurs d'un pad depuis le cache local (après téléchargement).
@@ -1783,6 +1827,8 @@ class SamplerNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
+    _previewPlayer?.dispose();
+    _previewPlayer = null;
     for (final padItem in _state.pads) {
       padItem.disposeAllSlots();
     }
@@ -1796,6 +1842,53 @@ class SamplerNotifier extends ChangeNotifier {
 
   Future<List<Sound>> getAllSounds() async {
     return await _repository.getAllSounds();
+  }
+
+  /// Recherche les ids de sons par requête de tags (normalisée, sans accents).
+  Future<Set<int>> findSoundIdsByTagQuery(String query) {
+    return _repository.findSoundIdsByTagQuery(query);
+  }
+
+  /// Joue immédiatement un son par id sur le lecteur de pré-écoute, sans toucher
+  /// au plateau ni à la file musique (recherche-éclair). Télécharge à la demande.
+  /// Retourne false si le son est introuvable ou indisponible.
+  Future<bool> previewSound(int soundId) async {
+    final sound = await _repository.getSoundById(soundId);
+    if (sound == null) return false;
+    try {
+      final path = await _resolvePlayablePath(sound, downloadIfNeeded: true);
+      await stopPreview();
+      final player = await AudioPlayerService.create(path);
+      _previewPlayer = player;
+      await player.play();
+      return true;
+    } catch (e) {
+      debugPrint('Pré-écoute échouée pour ${sound.title}: $e');
+      return false;
+    }
+  }
+
+  /// Coupe la pré-écoute en cours (fermeture de la recherche, nouveau son…).
+  Future<void> stopPreview() async {
+    final player = _previewPlayer;
+    _previewPlayer = null;
+    if (player == null) return;
+    try {
+      await player.stop();
+    } catch (_) {}
+    try {
+      player.dispose();
+    } catch (_) {}
+  }
+
+  /// Ajoute un son au plateau actif comme nouveau pad (recherche-éclair) et
+  /// recharge. Retourne l'id du pad créé, ou null si aucun plateau actif.
+  Future<int?> addSoundToActiveBoard(int soundId) async {
+    final boardId = _activeBoardId;
+    if (boardId == null) return null;
+    final padId = await _repository.createPad(boardId, soundId);
+    await loadSounds(boardId: boardId);
+    return padId;
   }
 
   // ── Tags ──────────────────────────────────────────────────────────────────
