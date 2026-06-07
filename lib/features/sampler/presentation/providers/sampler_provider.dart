@@ -3,7 +3,9 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/audio_player_service.dart';
+import '../../../../core/audio/audio_file_validation.dart';
 import '../../../../core/sync/download_queue.dart';
 import '../../data/repositories/library_repository.dart'
     show LibraryRepository, SoundNotAvailableLocallyException;
@@ -293,6 +295,9 @@ class SamplerNotifier extends ChangeNotifier {
   /// Sérialise les rechargements de plateau pour éviter les courses async.
   Future<void>? _loadSoundsChain;
 
+  /// Annule le préchargement audio quand le plateau change.
+  int _padPreloadGeneration = 0;
+
   SamplerState _state = SamplerState(pads: []);
   SamplerState get state => _state;
   double get musicVolume => _musicVolume;
@@ -354,7 +359,7 @@ class SamplerNotifier extends ChangeNotifier {
         // Sons de bibliothèque : pas de repli sur filePath (chemin d'un autre appareil).
         if (sound.libraryId != null && sound.relativePath != null) rethrow;
         final file = File(sound.filePath);
-        if (!await file.exists()) {
+        if (!await file.exists() || !await isPlausibleAudioFile(file)) {
           throw StateError(
             'Fichier audio introuvable : ${sound.displayName ?? sound.title}',
           );
@@ -364,7 +369,7 @@ class SamplerNotifier extends ChangeNotifier {
     }
 
     final file = File(sound.filePath);
-    if (!await file.exists()) {
+    if (!await file.exists() || !await isPlausibleAudioFile(file)) {
       throw StateError(
         'Fichier audio introuvable : ${sound.displayName ?? sound.title}',
       );
@@ -460,26 +465,84 @@ class SamplerNotifier extends ChangeNotifier {
     }
     padItem.slots[index] = PadSoundSlot();
     final sound = padItem.pad.sounds[index];
+    String? resolvedPath;
     try {
-      final path = await _resolvePlayablePath(
+      if (isKnownUnloadablePath(sound.filePath)) {
+        throw StateError('Fichier audio déjà signalé illisible');
+      }
+      resolvedPath = await _resolvePlayablePath(
         sound,
         downloadIfNeeded: downloadIfNeeded,
       );
       padItem.slots[index] = PadSoundSlot(
         availability: PadSoundAvailability.ready,
-        player: await AudioPlayerService.create(path),
+        player: await AudioPlayerService.create(resolvedPath),
       );
       await _syncPadSoundMetadata(padItem, index);
     } on SoundNotAvailableLocallyException catch (e) {
       padItem.slots[index] = PadSoundSlot(
         availability: _availabilityFromException(e),
       );
-    } catch (e) {
-      debugPrint('Échec du chargement de ${sound.title}: $e');
+    } catch (e, stack) {
+      if (resolvedPath != null) {
+        markPathUnloadable(resolvedPath);
+      }
+      AudioLoadLog.soundLoadFailed(
+        soundId: sound.id,
+        title: sound.displayName ?? sound.title,
+        padId: padItem.pad.id,
+        resolvedPath: resolvedPath,
+        legacyPath: sound.filePath,
+        error: e,
+        stackTrace: stack,
+      );
       padItem.slots[index] = PadSoundSlot(
         availability: PadSoundAvailability.missingFile,
       );
     }
+  }
+
+  Future<void> _loadPlayersForPadSafe(PadItem padItem, Pad pad) async {
+    final padLabel = pad.displayName;
+    try {
+      await _loadPlayersForPad(padItem, pad);
+      _notifyPad(padItem);
+    } catch (e, stack) {
+      AudioLoadLog.padPlayersFailed(
+        padId: pad.id,
+        padLabel: padLabel,
+        error: e,
+        stackTrace: stack,
+      );
+      _finalizePadAvailability(padItem);
+      _notifyPad(padItem);
+    }
+  }
+
+  Future<void> _preloadPadPlayersSequential(
+    List<PadItem> padItems,
+    int generation,
+  ) async {
+    final boardId = _activeBoardId;
+    if (boardId == null || padItems.isEmpty) return;
+
+    AudioLoadLog.preloadStarted(boardId: boardId, padCount: padItems.length);
+    for (final padItem in padItems) {
+      if (generation != _padPreloadGeneration) {
+        AudioLoadLog.preloadCancelled(boardId: boardId);
+        return;
+      }
+      await _loadPlayersForPadSafe(padItem, padItem.pad);
+      notifyListeners();
+    }
+
+    if (generation != _padPreloadGeneration) {
+      AudioLoadLog.preloadCancelled(boardId: boardId);
+      return;
+    }
+
+    AudioLoadLog.preloadFinished(boardId: boardId, padCount: padItems.length);
+    unawaited(_prefetchActiveBoard());
   }
 
   Future<void> _loadPlayersForPad(PadItem padItem, Pad pad) async {
@@ -712,17 +775,18 @@ class SamplerNotifier extends ChangeNotifier {
 
   // ── Pads ──────────────────────────────────────────────────────────────────
 
-  Future<void> loadSounds({int? boardId}) {
+  Future<void> loadSounds({int? boardId, bool silent = false}) {
     _loadSoundsChain ??= Future<void>.value();
     _loadSoundsChain = _loadSoundsChain!.then(
-      (_) => _loadSoundsImpl(boardId),
+      (_) => _loadSoundsImpl(boardId, silent: silent),
     );
     return _loadSoundsChain!;
   }
 
-  Future<void> _loadSoundsImpl(int? boardId) async {
+  Future<void> _loadSoundsImpl(int? boardId, {bool silent = false}) async {
     if (boardId != null) _activeBoardId = boardId;
     _lastRemovedPad = null;
+    final preloadGeneration = ++_padPreloadGeneration;
     final currentBoardId = _activeBoardId;
     if (currentBoardId == null) {
       _disposePadItems(_state.pads);
@@ -731,8 +795,10 @@ class SamplerNotifier extends ChangeNotifier {
       return;
     }
 
-    _state = _state.copyWith(isLoading: true, error: null);
-    notifyListeners();
+    if (!silent) {
+      _state = _state.copyWith(isLoading: true, error: null);
+      notifyListeners();
+    }
 
     try {
       final pads = await _loadPadsUseCase(currentBoardId);
@@ -741,39 +807,52 @@ class SamplerNotifier extends ChangeNotifier {
         for (final item in previousItems) item.pad.id: item,
       };
 
-      final loadFutures = pads.map((pad) async {
+      final padItems = <PadItem>[];
+      final padsToPreload = <PadItem>[];
+
+      for (final pad in pads) {
         final existing = previousItemsById[pad.id];
         if (existing != null) {
           final soundsChanged = _padSoundsChanged(existing, pad);
           existing.pad = pad;
           existing.syncSlotCount();
+          padItems.add(existing);
           if (soundsChanged) {
-            await _loadPlayersForPad(existing, pad);
-          }
-          if (existing.isPlaying) {
+            padsToPreload.add(existing);
+          } else if (existing.isPlaying) {
             existing.currentPlayer?.setVolume(_effectiveVolume(existing));
           }
-          return existing;
+          continue;
         }
 
         final padItem = PadItem(pad: pad);
-        await _loadPlayersForPad(padItem, pad);
-        return padItem;
-      });
+        padItems.add(padItem);
+        padsToPreload.add(padItem);
+      }
 
-      final items = await Future.wait(loadFutures);
-      final padItems = items.toList();
-
-      _state = _state.copyWith(pads: padItems, isLoading: false);
+      _state = _state.copyWith(pads: padItems, isLoading: false, error: null);
       final keptIds = padItems.map((item) => item.pad.id).toSet();
       final removedItems =
           previousItems.where((item) => !keptIds.contains(item.pad.id)).toList();
       _disposePadItems(removedItems);
       _syncMusicStateWithPads();
-      // Précharge la scène en arrière-plan : l'opérateur n'a pas à demander.
-      unawaited(_prefetchActiveBoard());
-    } catch (e) {
-      _state = _state.copyWith(isLoading: false, error: e.toString());
+
+      if (preloadGeneration == _padPreloadGeneration) {
+        if (padsToPreload.isNotEmpty) {
+          unawaited(
+            _preloadPadPlayersSequential(padsToPreload, preloadGeneration),
+          );
+        } else {
+          unawaited(_prefetchActiveBoard());
+        }
+      }
+    } catch (e, stack) {
+      AudioLoadLog.severe(
+        'Échec chargement plateau #$currentBoardId (UI conservée)',
+        error: e,
+        stackTrace: stack,
+      );
+      _state = _state.copyWith(isLoading: false, error: null);
     }
     notifyListeners();
   }
@@ -938,9 +1017,11 @@ class SamplerNotifier extends ChangeNotifier {
 
     final pendingIndices = <int>[];
     for (var i = 0; i < padItem.slots.length; i++) {
-      if (!padItem.slots[i].isReady) {
-        pendingIndices.add(i);
-      }
+      final slot = padItem.slots[i];
+      if (slot.isReady) continue;
+      // Fichier local corrompu / illisible : inutile de boucler sur le téléchargement.
+      if (slot.availability == PadSoundAvailability.missingFile) continue;
+      pendingIndices.add(i);
     }
     if (pendingIndices.isEmpty) {
       if (padItem.isPlayable) return true;
@@ -1915,20 +1996,63 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
+  /// Met à jour le pad en mémoire dès qu'un son est ajouté ou retiré, sans
+  /// attendre un rechargement complet du plateau (évite le délai perceptible
+  /// sur la grille pendant le chargement des lecteurs audio).
+  void _applySoundAddedToPad(PadItem padItem, Sound sound) {
+    if (padItem.pad.sounds.any((s) => s.id == sound.id)) return;
+    padItem.pad = padItem.pad.copyWith(
+      sounds: [...padItem.pad.sounds, sound],
+    );
+    padItem.syncSlotCount();
+    _finalizePadAvailability(padItem);
+    _notifyPad(padItem);
+    notifyListeners();
+  }
+
+  void _applySoundRemovedFromPad(PadItem padItem, int soundId) {
+    final index = padItem.pad.sounds.indexWhere((s) => s.id == soundId);
+    if (index < 0) return;
+    final sounds = List<Sound>.from(padItem.pad.sounds)..removeAt(index);
+    padItem.pad = padItem.pad.copyWith(sounds: sounds);
+    if (index < padItem.slots.length) {
+      padItem.slots.removeAt(index).dispose();
+    }
+    padItem.syncSlotCount();
+    _finalizePadAvailability(padItem);
+    _notifyPad(padItem);
+    notifyListeners();
+  }
+
+  /// Charge les lecteurs du pad en arrière-plan après un changement de liste.
+  Future<void> _reloadPadPlayersInBackground(PadItem padItem) async {
+    await _loadPlayersForPadSafe(padItem, padItem.pad);
+    notifyListeners();
+  }
+
   /// Ajoute un son à un pad existant et recharge.
   Future<void> addSoundToPad(int padId, int soundId) async {
+    final padItem = findPadItemById(padId);
+    if (padItem == null) return;
+
     await _repository.addSoundToPad(padId, soundId);
-    await loadSounds();
+
+    final sound = await _repository.getSoundById(soundId);
+    if (sound == null) return;
+
+    _applySoundAddedToPad(padItem, sound);
+    unawaited(_reloadPadPlayersInBackground(padItem));
   }
 
   /// Retire un son d'un pad. Si c'est le dernier son, supprime le pad.
   Future<void> removeSoundFromPad(int padId, int soundId) async {
-    final padItem = _state.pads.firstWhere((p) => p.pad.id == padId);
+    final padItem = findPadItemById(padId);
+    if (padItem == null) return;
     if (padItem.pad.sounds.length <= 1) {
       await removeSound(padItem);
     } else {
       await _repository.removeSoundFromPad(padId, soundId);
-      await loadSounds();
+      _applySoundRemovedFromPad(padItem, soundId);
     }
   }
 
@@ -2019,6 +2143,22 @@ class SamplerNotifier extends ChangeNotifier {
     final padId = await _repository.createPad(boardId, soundId);
     await loadSounds(boardId: boardId);
     return padId;
+  }
+
+  /// Crée un pad avec les sons donnés sur le plateau actif et recharge.
+  /// Retourne le [PadItem] résolu, ou null si aucun plateau actif.
+  Future<PadItem?> createPadWithSoundsOnActiveBoard(
+    List<int> soundIds,
+  ) async {
+    if (soundIds.isEmpty) return null;
+    final boardId = _activeBoardId;
+    if (boardId == null) return null;
+    final padId = await _repository.createPadWithSettings(
+      boardId: boardId,
+      soundIds: soundIds,
+    );
+    await loadSounds(boardId: boardId);
+    return _resolvePadItem(padId);
   }
 
   // ── Tags ──────────────────────────────────────────────────────────────────

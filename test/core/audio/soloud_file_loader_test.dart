@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stage_cue/core/audio/audio_file_validation.dart';
 import 'package:stage_cue/core/audio/soloud_file_loader.dart';
 
 void main() {
@@ -15,6 +16,14 @@ void main() {
         isBenignSoLoudLoadSideEffect(const SoLoudFileLoadFailedException()),
         isTrue,
       );
+      expect(
+        isBenignSoLoudLoadSideEffect(const SoLoudNotInitializedException()),
+        isTrue,
+      );
+      expect(
+        isBenignSoLoudLoadSideEffect(const SoLoudDllNotFoundException()),
+        isFalse,
+      );
       expect(isBenignSoLoudLoadSideEffect(StateError('autre')), isFalse);
     });
   });
@@ -26,8 +35,8 @@ void main() {
         await missing.delete();
       }
 
-      expect(
-        () => loadAudioSourceFromFile(missing),
+      await expectLater(
+        loadAudioSourceFromFile(missing),
         throwsA(isA<StateError>()),
       );
     });
@@ -39,13 +48,33 @@ void main() {
       await empty.writeAsBytes(const <int>[]);
 
       try {
-        expect(
-          () => loadAudioSourceFromFile(empty),
+        await expectLater(
+          loadAudioSourceFromFile(empty),
           throwsA(isA<StateError>()),
         );
       } finally {
         if (await empty.exists()) {
           await empty.delete();
+        }
+      }
+    });
+
+    test('rejette un fichier HTML déguisé en audio', () async {
+      final fake = File(
+        '${Directory.systemTemp.path}/fake-audio-test-${DateTime.now().millisecondsSinceEpoch}.mp3',
+      );
+      final content = List<int>.filled(kMinimumValidAudioFileBytes + 8, 0x20);
+      content.setAll(0, '<!DOCTYPE html>'.codeUnits);
+      await fake.writeAsBytes(content);
+
+      try {
+        await expectLater(
+          loadAudioSourceFromFile(fake),
+          throwsA(isA<StateError>()),
+        );
+      } finally {
+        if (await fake.exists()) {
+          await fake.delete();
         }
       }
     });

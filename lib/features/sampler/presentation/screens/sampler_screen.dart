@@ -23,7 +23,6 @@ import '../../../../core/utils/layout_utils.dart';
 import 'settings_screen.dart';
 import 'library_sync_screen.dart';
 import 'pad_details_screen.dart';
-import 'sound_library_screen.dart';
 import 'sound_library_manage_screen.dart';
 
 /// Marqueur pour le bouton d'ajout dans la grille
@@ -37,8 +36,8 @@ class _UndoPadIntent extends Intent {
   const _UndoPadIntent();
 }
 
-class _AddSoundIntent extends Intent {
-  const _AddSoundIntent();
+class _AddPadIntent extends Intent {
+  const _AddPadIntent();
 }
 
 class _QuickSearchIntent extends Intent {
@@ -406,11 +405,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
     _emphasizePad(padId);
   }
 
-  Future<void> _handleAddSoundShortcut() async {
+  Future<void> _handleAddPadShortcut() async {
     if (!_isDesktopPlatform || !mounted || _isEditMode) return;
     final board = _notifier.state.selectedBoard;
     if (board == null) return;
-    await _openSoundLibrary(board);
+    await _openAddPadFlow(board);
   }
 
   Future<void> _handleUndoShortcut() async {
@@ -434,16 +433,23 @@ class _SamplerScreenState extends State<SamplerScreen> {
   static const double _itemWidth = 180;
   static const Duration _padEmphasisDuration = Duration(milliseconds: 2200);
 
-  Future<void> _openSoundLibrary(SoundBoard board) async {
-    final result = await SoundLibraryScreen.open(
+  Future<void> _openAddPadFlow(SoundBoard board) async {
+    final selectedSoundIds = await PadDetailsScreen.pickSoundsForNewPad(
       context,
-      database: _database,
-      boardId: board.id,
-      libraryRepository: widget.services.libraryRepository,
+      notifier: _notifier,
     );
-    await _notifier.loadSounds();
-    if (!mounted || result == null) return;
-    _emphasizePad(result.highlightPadId);
+    if (!mounted || selectedSoundIds.isEmpty) return;
+
+    final padItem = await _notifier.createPadWithSoundsOnActiveBoard(
+      selectedSoundIds,
+    );
+    if (!mounted || padItem == null) return;
+
+    await PadDetailsScreen.open(
+      context,
+      padItem: padItem,
+      notifier: _notifier,
+    );
   }
 
   void _scrollPadIntoView(int padId) {
@@ -550,7 +556,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
             radius: borderRadius,
           ),
           child: InkWell(
-            onTap: () => _openSoundLibrary(selectedBoard),
+            onTap: () => _openAddPadFlow(selectedBoard),
             borderRadius: BorderRadius.circular(borderRadius),
             child: Center(
               child: Padding(
@@ -566,7 +572,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Ajouter un son',
+                      'Ajouter un pad',
                       textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -588,7 +594,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
     return _wrapMusicRegieTapTarget(
       Tooltip(
-        message: 'Ajouter un son (Ctrl+N)',
+        message: 'Ajouter un pad (Ctrl+N)',
         child: card,
       ),
     );
@@ -822,17 +828,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
             : () => unawaited(_handlePadTap(context, padItem)),
         onLongPress: _isEditMode || _isPerformanceMode
             ? null
-            : () async {
-                await Navigator.push(
+            : () => PadDetailsScreen.open(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => PadDetailsScreen(
-                      padItem: padItem,
-                      notifier: _notifier,
-                    ),
-                  ),
-                );
-              },
+                  padItem: padItem,
+                  notifier: _notifier,
+                ),
         onRemove: _isEditMode
             ? () async {
                 final removed = await _notifier.removeSound(padItem);
@@ -1119,7 +1119,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       shortcuts: _isDesktopPlatform
           ? const <ShortcutActivator, Intent>{
               SingleActivator(LogicalKeyboardKey.keyN, control: true):
-                  _AddSoundIntent(),
+                  _AddPadIntent(),
               SingleActivator(LogicalKeyboardKey.keyZ, control: true):
                   _UndoPadIntent(),
               SingleActivator(LogicalKeyboardKey.keyK, control: true):
@@ -1130,9 +1130,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
           : const <ShortcutActivator, Intent>{},
       child: Actions(
         actions: <Type, Action<Intent>>{
-          _AddSoundIntent: CallbackAction<_AddSoundIntent>(
+          _AddPadIntent: CallbackAction<_AddPadIntent>(
             onInvoke: (intent) {
-              unawaited(_handleAddSoundShortcut());
+              unawaited(_handleAddPadShortcut());
               return null;
             },
           ),
@@ -1996,7 +1996,7 @@ class _BoardTileIcon extends StatelessWidget {
   }
 }
 
-/// Contour pointillé pour le faux pad « Ajouter un son ».
+/// Contour pointillé pour le faux pad « Ajouter un pad ».
 class _DashedRoundedRectPainter extends CustomPainter {
   const _DashedRoundedRectPainter({
     required this.color,

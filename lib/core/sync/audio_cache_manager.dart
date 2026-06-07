@@ -58,25 +58,41 @@ class AudioCacheManager {
     required Library library,
     required String relativePath,
   }) async {
-    final localPath = localPathFor(library, relativePath);
+    final normalizedPath =
+        LibrarySoundPaths.normalizeRelativePath(relativePath);
+    var cachePath = normalizedPath;
+    final localPath = localPathFor(library, cachePath);
     final localFile = File(localPath);
 
     if (await localFile.exists()) {
-      await _touch(library, relativePath, await localFile.length());
+      await _touch(library, cachePath, await localFile.length());
       return localPath;
     }
 
-    final remote = await _resolveRemote(client, library, relativePath);
+    var remote = await _resolveRemote(client, library, normalizedPath);
     if (remote == null) {
-      throw StateError('Fichier introuvable sur Drive : $relativePath');
+      final fallback = await _findUniqueFileByName(
+        client,
+        library,
+        _nameOf(normalizedPath),
+      );
+      if (fallback != null) {
+        remote = fallback.file;
+        cachePath = fallback.relativePath;
+      }
     }
-    await localFile.parent.create(recursive: true);
-    await client.downloadToFile(fileId: remote.id, destinationPath: localPath);
+    if (remote == null) {
+      throw StateError('Fichier introuvable sur Drive : $normalizedPath');
+    }
 
-    final size = await File(localPath).length();
-    await _touch(library, relativePath, size);
-    await _evictIfNeeded(library, protect: relativePath);
-    return localPath;
+    final downloadPath = localPathFor(library, cachePath);
+    await File(downloadPath).parent.create(recursive: true);
+    await client.downloadToFile(fileId: remote.id, destinationPath: downloadPath);
+
+    final size = await File(downloadPath).length();
+    await _touch(library, cachePath, size);
+    await _evictIfNeeded(library, protect: cachePath);
+    return downloadPath;
   }
 
   /// Téléverse [source] dans la bibliothèque (Drive + copie cache local) sous
@@ -120,6 +136,61 @@ class AudioCacheManager {
   }
 
   // ── Résolution distante ──────────────────────────────────────────────────
+
+  /// Recherche un fichier audio par nom dans toute la bibliothèque Drive.
+  /// Retourne null si zéro ou plusieurs correspondances (ambigu).
+  Future<({DriveFile file, String relativePath})?> _findUniqueFileByName(
+    DriveClient client,
+    Library library,
+    String fileName,
+  ) async {
+    final matches = <({DriveFile file, String relativePath})>[];
+    await _collectFilesByName(
+      client,
+      library.driveFolderId!,
+      '',
+      fileName,
+      matches,
+      sharedDriveId: library.sharedDriveId,
+    );
+    if (matches.length != 1) return null;
+    return matches.first;
+  }
+
+  Future<void> _collectFilesByName(
+    DriveClient client,
+    String folderId,
+    String relativePrefix,
+    String fileName,
+    List<({DriveFile file, String relativePath})> matches, {
+    String? sharedDriveId,
+  }) async {
+    final children = await client.listFolder(
+      folderId,
+      sharedDriveId: sharedDriveId,
+    );
+    for (final child in children) {
+      if (child.isFolder) {
+        if (child.name == '.stagecue') continue;
+        final subPrefix = relativePrefix.isEmpty
+            ? child.name
+            : '$relativePrefix/${child.name}';
+        await _collectFilesByName(
+          client,
+          child.id,
+          subPrefix,
+          fileName,
+          matches,
+          sharedDriveId: sharedDriveId,
+        );
+      } else if (child.name == fileName) {
+        final relativePath = relativePrefix.isEmpty
+            ? child.name
+            : '$relativePrefix/${child.name}';
+        matches.add((file: child, relativePath: relativePath));
+      }
+    }
+  }
 
   Future<DriveFile?> _resolveRemote(
     DriveClient client,

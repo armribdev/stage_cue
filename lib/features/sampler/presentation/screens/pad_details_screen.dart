@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../widgets/app_modal.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -14,12 +15,50 @@ import '../widgets/app_bottom_sheet.dart';
 class PadDetailsScreen extends StatefulWidget {
   final PadItem padItem;
   final SamplerNotifier notifier;
+  final bool isModal;
 
   const PadDetailsScreen({
     super.key,
     required this.padItem,
     required this.notifier,
+    this.isModal = false,
   });
+
+  /// Page plein écran sur téléphone, fenêtre modale sur tablette et desktop.
+  static Future<void> open(
+    BuildContext context, {
+    required PadItem padItem,
+    required SamplerNotifier notifier,
+  }) {
+    return openAdaptiveScreen(
+      context: context,
+      builder: ({required isModal}) => PadDetailsScreen(
+        padItem: padItem,
+        notifier: notifier,
+        isModal: isModal,
+      ),
+    );
+  }
+
+  /// Ouvre le tiroir d'ajout de sons pour un futur pad (brouillon local).
+  /// Retourne les ids des sons sélectionnés (vide si fermé sans ajout).
+  static Future<List<int>> pickSoundsForNewPad(
+    BuildContext context, {
+    required SamplerNotifier notifier,
+  }) async {
+    final selectedSoundIds = <int>[];
+    final tagCatalog = await notifier.loadTagCatalog();
+    if (!context.mounted) return selectedSoundIds;
+    await showAppBottomSheet<void>(
+      context: context,
+      child: _AddSoundSheet(
+        notifier: notifier,
+        tagCatalog: tagCatalog,
+        draftSelectedIds: selectedSoundIds,
+      ),
+    );
+    return List<int>.from(selectedSoundIds);
+  }
 
   @override
   State<PadDetailsScreen> createState() => _PadDetailsScreenState();
@@ -102,17 +141,19 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
 
   Future<void> _addSound(BuildContext ctx) async {
     final pad = widget.padItem.pad;
-    // Ouvrir la bibliothèque pour choisir un son à ajouter à ce pad
     await showAppBottomSheet<void>(
       context: ctx,
       child: _AddSoundSheet(
         padId: pad.id,
         notifier: widget.notifier,
         tagCatalog: _tagCatalog,
+        onPadUpdated: () {
+          if (mounted) setState(() {});
+        },
       ),
     );
     if (!mounted) return;
-    setState(() {}); // Rafraîchir après ajout
+    setState(() {});
   }
 
   Future<void> _removeSound(int soundId) async {
@@ -124,8 +165,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     setState(() {});
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildBody(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final pad = widget.padItem.pad;
     final sounds = pad.sounds;
@@ -140,13 +180,11 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
       Colors.grey,
     ];
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Détails du pad')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             // ── Réglages du pad ──────────────────────────────────────────
             Card(
               child: Padding(
@@ -292,9 +330,22 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                 ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final body = _buildBody(context);
+
+    if (widget.isModal) {
+      return AppModalShell(title: 'Détails du pad', body: body);
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Détails du pad')),
+      body: body,
     );
   }
 
@@ -432,19 +483,11 @@ class _SoundRow extends StatefulWidget {
 class _SoundRowState extends State<_SoundRow> {
   Set<int> _tagIds = {};
   bool _loaded = false;
-  late SoundType _type;
 
   @override
   void initState() {
     super.initState();
-    _type = widget.sound.type;
     _loadTags();
-  }
-
-  Future<void> _changeType(SoundType type) async {
-    if (type == _type) return;
-    setState(() => _type = type); // feedback immédiat
-    await widget.notifier.updateSoundType(widget.sound.id, type);
   }
 
   Future<void> _loadTags() async {
@@ -468,7 +511,7 @@ class _SoundRowState extends State<_SoundRow> {
         children: [
           padSoundAvailabilityIcon(widget.availability, scheme, size: 20),
           const SizedBox(width: 8),
-          SoundTypeAvatar(type: _type, radius: 16, iconSize: 18),
+          SoundTypeAvatar(type: sound.type, radius: 16, iconSize: 18),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -480,8 +523,13 @@ class _SoundRowState extends State<_SoundRow> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 4),
-                _SoundTypeSelector(type: _type, onChanged: _changeType),
+                const SizedBox(height: 2),
+                Text(
+                  sound.type.label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
                 if (_loaded && _tagIds.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Wrap(
@@ -524,75 +572,21 @@ class _SoundRowState extends State<_SoundRow> {
   }
 }
 
-// ── Sélecteur de type de son ──────────────────────────────────────────────
-
-/// Menu compact pour corriger le type d'un son (l'auto-détection par durée
-/// peut se tromper). Le type pilote le routage : un pad « musique » passe par
-/// la régie/à l'antenne, un « bruitage »/« ambiance » se déclenche en one-shot.
-class _SoundTypeSelector extends StatelessWidget {
-  final SoundType type;
-  final ValueChanged<SoundType> onChanged;
-
-  const _SoundTypeSelector({required this.type, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return PopupMenuButton<SoundType>(
-      tooltip: 'Changer le type',
-      initialValue: type,
-      onSelected: onChanged,
-      itemBuilder: (context) => [
-        for (final t in SoundType.values)
-          PopupMenuItem<SoundType>(
-            value: t,
-            child: Row(
-              children: [
-                Icon(t.icon, size: 18, color: scheme.onSurfaceVariant),
-                const SizedBox(width: 10),
-                Text(t.label),
-              ],
-            ),
-          ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          border: Border.all(color: scheme.outlineVariant),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(type.icon, size: 14, color: scheme.onSurfaceVariant),
-            const SizedBox(width: 4),
-            Text(
-              type.label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            Icon(Icons.arrow_drop_down_rounded,
-                size: 18, color: scheme.onSurfaceVariant),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Sheet d'ajout de son ──────────────────────────────────────────────────
+// ── Sheet d'ajout de sons ─────────────────────────────────────────────────
 
 class _AddSoundSheet extends StatefulWidget {
-  final int padId;
+  final int? padId;
   final SamplerNotifier notifier;
   final List<TagCategoryWithTags> tagCatalog;
+  final List<int>? draftSelectedIds;
+  final VoidCallback? onPadUpdated;
 
   const _AddSoundSheet({
-    required this.padId,
+    this.padId,
     required this.notifier,
     required this.tagCatalog,
+    this.draftSelectedIds,
+    this.onPadUpdated,
   });
 
   @override
@@ -602,11 +596,30 @@ class _AddSoundSheet extends StatefulWidget {
 class _AddSoundSheetState extends State<_AddSoundSheet> {
   List<Sound> _sounds = [];
   bool _loading = true;
+  Set<int> _padSoundIds = const {};
+  final Set<int> _addingSoundIds = {};
+  SoundType _typeFilter = SoundType.soundEffect;
+
+  List<Sound> get _filteredSounds =>
+      _sounds.where((s) => s.type == _typeFilter).toList();
 
   @override
   void initState() {
     super.initState();
+    _syncPadSoundIds();
     _loadSounds();
+  }
+
+  void _syncPadSoundIds() {
+    final draftIds = widget.draftSelectedIds;
+    if (draftIds != null) {
+      _padSoundIds = draftIds.toSet();
+      return;
+    }
+    final padItem = widget.notifier.state.pads
+        .where((p) => p.pad.id == widget.padId)
+        .firstOrNull;
+    _padSoundIds = padItem?.pad.sounds.map((s) => s.id).toSet() ?? const {};
   }
 
   Future<void> _loadSounds() async {
@@ -618,32 +631,85 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
     });
   }
 
+  Future<void> _addSound(Sound sound) async {
+    if (_padSoundIds.contains(sound.id) || _addingSoundIds.contains(sound.id)) {
+      return;
+    }
+    final draftIds = widget.draftSelectedIds;
+    if (draftIds != null) {
+      setState(() {
+        draftIds.add(sound.id);
+        _syncPadSoundIds();
+      });
+      return;
+    }
+    setState(() => _addingSoundIds.add(sound.id));
+    await widget.notifier.addSoundToPad(widget.padId!, sound.id);
+    if (!mounted) return;
+    setState(() {
+      _addingSoundIds.remove(sound.id);
+      _syncPadSoundIds();
+    });
+    widget.onPadUpdated?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final filtered = _filteredSounds;
     return AppBottomSheetShell(
-      title: 'Ajouter un son au pad',
+      title: 'Ajouter des sons au pad',
+      header: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _buildTypeChip(SoundType.soundEffect),
+              _buildTypeChip(SoundType.music),
+              _buildTypeChip(SoundType.ambiance),
+            ],
+          ),
+        ),
+      ),
       bodyBuilder: (context, scrollController) {
         if (_loading) {
           return const Center(child: CircularProgressIndicator());
         }
+        if (filtered.isEmpty) {
+          return Center(
+            child: Text(
+              'Aucun son',
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+          );
+        }
         return ListView.builder(
           controller: scrollController,
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-          itemCount: _sounds.length,
+          itemCount: filtered.length,
           itemBuilder: (_, i) {
-            final s = _sounds[i];
+            final s = filtered[i];
+            final isOnPad = _padSoundIds.contains(s.id);
+            final isAdding = _addingSoundIds.contains(s.id);
             return ListTile(
               leading: SoundTypeAvatar(type: s.type, radius: 18),
               title: Text(s.displayName ?? s.title),
               subtitle: Text(s.type.label),
-              onTap: () async {
-                await widget.notifier.addSoundToPad(
-                  widget.padId,
-                  s.id,
-                );
-                if (!context.mounted) return;
-                Navigator.pop(context);
-              },
+              trailing: isAdding
+                  ? SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: scheme.primary,
+                      ),
+                    )
+                  : isOnPad
+                      ? Icon(Icons.check_rounded, color: scheme.primary)
+                      : Icon(Icons.add_rounded, color: scheme.onSurfaceVariant),
+              onTap: isOnPad || isAdding ? null : () => unawaited(_addSound(s)),
             );
           },
         );
@@ -651,4 +717,19 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
     );
   }
 
+  Widget _buildTypeChip(SoundType type) {
+    final selected = _typeFilter == type;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: FilterChip(
+        label: Text(type.label),
+        selected: selected,
+        showCheckmark: false,
+        visualDensity: VisualDensity.compact,
+        onSelected: (value) {
+          if (value) setState(() => _typeFilter = type);
+        },
+      ),
+    );
+  }
 }
