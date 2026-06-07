@@ -45,10 +45,16 @@ class AutoSyncCoordinator {
 
   Future<void> _initialPull() async {
     final reconnected = await _repository.reconnectSilently();
-    if (!reconnected) return;
 
     final libraries = await _connectedLibraries();
-    if (libraries.isEmpty) return;
+    if (libraries.isEmpty) return; // Usage 100 % local : la synchro reste idle.
+
+    if (!reconnected) {
+      // Bibliothèque Drive configurée mais pas de session (hors-ligne au
+      // lancement) : on signale l'état local plutôt que de rester silencieux.
+      _syncController.markOffline();
+      return;
+    }
 
     for (final library in libraries) {
       await _syncController.pullForLaunch(library);

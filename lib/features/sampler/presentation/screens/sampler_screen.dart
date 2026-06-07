@@ -6,11 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import '../providers/sampler_provider.dart';
+import '../providers/sync_controller.dart';
 import '../widgets/pad_button.dart' show padSoundAvailabilityIcon;
 import '../models/pad_sound_slot.dart';
 import '../widgets/pad_item.dart' show PadCard;
 import '../widgets/music_preview_panel.dart';
 import '../widgets/music_picker_sheet.dart';
+import '../widgets/quick_search_overlay.dart';
 import '../widgets/app_form_dialog.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
@@ -19,6 +21,7 @@ import '../../../../core/database/database.dart' as db;
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
 import 'settings_screen.dart';
+import 'library_sync_screen.dart';
 import 'pad_details_screen.dart';
 import 'sound_library_screen.dart';
 import 'sound_library_manage_screen.dart';
@@ -36,6 +39,10 @@ class _UndoPadIntent extends Intent {
 
 class _AddSoundIntent extends Intent {
   const _AddSoundIntent();
+}
+
+class _QuickSearchIntent extends Intent {
+  const _QuickSearchIntent();
 }
 
 /// Écran principal du sampler
@@ -376,6 +383,28 @@ class _SamplerScreenState extends State<SamplerScreen> {
     await _notifier.loadSounds();
   }
 
+  /// Ouvre la gestion de synchro Drive depuis la pastille ambiante de l'AppBar,
+  /// puis recharge scènes/sons (un pull a pu modifier la bibliothèque).
+  Future<void> _openLibrarySync() async {
+    await LibrarySyncScreen.open(
+      context,
+      libraryRepository: widget.services.libraryRepository,
+      syncController: widget.services.syncController,
+    );
+    if (!mounted) return;
+    await _notifier.loadBoards();
+  }
+
+  /// Ouvre la recherche-éclair (overlay) ; met en évidence le pad créé si un
+  /// son a été ajouté à la scène depuis la recherche.
+  Future<void> _openQuickSearch() async {
+    if (_isEditMode) return;
+    final padId = await QuickSearchOverlay.show(context, notifier: _notifier);
+    if (!mounted || padId == null) return;
+    await _notifier.stopPreview();
+    _emphasizePad(padId);
+  }
+
   Future<void> _handleAddSoundShortcut() async {
     if (!_isDesktopPlatform || !mounted || _isEditMode) return;
     final board = _notifier.state.selectedBoard;
@@ -627,55 +656,91 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
-  Future<void> _downloadPadWithFeedback(PadItem padItem) async {
-    final wasPartial = padItem.isPartiallyReady;
-    await _notifier.downloadAndLoadPad(padItem);
-    if (!mounted) return;
-    if (padItem.isFullyReady) return;
-    if (padItem.isPlayable && wasPartial) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${padItem.readySoundCount}/${padItem.totalSoundCount} variantes '
-            'disponibles — certaines n\'ont pas pu être téléchargées',
-          ),
-        ),
-      );
-      return;
-    }
-    if (padItem.isPlayable) return;
-    final reason = padItem.unavailabilityReason;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          switch (reason) {
-            PadUnavailabilityReason.offline =>
-              'Hors-ligne — reconnectez-vous à Drive pour télécharger ce son',
-            PadUnavailabilityReason.missingFile =>
-              'Fichier introuvable sur Drive — resynchronisez la bibliothèque',
-            _ => 'Téléchargement échoué — vérifiez la connexion',
-          },
-        ),
-      ),
-    );
-  }
+  /// Fenêtre pendant laquelle un pad « armé » se déclenche automatiquement une
+  /// fois chargé. Au-delà, le moment dramatique est passé : on ne joue pas en
+  /// retard, le pad reste PRÊT et un second tap le déclenche instantanément.
+  static const _autoPlayWindow = Duration(milliseconds: 1500);
 
   Future<void> _handlePadTap(BuildContext context, PadItem padItem) async {
     final resolved = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
+
+    // PRÊT : déclenchement immédiat.
     if (resolved.isPlayable) {
+      unawaited(HapticFeedback.selectionClick());
       await _notifier.toggleSound(resolved);
       return;
     }
-    if (resolved.unavailabilityReason == null) {
-      await _notifier.refreshPadPlayback(resolved.pad.id);
+
+    final reason = resolved.unavailabilityReason;
+
+    // BLOQUÉ : feedback non-bloquant (jamais de modale auto, jamais de clic mort).
+    if (reason == PadUnavailabilityReason.offline ||
+        reason == PadUnavailabilityReason.missingFile) {
+      unawaited(HapticFeedback.heavyImpact());
+      _showBlockedPadFeedback(resolved, reason);
+      return;
+    }
+
+    // EN ROUTE (ou état non résolu) : download optimiste + auto-play.
+    unawaited(HapticFeedback.selectionClick());
+    await _armAndPlay(resolved);
+  }
+
+  /// « Arme » un pad EN ROUTE : tente le cache local puis télécharge, et joue
+  /// automatiquement si le pad est prêt à temps. Donne un feedback si bloqué.
+  Future<void> _armAndPlay(PadItem padItem) async {
+    final stopwatch = Stopwatch()..start();
+
+    // État non résolu : un simple rechargement depuis le cache peut suffire.
+    if (padItem.unavailabilityReason == null) {
+      await _notifier.refreshPadPlayback(padItem.pad.id);
       if (!mounted) return;
-      final after = _notifier.findPadItemById(resolved.pad.id);
-      if (after != null && after.isPlayable) {
-        await _notifier.toggleSound(after);
+    }
+
+    var resolved = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
+    if (!resolved.isPlayable) {
+      await _notifier.downloadAndLoadPad(resolved);
+      if (!mounted) return;
+      resolved = _notifier.findPadItemById(resolved.pad.id) ?? resolved;
+    }
+
+    if (resolved.isPlayable) {
+      // Joue seulement si l'arrivée est restée « à temps » (cf. _autoPlayWindow).
+      if (stopwatch.elapsed <= _autoPlayWindow) {
+        await _notifier.toggleSound(resolved);
       }
       return;
     }
-    _showPadUnavailableSheet(context, resolved);
+
+    _showBlockedPadFeedback(resolved, resolved.unavailabilityReason);
+  }
+
+  /// SnackBar non-bloquante expliquant pourquoi un pad ne joue pas, avec une
+  /// action « Détails » pour la vue de téléchargement (sans la pousser de force).
+  void _showBlockedPadFeedback(
+    PadItem padItem,
+    PadUnavailabilityReason? reason,
+  ) {
+    if (!mounted) return;
+    final text = switch (reason) {
+      PadUnavailabilityReason.offline =>
+        '« ${padItem.pad.displayName} » indisponible hors-ligne',
+      PadUnavailabilityReason.missingFile =>
+        'Fichier introuvable pour « ${padItem.pad.displayName} »',
+      _ => '« ${padItem.pad.displayName} » non téléchargé',
+    };
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Détails',
+            onPressed: () => _showPadUnavailableSheet(context, padItem),
+          ),
+        ),
+      );
   }
 
   void _showPadUnavailableSheet(BuildContext context, PadItem padItem) {
@@ -747,9 +812,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
         onTap: _isEditMode
             ? null
             : () => unawaited(_handlePadTap(context, padItem)),
-        onBadgeTap: !_isEditMode && !padItem.isFullyReady
-            ? () => unawaited(_downloadPadWithFeedback(padItem))
-            : null,
         onLongPress: _isEditMode
             ? null
             : () async {
@@ -1052,6 +1114,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   _AddSoundIntent(),
               SingleActivator(LogicalKeyboardKey.keyZ, control: true):
                   _UndoPadIntent(),
+              SingleActivator(LogicalKeyboardKey.keyK, control: true):
+                  _QuickSearchIntent(),
+              SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+                  _QuickSearchIntent(),
             }
           : const <ShortcutActivator, Intent>{},
       child: Actions(
@@ -1065,6 +1131,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
           _UndoPadIntent: CallbackAction<_UndoPadIntent>(
             onInvoke: (intent) {
               unawaited(_handleUndoShortcut());
+              return null;
+            },
+          ),
+          _QuickSearchIntent: CallbackAction<_QuickSearchIntent>(
+            onInvoke: (intent) {
+              unawaited(_openQuickSearch());
               return null;
             },
           ),
@@ -1086,6 +1158,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onToggleEditMode: _toggleEditMode,
                     onOpenLibrary: _openLibrary,
                     onOpenSettings: _openSettings,
+                    onQuickSearch: () => unawaited(_openQuickSearch()),
+                    syncStatus: _SyncStatusPill(
+                      syncController: widget.services.syncController,
+                      onTap: _openLibrarySync,
+                    ),
                   )
                 : _SamplerAppBar(
                     selectedBoard: selectedBoard,
@@ -1093,6 +1170,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     canToggleEditMode: state.pads.isNotEmpty,
                     onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
                     onToggleEditMode: _toggleEditMode,
+                    onQuickSearch: () => unawaited(_openQuickSearch()),
+                    syncStatus: _SyncStatusPill(
+                      syncController: widget.services.syncController,
+                      onTap: _openLibrarySync,
+                    ),
                   ),
             drawer: isDesktop
                 ? null
@@ -1134,6 +1216,127 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
 }
 
+// ---------- Pastille de synchronisation (ambiante) ----------
+
+/// Indicateur de synchro Drive permanent et non bloquant dans l'AppBar.
+///
+/// Caché tant que la synchro est `idle` (aucun bruit pour un usage 100 % local) ;
+/// dès qu'une bibliothèque Drive est en jeu, il rend l'état d'un coup d'œil
+/// (couleur + libellé court) et ouvre la gestion de synchro au tap. Remplace
+/// l'enfouissement de la synchro dans Paramètres (refonte UX P1).
+class _SyncStatusPill extends StatelessWidget {
+  final SyncController syncController;
+  final VoidCallback onTap;
+
+  const _SyncStatusPill({required this.syncController, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: syncController,
+      builder: (context, _) {
+        final status = syncController.state.status;
+        if (status == SyncStatus.idle) return const SizedBox.shrink();
+
+        final scheme = Theme.of(context).colorScheme;
+        final (color, label, icon, spinning, tooltip) =
+            _visuals(status, scheme, syncController.state);
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Tooltip(
+            message: tooltip,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (spinning)
+                      SizedBox(
+                        width: 13,
+                        height: 13,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: color,
+                        ),
+                      )
+                    else
+                      Icon(icon, size: 15, color: color),
+                    const SizedBox(width: 6),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  (Color, String, IconData, bool, String) _visuals(
+    SyncStatus status,
+    ColorScheme scheme,
+    SyncState state,
+  ) {
+    return switch (status) {
+      SyncStatus.syncing => (
+          scheme.primary,
+          'Synchro…',
+          Icons.sync_rounded,
+          true,
+          'Synchronisation en cours…',
+        ),
+      SyncStatus.synced => (
+          scheme.primary,
+          'À jour',
+          Icons.cloud_done_outlined,
+          false,
+          'Bibliothèque synchronisée',
+        ),
+      // Hors-ligne : neutre, jamais alarmiste — le travail local est normal.
+      SyncStatus.offline => (
+          scheme.onSurfaceVariant,
+          'Hors-ligne',
+          Icons.cloud_off_outlined,
+          false,
+          'Hors-ligne — modifications gardées en local',
+        ),
+      SyncStatus.conflict => (
+          scheme.error,
+          'Conflit',
+          Icons.merge_type_rounded,
+          false,
+          'Conflit de version — appuyez pour résoudre',
+        ),
+      SyncStatus.error => (
+          scheme.error,
+          'Erreur sync',
+          Icons.error_outline_rounded,
+          false,
+          state.message ?? 'Erreur de synchronisation',
+        ),
+      SyncStatus.idle => (
+          scheme.onSurfaceVariant,
+          '',
+          Icons.cloud_outlined,
+          false,
+          '',
+        ),
+    };
+  }
+}
+
 // ---------- AppBar (mobile/tablette) ----------
 
 class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -1142,6 +1345,8 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool canToggleEditMode;
   final VoidCallback onOpenMenu;
   final VoidCallback onToggleEditMode;
+  final VoidCallback onQuickSearch;
+  final Widget syncStatus;
 
   const _SamplerAppBar({
     required this.selectedBoard,
@@ -1149,6 +1354,8 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.canToggleEditMode,
     required this.onOpenMenu,
     required this.onToggleEditMode,
+    required this.onQuickSearch,
+    required this.syncStatus,
   });
 
   @override
@@ -1169,6 +1376,12 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
+        IconButton(
+          icon: const Icon(Icons.search_rounded),
+          tooltip: 'Rechercher un son',
+          onPressed: onQuickSearch,
+        ),
+        syncStatus,
         IconButton(
           icon: Icon(
             isEditMode ? Icons.done_rounded : Icons.grid_view_rounded,
@@ -1341,6 +1554,8 @@ class _SamplerDesktopAppBar extends StatelessWidget
   final VoidCallback onToggleEditMode;
   final Future<void> Function() onOpenLibrary;
   final Future<void> Function() onOpenSettings;
+  final VoidCallback onQuickSearch;
+  final Widget syncStatus;
 
   const _SamplerDesktopAppBar({
     required this.selectedBoard,
@@ -1354,6 +1569,8 @@ class _SamplerDesktopAppBar extends StatelessWidget
     required this.onToggleEditMode,
     required this.onOpenLibrary,
     required this.onOpenSettings,
+    required this.onQuickSearch,
+    required this.syncStatus,
   });
 
   @override
@@ -1389,6 +1606,12 @@ class _SamplerDesktopAppBar extends StatelessWidget
         ),
       ),
       actions: [
+        IconButton(
+          icon: const Icon(Icons.search_rounded),
+          tooltip: 'Rechercher un son (Ctrl/Cmd+K)',
+          onPressed: onQuickSearch,
+        ),
+        syncStatus,
         IconButton(
           icon: Icon(
             isEditMode ? Icons.done_rounded : Icons.grid_view_rounded,

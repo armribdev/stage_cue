@@ -3,29 +3,56 @@ import '../../domain/entities/pad.dart';
 import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
 
-/// Widget représentant un pad de son
+/// Famille visuelle d'un pad — projette les 4 états d'availability sur 3 repères
+/// lisibles d'un coup d'œil sous stress live (refonte UX P0) :
+///
+/// - [ready]   : jouable immédiatement (tap = son). Inclut les pads partiels.
+/// - [enRoute] : résoluble par un tap (à télécharger / téléchargement en cours).
+/// - [blocked] : indisponible maintenant (hors-ligne ou fichier introuvable).
+///
+/// Clé : `needsDownload` n'est PAS dans la même famille qu'`offline`. Le premier
+/// se règle d'un tap ; le second est réellement bloqué. Les confondre est l'erreur
+/// cognitive centrale de l'ancienne carte grisée uniforme.
+enum _PadVisual { ready, enRoute, blocked }
+
+/// Widget représentant un pad de son.
 class PadButton extends StatelessWidget {
   final PadItem padItem;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
-  /// Déclenché par le badge (téléchargement des variantes manquantes).
-  final VoidCallback? onBadgeTap;
 
   const PadButton({
     super.key,
     required this.padItem,
     this.onTap,
     this.onLongPress,
-    this.onBadgeTap,
   });
+
+  _PadVisual get _visual {
+    // Un pad partiellement prêt reste jouable → famille PRÊT (le chip indique le ratio).
+    if (padItem.isPlayable) return _PadVisual.ready;
+    final reason = padItem.unavailabilityReason;
+    if (padItem.isDownloading ||
+        reason == null ||
+        reason == PadUnavailabilityReason.needsDownload) {
+      return _PadVisual.enRoute;
+    }
+    return _PadVisual.blocked;
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (!padItem.isPlayable && padItem.unavailabilityReason != null) {
-      return _buildUnavailableCard(context, padItem.unavailabilityReason!);
-    }
-
     final scheme = Theme.of(context).colorScheme;
+    return switch (_visual) {
+      _PadVisual.ready => _buildReady(context, scheme),
+      _PadVisual.enRoute => _buildEnRoute(context, scheme),
+      _PadVisual.blocked => _buildBlocked(context, scheme),
+    };
+  }
+
+  // ── PRÊT ──────────────────────────────────────────────────────────────────
+
+  Widget _buildReady(BuildContext context, ColorScheme scheme) {
     final colorValue = padItem.pad.colorValue;
     final customColor = colorValue != null ? Color(colorValue) : null;
     final defaultColor =
@@ -49,41 +76,10 @@ class PadButton extends StatelessWidget {
         ),
       ),
       color: padItem.isPlaying ? playingColor : baseColor,
-      child: _buildInteractiveChild(
-        onTap: onTap,
-        onLongPress: onLongPress,
+      child: _interactive(
         child: Stack(
           children: [
-            TweenAnimationBuilder<double>(
-              key: ValueKey(
-                'progress_${padItem.pad.id}_${padItem.isPlaying}'
-                '_${padItem.currentSoundIndex}',
-              ),
-              tween: Tween(begin: 0.0, end: padItem.isPlaying ? 1.0 : 0.0),
-              duration: padItem.isPlaying
-                  ? (padItem.currentPlayer?.duration ??
-                      const Duration(seconds: 1))
-                  : const Duration(milliseconds: 200),
-              curve: Curves.linear,
-              builder: (context, value, child) {
-                if (!padItem.isPlaying && value == 0.0) {
-                  return const SizedBox.shrink();
-                }
-                return Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: LinearProgressIndicator(
-                      value: value,
-                      backgroundColor: Colors.transparent,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        scheme.primary.withValues(alpha: 0.22),
-                      ),
-                      minHeight: double.infinity,
-                    ),
-                  ),
-                );
-              },
-            ),
+            _buildPlaybackProgress(scheme),
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -109,21 +105,55 @@ class PadButton extends StatelessWidget {
                     ),
                     if (padItem.totalSoundCount > 1) ...[
                       const SizedBox(height: 4),
-                      _buildVariantChip(context, scheme),
+                      _buildVariantChip(scheme),
                     ],
                   ],
                 ),
               ),
             ),
-            if (padItem.isPartiallyReady || padItem.isDownloading)
-              _buildPartialBadge(context, scheme),
+            // Badge informatif seulement : le corps du pad porte l'action.
+            if (padItem.isDownloading)
+              _buildDownloadCorner(scheme.tertiary),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildVariantChip(BuildContext context, ColorScheme scheme) {
+  /// Barre de progression de lecture (overlay) pendant que le pad joue.
+  Widget _buildPlaybackProgress(ColorScheme scheme) {
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(
+        'progress_${padItem.pad.id}_${padItem.isPlaying}'
+        '_${padItem.currentSoundIndex}',
+      ),
+      tween: Tween(begin: 0.0, end: padItem.isPlaying ? 1.0 : 0.0),
+      duration: padItem.isPlaying
+          ? (padItem.currentPlayer?.duration ?? const Duration(seconds: 1))
+          : const Duration(milliseconds: 200),
+      curve: Curves.linear,
+      builder: (context, value, child) {
+        if (!padItem.isPlaying && value == 0.0) {
+          return const SizedBox.shrink();
+        }
+        return Positioned.fill(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: LinearProgressIndicator(
+              value: value,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                scheme.primary.withValues(alpha: 0.22),
+              ),
+              minHeight: double.infinity,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildVariantChip(ColorScheme scheme) {
     final total = padItem.totalSoundCount;
     final ready = padItem.readySoundCount;
     final label = padItem.isPartiallyReady ? '$ready/$total' : '$total';
@@ -153,133 +183,98 @@ class PadButton extends StatelessWidget {
     );
   }
 
-  Widget _buildPartialBadge(BuildContext context, ColorScheme scheme) {
-    final onBadgeTap = this.onBadgeTap;
-    if (padItem.isDownloading) {
-      return Positioned(
-        top: 4,
-        right: 4,
-        child: SizedBox(
-          width: 26,
-          height: 26,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              SizedBox(
-                width: 21,
-                height: 21,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.8,
-                  value: padItem.downloadTotal > 0
-                      ? padItem.downloadDone / padItem.downloadTotal
-                      : null,
-                  color: scheme.tertiary,
+  // ── EN ROUTE ──────────────────────────────────────────────────────────────
+
+  Widget _buildEnRoute(BuildContext context, ColorScheme scheme) {
+    final label = padItem.pad.displayName;
+    final downloading = padItem.isDownloading;
+    final onColor = scheme.onTertiaryContainer;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: scheme.tertiary.withValues(alpha: 0.6)),
+      ),
+      color: scheme.tertiaryContainer,
+      child: _interactive(
+        child: Stack(
+          children: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: onColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          downloading
+                              ? Icons.downloading_rounded
+                              : Icons.cloud_download_outlined,
+                          size: 12,
+                          color: onColor.withValues(alpha: 0.75),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          downloading ? 'téléchargement…' : 'appuyer pour charger',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: onColor.withValues(alpha: 0.75),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              Icon(
-                Icons.cloud_download_outlined,
-                size: 14,
-                color: scheme.tertiary,
-              ),
-            ],
-          ),
+            ),
+            if (downloading) _buildDownloadCorner(onColor),
+          ],
         ),
-      );
-    }
-
-    if (onBadgeTap == null) return const SizedBox.shrink();
-
-    return Positioned(
-      top: 4,
-      right: 4,
-      child: IconButton(
-        icon: Icon(Icons.cloud_download_outlined, size: 16),
-        tooltip: 'Télécharger les variantes manquantes',
-        onPressed: onBadgeTap,
-        color: scheme.tertiary,
-        splashRadius: 14,
-        padding: const EdgeInsets.all(4),
-        constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
       ),
     );
   }
 
-  Widget _buildUnavailableCard(
-    BuildContext context,
-    PadUnavailabilityReason reason,
-  ) {
-    final scheme = Theme.of(context).colorScheme;
+  // ── BLOQUÉ ────────────────────────────────────────────────────────────────
+
+  Widget _buildBlocked(BuildContext context, ColorScheme scheme) {
+    final reason = padItem.unavailabilityReason;
+    final isMissing = reason == PadUnavailabilityReason.missingFile;
     final label = padItem.pad.displayName;
-
-    final (badgeIcon, badgeColor) = switch (reason) {
-      PadUnavailabilityReason.needsDownload => (
-          Icons.cloud_download_outlined,
-          scheme.onSurfaceVariant.withValues(alpha: 0.55),
-        ),
-      PadUnavailabilityReason.offline => (
-          Icons.cloud_off_outlined,
-          scheme.onSurfaceVariant.withValues(alpha: 0.45),
-        ),
-      PadUnavailabilityReason.missingFile => (
-          Icons.warning_amber_rounded,
-          scheme.error.withValues(alpha: 0.55),
-        ),
-    };
-
-    final badge = Positioned(
-      top: 4,
-      right: 4,
-      child: switch (reason) {
-        PadUnavailabilityReason.needsDownload => padItem.isDownloading
-            ? SizedBox(
-                width: 26,
-                height: 26,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(
-                      width: 21,
-                      height: 21,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.8,
-                        value: padItem.downloadTotal > 0
-                            ? padItem.downloadDone / padItem.downloadTotal
-                            : null,
-                        color: badgeColor,
-                      ),
-                    ),
-                    Icon(badgeIcon, size: 16, color: badgeColor),
-                  ],
-                ),
-              )
-            : IconButton(
-                icon: Icon(badgeIcon, size: 16),
-                tooltip: 'Télécharger',
-                onPressed: onBadgeTap,
-                color: badgeColor,
-                splashRadius: 14,
-                padding: const EdgeInsets.all(4),
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-              ),
-        _ => Padding(
-            padding: const EdgeInsets.all(7),
-            child: Icon(badgeIcon, size: 14, color: badgeColor),
-          ),
-      },
-    );
+    final accent =
+        isMissing ? scheme.error : scheme.onSurfaceVariant.withValues(alpha: 0.7);
+    final (icon, hint) = isMissing
+        ? (Icons.warning_amber_rounded, 'fichier introuvable')
+        : (Icons.cloud_off_outlined, 'hors-ligne');
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: scheme.outlineVariant.withValues(alpha: 0.3),
+          color: isMissing
+              ? scheme.error.withValues(alpha: 0.55)
+              : scheme.outlineVariant.withValues(alpha: 0.5),
         ),
       ),
-      color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
-      child: _buildInteractiveChild(
-        onTap: onTap,
-        onLongPress: onLongPress,
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+      child: _interactive(
         child: Stack(
           children: [
             Center(
@@ -298,35 +293,68 @@ class PadButton extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
-                        color: scheme.onSurface.withValues(alpha: 0.35),
+                        color: scheme.onSurface.withValues(alpha: 0.45),
                       ),
                     ),
-                    if (padItem.totalSoundCount > 1) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        '${padItem.totalSoundCount} variantes',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: scheme.onSurfaceVariant.withValues(alpha: 0.3),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, size: 12, color: accent),
+                        const SizedBox(width: 4),
+                        Text(
+                          hint,
+                          style: TextStyle(fontSize: 11, color: accent),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ],
                 ),
               ),
             ),
-            badge,
+            Positioned(
+              top: 6,
+              right: 6,
+              child: Icon(icon, size: 14, color: accent.withValues(alpha: 0.8)),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInteractiveChild({
-    required VoidCallback? onTap,
-    required VoidCallback? onLongPress,
-    required Widget child,
-  }) {
+  // ── Communs ───────────────────────────────────────────────────────────────
+
+  /// Pastille de progression de téléchargement (informative).
+  Widget _buildDownloadCorner(Color color) {
+    return Positioned(
+      top: 4,
+      right: 4,
+      child: SizedBox(
+        width: 26,
+        height: 26,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: 21,
+              height: 21,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.8,
+                value: padItem.downloadTotal > 0
+                    ? padItem.downloadDone / padItem.downloadTotal
+                    : null,
+                color: color,
+              ),
+            ),
+            Icon(Icons.cloud_download_outlined, size: 14, color: color),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _interactive({required Widget child}) {
     if (onTap == null && onLongPress == null) {
       return child;
     }
