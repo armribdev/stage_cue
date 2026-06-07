@@ -1393,14 +1393,58 @@ class _TransitionCell extends StatelessWidget {
   }
 }
 
-class _LiveBadge extends StatelessWidget {
+/// Voyant « ON AIR » de régie : le point rouge pulse comme un tally light
+/// broadcast tant que la musique sort des enceintes — signal sans ambiguïté de
+/// ce qui est à l'antenne (refonte UX P2). Statique si l'utilisateur a réduit
+/// les animations.
+class _LiveBadge extends StatefulWidget {
   final bool compact;
 
   const _LiveBadge({this.compact = false});
 
   @override
+  State<_LiveBadge> createState() => _LiveBadgeState();
+}
+
+class _LiveBadgeState extends State<_LiveBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+    );
+    _pulse = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (reduceMotion) {
+      _controller.stop();
+      _controller.value = 1.0;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final compact = widget.compact;
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 6 : 8,
@@ -1414,7 +1458,10 @@ class _LiveBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.circle, size: compact ? 7 : 8, color: scheme.error),
+          FadeTransition(
+            opacity: _pulse,
+            child: Icon(Icons.circle, size: compact ? 7 : 8, color: scheme.error),
+          ),
           SizedBox(width: compact ? 4 : 5),
           Text(
             'ON AIR',

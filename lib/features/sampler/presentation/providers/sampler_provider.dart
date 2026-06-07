@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import '../../../../core/audio/audio_player_service.dart';
+import '../../../../core/sync/download_queue.dart';
 import '../../data/repositories/library_repository.dart'
     show LibraryRepository, SoundNotAvailableLocallyException;
 import '../../data/repositories/sound_repository.dart';
@@ -132,6 +133,13 @@ class PadItem {
   int downloadDone = 0;
   int downloadTotal = 0;
 
+  /// Révision par pad : incrémentée à chaque changement propre au pad (download,
+  /// disponibilité). Permet un rebuild ciblé du seul PadButton via un
+  /// [ListenableBuilder], sans reconstruire toute la grille (refonte UX P2).
+  final ValueNotifier<int> _revision = ValueNotifier<int>(0);
+  Listenable get revision => _revision;
+  void bumpRevision() => _revision.value++;
+
   PadItem({
     required this.pad,
     List<PadSoundSlot>? slots,
@@ -214,6 +222,13 @@ class PadItem {
     slots.clear();
   }
 
+  /// Libère le pad définitivement (slots + notifier de révision). À appeler
+  /// quand le pad disparaît de l'état (changement de plateau, suppression).
+  void dispose() {
+    disposeAllSlots();
+    _revision.dispose();
+  }
+
   void clearPausedPlayback() {
     pausedPlayerIndex = null;
     pausedPlaybackPosition = null;
@@ -259,8 +274,17 @@ class SamplerNotifier extends ChangeNotifier {
   /// l'ajouter au plateau.
   AudioPlayerService? _previewPlayer;
 
-  /// Évite les téléchargements concurrents sur un même pad.
-  final Map<int, Future<bool>> _padDownloadTasks = {};
+  /// File de téléchargement priorisée à concurrence bornée (refonte UX P2) :
+  /// un tap utilisateur double un prefetch en attente, et changer de plateau
+  /// annule le prefetch encore en file. La déduplication par padId remplace
+  /// l'ancien suivi manuel des tâches en vol.
+  final DownloadQueue _downloadQueue = DownloadQueue(maxConcurrent: 2);
+
+  /// Priorités de téléchargement : tap utilisateur > préparation manuelle >
+  /// prefetch d'arrière-plan.
+  static const int _downloadPriorityTap = 100;
+  static const int _downloadPriorityManualPrepare = 50;
+  static const int _downloadPriorityPrefetch = 10;
 
   /// Génération de préchargement courante : tout changement de plateau ou
   /// rechargement l'incrémente, ce qui annule le prefetch en cours.
@@ -505,7 +529,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   void _disposePadItems(List<PadItem> items) {
     for (final item in items) {
-      item.disposeAllSlots();
+      item.dispose();
     }
   }
 
@@ -760,11 +784,11 @@ class SamplerNotifier extends ChangeNotifier {
   /// anticipe »).
   ///
   /// Silencieux et non bloquant ; annulé dès qu'on change de plateau ou qu'un
-  /// nouveau chargement démarre (garde de génération) ; inopérant hors-ligne —
-  /// seuls les pads `needsDownload` sont visés, les `offline`/`missingFile` sont
-  /// ignorés. Séquentiel pour ne pas marteler Drive : la file priorisée à
-  /// concurrence limitée (et la priorité aux favoris) viendra avec le
-  /// DownloadQueueManager (P2/P3).
+  /// nouveau chargement démarre (garde de génération + annulation de la file) ;
+  /// inopérant hors-ligne — seuls les pads `needsDownload` sont visés, les
+  /// `offline`/`missingFile` sont ignorés. Les pads sont mis en file à priorité
+  /// basse : la [DownloadQueue] borne la concurrence et un tap utilisateur passe
+  /// devant. La priorité aux favoris viendra avec P3.
   Future<void> _prefetchActiveBoard() async {
     final libraryRepository = _libraryRepository;
     if (libraryRepository == null) return;
@@ -778,12 +802,18 @@ class SamplerNotifier extends ChangeNotifier {
     if (!await libraryRepository.ensureDriveConnected()) return;
     if (generation != _prefetchGeneration || _activeBoardId != boardId) return;
 
+    // Annule le prefetch encore en file d'un plateau précédent (les tâches déjà
+    // démarrées finissent en cache, sans gâchis ; les tap restent prioritaires).
+    _downloadQueue.cancelQueued(
+      (key, priority) => priority <= _downloadPriorityPrefetch,
+    );
+
     for (final padItem in List<PadItem>.from(_state.pads)) {
-      if (generation != _prefetchGeneration || _activeBoardId != boardId) {
-        return;
-      }
       if (padItem.pendingDownloadCount == 0) continue; // déjà prêt ou bloqué.
-      await downloadAndLoadPad(padItem);
+      unawaited(
+        downloadAndLoadPad(padItem, priority: _downloadPriorityPrefetch)
+            .catchError((_) => false),
+      );
     }
   }
 
@@ -817,17 +847,29 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Télécharge les variantes manquantes puis recharge les slots concernés.
-  /// Retourne true si au moins une variante est jouable après l'opération.
-  Future<bool> downloadAndLoadPad(PadItem padItem) {
-    final resolved = _resolveBoardPadItem(padItem);
-    final padId = resolved.pad.id;
-    final inFlight = _padDownloadTasks[padId];
-    if (inFlight != null) return inFlight;
+  /// Notifie le rebuild d'un seul pad (progression de download, disponibilité)
+  /// sans reconstruire toute la grille : chaque PadButton écoute `revision`.
+  void _notifyPad(PadItem padItem) => padItem.bumpRevision();
 
-    final task = _downloadAndLoadPadImpl(resolved);
-    _padDownloadTasks[padId] = task;
-    return task.whenComplete(() => _padDownloadTasks.remove(padId));
+  /// Télécharge les variantes manquantes puis recharge les slots concernés via
+  /// la file priorisée. Retourne true si au moins une variante est jouable.
+  ///
+  /// [priority] : tap utilisateur par défaut (double tout prefetch en attente).
+  /// Une tâche annulée (changement de plateau) retourne l'état jouable courant.
+  Future<bool> downloadAndLoadPad(
+    PadItem padItem, {
+    int priority = _downloadPriorityTap,
+  }) async {
+    final resolved = _resolveBoardPadItem(padItem);
+    try {
+      return await _downloadQueue.enqueue<bool>(
+        key: resolved.pad.id,
+        priority: priority,
+        task: () => _downloadAndLoadPadImpl(resolved),
+      );
+    } on DownloadCancelledException {
+      return _resolveBoardPadItem(padItem).isPlayable;
+    }
   }
 
   Future<bool> _downloadAndLoadPadImpl(PadItem padItem) async {
@@ -842,14 +884,14 @@ class SamplerNotifier extends ChangeNotifier {
     if (pendingIndices.isEmpty) {
       if (padItem.isPlayable) return true;
       await _loadPlayersForPad(padItem, padItem.pad);
-      notifyListeners();
+      _notifyPad(padItem);
       return padItem.isPlayable;
     }
 
     padItem.isDownloading = true;
     padItem.downloadDone = 0;
     padItem.downloadTotal = pendingIndices.length;
-    notifyListeners();
+    _notifyPad(padItem);
 
     try {
       final libraryRepository = _libraryRepository;
@@ -857,7 +899,7 @@ class SamplerNotifier extends ChangeNotifier {
         final connected = await libraryRepository.ensureDriveConnected();
         if (!connected) {
           _markSlotsOffline(padItem);
-          notifyListeners();
+          _notifyPad(padItem);
           return false;
         }
       }
@@ -865,7 +907,7 @@ class SamplerNotifier extends ChangeNotifier {
       for (final index in pendingIndices) {
         await _loadSlotAtIndex(padItem, index, downloadIfNeeded: true);
         padItem.downloadDone++;
-        notifyListeners();
+        _notifyPad(padItem);
       }
     } finally {
       padItem.isDownloading = false;
@@ -880,7 +922,7 @@ class SamplerNotifier extends ChangeNotifier {
     } else {
       _finalizePadAvailability(padItem);
     }
-    notifyListeners();
+    _notifyPad(padItem);
     return padItem.isPlayable;
   }
 
@@ -923,7 +965,10 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
 
     for (var i = 0; i < toDownload.length; i++) {
-      await downloadAndLoadPad(toDownload[i]);
+      await downloadAndLoadPad(
+        toDownload[i],
+        priority: _downloadPriorityManualPrepare,
+      );
       _state = _state.copyWith(boardPrepareDone: i + 1);
       notifyListeners();
     }
@@ -1759,7 +1804,7 @@ class SamplerNotifier extends ChangeNotifier {
         await padItem.currentPlayer?.stop();
       } catch (_) {}
     }
-    padItem.disposeAllSlots();
+    padItem.dispose();
 
     _state = _state.copyWith(
       pads: _state.pads.where((p) => p != padItem).toList(),
@@ -1827,13 +1872,14 @@ class SamplerNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
+    _downloadQueue.dispose();
     _previewPlayer?.dispose();
     _previewPlayer = null;
     for (final padItem in _state.pads) {
-      padItem.disposeAllSlots();
+      padItem.dispose();
     }
     for (final padItem in _offStageMusicPads.values) {
-      padItem.disposeAllSlots();
+      padItem.dispose();
     }
     super.dispose();
   }

@@ -321,11 +321,17 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
           ),
         );
       },
-      child: PadButton(
-        key: ValueKey<int>(widget.padItem.pad.id),
-        padItem: widget.padItem,
-        onTap: widget.onTap,
-        onLongPress: widget.onLongPress,
+      // Rebuild ciblé : le PadButton se reconstruit sur la révision du pad
+      // (progression de download, disponibilité) sans dépendre d'un rebuild
+      // global de la grille (refonte UX P2).
+      child: ListenableBuilder(
+        listenable: widget.padItem.revision,
+        builder: (context, _) => PadButton(
+          key: ValueKey<int>(widget.padItem.pad.id),
+          padItem: widget.padItem,
+          onTap: widget.onTap,
+          onLongPress: widget.onLongPress,
+        ),
       ),
     );
   }
