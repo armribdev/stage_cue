@@ -4,7 +4,7 @@ import 'package:flutter_soloud/flutter_soloud.dart';
 
 import 'audio_file_validation.dart';
 
-/// Journalisation audio — visible dans la console (`print`) et DevTools (`log`).
+/// Journalisation audio via DevTools et la Debug Console (`developer.log`).
 class AudioLoadLog {
   AudioLoadLog._();
 
@@ -154,10 +154,6 @@ class AudioLoadLog {
       error: error,
       stackTrace: stackTrace,
     );
-    // `print` reste visible même quand debugPrint est filtré.
-    final suffix = error != null ? ' | $error' : '';
-    // ignore: avoid_print — volontaire : visible dans toutes les consoles.
-    print('[$_name] $message$suffix');
   }
 }
 
