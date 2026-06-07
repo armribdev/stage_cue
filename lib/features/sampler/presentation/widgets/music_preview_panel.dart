@@ -512,7 +512,6 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
     required bool isPlaying,
     required bool hasCurrent,
     required bool hasQueue,
-    required bool centered,
   }) {
     return _OnAirControls(
       volume: widget.musicVolume,
@@ -526,7 +525,6 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
       transitionProgress: widget.transitionProgress,
       transitionBlinkOpacity: widget.transitionBlinkOpacity,
       onChooseMusic: widget.onChooseMusic,
-      centered: centered,
       onTogglePlayPause: () => widget.onPauseToggle(
         isPlaying: isPlaying,
         hasCurrent: hasCurrent,
@@ -638,7 +636,6 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
       isPlaying: isPlaying,
       hasCurrent: hasCurrent,
       hasQueue: hasQueue,
-      centered: !advanced,
     );
     final showCompactHeaderBadge =
         progress == null ? !advanced : (progress < 0.5);
@@ -722,7 +719,6 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
                             isPlaying: isPlaying,
                             hasCurrent: hasCurrent,
                             hasQueue: hasQueue,
-                            centered: true,
                           ),
                         ),
                       ),
@@ -743,7 +739,6 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
                             isPlaying: isPlaying,
                             hasCurrent: hasCurrent,
                             hasQueue: hasQueue,
-                            centered: false,
                           ),
                         ),
                       ),
@@ -889,7 +884,6 @@ class _OnAirControls extends StatelessWidget {
   static const _inlineGap = 8.0;
   static const _wrappedRowGap = 10.0;
   static const _volumeGroupMinWidth = _volumeSliderMinWidth;
-  static const _volumeGroupMaxWidth = _volumeSliderMaxWidth;
 
   final double volume;
   final ValueChanged<double>? onVolumeChanged;
@@ -904,7 +898,6 @@ class _OnAirControls extends StatelessWidget {
   final VoidCallback onChooseMusic;
   final VoidCallback? onTogglePlayPause;
   final VoidCallback? onSkipNext;
-  final bool centered;
 
   const _OnAirControls({
     required this.volume,
@@ -920,7 +913,6 @@ class _OnAirControls extends StatelessWidget {
     required this.onChooseMusic,
     this.onTogglePlayPause,
     this.onSkipNext,
-    this.centered = false,
   });
 
   double _resolveSliderWidth(double available) {
@@ -979,47 +971,25 @@ class _OnAirControls extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
-        final inlineVolumeNeed = centered
-            ? _volumeGroupMaxWidth
-            : _volumeGroupMinWidth;
         final fitsOnOneLine = maxWidth >=
             _GroupedPlaybackControls.minWidth +
                 _inlineGap +
-                inlineVolumeNeed;
+                _volumeGroupMinWidth;
 
         final Widget controls;
         if (fitsOnOneLine) {
-          if (centered) {
-            final sliderWidth = _resolveSliderWidth(
-              maxWidth -
-                  _GroupedPlaybackControls.minWidth -
-                  _inlineGap,
-            );
-            controls = Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                playbackControls,
-                const SizedBox(width: _inlineGap),
-                _volumeSlider(width: sliderWidth),
-              ],
-            );
-          } else {
-            controls = Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                playbackControls,
-                const SizedBox(width: _inlineGap),
-                Flexible(child: _volumeSlider(flexible: true)),
-              ],
-            );
-          }
+          controls = Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              playbackControls,
+              const SizedBox(width: _inlineGap),
+              Flexible(child: _volumeSlider(flexible: true)),
+            ],
+          );
         } else {
           controls = Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: centered
-                ? CrossAxisAlignment.center
-                : CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               playbackControls,
               const SizedBox(height: _wrappedRowGap),
@@ -1030,7 +1000,7 @@ class _OnAirControls extends StatelessWidget {
 
         return SizedBox(
           width: maxWidth,
-          child: centered ? Center(child: controls) : controls,
+          child: controls,
         );
       },
     );
