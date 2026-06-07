@@ -29,8 +29,7 @@ class PadButton extends StatelessWidget {
   });
 
   _PadVisual get _visual {
-    // Un pad partiellement prêt reste jouable → famille PRÊT (le chip indique le ratio).
-    if (padItem.isPlayable) return _PadVisual.ready;
+    if (padItem.isPlayable || padItem.appearsReady) return _PadVisual.ready;
     final reason = padItem.unavailabilityReason;
     if (padItem.isDownloading ||
         reason == null ||
@@ -375,7 +374,7 @@ Widget padSoundAvailabilityIcon(
   double size = 18,
 }) {
   final (icon, color) = switch (availability) {
-    PadSoundAvailability.ready => (
+    PadSoundAvailability.ready || PadSoundAvailability.cached => (
         Icons.check_circle_outline,
         scheme.primary,
       ),

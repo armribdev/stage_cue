@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/audio/audio_file_validation.dart';
 import '../../../../core/audio/audio_load_log.dart';
+import '../../../../core/audio/local_sound_probe.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/sync/audio_cache_manager.dart';
 import '../../../../core/sync/drive_account_profile.dart';
@@ -462,6 +463,43 @@ class LibraryRepository {
       hadRemoteSnapshot: hasRemote,
       indexedNewFiles: indexed,
     );
+  }
+
+  /// Sonde disque rapide — sans SoLoud, sans réseau, sans modifier le cache.
+  Future<LocalSoundProbeResult> probeLocalCache(Sound sound) async {
+    final libraryId = sound.libraryId;
+    final rawRelativePath = sound.relativePath;
+    if (libraryId == null ||
+        rawRelativePath == null ||
+        rawRelativePath.isEmpty) {
+      return LocalSoundProbeResult.needsDownload;
+    }
+
+    final relativePath =
+        LibrarySoundPaths.normalizeRelativePath(rawRelativePath);
+    final library = await _dataSource.getLibraryById(libraryId);
+    if (library == null) {
+      return LocalSoundProbeResult.needsDownload;
+    }
+
+    final localPath = _cacheManager.localPathFor(library, relativePath);
+    if (isKnownUnloadablePath(localPath)) {
+      return LocalSoundProbeResult.missingFile;
+    }
+
+    final localFile = File(localPath);
+    if (await isPlausibleAudioFile(localFile)) {
+      return LocalSoundProbeResult.cached;
+    }
+    if (await localFile.exists()) {
+      return LocalSoundProbeResult.needsDownload;
+    }
+
+    final client = await _ensureDriveClient();
+    if (client == null) {
+      return LocalSoundProbeResult.offline;
+    }
+    return LocalSoundProbeResult.needsDownload;
   }
 
   /// Résout le chemin local jouable d'un son.
