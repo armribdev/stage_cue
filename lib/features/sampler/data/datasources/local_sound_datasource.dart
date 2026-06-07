@@ -27,6 +27,16 @@ class LocalSoundDataSource {
 
   LocalSoundDataSource(this._database);
 
+  Future<({db_sounds.SoundType type, String? contentHash})>
+      _resolveMetadataForFile(File file) async {
+    if (!await file.exists() || await file.length() <= 0) {
+      return (type: db_sounds.SoundType.soundEffect, contentHash: null);
+    }
+    final type = await _resolveSoundTypeFromDuration(file);
+    final contentHash = await computeQuickHash(file);
+    return (type: type, contentHash: contentHash);
+  }
+
   Future<db_sounds.SoundType> _resolveSoundTypeFromDuration(File file) async {
     AudioSource? source;
     try {
@@ -388,19 +398,31 @@ class LocalSoundDataSource {
         .get();
 
     if (existing.isNotEmpty) {
-      await syncLibrarySoundLocalPath(existing.first.id, localPath);
+      final existingRow = existing.first;
+      await syncLibrarySoundLocalPath(existingRow.id, localPath);
+      if (existingRow.contentHash == null) {
+        final metadata = await _resolveMetadataForFile(File(localPath));
+        if (metadata.contentHash != null) {
+          await refreshSoundMetadata(
+            soundId: existingRow.id,
+            file: File(localPath),
+          );
+        }
+      }
       return false;
     }
 
     final title = p.basenameWithoutExtension(relativePath);
+    final metadata = await _resolveMetadataForFile(File(localPath));
 
     await _database.into(_database.sounds).insert(
           db.SoundsCompanion.insert(
             title: title,
             filePath: localPath,
-            type: db_sounds.SoundType.soundEffect,
+            type: metadata.type,
             libraryId: Value(libraryId),
             relativePath: Value(relativePath),
+            contentHash: Value(metadata.contentHash),
           ),
         );
     return true;

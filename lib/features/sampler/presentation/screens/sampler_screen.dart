@@ -94,13 +94,23 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   void _onStateChanged() {
-    if (mounted) {
-      setState(() {
-        if (_isEditMode && _notifier.state.pads.isEmpty) {
-          _isEditMode = false;
-        }
+    if (!mounted) return;
+
+    final musicError = _notifier.consumeLastMusicPlaybackError();
+    if (musicError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(musicError)),
+        );
       });
     }
+
+    setState(() {
+      if (_isEditMode && _notifier.state.pads.isEmpty) {
+        _isEditMode = false;
+      }
+    });
   }
 
   /// Sélectionne un board et ferme le drawer (mobile).
@@ -650,6 +660,24 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
+  Future<void> _handlePadTap(BuildContext context, PadItem padItem) async {
+    final resolved = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
+    if (resolved.isPlayable) {
+      await _notifier.toggleSound(resolved);
+      return;
+    }
+    if (resolved.unavailabilityReason == null) {
+      await _notifier.refreshPadPlayback(resolved.pad.id);
+      if (!mounted) return;
+      final after = _notifier.findPadItemById(resolved.pad.id);
+      if (after != null && after.isPlayable) {
+        await _notifier.toggleSound(after);
+      }
+      return;
+    }
+    _showPadUnavailableSheet(context, resolved);
+  }
+
   void _showPadUnavailableSheet(BuildContext context, PadItem padItem) {
     final reason = padItem.unavailabilityReason;
     if (reason == null) return;
@@ -718,9 +746,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
         isHighlighted: _highlightedPadId == padItem.pad.id,
         onTap: _isEditMode
             ? null
-            : !padItem.isPlayable
-                ? () => _showPadUnavailableSheet(context, padItem)
-                : () => _notifier.toggleSound(padItem),
+            : () => unawaited(_handlePadTap(context, padItem)),
         onBadgeTap: !_isEditMode && !padItem.isFullyReady
             ? () => unawaited(_downloadPadWithFeedback(padItem))
             : null,
@@ -773,7 +799,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
               ? (isBoardsLoading ? 'boards_loading' : 'boards_empty')
               : state.isLoading
               ? 'sounds_loading'
-              : state.error != null
+              : state.error != null && state.pads.isEmpty
               ? 'sounds_error'
               : 'sounds_grid',
         ),
@@ -788,7 +814,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
           if (state.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (state.error != null) {
+          if (state.error != null && state.pads.isEmpty) {
             return Center(
               child: Card(
                 child: Padding(
@@ -814,14 +840,46 @@ class _SamplerScreenState extends State<SamplerScreen> {
             );
           }
           final downloadableCount = state.pads.where((p) => !p.isFullyReady).length;
-          final showBanner = downloadableCount > 0 || state.isBoardPreparing;
+          final showPrepareBanner =
+              downloadableCount > 0 || state.isBoardPreparing;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (state.error != null)
+                Material(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 18,
+                          color: Theme.of(context).colorScheme.onErrorContainer,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            state.error!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onErrorContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               AnimatedSize(
                 duration: const Duration(milliseconds: 260),
                 curve: Curves.easeInOutCubic,
-                child: showBanner
+                child: showPrepareBanner
                     ? _buildPrepareBanner(context, state, downloadableCount)
                     : const SizedBox.shrink(),
               ),
@@ -1060,7 +1118,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   Positioned.fill(
                     child: _buildSamplerContent(context, state),
                   ),
-                  _buildMusicPreviewPanel(context, state),
+                  ListenableBuilder(
+                    listenable: _notifier,
+                    builder: (context, _) =>
+                        _buildMusicPreviewPanel(context, _notifier.state),
+                  ),
                 ],
               ),
             ),

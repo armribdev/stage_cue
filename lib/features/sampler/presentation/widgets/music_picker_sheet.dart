@@ -104,10 +104,7 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
   Future<void> _playNow(Sound sound) async {
     final padItem = await widget.notifier.playMusicBySoundId(sound.id);
     if (!mounted) return;
-    if (padItem == null) {
-      _showPlaybackError();
-      return;
-    }
+    if (padItem == null) return;
     Navigator.pop(context);
   }
 
@@ -117,21 +114,9 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
 
     final padItem = await widget.notifier.enqueueMusicBySoundId(sound.id);
     if (!mounted) return;
-    if (padItem == null) {
-      _showPlaybackError();
-      return;
-    }
+    if (padItem == null) return;
 
     if (wasOnAir || wasQueued) return;
-  }
-
-  void _showPlaybackError() {
-    final message =
-        widget.notifier.state.error ??
-        'Fichier audio introuvable ou indisponible hors-ligne.';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
   }
 
   Widget _buildSearchField() {

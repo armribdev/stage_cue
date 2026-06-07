@@ -489,15 +489,21 @@ class LibraryRepository {
         if (length <= 0) {
           throw SoundNotAvailableLocallyException(isOffline: false);
         }
-        unawaited(_soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath));
+        await _soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath);
         if (sound.contentHash == null) {
-          unawaited(_refreshSoundMetadata(sound, localFile));
+          await _refreshSoundMetadata(sound, localFile);
         }
         return p.normalize(localFile.absolute.path);
       }
 
       // Fichier absent du cache.
-      final client = await _ensureDriveClient();
+      var client = await _ensureDriveClient();
+      if (client == null && downloadIfNeeded) {
+        if (!await ensureDriveConnected()) {
+          throw SoundNotAvailableLocallyException(isOffline: true);
+        }
+        client = await _ensureDriveClient();
+      }
       if (client == null) {
         throw SoundNotAvailableLocallyException(isOffline: true);
       }
@@ -510,8 +516,11 @@ class LibraryRepository {
         library: library,
         relativePath: relativePath,
       );
-      unawaited(_soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath));
-      unawaited(_refreshSoundMetadata(sound, localFile));
+      if (!await localFile.exists() || await localFile.length() <= 0) {
+        throw SoundNotAvailableLocallyException(isOffline: false);
+      }
+      await _soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath);
+      await _refreshSoundMetadata(sound, localFile);
       return p.normalize(localFile.absolute.path);
     }
 
