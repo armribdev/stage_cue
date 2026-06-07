@@ -34,6 +34,10 @@ class _UndoPadIntent extends Intent {
   const _UndoPadIntent();
 }
 
+class _AddSoundIntent extends Intent {
+  const _AddSoundIntent();
+}
+
 /// Écran principal du sampler
 class SamplerScreen extends StatefulWidget {
   final AppServices services;
@@ -362,6 +366,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
     await _notifier.loadSounds();
   }
 
+  Future<void> _handleAddSoundShortcut() async {
+    if (!_isDesktopPlatform || !mounted || _isEditMode) return;
+    final board = _notifier.state.selectedBoard;
+    if (board == null) return;
+    await _openSoundLibrary(board);
+  }
+
   Future<void> _handleUndoShortcut() async {
     if (!_isDesktopPlatform || !mounted) return;
     final restoredSoundId = await _notifier.undoLastRemoval();
@@ -384,15 +395,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
   static const Duration _padEmphasisDuration = Duration(milliseconds: 2200);
 
   Future<void> _openSoundLibrary(SoundBoard board) async {
-    final result = await Navigator.push<SoundLibraryScreenResult>(
+    final result = await SoundLibraryScreen.open(
       context,
-      MaterialPageRoute(
-        builder: (context) => SoundLibraryScreen(
-          database: _database,
-          boardId: board.id,
-          libraryRepository: widget.services.libraryRepository,
-        ),
-      ),
+      database: _database,
+      boardId: board.id,
+      libraryRepository: widget.services.libraryRepository,
     );
     await _notifier.loadSounds();
     if (!mounted || result == null) return;
@@ -473,42 +480,61 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   Widget _buildAddButtonCard(BuildContext context, SoundBoard selectedBoard) {
     final scheme = Theme.of(context).colorScheme;
-    return _wrapMusicRegieTapTarget(
-      Card(
+    const borderRadius = 14.0;
+    final card = Card(
         key: const ValueKey('add_button'),
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        color: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-            color: scheme.outlineVariant.withValues(alpha: 0.55),
-            style: BorderStyle.solid,
-            width: 1.0,
-          ),
+          borderRadius: BorderRadius.circular(borderRadius),
         ),
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.22),
-        child: InkWell(
-          onTap: () => _openSoundLibrary(selectedBoard),
-          borderRadius: BorderRadius.circular(14),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.add_circle_outline_rounded,
-                  size: 28,
-                  color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
+        child: CustomPaint(
+          foregroundPainter: _DashedRoundedRectPainter(
+            color: scheme.outlineVariant.withValues(alpha: 0.45),
+            radius: borderRadius,
+          ),
+          child: InkWell(
+            onTap: () => _openSoundLibrary(selectedBoard),
+            borderRadius: BorderRadius.circular(borderRadius),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.add_circle_outline_rounded,
+                      size: 22,
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.55),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Ajouter un son',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: scheme.onSurfaceVariant.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Ajouter un son',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
+    );
+    if (!_isDesktopPlatform) {
+      return _wrapMusicRegieTapTarget(card);
+    }
+    return _wrapMusicRegieTapTarget(
+      Tooltip(
+        message: 'Ajouter un son (Ctrl+N)',
+        child: card,
       ),
     );
   }
@@ -964,12 +990,20 @@ class _SamplerScreenState extends State<SamplerScreen> {
     return Shortcuts(
       shortcuts: _isDesktopPlatform
           ? const <ShortcutActivator, Intent>{
+              SingleActivator(LogicalKeyboardKey.keyN, control: true):
+                  _AddSoundIntent(),
               SingleActivator(LogicalKeyboardKey.keyZ, control: true):
                   _UndoPadIntent(),
             }
           : const <ShortcutActivator, Intent>{},
       child: Actions(
         actions: <Type, Action<Intent>>{
+          _AddSoundIntent: CallbackAction<_AddSoundIntent>(
+            onInvoke: (intent) {
+              unawaited(_handleAddSoundShortcut());
+              return null;
+            },
+          ),
           _UndoPadIntent: CallbackAction<_UndoPadIntent>(
             onInvoke: (intent) {
               unawaited(_handleUndoShortcut());
@@ -1615,5 +1649,53 @@ class _BoardTileIcon extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.xs),
       ),
     );
+  }
+}
+
+/// Contour pointillé pour le faux pad « Ajouter un son ».
+class _DashedRoundedRectPainter extends CustomPainter {
+  const _DashedRoundedRectPainter({
+    required this.color,
+    required this.radius,
+  });
+
+  final Color color;
+  final double radius;
+  static const _strokeWidth = 1.0;
+  static const _dashLength = 5.0;
+  static const _dashGap = 4.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _strokeWidth;
+
+    final halfStroke = _strokeWidth / 2;
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        halfStroke,
+        halfStroke,
+        size.width - _strokeWidth,
+        size.height - _strokeWidth,
+      ),
+      Radius.circular(radius),
+    );
+
+    final path = Path()..addRRect(rrect);
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final end = (distance + _dashLength).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance += _dashLength + _dashGap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRoundedRectPainter oldDelegate) {
+    return color != oldDelegate.color || radius != oldDelegate.radius;
   }
 }

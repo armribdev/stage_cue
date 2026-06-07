@@ -8,6 +8,7 @@ import '../widgets/pad_button.dart' show padSoundAvailabilityIcon;
 import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
+import '../widgets/app_bottom_sheet.dart';
 
 /// Écran de détails d'un pad — réglages, sons, mode de lecture.
 class PadDetailsScreen extends StatefulWidget {
@@ -102,10 +103,9 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   Future<void> _addSound(BuildContext ctx) async {
     final pad = widget.padItem.pad;
     // Ouvrir la bibliothèque pour choisir un son à ajouter à ce pad
-    await showModalBottomSheet<void>(
+    await showAppBottomSheet<void>(
       context: ctx,
-      isScrollControlled: true,
-      builder: (_) => _AddSoundSheet(
+      child: _AddSoundSheet(
         padId: pad.id,
         notifier: widget.notifier,
         tagCatalog: _tagCatalog,
@@ -561,46 +561,34 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.6,
-      maxChildSize: 0.9,
-      builder: (_, controller) => Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(
-              'Ajouter un son au pad',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    controller: controller,
-                    itemCount: _sounds.length,
-                    itemBuilder: (_, i) {
-                      final s = _sounds[i];
-                      return ListTile(
-                        leading: SoundTypeAvatar(type: s.type, radius: 18),
-                        title: Text(s.displayName ?? s.title),
-                        subtitle: Text(s.type.label),
-                        onTap: () async {
-                          await widget.notifier.addSoundToPad(
-                            widget.padId,
-                            s.id,
-                          );
-                          if (!context.mounted) return;
-                          Navigator.pop(context);
-                        },
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
+    return AppBottomSheetShell(
+      title: 'Ajouter un son au pad',
+      bodyBuilder: (context, scrollController) {
+        if (_loading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return ListView.builder(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          itemCount: _sounds.length,
+          itemBuilder: (_, i) {
+            final s = _sounds[i];
+            return ListTile(
+              leading: SoundTypeAvatar(type: s.type, radius: 18),
+              title: Text(s.displayName ?? s.title),
+              subtitle: Text(s.type.label),
+              onTap: () async {
+                await widget.notifier.addSoundToPad(
+                  widget.padId,
+                  s.id,
+                );
+                if (!context.mounted) return;
+                Navigator.pop(context);
+              },
+            );
+          },
+        );
+      },
     );
   }
 

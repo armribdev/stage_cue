@@ -4,6 +4,8 @@ import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../utils/sound_type_ui.dart';
 import '../providers/sampler_provider.dart';
+import 'app_bottom_sheet.dart';
+import 'sound_picker_actions.dart';
 
 /// Feuille modale pour choisir une musique à lancer ou mettre en file.
 class MusicPickerSheet extends StatefulWidget {
@@ -21,13 +23,9 @@ class MusicPickerSheet extends StatefulWidget {
     required SoundRepository repository,
     required SamplerNotifier notifier,
   }) {
-    final scheme = Theme.of(context).colorScheme;
-    return showModalBottomSheet<void>(
+    return showAppBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: scheme.surfaceContainerLow,
-      builder: (context) => MusicPickerSheet(
+      child: MusicPickerSheet(
         repository: repository,
         notifier: notifier,
       ),
@@ -136,92 +134,70 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
     );
   }
 
+  Widget _buildSearchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: TextField(
+        autofocus: true,
+        decoration: InputDecoration(
+          hintText: 'Rechercher un son...',
+          prefixIcon: const Icon(Icons.search),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onChanged: (value) => setState(() => _searchQuery = value),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final filtered = _filteredSounds;
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottomInset),
-      child: DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.75,
-        minChildSize: 0.4,
-        maxChildSize: 0.92,
-        builder: (context, scrollController) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-                child: Row(
-                  children: [
-                    Icon(SoundType.music.icon, color: scheme.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Sélectionner une musique',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+    return AppBottomSheetShell(
+      title: 'Sélectionner une musique',
+      leadingIcon: SoundType.music.icon,
+      header: _buildSearchField(),
+      bodyBuilder: (context, scrollController) {
+        if (_isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (filtered.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                _musicSounds.isEmpty
+                    ? 'Aucune musique dans la bibliothèque'
+                    : 'Aucun résultat',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge,
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Rechercher…',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    isDense: true,
-                  ),
-                  onChanged: (value) => setState(() => _searchQuery = value),
-                ),
-              ),
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : filtered.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(
-                            _musicSounds.isEmpty
-                                ? 'Aucune musique dans la bibliothèque'
-                                : 'Aucun résultat',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          ),
-                        ),
-                      )
-                    : ListenableBuilder(
-                        listenable: widget.notifier,
-                        builder: (context, _) {
-                          return ListView.builder(
-                            controller: scrollController,
-                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final sound = filtered[index];
-                              return _PickerTrackRow(
-                                sound: sound,
-                                onBoard: _isOnBoard(sound),
-                                onAir: _isOnAir(sound),
-                                queued: _isQueued(sound),
-                                onPlayNow: () => _playNow(sound),
-                                onEnqueue: () => _enqueue(sound),
-                              );
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
+            ),
           );
-        },
-      ),
+        }
+        return ListenableBuilder(
+          listenable: widget.notifier,
+          builder: (context, _) {
+            return ListView.builder(
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+              itemCount: filtered.length,
+              itemBuilder: (context, index) {
+                final sound = filtered[index];
+                return _PickerTrackRow(
+                  sound: sound,
+                  onBoard: _isOnBoard(sound),
+                  onAir: _isOnAir(sound),
+                  queued: _isQueued(sound),
+                  onPlayNow: () => _playNow(sound),
+                  onEnqueue: () => _enqueue(sound),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -318,26 +294,16 @@ class _PickerTrackRow extends StatelessWidget {
                 ],
               ),
             ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FilledButton(
-                  onPressed: onAir ? null : onPlayNow,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                  child: const Text('GO'),
-                ),
-                IconButton(
-                  tooltip: canEnqueue ? 'Mettre en file' : 'Déjà planifié',
-                  onPressed: canEnqueue ? onEnqueue : null,
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    queued ? Icons.check_rounded : Icons.playlist_add_rounded,
-                  ),
-                ),
-              ],
+            SoundPickerActionButtons(
+              goEnabled: !onAir,
+              onGo: onPlayNow,
+              secondaryEnabled: canEnqueue,
+              onSecondary: onEnqueue,
+              secondaryIcon: queued
+                  ? Icons.check_rounded
+                  : Icons.playlist_add_rounded,
+              secondaryTooltip:
+                  canEnqueue ? 'Mettre en file' : 'Déjà planifié',
             ),
           ],
         ),

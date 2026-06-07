@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/utils/copyable_snackbar.dart';
+import '../../../../core/utils/layout_utils.dart';
 import '../../../../core/utils/sound_display_paths.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../data/datasources/local_library_datasource.dart';
@@ -14,6 +14,8 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../../domain/usecases/add_sound_to_board_usecase.dart';
 import '../utils/sound_type_ui.dart';
+import '../widgets/app_bottom_sheet.dart';
+import '../widgets/sound_picker_actions.dart';
 
 /// Résultat renvoyé à la fermeture de [SoundLibraryScreen].
 class SoundLibraryScreenResult {
@@ -29,18 +31,47 @@ class SoundLibraryScreenResult {
 /// Longueur minimale de la recherche pour ne pas reléguer les sons déjà en board.
 const int kMinPreciseSoundLibrarySearchLength = 5;
 
-/// Écran pour ajouter un bruitage à la board.
+/// Écran pour ajouter un son à la board.
 class SoundLibraryScreen extends StatefulWidget {
   final db.AppDatabase database;
   final int boardId;
   final LibraryRepository? libraryRepository;
+  final bool isModal;
 
   const SoundLibraryScreen({
     super.key,
     required this.database,
     required this.boardId,
     this.libraryRepository,
+    this.isModal = false,
   });
+
+  /// Page plein écran sur téléphone, tiroir du bas sur tablette et desktop.
+  static Future<SoundLibraryScreenResult?> open(
+    BuildContext context, {
+    required db.AppDatabase database,
+    required int boardId,
+    LibraryRepository? libraryRepository,
+  }) {
+    final isModal = preferModalPresentation(context);
+    final screen = SoundLibraryScreen(
+      database: database,
+      boardId: boardId,
+      libraryRepository: libraryRepository,
+      isModal: isModal,
+    );
+
+    if (isModal) {
+      return showAppBottomSheet<SoundLibraryScreenResult>(
+        context: context,
+        child: screen,
+      );
+    }
+
+    return Navigator.of(context).push<SoundLibraryScreenResult>(
+      MaterialPageRoute(builder: (context) => screen),
+    );
+  }
 
   @override
   State<SoundLibraryScreen> createState() => _SoundLibraryScreenState();
@@ -52,9 +83,6 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   List<Sound> _availableSounds = [];
   Set<int> _soundsInBoard = {};
   Map<int, int> _soundIdToPadId = {};
-  AudioPlayerService? _previewPlayer;
-  int? _previewingSoundId;
-
   /// IDs des sons correspondant à la recherche (AND entre tokens, tag ou titre par token).
   /// null = pas de filtre (requête vide ou tokens vides).
   Set<int>? _searchMatchedSoundIds;
@@ -62,15 +90,24 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   List<TagCategoryWithTags> _tagCatalog = [];
   Map<int, Library> _librariesById = {};
   bool _isLoading = true;
+  SoundType _selectedType = SoundType.soundEffect;
   String _searchQuery = '';
   Timer? _searchDebounce;
+  late final TextEditingController _searchController;
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _searchFocusedBeforeTabTap = false;
 
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
     _initializeRepository();
     _loadTagCatalog();
     _loadSounds();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_searchFocusNode.canRequestFocus) return;
+      _searchFocusNode.requestFocus();
+    });
   }
 
   void _initializeRepository() {
@@ -94,7 +131,12 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
           await _repository.getSoundIdToFirstPadIdInBoard(widget.boardId);
 
       final availableSounds = allSounds
-          .where((s) => s.type == SoundType.soundEffect)
+          .where(
+            (s) =>
+                s.type == SoundType.soundEffect ||
+                s.type == SoundType.ambiance ||
+                s.type == SoundType.music,
+          )
           .toList();
 
       setState(() {
@@ -118,46 +160,6 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   bool get _isSearchPreciseEnough =>
       _searchQuery.trim().length >= kMinPreciseSoundLibrarySearchLength;
 
-  Future<void> _stopPreview() async {
-    await _previewPlayer?.stop();
-    _previewPlayer?.dispose();
-    _previewPlayer = null;
-    _previewingSoundId = null;
-  }
-
-  Future<String> _resolvePlayablePath(Sound sound) async {
-    final libraryRepository = widget.libraryRepository;
-    if (libraryRepository == null) return sound.filePath;
-    return libraryRepository.resolvePlayablePath(sound);
-  }
-
-  Future<void> _playPreview(Sound sound) async {
-    try {
-      if (_previewingSoundId == sound.id && _previewPlayer?.isPlaying == true) {
-        await _stopPreview();
-        if (mounted) setState(() {});
-        return;
-      }
-      await _stopPreview();
-      final path = await _resolvePlayablePath(sound);
-      final player = await AudioPlayerService.create(path);
-      player.setVolume(sound.volume);
-      await player.play();
-      if (!mounted) {
-        player.dispose();
-        return;
-      }
-      setState(() {
-        _previewPlayer = player;
-        _previewingSoundId = sound.id;
-      });
-    } catch (e) {
-      if (mounted) {
-        showCopyableSnackBar(context, 'Impossible de lire le son: $e');
-      }
-    }
-  }
-
   Future<void> _handleAdd(Sound sound) async {
     final isInBoard = _soundsInBoard.contains(sound.id);
     if (isInBoard) {
@@ -165,12 +167,11 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       if (padId == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Pad introuvable pour ce bruitage')),
+            const SnackBar(content: Text('Pad introuvable pour ce son')),
           );
         }
         return;
       }
-      await _stopPreview();
       if (!mounted) return;
       Navigator.pop(
         context,
@@ -185,12 +186,28 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
         _soundsInBoard.add(sound.id);
         _soundIdToPadId[sound.id] = padId;
       });
-      await _stopPreview();
       if (!mounted) return;
       Navigator.pop(
         context,
         SoundLibraryScreenResult(highlightPadId: padId, wasAdded: true),
       );
+    } catch (e) {
+      if (mounted) {
+        showCopyableSnackBar(context, 'Erreur lors de l\'ajout: $e');
+      }
+    }
+  }
+
+  Future<void> _handleAddAsPad(Sound sound) async {
+    if (_soundsInBoard.contains(sound.id)) return;
+
+    try {
+      final padId = await _addSoundToBoardUseCase(widget.boardId, sound.id);
+      if (!mounted) return;
+      setState(() {
+        _soundsInBoard.add(sound.id);
+        _soundIdToPadId[sound.id] = padId;
+      });
     } catch (e) {
       if (mounted) {
         showCopyableSnackBar(context, 'Erreur lors de l\'ajout: $e');
@@ -284,14 +301,33 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     return matchInTitle || matchInDisplayName || matchInPath;
   }
 
+  List<Sound> get _soundsForSelectedType => _availableSounds
+      .where((sound) => sound.type == _selectedType)
+      .toList();
+
+  void _onTypeChanged(SoundType type) {
+    if (_selectedType == type) return;
+    final restoreSearchFocus = _searchFocusedBeforeTabTap;
+    setState(() {
+      _selectedType = type;
+    });
+    _scheduleSearch(_searchQuery);
+    if (!restoreSearchFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_searchFocusNode.canRequestFocus) return;
+      _searchFocusNode.requestFocus();
+    });
+  }
+
   List<Sound> get _filteredSounds {
+    final typeSounds = _soundsForSelectedType;
     List<Sound> sounds;
     if (_searchQuery.trim().isEmpty) {
-      sounds = _availableSounds;
+      sounds = typeSounds;
     } else if (_searchMatchedSoundIds == null) {
-      sounds = _availableSounds;
+      sounds = typeSounds;
     } else {
-      sounds = _availableSounds
+      sounds = typeSounds
           .where((s) => _searchMatchedSoundIds!.contains(s.id))
           .toList();
     }
@@ -329,7 +365,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       Set<int>? intersection;
       for (final token in tokens) {
         final tagIds = await _repository.findSoundIdsByTagQuery(token);
-        final titleIds = _availableSounds
+        final titleIds = _soundsForSelectedType
             .where((s) => _soundMatchesToken(s, token))
             .map((s) => s.id)
             .toSet();
@@ -349,195 +385,265 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     });
   }
 
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+    });
+    _scheduleSearch('');
+    if (_searchFocusNode.canRequestFocus) {
+      _searchFocusNode.requestFocus();
+    }
+  }
+
   @override
   void dispose() {
     _searchDebounce?.cancel();
-    _previewPlayer?.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  Widget _buildTypeSelector() {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, widget.isModal ? 8 : 16, 16, 8),
+      child: Listener(
+        onPointerDown: (_) {
+          _searchFocusedBeforeTabTap = _searchFocusNode.hasFocus;
+        },
+        child: SegmentedButton<SoundType>(
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(
+              value: SoundType.soundEffect,
+              icon: Icon(SoundType.soundEffect.icon, size: 16),
+              label: Text(SoundType.soundEffect.label),
+            ),
+            ButtonSegment(
+              value: SoundType.ambiance,
+              icon: Icon(SoundType.ambiance.icon, size: 16),
+              label: Text(SoundType.ambiance.label),
+            ),
+            ButtonSegment(
+              value: SoundType.music,
+              icon: Icon(SoundType.music.icon, size: 16),
+              label: Text(SoundType.music.label),
+            ),
+          ],
+          selected: {_selectedType},
+          onSelectionChanged: (selection) => _onTypeChanged(selection.first),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchField() {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 8, 16, widget.isModal ? 12 : 16),
+      child: TextField(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        autofocus: true,
+        decoration: InputDecoration(
+          hintText: 'Rechercher un son...',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  tooltip: 'Effacer la recherche',
+                  onPressed: _clearSearch,
+                  icon: const Icon(Icons.close_rounded),
+                )
+              : null,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onChanged: (value) {
+          setState(() {
+            _searchQuery = value;
+          });
+          _scheduleSearch(value);
+        },
+      ),
+    );
+  }
+
+  Widget _buildSoundList({ScrollController? scrollController}) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 220),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      child: _isLoading
+          ? _LibraryLoadingList(
+              key: const ValueKey('loading'),
+              scrollController: scrollController,
+            )
+          : _filteredSounds.isEmpty
+              ? Center(
+                  key: ValueKey('empty_${_selectedType.name}'),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _selectedType.icon,
+                        size: 64,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _searchQuery.isEmpty
+                            ? 'Aucun ${_selectedType.label.toLowerCase()} disponible'
+                            : 'Aucun ${_selectedType.label.toLowerCase()} trouvé',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  key: ValueKey('list_${_selectedType.name}'),
+                  controller: scrollController,
+                  itemCount: _filteredSounds.length,
+                  itemBuilder: (context, index) {
+                    final sound = _filteredSounds[index];
+                    final isInBoard = _soundsInBoard.contains(sound.id);
+                    final tags = _soundTags[sound.id] ?? [];
+
+                    return TweenAnimationBuilder<double>(
+                      duration: Duration(milliseconds: 160 + (index * 22)),
+                      curve: Curves.easeOutCubic,
+                      tween: Tween(begin: 0, end: 1),
+                      builder: (context, value, child) {
+                        return Opacity(
+                          opacity: value,
+                          child: Transform.translate(
+                            offset: Offset(0, (1 - value) * 10),
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 4,
+                        ),
+                        child: Opacity(
+                          opacity: isInBoard ? 0.6 : 1.0,
+                          child: ListTile(
+                            leading: SoundTypeAvatar(type: sound.type),
+                            title: Text(
+                              sound.title,
+                              style: TextStyle(
+                                fontWeight: isInBoard
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                Text(
+                                  _displayPath(sound),
+                                  style: const TextStyle(fontSize: 11),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (tags.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      for (final tag in tags) _buildTagChip(tag),
+                                    ],
+                                  ),
+                                ],
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Type: ${sound.type.label}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            trailing: SoundPickerActionButtons(
+                              onGo: () => _handleAdd(sound),
+                              secondaryEnabled: !isInBoard,
+                              onSecondary: () => _handleAddAsPad(sound),
+                              secondaryIcon: isInBoard
+                                  ? Icons.check_rounded
+                                  : Icons.view_comfy_alt_rounded,
+                              secondaryTooltip: isInBoard
+                                  ? 'Déjà sur la scène'
+                                  : 'Ajouter comme pad',
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+    );
+  }
+
+  Widget _buildBody({ScrollController? listScrollController}) {
+    return Column(
+      children: [
+        if (!widget.isModal) ...[
+          _buildTypeSelector(),
+          _buildSearchField(),
+        ],
+        Expanded(child: _buildSoundList(scrollController: listScrollController)),
+      ],
+    );
+  }
+
+  Widget _buildModalHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildTypeSelector(),
+        _buildSearchField(),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Ajouter un bruitage')),
-      body: Column(
-        children: [
-          // Barre de recherche
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Rechercher un bruitage...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-                _scheduleSearch(value);
-              },
-            ),
-          ),
-          // Liste des sons
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              child: _isLoading
-                  ? const _LibraryLoadingList(key: ValueKey('loading'))
-                  : _filteredSounds.isEmpty
-                  ? Center(
-                      key: const ValueKey('empty'),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            SoundType.soundEffect.icon,
-                            size: 64,
-                            color: Colors.grey[600],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _searchQuery.isEmpty
-                                ? 'Aucun bruitage disponible'
-                                : 'Aucun bruitage trouvé',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      key: const ValueKey('list'),
-                      itemCount: _filteredSounds.length,
-                      itemBuilder: (context, index) {
-                        final sound = _filteredSounds[index];
-                        final isInBoard = _soundsInBoard.contains(sound.id);
-                        final tags = _soundTags[sound.id] ?? [];
+    if (widget.isModal) {
+      return AppBottomSheetShell(
+        title: 'Ajouter un son',
+        header: _buildModalHeader(),
+        bodyBuilder: (context, scrollController) =>
+            _buildBody(listScrollController: scrollController),
+      );
+    }
 
-                        return TweenAnimationBuilder<double>(
-                          duration: Duration(milliseconds: 160 + (index * 22)),
-                          curve: Curves.easeOutCubic,
-                          tween: Tween(begin: 0, end: 1),
-                          builder: (context, value, child) {
-                            return Opacity(
-                              opacity: value,
-                              child: Transform.translate(
-                                offset: Offset(0, (1 - value) * 10),
-                                child: child,
-                              ),
-                            );
-                          },
-                          child: Card(
-                            margin: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 4,
-                            ),
-                            child: Opacity(
-                              opacity: isInBoard ? 0.6 : 1.0,
-                              child: ListTile(
-                                leading: SoundTypeAvatar(type: sound.type),
-                                title: Text(
-                                  sound.title,
-                                  style: TextStyle(
-                                    fontWeight: isInBoard
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _displayPath(sound),
-                                      style: const TextStyle(fontSize: 11),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    if (tags.isNotEmpty) ...[
-                                      const SizedBox(height: 6),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 6,
-                                        children: [
-                                          for (final tag in tags)
-                                            _buildTagChip(tag),
-                                        ],
-                                      ),
-                                    ],
-                                    const SizedBox(height: 2),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          'Type: ${sound.type.label}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      tooltip:
-                                          _previewingSoundId == sound.id &&
-                                                  _previewPlayer?.isPlaying ==
-                                                      true
-                                              ? 'Arrêter'
-                                              : 'Jouer',
-                                      onPressed: () => _playPreview(sound),
-                                      icon: Icon(
-                                        _previewingSoundId == sound.id &&
-                                                _previewPlayer?.isPlaying ==
-                                                    true
-                                            ? Icons.stop_rounded
-                                            : Icons.play_arrow_rounded,
-                                      ),
-                                    ),
-                                    IconButton(
-                                      tooltip: isInBoard
-                                          ? 'Afficher sur la scène'
-                                          : 'Ajouter à la scène',
-                                      onPressed: () => _handleAdd(sound),
-                                      icon: Icon(
-                                        isInBoard
-                                            ? Icons.visibility_outlined
-                                            : Icons.add_circle_outline_rounded,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ),
-        ],
-      ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Ajouter un son')),
+      body: _buildBody(),
     );
   }
 }
 
 class _LibraryLoadingList extends StatelessWidget {
-  const _LibraryLoadingList({super.key});
+  const _LibraryLoadingList({super.key, this.scrollController});
+
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
+      controller: scrollController,
       itemCount: 6,
       itemBuilder: (context, index) {
         return const Padding(
