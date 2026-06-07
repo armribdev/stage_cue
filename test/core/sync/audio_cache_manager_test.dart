@@ -76,6 +76,82 @@ void main() {
         ));
   });
 
+  test('ensureCached normalise le préfixe legacy sounds/', () async {
+    final manager = AudioCacheManager();
+    when(() => client.findInFolder(
+          parentId: 'folder-root',
+          name: 'porte.wav',
+        )).thenAnswer((_) async => file('remote', 'porte.wav'));
+    stubDownloadWriting(50);
+
+    final result = await manager.ensureCached(
+      client: client,
+      library: library,
+      relativePath: 'sounds/porte.wav',
+    );
+
+    expect(result, p.join(rootDir.path, 'porte.wav'));
+    expect(await File(result).exists(), isTrue);
+  });
+
+  test('ensureCached : repli par nom de fichier si chemin dossier incorrect',
+      () async {
+    final manager = AudioCacheManager();
+    when(() => client.findInFolder(
+          parentId: any(named: 'parentId'),
+          name: any(named: 'name'),
+        )).thenAnswer((invocation) async {
+      final parentId = invocation.namedArguments[#parentId] as String;
+      final name = invocation.namedArguments[#name] as String;
+      if (parentId == 'folder-root' && name == 'Ancien dossier') {
+        return null;
+      }
+      if (parentId == 'folder-root' && name == 'porte.wav') {
+        return null;
+      }
+      if (parentId == 'sub-folder' && name == 'porte.wav') {
+        return file('remote', 'porte.wav');
+      }
+      if (parentId == 'folder-root' && name == 'Nouveau dossier') {
+        return DriveFile(
+          id: 'sub-folder',
+          name: 'Nouveau dossier',
+          mimeType: driveFolderMimeType,
+        );
+      }
+      return null;
+    });
+    when(() => client.listFolder(
+          any(),
+          sharedDriveId: any(named: 'sharedDriveId'),
+        )).thenAnswer((invocation) async {
+      final folderId = invocation.positionalArguments[0] as String;
+      if (folderId == 'folder-root') {
+        return [
+          DriveFile(
+            id: 'sub-folder',
+            name: 'Nouveau dossier',
+            mimeType: driveFolderMimeType,
+          ),
+        ];
+      }
+      if (folderId == 'sub-folder') {
+        return [file('remote', 'porte.wav')];
+      }
+      return [];
+    });
+    stubDownloadWriting(50);
+
+    final result = await manager.ensureCached(
+      client: client,
+      library: library,
+      relativePath: 'Ancien dossier/porte.wav',
+    );
+
+    expect(result, p.join(rootDir.path, 'Nouveau dossier', 'porte.wav'));
+    expect(await File(result).exists(), isTrue);
+  });
+
   test('ensureCached : fichier absent, télécharge depuis Drive', () async {
     final manager = AudioCacheManager();
     when(() => client.findInFolder(

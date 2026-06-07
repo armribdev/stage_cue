@@ -13,8 +13,8 @@ import '../providers/sampler_provider.dart';
 /// - résultats dès le 1er caractère, fuzzy + normalisé (accents) ;
 /// - tri par pertinence puis récence ;
 /// - tap sur une ligne = pré-écoute (audition, reste ouvert) ;
-/// - `Entrée` = joue le 1er résultat et ferme ; `Ctrl/Cmd+Entrée` = l'ajoute à
-///   la scène et ferme ; `Échap` = ferme.
+/// - `↑`/`↓` = parcourir les résultats ; `Entrée` = joue la sélection et ferme ;
+/// - `Ctrl/Cmd+Entrée` = l'ajoute à la scène et ferme ; `Échap` = ferme.
 ///
 /// Renvoie l'id du pad créé si un son a été ajouté à la scène (pour le mettre en
 /// évidence), sinon null.
@@ -39,7 +39,7 @@ class QuickSearchOverlay extends StatefulWidget {
         return FadeTransition(
           opacity: curved,
           child: SlideTransition(
-            position: Tween(begin: const Offset(0, -0.03), end: Offset.zero)
+            position: Tween(begin: const Offset(0, 0.03), end: Offset.zero)
                 .animate(curved),
             child: child,
           ),
@@ -54,12 +54,16 @@ class QuickSearchOverlay extends StatefulWidget {
 
 class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   final _controller = TextEditingController();
+  late final FocusNode _focusNode;
+  final _scrollController = ScrollController();
+  final _itemKeys = <int, GlobalKey>{};
   List<Sound> _all = const [];
   bool _loading = true;
   String _query = '';
   SoundType? _typeFilter;
   bool _favoritesOnly = false;
   bool _localOnly = false;
+  int _selectedIndex = 0;
 
   /// Ids des sons jouables hors-ligne (cache présent / fichier legacy). Chargé
   /// en arrière-plan ; null tant que le calcul n'est pas terminé.
@@ -76,6 +80,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   @override
   void initState() {
     super.initState();
+    _focusNode = FocusNode(onKeyEvent: _onSearchKey);
     _load();
   }
 
@@ -97,7 +102,10 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   bool _isLocal(Sound s) => _localIds?.contains(s.id) ?? true;
 
   void _onQueryChanged(String value) {
-    setState(() => _query = value);
+    setState(() {
+      _query = value;
+      _selectedIndex = 0;
+    });
     _tagDebounce?.cancel();
     _tagDebounce = Timer(const Duration(milliseconds: 120), () {
       unawaited(_runTagSearch(value));
@@ -146,6 +154,78 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     return [for (final e in scored) e.$1];
   }
 
+  /// Liste affichée (sous-ensemble en mode parcours favoris/récents).
+  List<Sound> _shownResults(List<Sound> results) {
+    final isBrowse = _query.isEmpty && !_favoritesOnly;
+    if (!isBrowse) return results;
+    return results
+        .where((s) => _isFav(s) || s.lastPlayedAt != null)
+        .take(25)
+        .toList();
+  }
+
+  int _clampSelectedIndex(int count) =>
+      count == 0 ? 0 : _selectedIndex.clamp(0, count - 1);
+
+  /// Hauteur fixe des lignes — aligne le scroll clavier et évite le « saut » visuel.
+  static const _itemExtent = 64.0;
+
+  void _moveSelection(int delta) {
+    final shown = _shownResults(_results);
+    if (shown.isEmpty) return;
+    final next = (_selectedIndex + delta).clamp(0, shown.length - 1);
+    if (next == _selectedIndex) return;
+
+    final soundId = shown[next].id;
+    final policy = delta < 0
+        ? ScrollPositionAlignmentPolicy.keepVisibleAtStart
+        : ScrollPositionAlignmentPolicy.keepVisibleAtEnd;
+    final ctx = _itemKey(soundId).currentContext;
+
+    if (ctx != null) {
+      // Ligne déjà rendue : scroll d'abord, puis surlignage (même frame).
+      Scrollable.ensureVisible(
+        ctx,
+        duration: Duration.zero,
+        alignmentPolicy: policy,
+      );
+      setState(() => _selectedIndex = next);
+      return;
+    }
+
+    // Ligne hors écran (ListView.builder) : pré-scroll, puis rendu + ajustement fin.
+    _preScrollToIndex(next, delta);
+    setState(() => _selectedIndex = next);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final lateCtx = _itemKey(soundId).currentContext;
+      if (lateCtx == null) return;
+      Scrollable.ensureVisible(
+        lateCtx,
+        duration: Duration.zero,
+        alignmentPolicy: policy,
+      );
+    });
+  }
+
+  GlobalKey _itemKey(int soundId) =>
+      _itemKeys.putIfAbsent(soundId, GlobalKey.new);
+
+  void _preScrollToIndex(int index, int delta) {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final viewport = position.viewportDimension;
+    final current = position.pixels;
+    final max = position.maxScrollExtent;
+    final itemTop = index * _itemExtent;
+    final itemBottom = itemTop + _itemExtent;
+
+    if (delta > 0 && itemBottom > current + viewport) {
+      _scrollController.jumpTo((itemBottom - viewport).clamp(0.0, max));
+    } else if (delta < 0 && itemTop < current) {
+      _scrollController.jumpTo(itemTop.clamp(0.0, max));
+    }
+  }
+
   Future<void> _play(Sound sound) async {
     final ok = await widget.notifier.previewSound(sound.id);
     if (!mounted || ok) return;
@@ -157,10 +237,11 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     );
   }
 
-  Future<void> _playTopAndClose() async {
-    final results = _results;
-    if (results.isEmpty) return;
-    await widget.notifier.previewSound(results.first.id);
+  Future<void> _playSelectedAndClose() async {
+    final shown = _shownResults(_results);
+    if (shown.isEmpty) return;
+    final index = _clampSelectedIndex(shown.length);
+    await widget.notifier.previewSound(shown[index].id);
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -175,15 +256,30 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     if (mounted) Navigator.of(context).pop(padId);
   }
 
-  Future<void> _addTopAndClose() async {
-    final results = _results;
-    if (results.isEmpty) return;
-    await _addAndClose(results.first);
+  Future<void> _addSelectedAndClose() async {
+    final shown = _shownResults(_results);
+    if (shown.isEmpty) return;
+    await _addAndClose(shown[_clampSelectedIndex(shown.length)]);
+  }
+
+  KeyEventResult _onSearchKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _moveSelection(1);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _moveSelection(-1);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
   void dispose() {
     _tagDebounce?.cancel();
+    _focusNode.dispose();
+    _scrollController.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -192,7 +288,6 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final mq = MediaQuery.of(context);
-    final topInset = mq.padding.top + 12;
     final results = _results;
 
     return CallbackShortcuts(
@@ -200,14 +295,19 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
         const SingleActivator(LogicalKeyboardKey.escape): () =>
             Navigator.of(context).pop(),
         const SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
-            unawaited(_addTopAndClose()),
+            unawaited(_addSelectedAndClose()),
         const SingleActivator(LogicalKeyboardKey.enter, meta: true): () =>
-            unawaited(_addTopAndClose()),
+            unawaited(_addSelectedAndClose()),
       },
       child: Align(
-        alignment: Alignment.topCenter,
+        alignment: Alignment.center,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(12, topInset, 12, 12),
+          padding: EdgeInsets.fromLTRB(
+            12,
+            mq.padding.top + 12,
+            12,
+            mq.padding.bottom + 12,
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: 560,
@@ -245,12 +345,20 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
           Expanded(
             child: TextField(
               controller: _controller,
+              focusNode: _focusNode,
               autofocus: true,
               textInputAction: TextInputAction.go,
               onChanged: _onQueryChanged,
-              onSubmitted: (_) => unawaited(_playTopAndClose()),
+              onSubmitted: (_) => unawaited(_playSelectedAndClose()),
               decoration: const InputDecoration(
+                filled: false,
+                fillColor: Colors.transparent,
                 border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
                 hintText: 'Chercher un son…',
                 isCollapsed: true,
               ),
@@ -277,53 +385,60 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
           selected: selected,
           showCheckmark: false,
           visualDensity: VisualDensity.compact,
-          onSelected: (_) => setState(() => _typeFilter = type),
+          onSelected: (_) =>
+              setState(() {
+                _typeFilter = type;
+                _selectedIndex = 0;
+              }),
         ),
       );
     }
 
     return SizedBox(
       height: 40,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: FilterChip(
-              avatar: Icon(
-                _favoritesOnly ? Icons.star_rounded : Icons.star_border_rounded,
-                size: 18,
-                color: _favoritesOnly ? scheme.primary : scheme.onSurfaceVariant,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+        child: Row(
+          children: [
+            Expanded(
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  chip('Tous', null),
+                  chip('SFX', SoundType.soundEffect),
+                  chip('Musique', SoundType.music),
+                  chip('Ambiance', SoundType.ambiance),
+                ],
               ),
-              label: const Text('Favoris'),
-              selected: _favoritesOnly,
-              showCheckmark: false,
-              visualDensity: VisualDensity.compact,
-              onSelected: (_) =>
-                  setState(() => _favoritesOnly = !_favoritesOnly),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: FilterChip(
-              avatar: Icon(
-                Icons.offline_bolt_rounded,
-                size: 18,
-                color: _localOnly ? scheme.primary : scheme.onSurfaceVariant,
-              ),
-              label: const Text('Local'),
-              selected: _localOnly,
-              showCheckmark: false,
-              visualDensity: VisualDensity.compact,
-              onSelected: (_) => setState(() => _localOnly = !_localOnly),
+            _roundActionButton(
+              scheme: scheme,
+              icon: _favoritesOnly
+                  ? Icons.star_rounded
+                  : Icons.star_border_rounded,
+              tooltip: 'Favoris uniquement',
+              iconColor: _favoritesOnly
+                  ? scheme.primary
+                  : scheme.onSurfaceVariant,
+              onPressed: () => setState(() {
+                _favoritesOnly = !_favoritesOnly;
+                _selectedIndex = 0;
+              }),
             ),
-          ),
-          chip('Tous', null),
-          chip('SFX', SoundType.soundEffect),
-          chip('Musique', SoundType.music),
-          chip('Ambiance', SoundType.ambiance),
-        ],
+            const SizedBox(width: 4),
+            _roundActionButton(
+              scheme: scheme,
+              icon: Icons.offline_bolt_rounded,
+              tooltip: 'Local uniquement',
+              iconColor:
+                  _localOnly ? scheme.primary : scheme.onSurfaceVariant,
+              onPressed: () => setState(() {
+                _localOnly = !_localOnly;
+                _selectedIndex = 0;
+              }),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -339,12 +454,8 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     // À l'ouverture (requête vide, hors filtre favoris) : accès direct aux
     // favoris et sons récemment joués, plutôt que tout déverser.
     final isBrowse = _query.isEmpty && !_favoritesOnly;
-    final shown = isBrowse
-        ? results
-            .where((s) => _isFav(s) || s.lastPlayedAt != null)
-            .take(25)
-            .toList()
-        : results;
+    final shown = _shownResults(results);
+    final selectedIndex = _clampSelectedIndex(shown.length);
 
     if (shown.isEmpty) {
       return Padding(
@@ -362,7 +473,6 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     }
 
     return Column(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (isBrowse)
@@ -378,67 +488,141 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
               ),
             ),
           ),
-        Flexible(
-          child: ListView.builder(
-            shrinkWrap: true,
-            padding: EdgeInsets.zero,
-            itemCount: shown.length,
-            itemBuilder: (context, index) {
-              final sound = shown[index];
-              final isTop = index == 0 && _query.isNotEmpty;
-              final fav = _isFav(sound);
-              return ListTile(
-                dense: true,
-                tileColor:
-                    isTop ? scheme.primary.withValues(alpha: 0.06) : null,
-                leading:
-                    Icon(_typeIcon(sound.type), color: scheme.onSurfaceVariant),
-                title: Text(
-                  sound.displayName ?? sound.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Row(
-                  children: [
-                    Text(_typeLabel(sound.type)),
-                    if (_localIds != null && !_isLocal(sound)) ...[
-                      const SizedBox(width: 6),
-                      Icon(
-                        Icons.cloud_outlined,
-                        size: 13,
-                        color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+        Expanded(
+          child: ClipRect(
+            child: ListView.builder(
+              controller: _scrollController,
+              itemExtent: _itemExtent,
+              padding: EdgeInsets.zero,
+              itemCount: shown.length,
+              itemBuilder: (context, index) {
+                final sound = shown[index];
+                final isSelected = index == selectedIndex;
+                final fav = _isFav(sound);
+                return Material(
+                  key: _itemKey(sound.id),
+                  color: isSelected
+                      ? scheme.primary.withValues(alpha: 0.10)
+                      : Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      setState(() => _selectedIndex = index);
+                      unawaited(_play(sound));
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _typeIcon(sound.type),
+                            color: scheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  sound.displayName ?? sound.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Row(
+                                  children: [
+                                    Text(
+                                      _typeLabel(sound.type),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    if (_localIds != null &&
+                                        !_isLocal(sound)) ...[
+                                      const SizedBox(width: 6),
+                                      Icon(
+                                        Icons.cloud_outlined,
+                                        size: 13,
+                                        color: scheme.onSurfaceVariant
+                                            .withValues(alpha: 0.7),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _roundActionButton(
+                                scheme: scheme,
+                                icon: fav
+                                    ? Icons.star_rounded
+                                    : Icons.star_border_rounded,
+                                tooltip: fav
+                                    ? 'Retirer des favoris'
+                                    : 'Ajouter aux favoris',
+                                iconColor: fav
+                                    ? scheme.primary
+                                    : scheme.onSurfaceVariant,
+                                onPressed: () => unawaited(_toggleFav(sound)),
+                              ),
+                              const SizedBox(width: 4),
+                              _roundActionButton(
+                                scheme: scheme,
+                                icon: Icons.add_rounded,
+                                tooltip: 'Ajouter à la scène',
+                                iconColor: scheme.primary,
+                                onPressed: () => unawaited(_addAndClose(sound)),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    ],
-                  ],
-                ),
-                onTap: () => unawaited(_play(sound)),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(
-                        fav ? Icons.star_rounded : Icons.star_border_rounded,
-                        color:
-                            fav ? scheme.primary : scheme.onSurfaceVariant,
-                      ),
-                      tooltip:
-                          fav ? 'Retirer des favoris' : 'Ajouter aux favoris',
-                      onPressed: () => unawaited(_toggleFav(sound)),
                     ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.add_rounded),
-                      tooltip: 'Ajouter à la scène',
-                      onPressed: () => unawaited(_addAndClose(sound)),
-                    ),
-                  ],
-                ),
-              );
-            },
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ],
+    );
+  }
+
+  static const _actionButtonSize = 30.0;
+
+  Widget _roundActionButton({
+    required ColorScheme scheme,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    required Color iconColor,
+  }) {
+    return SizedBox(
+      width: _actionButtonSize,
+      height: _actionButtonSize,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        style: IconButton.styleFrom(
+          shape: const CircleBorder(),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          backgroundColor: Colors.transparent,
+          disabledBackgroundColor: Colors.transparent,
+          hoverColor: scheme.onSurface.withValues(alpha: 0.08),
+          foregroundColor: iconColor,
+        ),
+        constraints: const BoxConstraints.tightFor(
+          width: _actionButtonSize,
+          height: _actionButtonSize,
+        ),
+      ),
     );
   }
 
@@ -449,7 +633,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
       child: Text(
-        '↵ jouer    ⌘/Ctrl+↵ ajouter à la scène    tap audition',
+        '↑↓ sélectionner    ↵ jouer    ⌘/Ctrl+↵ ajouter    tap audition',
         style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
       ),
     );

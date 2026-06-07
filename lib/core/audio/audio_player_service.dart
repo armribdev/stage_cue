@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
 import 'soloud_file_loader.dart';
+import 'audio_load_log.dart';
 
 /// Service de gestion des lecteurs audio (basé sur flutter_soloud)
 /// Préchargement des sources pour une latence minimale au déclenchement
@@ -31,6 +32,9 @@ class AudioPlayerService {
       final source = await loadAudioSourceFromFile(file);
       return AudioPlayerService._(source);
     } catch (e) {
+      if (e is! StateError) {
+        AudioLoadLog.loadMemFailed(path: file.absolute.path, error: e);
+      }
       throw StateError(
         'Impossible de charger le fichier audio : ${file.absolute.path} ($e)',
       );

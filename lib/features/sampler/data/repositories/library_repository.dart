@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/audio/audio_file_validation.dart';
+import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/sync/audio_cache_manager.dart';
 import '../../../../core/sync/drive_account_profile.dart';
@@ -13,6 +15,7 @@ import '../../../../core/sync/drive_client.dart';
 import '../../../../core/sync/drive_models.dart';
 import '../../../../core/sync/google_drive_client.dart';
 import '../../../../core/sync/saf_drive_owner_resolver.dart';
+import '../../../../core/sync/library_sound_paths.dart';
 import '../../../../core/sync/library_sync_service.dart';
 import '../../../../core/sync/snapshot_store.dart';
 import '../../../../core/utils/file_utils.dart' show isAudioFile;
@@ -474,11 +477,24 @@ class LibraryRepository {
     bool downloadIfNeeded = true,
   }) async {
     final libraryId = sound.libraryId;
-    final relativePath = sound.relativePath;
+    final rawRelativePath = sound.relativePath;
 
     if (libraryId != null) {
-      if (relativePath == null || relativePath.isEmpty) {
+      if (rawRelativePath == null || rawRelativePath.isEmpty) {
         throw SoundNotAvailableLocallyException(isOffline: false);
+      }
+
+      final relativePath =
+          LibrarySoundPaths.normalizeRelativePath(rawRelativePath);
+      if (relativePath != rawRelativePath) {
+        final libraryForUpdate = await _dataSource.getLibraryById(libraryId);
+        if (libraryForUpdate != null) {
+          await _soundDataSource.updateSoundRelativePath(
+            soundId: sound.id,
+            relativePath: relativePath,
+            localPath: _cacheManager.localPathFor(libraryForUpdate, relativePath),
+          );
+        }
       }
 
       final library = await _dataSource.getLibraryById(libraryId);
@@ -490,15 +506,24 @@ class LibraryRepository {
       final localFile = File(localPath);
 
       if (await localFile.exists()) {
-        final length = await localFile.length();
-        if (length <= 0) {
-          throw SoundNotAvailableLocallyException(isOffline: false);
-        }
-        await _soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath);
+        if (await isPlausibleAudioFile(localFile)) {
+          await _soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath);
         if (sound.contentHash == null) {
           await _refreshSoundMetadata(sound, localFile);
         }
+        clearUnloadablePath(localPath);
         return p.normalize(localFile.absolute.path);
+        }
+
+        final corruptSize = await localFile.length();
+        AudioLoadLog.corruptCacheFile(path: localPath, bytes: corruptSize);
+        try {
+          await localFile.delete();
+        } catch (_) {}
+        markPathUnloadable(localPath);
+        if (!downloadIfNeeded) {
+          throw SoundNotAvailableLocallyException(isOffline: false);
+        }
       }
 
       // Fichier absent du cache.
@@ -516,17 +541,37 @@ class LibraryRepository {
         throw SoundNotAvailableLocallyException(isOffline: false);
       }
 
-      await _cacheManager.ensureCached(
+      final resolvedLocalPath = await _cacheManager.ensureCached(
         client: client,
         library: library,
         relativePath: relativePath,
       );
-      if (!await localFile.exists() || await localFile.length() <= 0) {
+      final downloaded = File(resolvedLocalPath);
+      if (!await downloaded.exists() ||
+          !await isPlausibleAudioFile(downloaded)) {
         throw SoundNotAvailableLocallyException(isOffline: false);
       }
-      await _soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath);
-      await _refreshSoundMetadata(sound, localFile);
-      return p.normalize(localFile.absolute.path);
+      final effectiveRelative = p
+          .relative(
+            p.normalize(resolvedLocalPath),
+            from: p.normalize(library.localRootPath),
+          )
+          .replaceAll('\\', '/');
+      if (effectiveRelative != relativePath) {
+        await _soundDataSource.updateSoundRelativePath(
+          soundId: sound.id,
+          relativePath: effectiveRelative,
+          localPath: resolvedLocalPath,
+        );
+      } else {
+        await _soundDataSource.syncLibrarySoundLocalPath(
+          sound.id,
+          resolvedLocalPath,
+        );
+      }
+      await _refreshSoundMetadata(sound, downloaded);
+      clearUnloadablePath(resolvedLocalPath);
+      return p.normalize(downloaded.absolute.path);
     }
 
     final legacyFile = File(sound.filePath);
@@ -708,6 +753,11 @@ class LibraryRepository {
         );
       }
 
+      await _reconcileOrphanedSoundPaths(
+        library: library,
+        driveRelativePaths: audioFiles.map((e) => e.relativePath).toList(),
+      );
+
       onProgress?.call(
         IndexingProgress(
           path: library.name,
@@ -762,6 +812,7 @@ class LibraryRepository {
 
     for (final child in children) {
       if (child.isFolder) {
+        if (child.name == '.stagecue') continue;
         final subPrefix = relativePrefix.isEmpty
             ? child.name
             : '$relativePrefix/${child.name}';
@@ -782,6 +833,41 @@ class LibraryRepository {
     }
 
     return results;
+  }
+
+  /// Réaligne les chemins issus d'un snapshot sur les fichiers réellement
+  /// présents sur Drive (déplacement, renommage, préfixe legacy `sounds/`).
+  Future<void> _reconcileOrphanedSoundPaths({
+    required Library library,
+    required List<String> driveRelativePaths,
+  }) async {
+    final drivePaths = driveRelativePaths
+        .map(LibrarySoundPaths.normalizeRelativePath)
+        .toSet();
+    final byBasename = <String, List<String>>{};
+    for (final path in drivePaths) {
+      final key = p.basename(path).toLowerCase();
+      byBasename.putIfAbsent(key, () => []).add(path);
+    }
+
+    final sounds = await _soundDataSource.getSoundsForLibrary(library.id);
+    for (final sound in sounds) {
+      final raw = sound.relativePath;
+      if (raw == null || raw.isEmpty) continue;
+
+      final current = LibrarySoundPaths.normalizeRelativePath(raw);
+      if (drivePaths.contains(current)) continue;
+
+      final candidates = byBasename[p.basename(current).toLowerCase()];
+      if (candidates == null || candidates.length != 1) continue;
+
+      final corrected = candidates.single;
+      await _soundDataSource.updateSoundRelativePath(
+        soundId: sound.id,
+        relativePath: corrected,
+        localPath: _cacheManager.localPathFor(library, corrected),
+      );
+    }
   }
 
   /// Ferme la session Drive et révoque la connexion du compte.

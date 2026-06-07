@@ -11,6 +11,8 @@ import '../../../../core/platform/saf_directory_bridge.dart';
 import '../../../../core/utils/file_utils.dart'
     show scanDirectoryForAudioFiles, computeQuickHash;
 import '../../../../core/audio/soloud_file_loader.dart';
+import '../../../../core/audio/audio_load_log.dart';
+import '../../../../core/audio/audio_file_validation.dart';
 import '../models/sound_model.dart';
 import '../models/sound_board_model.dart';
 import '../models/watched_path_model.dart';
@@ -38,6 +40,17 @@ class LocalSoundDataSource {
   }
 
   Future<db_sounds.SoundType> _resolveSoundTypeFromDuration(File file) async {
+    if (!await isPlausibleAudioFile(file)) {
+      AudioLoadLog.metadataProbeFailed(
+        path: file.path,
+        error: StateError(
+          'Fichier trop petit ou en-tête invalide '
+          '(min $kMinimumValidAudioFileBytes o)',
+        ),
+      );
+      return db_sounds.SoundType.soundEffect;
+    }
+
     AudioSource? source;
     try {
       source = await loadAudioSourceFromFile(file);
@@ -46,9 +59,7 @@ class LocalSoundDataSource {
         return db_sounds.SoundType.music;
       }
     } catch (e) {
-      debugPrint(
-        'Impossible de lire la durée de ${file.path}, type par défaut appliqué: $e',
-      );
+      AudioLoadLog.metadataProbeFailed(path: file.path, error: e);
     } finally {
       if (source != null) {
         try {
@@ -397,6 +408,22 @@ class LocalSoundDataSource {
           db.SoundsCompanion(
             type: typeValue,
             contentHash: Value(contentHash),
+          ),
+        );
+  }
+
+  /// Corrige le chemin relatif portable d'un son (déplacement/renommage Drive).
+  Future<void> updateSoundRelativePath({
+    required int soundId,
+    required String relativePath,
+    required String localPath,
+  }) async {
+    await (_database.update(_database.sounds)
+          ..where((s) => s.id.equals(soundId)))
+        .write(
+          db.SoundsCompanion(
+            relativePath: Value(relativePath),
+            filePath: Value(localPath),
           ),
         );
   }

@@ -1,26 +1,58 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'core/app/app.dart';
 import 'core/app/app_services.dart';
-import 'core/audio/soloud_file_loader.dart';
+import 'core/audio/audio_load_log.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      _installGlobalErrorHandlers();
 
-  // flutter_soloud relance certaines erreurs de chargement dans son listener
-  // interne en plus de completeError sur le Future — filtrer pour éviter un crash.
+      try {
+        await SoLoud.instance.init(
+          bufferSize: 1024, // Latence réduite pour soundboard réactif
+        );
+        AudioLoadLog.engineReady();
+      } catch (e, stack) {
+        AudioLoadLog.engineInitFailed(e, stack);
+      }
+
+      final services = AppServices.create();
+      runApp(SoundboardApp(services: services));
+    },
+    (error, stack) {
+      if (isBenignSoLoudLoadSideEffect(error)) {
+        AudioLoadLog.benignSoLoudSideEffect(error, stack);
+        return;
+      }
+      AudioLoadLog.uncaughtZoneError(error, stack);
+    },
+  );
+}
+
+void _installGlobalErrorHandlers() {
   PlatformDispatcher.instance.onError = (error, stack) {
     if (isBenignSoLoudLoadSideEffect(error)) {
-      debugPrint('SoLoud (erreur déjà gérée par l\'app): $error');
+      AudioLoadLog.benignSoLoudSideEffect(error, stack);
       return true;
     }
     return false;
   };
 
-  await SoLoud.instance.init(
-    bufferSize: 1024, // Latence réduite pour soundboard réactif
-  );
-  final services = AppServices.create();
-  runApp(SoundboardApp(services: services));
+  final previousFlutterErrorHandler = FlutterError.onError;
+  FlutterError.onError = (details) {
+    if (isBenignSoLoudLoadSideEffect(details.exception)) {
+      AudioLoadLog.benignSoLoudSideEffect(
+        details.exception,
+        details.stack ?? StackTrace.current,
+      );
+      return;
+    }
+    previousFlutterErrorHandler?.call(details);
+  };
 }
