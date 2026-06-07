@@ -688,6 +688,18 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
 
+    // Fichier local validé, lecteur SoLoud pas encore chargé.
+    if (resolved.appearsReady) {
+      unawaited(HapticFeedback.selectionClick());
+      await _notifier.refreshPadPlayback(resolved.pad.id);
+      if (!mounted) return;
+      final after = _notifier.findPadItemById(resolved.pad.id) ?? resolved;
+      if (after.isPlayable) {
+        await _notifier.toggleSound(after);
+      }
+      return;
+    }
+
     final reason = resolved.unavailabilityReason;
 
     // BLOQUÉ : feedback non-bloquant (jamais de modale auto, jamais de clic mort).

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/audio/audio_file_validation.dart';
+import '../../../../core/audio/local_sound_probe.dart';
 import '../../../../core/sync/download_queue.dart';
 import '../../data/repositories/library_repository.dart'
     show LibraryRepository, SoundNotAvailableLocallyException;
@@ -164,14 +165,17 @@ class PadItem {
 
   int get totalSoundCount => pad.sounds.length;
 
-  int get readySoundCount => slots.where((s) => s.isReady).length;
+  int get readySoundCount => slots.where((s) => s.appearsReady).length;
 
   bool get isPlayable => slots.any((s) => s.isReady);
 
-  bool get isFullyReady =>
-      pad.sounds.isNotEmpty && readySoundCount == pad.sounds.length;
+  bool get appearsReady => slots.any((s) => s.appearsReady);
 
-  bool get isPartiallyReady => isPlayable && !isFullyReady;
+  bool get isFullyReady =>
+      pad.sounds.isNotEmpty &&
+      slots.every((s) => s.isReady || s.isCached);
+
+  bool get isPartiallyReady => appearsReady && !isFullyReady;
 
   int get pendingDownloadCount => slots
       .where((s) => s.availability == PadSoundAvailability.needsDownload)
@@ -404,6 +408,7 @@ class SamplerNotifier extends ChangeNotifier {
   ) {
     return switch (availability) {
       PadSoundAvailability.ready => null,
+      PadSoundAvailability.cached => null,
       PadSoundAvailability.needsDownload => PadUnavailabilityReason.needsDownload,
       PadSoundAvailability.offline => PadUnavailabilityReason.offline,
       PadSoundAvailability.missingFile => PadUnavailabilityReason.missingFile,
@@ -411,11 +416,58 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   PadUnavailabilityReason? _unavailabilityFromSlot(PadSoundSlot slot) {
-    if (slot.isReady) return null;
+    if (slot.isReady || slot.isCached) return null;
     if (slot.availability == PadSoundAvailability.ready) {
       return PadUnavailabilityReason.missingFile;
     }
     return _unavailabilityFromAvailability(slot.availability);
+  }
+
+  PadSoundAvailability _availabilityFromProbe(LocalSoundProbeResult result) {
+    return switch (result) {
+      LocalSoundProbeResult.cached => PadSoundAvailability.cached,
+      LocalSoundProbeResult.needsDownload => PadSoundAvailability.needsDownload,
+      LocalSoundProbeResult.offline => PadSoundAvailability.offline,
+      LocalSoundProbeResult.missingFile => PadSoundAvailability.missingFile,
+    };
+  }
+
+  Future<PadSoundAvailability> _probeSoundLocalAvailability(Sound sound) async {
+    final libraryRepository = _libraryRepository;
+    if (libraryRepository != null &&
+        sound.libraryId != null &&
+        sound.relativePath != null &&
+        sound.relativePath!.isNotEmpty) {
+      return _availabilityFromProbe(
+        await libraryRepository.probeLocalCache(sound),
+      );
+    }
+
+    if (isKnownUnloadablePath(sound.filePath)) {
+      return PadSoundAvailability.missingFile;
+    }
+    final file = File(sound.filePath);
+    if (await isPlausibleAudioFile(file)) {
+      return PadSoundAvailability.cached;
+    }
+    if (await file.exists()) {
+      return PadSoundAvailability.missingFile;
+    }
+    return PadSoundAvailability.missingFile;
+  }
+
+  Future<void> _probePadLocalAvailability(PadItem padItem) async {
+    padItem.syncSlotCount();
+    for (var i = 0; i < padItem.pad.sounds.length; i++) {
+      final slot = padItem.slots[i];
+      if (slot.isReady || slot.isCached) continue;
+      final availability = await _probeSoundLocalAvailability(
+        padItem.pad.sounds[i],
+      );
+      slot.dispose();
+      padItem.slots[i] = PadSoundSlot(availability: availability);
+    }
+    _finalizePadAvailability(padItem);
   }
 
   void _finalizePadAvailability(PadItem padItem) {
@@ -458,22 +510,30 @@ class SamplerNotifier extends ChangeNotifier {
     int index, {
     bool downloadIfNeeded = false,
   }) async {
+    final previousSlot = padItem.slots[index];
+    final keepReadyAppearance = previousSlot.appearsReady;
+
     try {
-      padItem.slots[index].dispose();
+      previousSlot.dispose();
     } catch (e) {
       debugPrint('Dispose slot échoué: $e');
     }
-    padItem.slots[index] = PadSoundSlot();
+
+    // Conserver l'apparence « prêt » (phase 0) pendant le warm SoLoud.
+    padItem.slots[index] = keepReadyAppearance
+        ? PadSoundSlot(availability: PadSoundAvailability.cached)
+        : PadSoundSlot();
+
     final sound = padItem.pad.sounds[index];
     String? resolvedPath;
     try {
-      if (isKnownUnloadablePath(sound.filePath)) {
-        throw StateError('Fichier audio déjà signalé illisible');
-      }
       resolvedPath = await _resolvePlayablePath(
         sound,
         downloadIfNeeded: downloadIfNeeded,
       );
+      if (isKnownUnloadablePath(resolvedPath)) {
+        throw StateError('Fichier audio déjà signalé illisible');
+      }
       padItem.slots[index] = PadSoundSlot(
         availability: PadSoundAvailability.ready,
         player: await AudioPlayerService.create(resolvedPath),
@@ -533,7 +593,6 @@ class SamplerNotifier extends ChangeNotifier {
         return;
       }
       await _loadPlayersForPadSafe(padItem, padItem.pad);
-      notifyListeners();
     }
 
     if (generation != _padPreloadGeneration) {
@@ -542,6 +601,7 @@ class SamplerNotifier extends ChangeNotifier {
     }
 
     AudioLoadLog.preloadFinished(boardId: boardId, padCount: padItems.length);
+    notifyListeners();
     unawaited(_prefetchActiveBoard());
   }
 
@@ -550,6 +610,7 @@ class SamplerNotifier extends ChangeNotifier {
     padItem.syncSlotCount();
 
     for (var i = 0; i < pad.sounds.length; i++) {
+      if (padItem.slots[i].isReady) continue;
       await _loadSlotAtIndex(padItem, i);
     }
 
@@ -829,6 +890,10 @@ class SamplerNotifier extends ChangeNotifier {
         padItems.add(padItem);
         padsToPreload.add(padItem);
       }
+
+      await Future.wait(
+        padItems.map(_probePadLocalAvailability),
+      );
 
       _state = _state.copyWith(pads: padItems, isLoading: false, error: null);
       final keptIds = padItems.map((item) => item.pad.id).toSet();

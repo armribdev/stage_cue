@@ -3,6 +3,8 @@ import '../../../../core/audio/audio_player_service.dart';
 /// Disponibilité locale d'un son dans un pad multi-variantes.
 enum PadSoundAvailability {
   ready,
+  /// Fichier local vérifié — affichage PRÊT, lecteur SoLoud pas encore chargé.
+  cached,
   needsDownload,
   offline,
   missingFile,
@@ -20,6 +22,11 @@ class PadSoundSlot {
 
   bool get isReady =>
       availability == PadSoundAvailability.ready && player != null;
+
+  bool get isCached => availability == PadSoundAvailability.cached;
+
+  /// Prêt à jouer ou fichier local déjà validé (phase 0).
+  bool get appearsReady => isReady || isCached;
 
   void dispose() {
     try {
