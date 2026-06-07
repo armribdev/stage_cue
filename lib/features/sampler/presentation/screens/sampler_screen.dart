@@ -10,7 +10,6 @@ import '../widgets/pad_item.dart' show PadCard;
 import '../widgets/music_preview_panel.dart';
 import '../widgets/music_picker_sheet.dart';
 import '../widgets/app_form_dialog.dart';
-import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
@@ -21,7 +20,6 @@ import 'settings_screen.dart';
 import 'pad_details_screen.dart';
 import 'sound_library_screen.dart';
 import 'sound_library_manage_screen.dart';
-import '../utils/sound_type_ui.dart';
 
 /// Marqueur pour le bouton d'ajout dans la grille
 const _addButtonMarker = _AddButtonMarker();
@@ -656,8 +654,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
               ? 'sounds_loading'
               : state.error != null
               ? 'sounds_error'
-              : state.pads.isEmpty
-              ? 'sounds_empty'
               : 'sounds_grid',
         ),
         builder: (context) {
@@ -692,39 +688,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
                       ),
                     ],
                   ),
-                ),
-              ),
-            );
-          }
-          if (state.pads.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      SoundType.soundEffect.icon,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Aucun son dans la scène',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Ajoutez des sons depuis la bibliothèque',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: () => _openSoundLibrary(selectedBoard),
-                      icon: const Icon(Icons.library_music_rounded),
-                      label: const Text('Ouvrir la bibliothèque'),
-                    ),
-                  ],
                 ),
               ),
             );
