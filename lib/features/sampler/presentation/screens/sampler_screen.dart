@@ -67,6 +67,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   int _gridCrossAxisCount = 2;
   double _gridViewportWidth = 0;
   bool _isEditMode = false;
+  bool _isPerformanceMode = false;
   int? _recentlyRestoredSoundId;
   int? _highlightedPadId;
   bool _didAutoOpenCreateForCurrentEmptyState = false;
@@ -484,6 +485,21 @@ class _SamplerScreenState extends State<SamplerScreen> {
     });
   }
 
+  /// Entre/sort du Mode Spectacle : verrouille l'édition (long-press, grille)
+  /// et suspend les push Drive auto pour éviter tout jank pendant le live.
+  void _togglePerformanceMode() {
+    setState(() {
+      _isPerformanceMode = !_isPerformanceMode;
+      if (_isPerformanceMode) _isEditMode = false;
+    });
+    final syncController = widget.services.syncController;
+    if (_isPerformanceMode) {
+      syncController.pauseAutoSync();
+    } else {
+      syncController.resumeAutoSync();
+    }
+  }
+
   void _toggleEditMode() {
     final outgoing = _activeGridScrollController;
     final savedOffset = outgoing.hasClients && outgoing.positions.length == 1
@@ -812,7 +828,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
         onTap: _isEditMode
             ? null
             : () => unawaited(_handlePadTap(context, padItem)),
-        onLongPress: _isEditMode
+        onLongPress: _isEditMode || _isPerformanceMode
             ? null
             : () async {
                 await Navigator.push(
@@ -1156,6 +1172,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onCreateBoard: _createBoard,
                     onBoardContextMenu: _showBoardContextMenu,
                     onToggleEditMode: _toggleEditMode,
+                    isPerformanceMode: _isPerformanceMode,
+                    onTogglePerformanceMode: _togglePerformanceMode,
                     onOpenLibrary: _openLibrary,
                     onOpenSettings: _openSettings,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
@@ -1167,9 +1185,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 : _SamplerAppBar(
                     selectedBoard: selectedBoard,
                     isEditMode: _isEditMode,
+                    isPerformanceMode: _isPerformanceMode,
                     canToggleEditMode: state.pads.isNotEmpty,
                     onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
                     onToggleEditMode: _toggleEditMode,
+                    onTogglePerformanceMode: _togglePerformanceMode,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
                     syncStatus: _SyncStatusPill(
                       syncController: widget.services.syncController,
@@ -1342,18 +1362,22 @@ class _SyncStatusPill extends StatelessWidget {
 class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final SoundBoard? selectedBoard;
   final bool isEditMode;
+  final bool isPerformanceMode;
   final bool canToggleEditMode;
   final VoidCallback onOpenMenu;
   final VoidCallback onToggleEditMode;
+  final VoidCallback onTogglePerformanceMode;
   final VoidCallback onQuickSearch;
   final Widget syncStatus;
 
   const _SamplerAppBar({
     required this.selectedBoard,
     required this.isEditMode,
+    required this.isPerformanceMode,
     required this.canToggleEditMode,
     required this.onOpenMenu,
     required this.onToggleEditMode,
+    required this.onTogglePerformanceMode,
     required this.onQuickSearch,
     required this.syncStatus,
   });
@@ -1376,26 +1400,60 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
+        _PerformanceLockButton(
+          isPerformanceMode: isPerformanceMode,
+          onToggle: onTogglePerformanceMode,
+        ),
         IconButton(
           icon: const Icon(Icons.search_rounded),
           tooltip: 'Rechercher un son',
           onPressed: onQuickSearch,
         ),
         syncStatus,
-        IconButton(
-          icon: Icon(
-            isEditMode ? Icons.done_rounded : Icons.grid_view_rounded,
-            color: isEditMode ? scheme.primary : null,
+        if (!isPerformanceMode)
+          IconButton(
+            icon: Icon(
+              isEditMode ? Icons.done_rounded : Icons.grid_view_rounded,
+              color: isEditMode ? scheme.primary : null,
+            ),
+            tooltip: isEditMode ? 'Terminer l\'édition' : 'Modifier la grille',
+            onPressed: canToggleEditMode ? onToggleEditMode : null,
           ),
-          tooltip: isEditMode ? 'Terminer l\'édition' : 'Modifier la grille',
-          onPressed: canToggleEditMode ? onToggleEditMode : null,
-        ),
       ],
     );
   }
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+}
+
+// ---------- Bouton verrou Mode Spectacle ----------
+
+/// Bascule du Mode Spectacle : verrouille l'édition et suspend la sync auto
+/// pour un live sans modif accidentelle ni jank (refonte UX P2).
+class _PerformanceLockButton extends StatelessWidget {
+  final bool isPerformanceMode;
+  final VoidCallback onToggle;
+
+  const _PerformanceLockButton({
+    required this.isPerformanceMode,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      icon: Icon(
+        isPerformanceMode ? Icons.lock_rounded : Icons.lock_open_rounded,
+      ),
+      color: isPerformanceMode ? scheme.primary : null,
+      tooltip: isPerformanceMode
+          ? 'Mode Spectacle actif — déverrouiller'
+          : 'Mode Spectacle (verrouiller l\'édition)',
+      onPressed: onToggle,
+    );
+  }
 }
 
 // ---------- Liste des scènes (drawer mobile/tablette) ----------
@@ -1552,6 +1610,8 @@ class _SamplerDesktopAppBar extends StatelessWidget
   final Future<void> Function(SoundBoard board, Offset position)
       onBoardContextMenu;
   final VoidCallback onToggleEditMode;
+  final bool isPerformanceMode;
+  final VoidCallback onTogglePerformanceMode;
   final Future<void> Function() onOpenLibrary;
   final Future<void> Function() onOpenSettings;
   final VoidCallback onQuickSearch;
@@ -1567,6 +1627,8 @@ class _SamplerDesktopAppBar extends StatelessWidget
     required this.onCreateBoard,
     required this.onBoardContextMenu,
     required this.onToggleEditMode,
+    required this.isPerformanceMode,
+    required this.onTogglePerformanceMode,
     required this.onOpenLibrary,
     required this.onOpenSettings,
     required this.onQuickSearch,
@@ -1606,20 +1668,25 @@ class _SamplerDesktopAppBar extends StatelessWidget
         ),
       ),
       actions: [
+        _PerformanceLockButton(
+          isPerformanceMode: isPerformanceMode,
+          onToggle: onTogglePerformanceMode,
+        ),
         IconButton(
           icon: const Icon(Icons.search_rounded),
           tooltip: 'Rechercher un son (Ctrl/Cmd+K)',
           onPressed: onQuickSearch,
         ),
         syncStatus,
-        IconButton(
-          icon: Icon(
-            isEditMode ? Icons.done_rounded : Icons.grid_view_rounded,
-            color: isEditMode ? scheme.primary : null,
+        if (!isPerformanceMode)
+          IconButton(
+            icon: Icon(
+              isEditMode ? Icons.done_rounded : Icons.grid_view_rounded,
+              color: isEditMode ? scheme.primary : null,
+            ),
+            tooltip: isEditMode ? 'Terminer l\'édition' : 'Modifier la grille',
+            onPressed: canToggleEditMode ? onToggleEditMode : null,
           ),
-          tooltip: isEditMode ? 'Terminer l\'édition' : 'Modifier la grille',
-          onPressed: canToggleEditMode ? onToggleEditMode : null,
-        ),
       ],
     );
   }

@@ -150,6 +150,43 @@ void main() {
     });
   });
 
+  group('Mode Spectacle (pause auto-sync)', () {
+    test('schedulePush en pause -> aucun push, rejoué à la reprise', () async {
+      when(() => repo.pushLibrary(any(),
+              overrideKnownRevision: any(named: 'overrideKnownRevision')))
+          .thenAnswer((_) async => const PushSuccess(3));
+      final controller =
+          SyncController(repo, debounce: const Duration(milliseconds: 20));
+
+      controller.pauseAutoSync();
+      controller.schedulePush(library);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      verifyNever(() => repo.pushLibrary(any()));
+
+      controller.resumeAutoSync();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      verify(() => repo.pushLibrary(any())).called(1);
+    });
+
+    test('un push débouncé en attente est différé puis rejoué à la reprise',
+        () async {
+      when(() => repo.pushLibrary(any(),
+              overrideKnownRevision: any(named: 'overrideKnownRevision')))
+          .thenAnswer((_) async => const PushSuccess(3));
+      final controller =
+          SyncController(repo, debounce: const Duration(milliseconds: 30));
+
+      controller.schedulePush(library); // timer armé
+      controller.pauseAutoSync(); // entre en spectacle : annule mais diffère
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      verifyNever(() => repo.pushLibrary(any())); // rien pendant le show
+
+      controller.resumeAutoSync();
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      verify(() => repo.pushLibrary(any())).called(1);
+    });
+  });
+
   group('schedulePush (anti-rebond)', () {
     test('plusieurs appels rapprochés -> un seul push', () async {
       when(() => repo.pushLibrary(any(),

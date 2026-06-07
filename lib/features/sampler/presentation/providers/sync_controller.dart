@@ -70,8 +70,18 @@ class SyncController extends ChangeNotifier {
   final LibraryRepository _repository;
   final Duration _debounce;
 
-  final Map<int, Timer> _debounceTimers = {};
+  /// Timers de push débouncé, avec la [Library] associée (pour pouvoir différer
+  /// un push en attente quand on entre en Mode Spectacle).
+  final Map<int, (Timer, Library)> _debounceTimers = {};
   SyncState _state = const SyncState();
+
+  /// Mode Spectacle : suspend les push automatiques pour éviter tout jank audio
+  /// (export `VACUUM INTO` + upload) pendant les déclenchements live.
+  bool _autoSyncPaused = false;
+
+  /// Dernière bibliothèque dont un push a été supprimé pendant la pause, à
+  /// rejouer à la reprise.
+  Library? _deferredPushLibrary;
 
   SyncController(
     this._repository, {
@@ -85,20 +95,50 @@ class SyncController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Suspend les push automatiques (entrée en Mode Spectacle). Annule les push
+  /// débouncés en attente ; ils seront rejoués à la reprise.
+  void pauseAutoSync() {
+    if (_autoSyncPaused) return;
+    _autoSyncPaused = true;
+    for (final entry in _debounceTimers.values) {
+      entry.$1.cancel();
+      _deferredPushLibrary = entry.$2; // à rejouer à la reprise
+    }
+    _debounceTimers.clear();
+  }
+
+  /// Reprend les push automatiques (sortie du Mode Spectacle) et rejoue le push
+  /// éventuellement supprimé pendant la pause.
+  void resumeAutoSync() {
+    if (!_autoSyncPaused) return;
+    _autoSyncPaused = false;
+    final deferred = _deferredPushLibrary;
+    _deferredPushLibrary = null;
+    if (deferred != null) schedulePush(deferred);
+  }
+
   /// Planifie un push après une période d'inactivité (anti-rebond). Appelé à
   /// chaque modification de la bibliothèque (tags, pads, settings…).
   void schedulePush(Library library) {
-    _debounceTimers[library.id]?.cancel();
-    _debounceTimers[library.id] = Timer(_debounce, () {
-      _debounceTimers.remove(library.id);
-      unawaited(syncNow(library));
-    });
+    // En Mode Spectacle : on mémorise le besoin de push sans rien lancer.
+    if (_autoSyncPaused) {
+      _deferredPushLibrary = library;
+      return;
+    }
+    _debounceTimers[library.id]?.$1.cancel();
+    _debounceTimers[library.id] = (
+      Timer(_debounce, () {
+        _debounceTimers.remove(library.id);
+        unawaited(syncNow(library));
+      }),
+      library,
+    );
   }
 
   /// Pousse immédiatement l'état local vers Drive.
   Future<void> syncNow(Library library) async {
     // Un push immédiat supersède un push débouncé éventuellement en attente.
-    _debounceTimers[library.id]?.cancel();
+    _debounceTimers[library.id]?.$1.cancel();
     _debounceTimers.remove(library.id);
     if (!await _ensureConnected()) {
       _set(_state.copyWith(status: SyncStatus.offline));
@@ -213,8 +253,8 @@ class SyncController extends ChangeNotifier {
 
   @override
   void dispose() {
-    for (final timer in _debounceTimers.values) {
-      timer.cancel();
+    for (final entry in _debounceTimers.values) {
+      entry.$1.cancel();
     }
     _debounceTimers.clear();
     super.dispose();
