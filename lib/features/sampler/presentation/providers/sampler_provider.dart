@@ -330,16 +330,18 @@ class SamplerNotifier extends ChangeNotifier {
     await loadSounds();
   }
 
-  Future<SoundBoard?> createBoard(String name) async {
+  Future<SoundBoard?> createBoard(String name, {int? color}) async {
     try {
       final libraryId = await _libraryRepository?.singleConnectedLibraryId();
       final newBoardId = await _repository.createSoundBoard(
         name,
+        color: color,
         libraryId: libraryId,
       );
       final newBoard = SoundBoard(
         id: newBoardId,
         name: name,
+        color: color,
         libraryId: libraryId,
         createdAt: DateTime.now(),
       );
@@ -365,14 +367,10 @@ class SamplerNotifier extends ChangeNotifier {
     try {
       await _repository.renameSoundBoard(board.id, name);
       final updatedBoards = _state.boards
-          .map(
-            (b) => b.id == board.id
-                ? SoundBoard(id: b.id, name: name, createdAt: b.createdAt)
-                : b,
-          )
+          .map((b) => b.id == board.id ? b.copyWith(name: name) : b)
           .toList();
       final selected = _state.selectedBoard?.id == board.id
-          ? SoundBoard(id: board.id, name: name, createdAt: board.createdAt)
+          ? board.copyWith(name: name)
           : _state.selectedBoard;
 
       _state = _state.copyWith(boards: updatedBoards, selectedBoard: selected);
@@ -417,6 +415,7 @@ class SamplerNotifier extends ChangeNotifier {
     try {
       final newBoardId = await _repository.createSoundBoard(
         newName,
+        color: sourceBoard.color,
         libraryId: sourceBoard.libraryId,
       );
       await _repository.duplicatePads(sourceBoard.id, newBoardId);
@@ -424,6 +423,7 @@ class SamplerNotifier extends ChangeNotifier {
       final newBoard = SoundBoard(
         id: newBoardId,
         name: newName,
+        color: sourceBoard.color,
         libraryId: sourceBoard.libraryId,
         createdAt: DateTime.now(),
       );

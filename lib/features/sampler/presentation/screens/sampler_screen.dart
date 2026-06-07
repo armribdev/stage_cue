@@ -114,24 +114,22 @@ class _SamplerScreenState extends State<SamplerScreen> {
     if (!mounted) return;
 
     final suggestedName = _buildSuggestedBoardName(_notifier.state.boards);
-    final name = await AppTextInputDialog.show(
+    final result = await AppBoardCreationDialog.show(
       context,
-      title: 'Nouvelle scène',
-      confirmLabel: 'Créer',
-      hint: suggestedName,
-      icon: Icons.auto_awesome_rounded,
+      suggestedName: suggestedName,
     );
 
-    final trimmedName = name?.trim();
-    if (trimmedName == null || !mounted) return;
+    if (result == null || !mounted) return;
     // Ferme le drawer s'il est ouvert (mobile — no-op si pas de drawer).
     final scaffoldState = _scaffoldKey.currentState;
     if (scaffoldState?.isDrawerOpen ?? false) {
       Navigator.of(context).pop();
     }
 
-    final finalName = trimmedName.isEmpty ? suggestedName : trimmedName;
-    final newBoard = await _notifier.createBoard(finalName);
+    final newBoard = await _notifier.createBoard(
+      result.name,
+      color: result.color,
+    );
     if (!mounted) return;
     if (newBoard == null) {
       showCopyableSnackBar(context, 'Erreur lors de la création de la scène');
@@ -835,7 +833,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
             key: isDesktop ? null : _scaffoldKey,
             appBar: isDesktop
                 ? _SamplerDesktopAppBar(
-                    title: selectedBoard == null ? 'Scène' : selectedBoard.name,
                     selectedBoard: selectedBoard,
                     boards: boards,
                     isBoardsLoading: isBoardsLoading,
@@ -843,15 +840,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     canToggleEditMode: state.pads.isNotEmpty,
                     onSelectBoard: _selectBoardDirect,
                     onCreateBoard: _createBoard,
-                    onBoardContextMenu: selectedBoard != null
-                        ? (pos) => _showBoardContextMenu(selectedBoard, pos)
-                        : null,
+                    onBoardContextMenu: _showBoardContextMenu,
                     onToggleEditMode: _toggleEditMode,
                     onOpenLibrary: _openLibrary,
                     onOpenSettings: _openSettings,
                   )
                 : _SamplerAppBar(
-                    title: selectedBoard == null ? 'Scène' : selectedBoard.name,
+                    selectedBoard: selectedBoard,
                     isEditMode: _isEditMode,
                     canToggleEditMode: state.pads.isNotEmpty,
                     onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
@@ -896,14 +891,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
 // ---------- AppBar (mobile/tablette) ----------
 
 class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
-  final String title;
+  final SoundBoard? selectedBoard;
   final bool isEditMode;
   final bool canToggleEditMode;
   final VoidCallback onOpenMenu;
   final VoidCallback onToggleEditMode;
 
   const _SamplerAppBar({
-    required this.title,
+    required this.selectedBoard,
     required this.isEditMode,
     required this.canToggleEditMode,
     required this.onOpenMenu,
@@ -919,12 +914,7 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
         tooltip: 'Menu',
         onPressed: onOpenMenu,
       ),
-      title: Text(
-        title,
-        style: Theme.of(
-          context,
-        ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-      ),
+      title: _BoardTitleLabel(board: selectedBoard),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(
@@ -1013,8 +1003,10 @@ class _BoardsList extends StatelessWidget {
               else
                 ...boards.map(
                   (board) => ListTile(
+                    leading: board.color != null
+                        ? _BoardTileIcon(color: board.color!)
+                        : null,
                     title: Text(board.name),
-                    selected: selectedBoard?.id == board.id,
                     onTap: () => onSelectBoard(board),
                     onLongPress: onBoardLongPress == null
                         ? null
@@ -1091,7 +1083,6 @@ class _BoardsDrawer extends StatelessWidget {
 
 class _SamplerDesktopAppBar extends StatelessWidget
     implements PreferredSizeWidget {
-  final String title;
   final SoundBoard? selectedBoard;
   final List<SoundBoard> boards;
   final bool isBoardsLoading;
@@ -1099,13 +1090,13 @@ class _SamplerDesktopAppBar extends StatelessWidget
   final bool canToggleEditMode;
   final Future<void> Function(SoundBoard board) onSelectBoard;
   final Future<void> Function() onCreateBoard;
-  final Future<void> Function(Offset position)? onBoardContextMenu;
+  final Future<void> Function(SoundBoard board, Offset position)
+      onBoardContextMenu;
   final VoidCallback onToggleEditMode;
   final Future<void> Function() onOpenLibrary;
   final Future<void> Function() onOpenSettings;
 
   const _SamplerDesktopAppBar({
-    required this.title,
     required this.selectedBoard,
     required this.boards,
     required this.isBoardsLoading,
@@ -1133,18 +1124,15 @@ class _SamplerDesktopAppBar extends StatelessWidget
         onOpenSettings: onOpenSettings,
       ),
       title: GestureDetector(
-        onSecondaryTapDown: onBoardContextMenu != null
-            ? (details) => onBoardContextMenu!(details.globalPosition)
+        onSecondaryTapDown: selectedBoard != null
+            ? (details) =>
+                onBoardContextMenu(selectedBoard!, details.globalPosition)
             : null,
         child: Tooltip(
-          message:
-              onBoardContextMenu != null ? 'Clic droit pour les actions…' : '',
-          child: Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-          ),
+          message: selectedBoard != null
+              ? 'Clic droit pour les actions…'
+              : '',
+          child: _BoardTitleLabel(board: selectedBoard),
         ),
       ),
       bottom: PreferredSize(
@@ -1216,10 +1204,17 @@ class _BoardsMenuButton extends StatelessWidget {
           )
         else
           ...boards.map(
-            (board) => CheckedPopupMenuItem<Object>(
+            (board) => PopupMenuItem<Object>(
               value: board,
-              checked: selectedBoard?.id == board.id,
-              child: Text(board.name),
+              child: Row(
+                children: [
+                  if (board.color != null) ...[
+                    _BoardTileIcon(color: board.color!),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
+                  Text(board.name),
+                ],
+              ),
             ),
           ),
         const PopupMenuItem<Object>(
@@ -1269,3 +1264,54 @@ class _BoardsMenuButton extends StatelessWidget {
   }
 }
 
+// ---------- Titre de scène dans l'AppBar (icône + nom) ----------
+
+class _BoardTitleLabel extends StatelessWidget {
+  const _BoardTitleLabel({this.board});
+
+  final SoundBoard? board;
+
+  @override
+  Widget build(BuildContext context) {
+    final showIcon = board != null && board!.color != null;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showIcon) ...[
+          _BoardTileIcon(color: board!.color!),
+          const SizedBox(width: AppSpacing.sm),
+        ],
+        Flexible(
+          child: Text(
+            board?.name ?? 'Scène',
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------- Icône de scène (couleur + icône) ----------
+
+class _BoardTileIcon extends StatelessWidget {
+  const _BoardTileIcon({required this.color});
+
+  final int color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(
+        color: Color(color),
+        borderRadius: BorderRadius.circular(AppRadius.xs),
+      ),
+    );
+  }
+}
