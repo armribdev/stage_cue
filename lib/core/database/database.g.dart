@@ -1324,6 +1324,24 @@ class $SoundBoardsTable extends SoundBoards
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _colorMeta = const VerificationMeta('color');
+  @override
+  late final GeneratedColumn<int> color = GeneratedColumn<int>(
+    'color',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _iconMeta = const VerificationMeta('icon');
+  @override
+  late final GeneratedColumn<int> icon = GeneratedColumn<int>(
+    'icon',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _libraryIdMeta = const VerificationMeta(
     'libraryId',
   );
@@ -1351,7 +1369,14 @@ class $SoundBoardsTable extends SoundBoards
     defaultValue: currentDateAndTime,
   );
   @override
-  List<GeneratedColumn> get $columns => [id, name, libraryId, createdAt];
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    color,
+    icon,
+    libraryId,
+    createdAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1374,6 +1399,18 @@ class $SoundBoardsTable extends SoundBoards
       );
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('color')) {
+      context.handle(
+        _colorMeta,
+        color.isAcceptableOrUnknown(data['color']!, _colorMeta),
+      );
+    }
+    if (data.containsKey('icon')) {
+      context.handle(
+        _iconMeta,
+        icon.isAcceptableOrUnknown(data['icon']!, _iconMeta),
+      );
     }
     if (data.containsKey('library_id')) {
       context.handle(
@@ -1404,6 +1441,14 @@ class $SoundBoardsTable extends SoundBoards
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      color: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color'],
+      ),
+      icon: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}icon'],
+      ),
       libraryId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}library_id'],
@@ -1424,6 +1469,8 @@ class $SoundBoardsTable extends SoundBoards
 class SoundBoard extends DataClass implements Insertable<SoundBoard> {
   final int id;
   final String name;
+  final int? color;
+  final int? icon;
 
   /// Bibliothèque Drive propriétaire ; null = scène locale non synchronisée.
   final int? libraryId;
@@ -1431,6 +1478,8 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
   const SoundBoard({
     required this.id,
     required this.name,
+    this.color,
+    this.icon,
     this.libraryId,
     required this.createdAt,
   });
@@ -1439,6 +1488,12 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
+    if (!nullToAbsent || color != null) {
+      map['color'] = Variable<int>(color);
+    }
+    if (!nullToAbsent || icon != null) {
+      map['icon'] = Variable<int>(icon);
+    }
     if (!nullToAbsent || libraryId != null) {
       map['library_id'] = Variable<int>(libraryId);
     }
@@ -1450,6 +1505,10 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
     return SoundBoardsCompanion(
       id: Value(id),
       name: Value(name),
+      color: color == null && nullToAbsent
+          ? const Value.absent()
+          : Value(color),
+      icon: icon == null && nullToAbsent ? const Value.absent() : Value(icon),
       libraryId: libraryId == null && nullToAbsent
           ? const Value.absent()
           : Value(libraryId),
@@ -1465,6 +1524,8 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
     return SoundBoard(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      color: serializer.fromJson<int?>(json['color']),
+      icon: serializer.fromJson<int?>(json['icon']),
       libraryId: serializer.fromJson<int?>(json['libraryId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -1475,6 +1536,8 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
+      'color': serializer.toJson<int?>(color),
+      'icon': serializer.toJson<int?>(icon),
       'libraryId': serializer.toJson<int?>(libraryId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
@@ -1483,11 +1546,15 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
   SoundBoard copyWith({
     int? id,
     String? name,
+    Value<int?> color = const Value.absent(),
+    Value<int?> icon = const Value.absent(),
     Value<int?> libraryId = const Value.absent(),
     DateTime? createdAt,
   }) => SoundBoard(
     id: id ?? this.id,
     name: name ?? this.name,
+    color: color.present ? color.value : this.color,
+    icon: icon.present ? icon.value : this.icon,
     libraryId: libraryId.present ? libraryId.value : this.libraryId,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -1495,6 +1562,8 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
     return SoundBoard(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      color: data.color.present ? data.color.value : this.color,
+      icon: data.icon.present ? data.icon.value : this.icon,
       libraryId: data.libraryId.present ? data.libraryId.value : this.libraryId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
@@ -1505,6 +1574,8 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
     return (StringBuffer('SoundBoard(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('color: $color, ')
+          ..write('icon: $icon, ')
           ..write('libraryId: $libraryId, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -1512,13 +1583,15 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
   }
 
   @override
-  int get hashCode => Object.hash(id, name, libraryId, createdAt);
+  int get hashCode => Object.hash(id, name, color, icon, libraryId, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is SoundBoard &&
           other.id == this.id &&
           other.name == this.name &&
+          other.color == this.color &&
+          other.icon == this.icon &&
           other.libraryId == this.libraryId &&
           other.createdAt == this.createdAt);
 }
@@ -1526,29 +1599,39 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
 class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
   final Value<int> id;
   final Value<String> name;
+  final Value<int?> color;
+  final Value<int?> icon;
   final Value<int?> libraryId;
   final Value<DateTime> createdAt;
   const SoundBoardsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.color = const Value.absent(),
+    this.icon = const Value.absent(),
     this.libraryId = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   SoundBoardsCompanion.insert({
     this.id = const Value.absent(),
     required String name,
+    this.color = const Value.absent(),
+    this.icon = const Value.absent(),
     this.libraryId = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : name = Value(name);
   static Insertable<SoundBoard> custom({
     Expression<int>? id,
     Expression<String>? name,
+    Expression<int>? color,
+    Expression<int>? icon,
     Expression<int>? libraryId,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (color != null) 'color': color,
+      if (icon != null) 'icon': icon,
       if (libraryId != null) 'library_id': libraryId,
       if (createdAt != null) 'created_at': createdAt,
     });
@@ -1557,12 +1640,16 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
   SoundBoardsCompanion copyWith({
     Value<int>? id,
     Value<String>? name,
+    Value<int?>? color,
+    Value<int?>? icon,
     Value<int?>? libraryId,
     Value<DateTime>? createdAt,
   }) {
     return SoundBoardsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      color: color ?? this.color,
+      icon: icon ?? this.icon,
       libraryId: libraryId ?? this.libraryId,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -1576,6 +1663,12 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (color.present) {
+      map['color'] = Variable<int>(color.value);
+    }
+    if (icon.present) {
+      map['icon'] = Variable<int>(icon.value);
     }
     if (libraryId.present) {
       map['library_id'] = Variable<int>(libraryId.value);
@@ -1591,6 +1684,8 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
     return (StringBuffer('SoundBoardsCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('color: $color, ')
+          ..write('icon: $icon, ')
           ..write('libraryId: $libraryId, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -5775,6 +5870,8 @@ typedef $$SoundBoardsTableCreateCompanionBuilder =
     SoundBoardsCompanion Function({
       Value<int> id,
       required String name,
+      Value<int?> color,
+      Value<int?> icon,
       Value<int?> libraryId,
       Value<DateTime> createdAt,
     });
@@ -5782,6 +5879,8 @@ typedef $$SoundBoardsTableUpdateCompanionBuilder =
     SoundBoardsCompanion Function({
       Value<int> id,
       Value<String> name,
+      Value<int?> color,
+      Value<int?> icon,
       Value<int?> libraryId,
       Value<DateTime> createdAt,
     });
@@ -5863,6 +5962,16 @@ class $$SoundBoardsTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get icon => $composableBuilder(
+    column: $table.icon,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5964,6 +6073,16 @@ class $$SoundBoardsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get icon => $composableBuilder(
+    column: $table.icon,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -6007,6 +6126,12 @@ class $$SoundBoardsTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get color =>
+      $composableBuilder(column: $table.color, builder: (column) => column);
+
+  GeneratedColumn<int> get icon =>
+      $composableBuilder(column: $table.icon, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -6119,11 +6244,15 @@ class $$SoundBoardsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
+                Value<int?> color = const Value.absent(),
+                Value<int?> icon = const Value.absent(),
                 Value<int?> libraryId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => SoundBoardsCompanion(
                 id: id,
                 name: name,
+                color: color,
+                icon: icon,
                 libraryId: libraryId,
                 createdAt: createdAt,
               ),
@@ -6131,11 +6260,15 @@ class $$SoundBoardsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required String name,
+                Value<int?> color = const Value.absent(),
+                Value<int?> icon = const Value.absent(),
                 Value<int?> libraryId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => SoundBoardsCompanion.insert(
                 id: id,
                 name: name,
+                color: color,
+                icon: icon,
                 libraryId: libraryId,
                 createdAt: createdAt,
               ),

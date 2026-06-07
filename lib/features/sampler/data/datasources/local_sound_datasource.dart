@@ -637,12 +637,17 @@ class LocalSoundBoardDataSource {
   }
 
   /// Crée une soundboard
-  Future<int> createBoard(String name, {int? libraryId}) async {
+  Future<int> createBoard(
+    String name, {
+    int? color,
+    int? libraryId,
+  }) async {
     return await _database
         .into(_database.soundBoards)
         .insert(
           db.SoundBoardsCompanion.insert(
             name: name,
+            color: Value(color),
             libraryId: Value(libraryId),
             createdAt: Value(DateTime.now()),
           ),

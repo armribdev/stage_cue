@@ -55,6 +55,8 @@ class Sounds extends Table {
 class SoundBoards extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
+  IntColumn get color => integer().nullable()(); // Couleur ARGB personnalisée
+  IntColumn get icon => integer().nullable()(); // IconData.codePoint ; null = carré
   /// Bibliothèque Drive propriétaire ; null = scène locale non synchronisée.
   IntColumn get libraryId =>
       integer().nullable().references(Libraries, #id, onDelete: KeyAction.cascade)();

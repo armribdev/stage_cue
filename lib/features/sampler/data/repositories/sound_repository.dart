@@ -166,8 +166,16 @@ class SoundRepository {
     return await _soundBoardDataSource.getAllBoards();
   }
 
-  Future<int> createSoundBoard(String name, {int? libraryId}) async {
-    return await _soundBoardDataSource.createBoard(name, libraryId: libraryId);
+  Future<int> createSoundBoard(
+    String name, {
+    int? color,
+    int? libraryId,
+  }) async {
+    return await _soundBoardDataSource.createBoard(
+      name,
+      color: color,
+      libraryId: libraryId,
+    );
   }
 
   Future<void> renameSoundBoard(int boardId, String name) async {

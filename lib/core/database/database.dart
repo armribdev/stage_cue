@@ -29,7 +29,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration {
@@ -133,6 +133,16 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 15) {
           await m.addColumn(soundBoards, soundBoards.libraryId);
+        }
+        if (from < 16) {
+          await m.addColumn(
+            soundBoards,
+            soundBoards.color as GeneratedColumn<Object>,
+          );
+          await m.addColumn(
+            soundBoards,
+            soundBoards.icon as GeneratedColumn<Object>,
+          );
         }
       },
       beforeOpen: (details) async {
