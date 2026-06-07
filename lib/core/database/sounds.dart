@@ -52,6 +52,11 @@ class Sounds extends Table {
   TextColumn get relativePath => text().nullable()();
   // Empreinte de contenu (FNV-1a) pour réidentifier un fichier déplacé/renommé.
   TextColumn get contentHash => text().nullable()();
+  // ── Accès rapide live (refonte UX P3) ────────────────────────────────────
+  /// Marqué favori par l'opérateur : accès 1-tap aux sons du spectacle.
+  BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
+  /// Dernière lecture (pré-écoute ou déclenchement) — tri par récence.
+  DateTimeColumn get lastPlayedAt => dateTime().nullable()();
 }
 
 class SoundBoards extends Table {

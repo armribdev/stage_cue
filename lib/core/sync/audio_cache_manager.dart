@@ -26,6 +26,12 @@ class AudioCacheManager {
   final int maxCacheBytes;
   final int Function() _clock;
 
+  /// Fournit les chemins relatifs « épinglés » d'une bibliothèque : ces fichiers
+  /// (favoris) ne sont jamais évincés par le LRU, même rarement lus. La scène
+  /// active est, elle, protégée implicitement par la récence (sons fraîchement
+  /// mis en cache). Optionnel : null = aucun épinglage (refonte UX P3).
+  final Future<Set<String>> Function(Library library)? _pinnedPaths;
+
   /// Index LRU chargé paresseusement, indexé par racine de cache.
   final Map<String, _AccessIndex> _indices = {};
 
@@ -34,7 +40,9 @@ class AudioCacheManager {
   AudioCacheManager({
     this.maxCacheBytes = 2 * 1024 * 1024 * 1024, // 2 Go par défaut
     int Function()? clock,
-  }) : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
+    Future<Set<String>> Function(Library library)? pinnedPaths,
+  })  : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
+        _pinnedPaths = pinnedPaths;
 
   /// Chemin local (dans le cache de la bibliothèque) d'un chemin relatif.
   /// Les chemins relatifs utilisent toujours `/` (portables) ; la conversion
@@ -170,12 +178,16 @@ class AudioCacheManager {
         index.entries.values.fold<int>(0, (sum, e) => sum + e.size);
     if (total <= maxCacheBytes) return;
 
+    // Favoris épinglés : exclus de l'éviction, même peu récents.
+    final pinned = await _pinnedPaths?.call(library) ?? const <String>{};
+
     final ordered = index.entries.entries.toList()
       ..sort((a, b) => a.value.accessedAt.compareTo(b.value.accessedAt));
 
     for (final entry in ordered) {
       if (total <= maxCacheBytes) break;
       if (entry.key == protect) continue;
+      if (pinned.contains(entry.key)) continue; // épinglé : jamais évincé
       final fileToDelete = File(localPathFor(library, entry.key));
       try {
         if (await fileToDelete.exists()) await fileToDelete.delete();

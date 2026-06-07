@@ -818,6 +818,32 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _isFavoriteMeta = const VerificationMeta(
+    'isFavorite',
+  );
+  @override
+  late final GeneratedColumn<bool> isFavorite = GeneratedColumn<bool>(
+    'is_favorite',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_favorite" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _lastPlayedAtMeta = const VerificationMeta(
+    'lastPlayedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastPlayedAt = GeneratedColumn<DateTime>(
+    'last_played_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -831,6 +857,8 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     libraryId,
     relativePath,
     contentHash,
+    isFavorite,
+    lastPlayedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -914,6 +942,21 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         ),
       );
     }
+    if (data.containsKey('is_favorite')) {
+      context.handle(
+        _isFavoriteMeta,
+        isFavorite.isAcceptableOrUnknown(data['is_favorite']!, _isFavoriteMeta),
+      );
+    }
+    if (data.containsKey('last_played_at')) {
+      context.handle(
+        _lastPlayedAtMeta,
+        lastPlayedAt.isAcceptableOrUnknown(
+          data['last_played_at']!,
+          _lastPlayedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -969,6 +1012,14 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.string,
         data['${effectivePrefix}content_hash'],
       ),
+      isFavorite: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_favorite'],
+      )!,
+      lastPlayedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_played_at'],
+      ),
     );
   }
 
@@ -993,6 +1044,12 @@ class Sound extends DataClass implements Insertable<Sound> {
   final int? libraryId;
   final String? relativePath;
   final String? contentHash;
+
+  /// Marqué favori par l'opérateur : accès 1-tap aux sons du spectacle.
+  final bool isFavorite;
+
+  /// Dernière lecture (pré-écoute ou déclenchement) — tri par récence.
+  final DateTime? lastPlayedAt;
   const Sound({
     required this.id,
     required this.title,
@@ -1005,6 +1062,8 @@ class Sound extends DataClass implements Insertable<Sound> {
     this.libraryId,
     this.relativePath,
     this.contentHash,
+    required this.isFavorite,
+    this.lastPlayedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1032,6 +1091,10 @@ class Sound extends DataClass implements Insertable<Sound> {
     if (!nullToAbsent || contentHash != null) {
       map['content_hash'] = Variable<String>(contentHash);
     }
+    map['is_favorite'] = Variable<bool>(isFavorite);
+    if (!nullToAbsent || lastPlayedAt != null) {
+      map['last_played_at'] = Variable<DateTime>(lastPlayedAt);
+    }
     return map;
   }
 
@@ -1058,6 +1121,10 @@ class Sound extends DataClass implements Insertable<Sound> {
       contentHash: contentHash == null && nullToAbsent
           ? const Value.absent()
           : Value(contentHash),
+      isFavorite: Value(isFavorite),
+      lastPlayedAt: lastPlayedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastPlayedAt),
     );
   }
 
@@ -1080,6 +1147,8 @@ class Sound extends DataClass implements Insertable<Sound> {
       libraryId: serializer.fromJson<int?>(json['libraryId']),
       relativePath: serializer.fromJson<String?>(json['relativePath']),
       contentHash: serializer.fromJson<String?>(json['contentHash']),
+      isFavorite: serializer.fromJson<bool>(json['isFavorite']),
+      lastPlayedAt: serializer.fromJson<DateTime?>(json['lastPlayedAt']),
     );
   }
   @override
@@ -1097,6 +1166,8 @@ class Sound extends DataClass implements Insertable<Sound> {
       'libraryId': serializer.toJson<int?>(libraryId),
       'relativePath': serializer.toJson<String?>(relativePath),
       'contentHash': serializer.toJson<String?>(contentHash),
+      'isFavorite': serializer.toJson<bool>(isFavorite),
+      'lastPlayedAt': serializer.toJson<DateTime?>(lastPlayedAt),
     };
   }
 
@@ -1112,6 +1183,8 @@ class Sound extends DataClass implements Insertable<Sound> {
     Value<int?> libraryId = const Value.absent(),
     Value<String?> relativePath = const Value.absent(),
     Value<String?> contentHash = const Value.absent(),
+    bool? isFavorite,
+    Value<DateTime?> lastPlayedAt = const Value.absent(),
   }) => Sound(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -1124,6 +1197,8 @@ class Sound extends DataClass implements Insertable<Sound> {
     libraryId: libraryId.present ? libraryId.value : this.libraryId,
     relativePath: relativePath.present ? relativePath.value : this.relativePath,
     contentHash: contentHash.present ? contentHash.value : this.contentHash,
+    isFavorite: isFavorite ?? this.isFavorite,
+    lastPlayedAt: lastPlayedAt.present ? lastPlayedAt.value : this.lastPlayedAt,
   );
   Sound copyWithCompanion(SoundsCompanion data) {
     return Sound(
@@ -1144,6 +1219,12 @@ class Sound extends DataClass implements Insertable<Sound> {
       contentHash: data.contentHash.present
           ? data.contentHash.value
           : this.contentHash,
+      isFavorite: data.isFavorite.present
+          ? data.isFavorite.value
+          : this.isFavorite,
+      lastPlayedAt: data.lastPlayedAt.present
+          ? data.lastPlayedAt.value
+          : this.lastPlayedAt,
     );
   }
 
@@ -1160,7 +1241,9 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('createdAt: $createdAt, ')
           ..write('libraryId: $libraryId, ')
           ..write('relativePath: $relativePath, ')
-          ..write('contentHash: $contentHash')
+          ..write('contentHash: $contentHash, ')
+          ..write('isFavorite: $isFavorite, ')
+          ..write('lastPlayedAt: $lastPlayedAt')
           ..write(')'))
         .toString();
   }
@@ -1178,6 +1261,8 @@ class Sound extends DataClass implements Insertable<Sound> {
     libraryId,
     relativePath,
     contentHash,
+    isFavorite,
+    lastPlayedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -1193,7 +1278,9 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.createdAt == this.createdAt &&
           other.libraryId == this.libraryId &&
           other.relativePath == this.relativePath &&
-          other.contentHash == this.contentHash);
+          other.contentHash == this.contentHash &&
+          other.isFavorite == this.isFavorite &&
+          other.lastPlayedAt == this.lastPlayedAt);
 }
 
 class SoundsCompanion extends UpdateCompanion<Sound> {
@@ -1208,6 +1295,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<int?> libraryId;
   final Value<String?> relativePath;
   final Value<String?> contentHash;
+  final Value<bool> isFavorite;
+  final Value<DateTime?> lastPlayedAt;
   const SoundsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -1220,6 +1309,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.libraryId = const Value.absent(),
     this.relativePath = const Value.absent(),
     this.contentHash = const Value.absent(),
+    this.isFavorite = const Value.absent(),
+    this.lastPlayedAt = const Value.absent(),
   });
   SoundsCompanion.insert({
     this.id = const Value.absent(),
@@ -1233,6 +1324,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.libraryId = const Value.absent(),
     this.relativePath = const Value.absent(),
     this.contentHash = const Value.absent(),
+    this.isFavorite = const Value.absent(),
+    this.lastPlayedAt = const Value.absent(),
   }) : title = Value(title),
        filePath = Value(filePath),
        type = Value(type);
@@ -1248,6 +1341,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<int>? libraryId,
     Expression<String>? relativePath,
     Expression<String>? contentHash,
+    Expression<bool>? isFavorite,
+    Expression<DateTime>? lastPlayedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1261,6 +1356,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (libraryId != null) 'library_id': libraryId,
       if (relativePath != null) 'relative_path': relativePath,
       if (contentHash != null) 'content_hash': contentHash,
+      if (isFavorite != null) 'is_favorite': isFavorite,
+      if (lastPlayedAt != null) 'last_played_at': lastPlayedAt,
     });
   }
 
@@ -1276,6 +1373,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<int?>? libraryId,
     Value<String?>? relativePath,
     Value<String?>? contentHash,
+    Value<bool>? isFavorite,
+    Value<DateTime?>? lastPlayedAt,
   }) {
     return SoundsCompanion(
       id: id ?? this.id,
@@ -1289,6 +1388,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       libraryId: libraryId ?? this.libraryId,
       relativePath: relativePath ?? this.relativePath,
       contentHash: contentHash ?? this.contentHash,
+      isFavorite: isFavorite ?? this.isFavorite,
+      lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
     );
   }
 
@@ -1330,6 +1431,12 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     if (contentHash.present) {
       map['content_hash'] = Variable<String>(contentHash.value);
     }
+    if (isFavorite.present) {
+      map['is_favorite'] = Variable<bool>(isFavorite.value);
+    }
+    if (lastPlayedAt.present) {
+      map['last_played_at'] = Variable<DateTime>(lastPlayedAt.value);
+    }
     return map;
   }
 
@@ -1346,7 +1453,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('createdAt: $createdAt, ')
           ..write('libraryId: $libraryId, ')
           ..write('relativePath: $relativePath, ')
-          ..write('contentHash: $contentHash')
+          ..write('contentHash: $contentHash, ')
+          ..write('isFavorite: $isFavorite, ')
+          ..write('lastPlayedAt: $lastPlayedAt')
           ..write(')'))
         .toString();
   }
@@ -5238,6 +5347,8 @@ typedef $$SoundsTableCreateCompanionBuilder =
       Value<int?> libraryId,
       Value<String?> relativePath,
       Value<String?> contentHash,
+      Value<bool> isFavorite,
+      Value<DateTime?> lastPlayedAt,
     });
 typedef $$SoundsTableUpdateCompanionBuilder =
     SoundsCompanion Function({
@@ -5252,6 +5363,8 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<int?> libraryId,
       Value<String?> relativePath,
       Value<String?> contentHash,
+      Value<bool> isFavorite,
+      Value<DateTime?> lastPlayedAt,
     });
 
 final class $$SoundsTableReferences
@@ -5387,6 +5500,16 @@ class $$SoundsTableFilterComposer
 
   ColumnFilters<String> get contentHash => $composableBuilder(
     column: $table.contentHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isFavorite => $composableBuilder(
+    column: $table.isFavorite,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastPlayedAt => $composableBuilder(
+    column: $table.lastPlayedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5548,6 +5671,16 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isFavorite => $composableBuilder(
+    column: $table.isFavorite,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastPlayedAt => $composableBuilder(
+    column: $table.lastPlayedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LibrariesTableOrderingComposer get libraryId {
     final $$LibrariesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -5614,6 +5747,16 @@ class $$SoundsTableAnnotationComposer
 
   GeneratedColumn<String> get contentHash => $composableBuilder(
     column: $table.contentHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isFavorite => $composableBuilder(
+    column: $table.isFavorite,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastPlayedAt => $composableBuilder(
+    column: $table.lastPlayedAt,
     builder: (column) => column,
   );
 
@@ -5760,6 +5903,8 @@ class $$SoundsTableTableManager
                 Value<int?> libraryId = const Value.absent(),
                 Value<String?> relativePath = const Value.absent(),
                 Value<String?> contentHash = const Value.absent(),
+                Value<bool> isFavorite = const Value.absent(),
+                Value<DateTime?> lastPlayedAt = const Value.absent(),
               }) => SoundsCompanion(
                 id: id,
                 title: title,
@@ -5772,6 +5917,8 @@ class $$SoundsTableTableManager
                 libraryId: libraryId,
                 relativePath: relativePath,
                 contentHash: contentHash,
+                isFavorite: isFavorite,
+                lastPlayedAt: lastPlayedAt,
               ),
           createCompanionCallback:
               ({
@@ -5786,6 +5933,8 @@ class $$SoundsTableTableManager
                 Value<int?> libraryId = const Value.absent(),
                 Value<String?> relativePath = const Value.absent(),
                 Value<String?> contentHash = const Value.absent(),
+                Value<bool> isFavorite = const Value.absent(),
+                Value<DateTime?> lastPlayedAt = const Value.absent(),
               }) => SoundsCompanion.insert(
                 id: id,
                 title: title,
@@ -5798,6 +5947,8 @@ class $$SoundsTableTableManager
                 libraryId: libraryId,
                 relativePath: relativePath,
                 contentHash: contentHash,
+                isFavorite: isFavorite,
+                lastPlayedAt: lastPlayedAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(

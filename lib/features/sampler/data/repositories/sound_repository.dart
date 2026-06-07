@@ -74,6 +74,16 @@ class SoundRepository {
     await _soundDataSource.deleteSound(id);
   }
 
+  /// Marque ou démarque un son comme favori.
+  Future<void> setSoundFavorite(int id, bool isFavorite) async {
+    await _soundDataSource.setFavorite(id, isFavorite);
+  }
+
+  /// Enregistre l'instant de dernière lecture d'un son (tri par récence).
+  Future<void> markSoundPlayed(int id) async {
+    await _soundDataSource.markPlayed(id);
+  }
+
   /// Met à jour les réglages globaux d'un son (hors contexte de board).
   Future<void> updateSoundSettings({
     required int id,

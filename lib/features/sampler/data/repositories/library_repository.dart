@@ -72,12 +72,17 @@ class LibraryRepository {
 
   /// Assemble le repository avec ses dépendances Drive par défaut.
   factory LibraryRepository.fromDatabase(db.AppDatabase database) {
+    final soundDataSource = LocalSoundDataSource(database);
     return LibraryRepository(
       LocalLibraryDataSource(database),
       GoogleDriveAuthenticator(),
       LibrarySyncService(DriftSnapshotStore(database)),
-      AudioCacheManager(),
-      LocalSoundDataSource(database),
+      AudioCacheManager(
+        // Épingle les favoris : jamais évincés du cache, même peu lus.
+        pinnedPaths: (library) =>
+            soundDataSource.getFavoriteRelativePaths(library.id),
+      ),
+      soundDataSource,
     );
   }
 

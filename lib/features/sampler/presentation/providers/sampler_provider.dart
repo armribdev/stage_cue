@@ -844,7 +844,28 @@ class SamplerNotifier extends ChangeNotifier {
     if (player == null) return;
     player.setVolume(_effectiveVolume(resolved));
     await player.play();
+    _markPlayedAt(resolved, soundIndex);
     notifyListeners();
+  }
+
+  /// Enregistre l'instant de dernière lecture du son joué (tri par récence en
+  /// recherche). Fire-and-forget ; l'écriture est débouncée côté sync.
+  void _markPlayed(int soundId) {
+    unawaited(_repository.markSoundPlayed(soundId));
+  }
+
+  void _markPlayedAt(PadItem padItem, int soundIndex) {
+    if (soundIndex < 0 || soundIndex >= padItem.pad.sounds.length) return;
+    _markPlayed(padItem.pad.sounds[soundIndex].id);
+  }
+
+  /// Bascule l'état favori d'un son et persiste. Retourne le nouvel état.
+  Future<bool> toggleSoundFavorite(int soundId) async {
+    final sound = await _repository.getSoundById(soundId);
+    if (sound == null) return false;
+    final next = !sound.isFavorite;
+    await _repository.setSoundFavorite(soundId, next);
+    return next;
   }
 
   /// Notifie le rebuild d'un seul pad (progression de download, disponibilité)
@@ -1283,6 +1304,7 @@ class SamplerNotifier extends ChangeNotifier {
     } else {
       await player.play();
     }
+    _markPlayedAt(padItem, index);
     notifyListeners();
     return true;
   }
@@ -1895,6 +1917,27 @@ class SamplerNotifier extends ChangeNotifier {
     return _repository.findSoundIdsByTagQuery(query);
   }
 
+  /// Ids des sons jouables immédiatement en local (cache présent ou fichier
+  /// legacy existant), pour le filtre « disponible hors-ligne » de la recherche.
+  Future<Set<int>> getLocallyAvailableSoundIds() async {
+    final sounds = await _repository.getAllSounds();
+    final available = <int>{};
+    for (final sound in sounds) {
+      if (await _isAvailableLocally(sound)) available.add(sound.id);
+    }
+    return available;
+  }
+
+  Future<bool> _isAvailableLocally(Sound sound) async {
+    try {
+      // downloadIfNeeded:false → lève si non disponible localement.
+      await _resolvePlayablePath(sound, downloadIfNeeded: false);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Joue immédiatement un son par id sur le lecteur de pré-écoute, sans toucher
   /// au plateau ni à la file musique (recherche-éclair). Télécharge à la demande.
   /// Retourne false si le son est introuvable ou indisponible.
@@ -1907,6 +1950,7 @@ class SamplerNotifier extends ChangeNotifier {
       final player = await AudioPlayerService.create(path);
       _previewPlayer = player;
       await player.play();
+      _markPlayed(soundId);
       return true;
     } catch (e) {
       debugPrint('Pré-écoute échouée pour ${sound.title}: $e');
