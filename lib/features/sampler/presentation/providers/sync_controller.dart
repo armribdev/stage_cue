@@ -32,9 +32,6 @@ class SyncState {
   final SyncStatus status;
   final DateTime? lastSyncedAt;
 
-  /// Un snapshot distant a été tiré et s'appliquera au prochain démarrage.
-  final bool pendingRestart;
-
   /// Révision distante en cas de conflit (pour la résolution).
   final int? conflictRemoteRevision;
 
@@ -43,7 +40,6 @@ class SyncState {
   const SyncState({
     this.status = SyncStatus.idle,
     this.lastSyncedAt,
-    this.pendingRestart = false,
     this.conflictRemoteRevision,
     this.message,
   });
@@ -51,7 +47,6 @@ class SyncState {
   SyncState copyWith({
     SyncStatus? status,
     DateTime? lastSyncedAt,
-    bool? pendingRestart,
     int? conflictRemoteRevision,
     bool clearConflict = false,
     String? message,
@@ -60,7 +55,6 @@ class SyncState {
     return SyncState(
       status: status ?? this.status,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
-      pendingRestart: pendingRestart ?? this.pendingRestart,
       conflictRemoteRevision: clearConflict
           ? null
           : (conflictRemoteRevision ?? this.conflictRemoteRevision),
@@ -164,8 +158,7 @@ class SyncController extends ChangeNotifier {
     }
   }
 
-  /// Résolution de conflit — prendre la version distante (tirée, appliquée au
-  /// prochain démarrage).
+  /// Résolution de conflit — prendre la version distante (tirée et fusionnée en direct).
   Future<void> takeRemote(Library library) async {
     _set(_state.copyWith(status: SyncStatus.syncing, clearMessage: true));
     try {

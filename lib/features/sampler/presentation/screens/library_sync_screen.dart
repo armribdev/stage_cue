@@ -123,9 +123,6 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
   Future<void> _pull(Library library) async {
     await _syncController.pullForLaunch(library);
     await _loadLibraries();
-    if (mounted && _syncController.state.pendingRestart) {
-      _snack('Nouvelle version récupérée — redémarrez l\'app pour l\'appliquer');
-    }
   }
 
   Future<void> _disconnect() async {
@@ -338,12 +335,6 @@ class _SyncStatusBanner extends StatelessWidget {
         Icon(icon, size: 18, color: color),
         const SizedBox(width: 8),
         Text(label, style: TextStyle(color: color)),
-        if (state.pendingRestart) ...[
-          const SizedBox(width: 12),
-          const Icon(Icons.restart_alt, size: 18),
-          const SizedBox(width: 4),
-          const Text('Redémarrage requis'),
-        ],
         if (state.message != null) ...[
           const SizedBox(width: 12),
           Expanded(

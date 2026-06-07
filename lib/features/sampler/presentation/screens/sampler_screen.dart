@@ -70,30 +70,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
           defaultTargetPlatform == TargetPlatform.linux ||
           defaultTargetPlatform == TargetPlatform.macOS);
 
-  bool _restartNotified = false;
-
   @override
   void initState() {
     super.initState();
     _database = widget.services.database;
     _initializeNotifier();
-    // Surface l'application différée d'un snapshot tiré (auto-pull au lancement).
-    widget.services.syncController.addListener(_onSyncChanged);
     _notifier.loadBoards();
-  }
-
-  void _onSyncChanged() {
-    if (!mounted || _restartNotified) return;
-    if (!widget.services.syncController.state.pendingRestart) return;
-    _restartNotified = true;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Nouvelle version récupérée depuis Drive — redémarre l\'app pour l\'appliquer',
-        ),
-        duration: Duration(seconds: 6),
-      ),
-    );
   }
 
   void _initializeNotifier() {
@@ -804,7 +786,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
   void dispose() {
     _normalGridScrollController.dispose();
     _editGridScrollController.dispose();
-    widget.services.syncController.removeListener(_onSyncChanged);
     _notifier.removeListener(_onStateChanged);
     _notifier.dispose();
     super.dispose();
