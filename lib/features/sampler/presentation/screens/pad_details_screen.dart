@@ -281,7 +281,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                                   ? widget.padItem.slots[i].availability
                                   : PadSoundAvailability.needsDownload,
                               canRemove: sounds.length > 1,
-                              typeLabel: sounds[i].type.label,
                               tagCatalog: _tagCatalog,
                               isTagsLoading: _isTagsLoading,
                               notifier: widget.notifier,
@@ -411,7 +410,6 @@ class _SoundRow extends StatefulWidget {
   final Sound sound;
   final PadSoundAvailability availability;
   final bool canRemove;
-  final String typeLabel;
   final List<TagCategoryWithTags> tagCatalog;
   final bool isTagsLoading;
   final SamplerNotifier notifier;
@@ -421,7 +419,6 @@ class _SoundRow extends StatefulWidget {
     required this.sound,
     required this.availability,
     required this.canRemove,
-    required this.typeLabel,
     required this.tagCatalog,
     required this.isTagsLoading,
     required this.notifier,
@@ -435,11 +432,19 @@ class _SoundRow extends StatefulWidget {
 class _SoundRowState extends State<_SoundRow> {
   Set<int> _tagIds = {};
   bool _loaded = false;
+  late SoundType _type;
 
   @override
   void initState() {
     super.initState();
+    _type = widget.sound.type;
     _loadTags();
+  }
+
+  Future<void> _changeType(SoundType type) async {
+    if (type == _type) return;
+    setState(() => _type = type); // feedback immédiat
+    await widget.notifier.updateSoundType(widget.sound.id, type);
   }
 
   Future<void> _loadTags() async {
@@ -463,7 +468,7 @@ class _SoundRowState extends State<_SoundRow> {
         children: [
           padSoundAvailabilityIcon(widget.availability, scheme, size: 20),
           const SizedBox(width: 8),
-          SoundTypeAvatar(type: sound.type, radius: 16, iconSize: 18),
+          SoundTypeAvatar(type: _type, radius: 16, iconSize: 18),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -475,12 +480,8 @@ class _SoundRowState extends State<_SoundRow> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                Text(
-                  widget.typeLabel,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
+                const SizedBox(height: 4),
+                _SoundTypeSelector(type: _type, onChanged: _changeType),
                 if (_loaded && _tagIds.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Wrap(
@@ -518,6 +519,64 @@ class _SoundRowState extends State<_SoundRow> {
               color: scheme.error,
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Sélecteur de type de son ──────────────────────────────────────────────
+
+/// Menu compact pour corriger le type d'un son (l'auto-détection par durée
+/// peut se tromper). Le type pilote le routage : un pad « musique » passe par
+/// la régie/à l'antenne, un « bruitage »/« ambiance » se déclenche en one-shot.
+class _SoundTypeSelector extends StatelessWidget {
+  final SoundType type;
+  final ValueChanged<SoundType> onChanged;
+
+  const _SoundTypeSelector({required this.type, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return PopupMenuButton<SoundType>(
+      tooltip: 'Changer le type',
+      initialValue: type,
+      onSelected: onChanged,
+      itemBuilder: (context) => [
+        for (final t in SoundType.values)
+          PopupMenuItem<SoundType>(
+            value: t,
+            child: Row(
+              children: [
+                Icon(t.icon, size: 18, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 10),
+                Text(t.label),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          border: Border.all(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(type.icon, size: 14, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Text(
+              type.label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Icon(Icons.arrow_drop_down_rounded,
+                size: 18, color: scheme.onSurfaceVariant),
+          ],
+        ),
       ),
     );
   }

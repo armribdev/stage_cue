@@ -672,15 +672,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
-  /// Fenêtre pendant laquelle un pad « armé » se déclenche automatiquement une
-  /// fois chargé. Au-delà, le moment dramatique est passé : on ne joue pas en
-  /// retard, le pad reste PRÊT et un second tap le déclenche instantanément.
-  static const _autoPlayWindow = Duration(milliseconds: 1500);
-
   Future<void> _handlePadTap(BuildContext context, PadItem padItem) async {
     final resolved = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
 
-    // PRÊT : déclenchement immédiat.
+    // PRÊT (bouton GO) : lecture immédiate garantie.
     if (resolved.isPlayable) {
       unawaited(HapticFeedback.selectionClick());
       await _notifier.toggleSound(resolved);
@@ -697,38 +692,35 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
 
-    // EN ROUTE (ou état non résolu) : download optimiste + auto-play.
+    // EN ROUTE (bouton DL) : on télécharge SANS jouer. Le moment de lecture
+    // doit rester maîtrisé par l'opérateur → le pad devient un bouton GO une
+    // fois prêt, et un second tap le déclenche immédiatement.
+    if (resolved.isDownloading) return; // déjà en cours
     unawaited(HapticFeedback.selectionClick());
-    await _armAndPlay(resolved);
+    await _preparePad(resolved);
   }
 
-  /// « Arme » un pad EN ROUTE : tente le cache local puis télécharge, et joue
-  /// automatiquement si le pad est prêt à temps. Donne un feedback si bloqué.
-  Future<void> _armAndPlay(PadItem padItem) async {
-    final stopwatch = Stopwatch()..start();
-
+  /// Prépare un pad EN ROUTE : recharge depuis le cache puis télécharge si
+  /// nécessaire — **sans lecture automatique**. Le pad passe en PRÊT (GO) ;
+  /// l'opérateur déclenche au tap suivant. Feedback non-bloquant si bloqué.
+  Future<void> _preparePad(PadItem padItem) async {
     // État non résolu : un simple rechargement depuis le cache peut suffire.
     if (padItem.unavailabilityReason == null) {
       await _notifier.refreshPadPlayback(padItem.pad.id);
       if (!mounted) return;
     }
 
-    var resolved = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
-    if (!resolved.isPlayable) {
-      await _notifier.downloadAndLoadPad(resolved);
-      if (!mounted) return;
-      resolved = _notifier.findPadItemById(resolved.pad.id) ?? resolved;
-    }
+    final resolved = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
+    if (resolved.isPlayable) return; // déjà prêt : c'est désormais un bouton GO.
 
-    if (resolved.isPlayable) {
-      // Joue seulement si l'arrivée est restée « à temps » (cf. _autoPlayWindow).
-      if (stopwatch.elapsed <= _autoPlayWindow) {
-        await _notifier.toggleSound(resolved);
-      }
-      return;
-    }
+    await _notifier.downloadAndLoadPad(resolved);
+    if (!mounted) return;
 
-    _showBlockedPadFeedback(resolved, resolved.unavailabilityReason);
+    final after = _notifier.findPadItemById(resolved.pad.id) ?? resolved;
+    if (!after.isPlayable) {
+      _showBlockedPadFeedback(after, after.unavailabilityReason);
+    }
+    // Sinon : le pad est maintenant PRÊT (GO), sans déclenchement automatique.
   }
 
   /// SnackBar non-bloquante expliquant pourquoi un pad ne joue pas, avec une
