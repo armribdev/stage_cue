@@ -127,9 +127,7 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
     if (wasOnAir || wasQueued) return;
 
     final title = sound.displayName ?? sound.title;
-    final message = _isOnAir(sound)
-        ? 'Lancé à l\'antenne : $title'
-        : '$title ajouté à la file';
+    final message = '$title ajouté à la file';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),

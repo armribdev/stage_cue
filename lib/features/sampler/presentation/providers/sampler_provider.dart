@@ -98,6 +98,8 @@ class PadItem {
   bool isPlaying;
   int _nextSoundIndex;
   int? _currentPlayerIndex;
+  int? pausedPlayerIndex;
+  Duration? pausedPlaybackPosition;
 
   PadItem({
     required this.pad,
@@ -114,6 +116,23 @@ class PadItem {
 
   /// Index du son actuellement joué (pour la clé du TweenAnimationBuilder).
   int? get currentSoundIndex => _currentPlayerIndex;
+
+  /// Lecteur de la piste en pause ou en cours (pour la barre de progression).
+  AudioPlayerService? get progressPlayer {
+    if (_currentPlayerIndex != null &&
+        _currentPlayerIndex! < players.length) {
+      return players[_currentPlayerIndex!];
+    }
+    if (pausedPlayerIndex != null && pausedPlayerIndex! < players.length) {
+      return players[pausedPlayerIndex!];
+    }
+    return players.isNotEmpty ? players.first : null;
+  }
+
+  void clearPausedPlayback() {
+    pausedPlayerIndex = null;
+    pausedPlaybackPosition = null;
+  }
 }
 
 class _RemovedPadSnapshot {
@@ -601,14 +620,7 @@ class SamplerNotifier extends ChangeNotifier {
       return padItem;
     }
 
-    final shouldEnqueue = (current != null && current.isPlaying) ||
-        _state.musicQueuePadIds.isNotEmpty;
-    if (shouldEnqueue) {
-      enqueueMusicPad(padItem);
-      return padItem;
-    }
-
-    await playMusicNow(padItem);
+    enqueueMusicPad(padItem);
     return padItem;
   }
 
@@ -696,7 +708,18 @@ class SamplerNotifier extends ChangeNotifier {
   /// Pad musique correspondant à un son, sur la scène ou hors-scène.
   PadItem? findMusicPadForSound(int soundId) => _findPadItemForSound(soundId);
 
-  Future<void> _playMusicPad(PadItem padItem) async {
+  void _capturePausedPlayback(PadItem padItem) {
+    final player = padItem.currentPlayer;
+    if (player == null) return;
+    padItem.pausedPlaybackPosition = player.position;
+    padItem.pausedPlayerIndex = padItem._currentPlayerIndex;
+  }
+
+  Future<void> _playMusicPad(
+    PadItem padItem, {
+    Duration? fromPosition,
+    int? soundIndex,
+  }) async {
     if (padItem.players.isEmpty) {
       await _loadPlayersForPad(padItem, padItem.pad);
       if (padItem.players.isEmpty) {
@@ -705,6 +728,10 @@ class SamplerNotifier extends ChangeNotifier {
       }
     }
 
+    final resumePosition = fromPosition;
+    final resumeIndex = soundIndex;
+    padItem.clearPausedPlayback();
+
     _state = _state.copyWith(
       currentMusicPad: padItem,
       musicQueuePadIds: _state.musicQueuePadIds
@@ -712,16 +739,27 @@ class SamplerNotifier extends ChangeNotifier {
           .toList(),
     );
 
-    final soundIndex = _pickSoundIndex(padItem);
-    final player = padItem.players[soundIndex];
+    final index = resumeIndex ?? _pickSoundIndex(padItem);
+    final player = padItem.players[index];
     player.setVolume(_effectiveVolume(padItem));
-    await player.play();
+    if (resumePosition != null && resumePosition > Duration.zero) {
+      await player.playFromPosition(resumePosition);
+    } else {
+      await player.play();
+    }
     notifyListeners();
   }
 
-  Future<void> _stopMusicPad(PadItem padItem, {required bool manual}) async {
+  Future<void> _stopMusicPad(
+    PadItem padItem, {
+    required bool manual,
+    bool clearOnAir = true,
+  }) async {
     if (manual) {
       _skipMusicAutoAdvance = true;
+    }
+    if (!clearOnAir && manual) {
+      _capturePausedPlayback(padItem);
     }
     try {
       await padItem.currentPlayer?.stop();
@@ -732,7 +770,7 @@ class SamplerNotifier extends ChangeNotifier {
     }
 
     var nextState = _state;
-    if (_state.currentMusicPad?.pad.id == padItem.pad.id) {
+    if (clearOnAir && _state.currentMusicPad?.pad.id == padItem.pad.id) {
       nextState = nextState.copyWith(clearCurrentMusicPad: true);
     }
     if (_state.musicQueuePadIds.contains(padItem.pad.id)) {
@@ -819,7 +857,7 @@ class SamplerNotifier extends ChangeNotifier {
     final current = _state.currentMusicPad;
     if (current == null || !current.isPlaying) return;
     if (duration == Duration.zero) {
-      await _stopMusicPad(current, manual: true);
+      await _stopMusicPad(current, manual: true, clearOnAir: false);
       return;
     }
     final player = current.currentPlayer;
@@ -827,19 +865,16 @@ class SamplerNotifier extends ChangeNotifier {
 
     _skipMusicAutoAdvance = true;
     try {
-      await player.fadeOutAndStop(duration);
+      player.fadeVolumeTo(0, duration);
+      await Future<void>.delayed(duration);
+      _capturePausedPlayback(current);
+      await player.stop();
+      current.isPlaying = false;
+      current._currentPlayerIndex = null;
+      notifyListeners();
     } finally {
       _skipMusicAutoAdvance = false;
     }
-
-    var nextState = _state;
-    if (_state.currentMusicPad?.pad.id == current.pad.id) {
-      nextState = nextState.copyWith(clearCurrentMusicPad: true);
-    }
-    current.isPlaying = false;
-    current._currentPlayerIndex = null;
-    _state = nextState;
-    notifyListeners();
   }
 
   /// Enchaîne vers la musique suivante en file, avec un fondu enchaîné.
@@ -974,10 +1009,14 @@ class SamplerNotifier extends ChangeNotifier {
       return;
     }
     if (current.isPlaying) {
-      await _stopMusicPad(current, manual: true);
+      await _stopMusicPad(current, manual: true, clearOnAir: false);
       return;
     }
-    await playMusicNow(current);
+    await _playMusicPad(
+      current,
+      fromPosition: current.pausedPlaybackPosition,
+      soundIndex: current.pausedPlayerIndex,
+    );
   }
 
   Future<void> restartCurrentMusic() async {

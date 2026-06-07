@@ -564,17 +564,13 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
                 emptyLabel: 'Aucune piste',
               ),
               const SizedBox(height: 10),
-              Visibility(
-                visible: current == null || isPlaying,
-                maintainSize: true,
-                maintainAnimation: true,
-                maintainState: true,
-                child: _RegieProgressBar(
+              if (current != null) ...[
+                _RegieProgressBar(
                   padItem: current,
-                  isPlaying: isPlaying && current != null,
+                  isPlaying: isPlaying,
                   height: 4,
                 ),
-              ),
+              ],
               const SizedBox(height: 12),
               onAirControls,
               if (next != null) ...[
@@ -1613,17 +1609,12 @@ class _OnAirCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            Visibility(
-              visible: padItem == null || isPlaying,
-              maintainSize: true,
-              maintainAnimation: true,
-              maintainState: true,
-              child: _RegieProgressBar(
+            if (padItem != null)
+              _RegieProgressBar(
                 padItem: padItem,
-                isPlaying: isPlaying && padItem != null,
+                isPlaying: isPlaying,
                 showTimes: true,
               ),
-            ),
             const SizedBox(height: 12),
             controls,
           ],
@@ -1654,8 +1645,10 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker;
 
-  bool get _isActive =>
+  bool get _isLive =>
       widget.isPlaying && (widget.padItem?.isPlaying ?? false);
+
+  bool get _hasTrack => widget.padItem != null;
 
   @override
   void initState() {
@@ -1673,7 +1666,7 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
   }
 
   void _syncTicker() {
-    if (_isActive) {
+    if (_isLive) {
       if (!_ticker.isActive) _ticker.start();
     } else if (_ticker.isActive) {
       _ticker.stop();
@@ -1687,13 +1680,21 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
   }
 
   ({Duration position, Duration duration, double value}) _playbackState() {
-    final player = widget.padItem?.currentPlayer;
-    final duration = player?.duration ?? Duration.zero;
-    if (!_isActive || player == null) {
-      return (position: Duration.zero, duration: duration, value: 0);
+    final padItem = widget.padItem;
+    if (padItem == null) {
+      return (position: Duration.zero, duration: Duration.zero, value: 0);
     }
 
-    final position = player.position;
+    final player = padItem.progressPlayer;
+    final duration = player?.duration ?? Duration.zero;
+
+    final Duration position;
+    if (_isLive && padItem.currentPlayer != null) {
+      position = padItem.currentPlayer!.position;
+    } else {
+      position = padItem.pausedPlaybackPosition ?? Duration.zero;
+    }
+
     if (duration.inMilliseconds <= 0) {
       return (position: position, duration: duration, value: 0);
     }
@@ -1713,7 +1714,7 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
         ClipRRect(
           borderRadius: BorderRadius.circular(widget.height),
           child: LinearProgressIndicator(
-            value: _isActive ? playback.value : 0,
+            value: _hasTrack ? playback.value : 0,
             minHeight: widget.height,
             backgroundColor: scheme.outlineVariant.withValues(alpha: 0.35),
             valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
