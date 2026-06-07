@@ -74,6 +74,11 @@ class SoundRepository {
     await _soundDataSource.deleteSound(id);
   }
 
+  /// Change le type d'un son (corrige l'auto-détection par durée).
+  Future<void> updateSoundType(int id, SoundType type) async {
+    await _soundDataSource.updateSoundType(id, type);
+  }
+
   /// Marque ou démarque un son comme favori.
   Future<void> setSoundFavorite(int id, bool isFavorite) async {
     await _soundDataSource.setFavorite(id, isFavorite);

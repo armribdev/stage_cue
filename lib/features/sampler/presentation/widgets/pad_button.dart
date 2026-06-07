@@ -232,10 +232,11 @@ class PadButton extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          downloading ? 'téléchargement…' : 'appuyer pour charger',
+                          downloading ? 'téléchargement…' : 'Télécharger',
                           style: TextStyle(
                             fontSize: 11,
-                            color: onColor.withValues(alpha: 0.75),
+                            fontWeight: FontWeight.w600,
+                            color: onColor.withValues(alpha: 0.85),
                           ),
                         ),
                       ],

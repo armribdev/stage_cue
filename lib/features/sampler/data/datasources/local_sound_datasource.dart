@@ -224,6 +224,17 @@ class LocalSoundDataSource {
     )..where((s) => s.id.equals(id))).write(companion);
   }
 
+  /// Change le type d'un son (corrige une auto-détection par durée erronée).
+  Future<void> updateSoundType(int id, domain.SoundType type) async {
+    final dbType = switch (type) {
+      domain.SoundType.soundEffect => db_sounds.SoundType.soundEffect,
+      domain.SoundType.music => db_sounds.SoundType.music,
+      domain.SoundType.ambiance => db_sounds.SoundType.ambiance,
+    };
+    await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
+        .write(db.SoundsCompanion(type: Value(dbType)));
+  }
+
   /// Marque ou démarque un son comme favori (accès rapide en recherche).
   Future<void> setFavorite(int id, bool isFavorite) async {
     await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
@@ -368,13 +379,23 @@ class LocalSoundDataSource {
     required int soundId,
     required File file,
   }) async {
-    final soundType = await _resolveSoundTypeFromDuration(file);
+    final existing = await (_database.select(_database.sounds)
+          ..where((s) => s.id.equals(soundId)))
+        .getSingleOrNull();
+    if (existing == null) return;
+
     final contentHash = await computeQuickHash(file);
+    // Ne réécrase le type que si c'est la première détection (pas de hash connu).
+    // Protège les surcharges manuelles de type si le cache est évincé et re-téléchargé.
+    final typeValue = existing.contentHash == null
+        ? Value(await _resolveSoundTypeFromDuration(file))
+        : const Value<db_sounds.SoundType>.absent();
+
     await (_database.update(_database.sounds)
           ..where((s) => s.id.equals(soundId)))
         .write(
           db.SoundsCompanion(
-            type: Value(soundType),
+            type: typeValue,
             contentHash: Value(contentHash),
           ),
         );

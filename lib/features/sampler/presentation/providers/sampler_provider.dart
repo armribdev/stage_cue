@@ -859,6 +859,46 @@ class SamplerNotifier extends ChangeNotifier {
     _markPlayed(padItem.pad.sounds[soundIndex].id);
   }
 
+  /// Change le type d'un son puis recharge le plateau : `isMusicPad` (et donc
+  /// le routage musique vs déclenchement) en dépend directement.
+  ///
+  /// La mise à jour en mémoire est synchrone (notifyListeners immédiat) pour
+  /// éviter une fenêtre où le routage utilise encore l'ancien type alors que
+  /// l'UI a déjà reflété le changement (race condition : `_changeType` est async
+  /// mais son appelant ne peut pas awaiter via `ValueChanged<SoundType>`).
+  Future<void> updateSoundType(int soundId, SoundType type) async {
+    // 1. Mise à jour en mémoire immédiate — routage correct sans attendre la DB.
+    for (final padItem in _state.pads) {
+      final sounds = padItem.pad.sounds;
+      final idx = sounds.indexWhere((s) => s.id == soundId);
+      if (idx >= 0) {
+        final s = sounds[idx];
+        final updated = List<Sound>.from(sounds);
+        updated[idx] = Sound(
+          id: s.id,
+          title: s.title,
+          displayName: s.displayName,
+          filePath: s.filePath,
+          type: type,
+          colorValue: s.colorValue,
+          volume: s.volume,
+          createdAt: s.createdAt,
+          libraryId: s.libraryId,
+          relativePath: s.relativePath,
+          contentHash: s.contentHash,
+          isFavorite: s.isFavorite,
+          lastPlayedAt: s.lastPlayedAt,
+        );
+        padItem.pad = padItem.pad.copyWith(sounds: updated);
+        _notifyPad(padItem);
+      }
+    }
+    notifyListeners();
+    // 2. Persistance DB + rechargement complet pour synchroniser le reste.
+    await _repository.updateSoundType(soundId, type);
+    await loadSounds();
+  }
+
   /// Bascule l'état favori d'un son et persiste. Retourne le nouvel état.
   Future<bool> toggleSoundFavorite(int soundId) async {
     final sound = await _repository.getSoundById(soundId);
