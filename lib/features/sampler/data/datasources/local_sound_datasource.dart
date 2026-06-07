@@ -335,6 +335,56 @@ class LocalSoundDataSource {
     return true;
   }
 
+  /// Met à jour le type et le hash d'un son après que son fichier a été matérialisé
+  /// (premier téléchargement). Ne touche pas aux champs de présentation.
+  Future<void> refreshSoundMetadata({
+    required int soundId,
+    required File file,
+  }) async {
+    final soundType = await _resolveSoundTypeFromDuration(file);
+    final contentHash = await computeQuickHash(file);
+    await (_database.update(_database.sounds)
+          ..where((s) => s.id.equals(soundId)))
+        .write(
+          db.SoundsCompanion(
+            type: Value(soundType),
+            contentHash: Value(contentHash),
+          ),
+        );
+  }
+
+  /// Indexe un fichier audio distant par ses métadonnées seules, sans télécharger
+  /// le fichier. [localPath] est le chemin local calculé (cache cible) ; le
+  /// fichier n'existe pas encore. Type et hash seront mis à jour au premier
+  /// téléchargement. Retourne true si un nouveau son a été créé.
+  Future<bool> indexLibraryAudioFileMetadataOnly({
+    required int libraryId,
+    required String relativePath,
+    required String localPath,
+  }) async {
+    final existing = await (_database.select(_database.sounds)
+          ..where(
+            (s) =>
+                s.libraryId.equals(libraryId) &
+                s.relativePath.equals(relativePath),
+          ))
+        .get();
+    if (existing.isNotEmpty) return false;
+
+    final title = p.basenameWithoutExtension(relativePath);
+
+    await _database.into(_database.sounds).insert(
+          db.SoundsCompanion.insert(
+            title: title,
+            filePath: localPath,
+            type: db_sounds.SoundType.soundEffect,
+            libraryId: Value(libraryId),
+            relativePath: Value(relativePath),
+          ),
+        );
+    return true;
+  }
+
   /// Indexe tous les fichiers audio d'un dossier
   Future<int> indexDirectory(
     Directory directory, {

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -19,6 +21,18 @@ import '../../domain/entities/sound.dart';
 import '../datasources/local_library_datasource.dart';
 import '../datasources/local_sound_datasource.dart';
 import '../models/indexing_progress.dart';
+
+/// Levée quand un son de bibliothèque n'est pas accessible localement sans
+/// déclencher un téléchargement (utilisé pendant le chargement des pads).
+class SoundNotAvailableLocallyException implements Exception {
+  /// true = appareil hors-ligne, false = fichier non encore téléchargé.
+  final bool isOffline;
+  const SoundNotAvailableLocallyException({required this.isOffline});
+
+  @override
+  String toString() =>
+      isOffline ? 'Son indisponible hors-ligne' : 'Son non téléchargé';
+}
 
 /// Résultat de l'initialisation d'un dossier Drive nouvellement lié.
 class DriveFolderLinkInitResult {
@@ -383,10 +397,15 @@ class LibraryRepository {
   /// Résout le chemin local jouable d'un son.
   ///
   /// - Son legacy (hors bibliothèque) : renvoie directement [Sound.filePath].
-  /// - Son de bibliothèque : matérialise le fichier dans le cache (download
-  ///   Drive à la demande) et renvoie le chemin local. Hors-ligne, renvoie le
-  ///   fichier en cache s'il existe, sinon lève une erreur.
-  Future<String> resolvePlayablePath(Sound sound) async {
+  /// - Son de bibliothèque en cache : renvoie le chemin local.
+  /// - Son de bibliothèque non encore téléchargé avec [downloadIfNeeded] false :
+  ///   lève [SoundNotAvailableLocallyException].
+  /// - Son de bibliothèque non encore téléchargé avec [downloadIfNeeded] true :
+  ///   télécharge depuis Drive et renvoie le chemin local.
+  Future<String> resolvePlayablePath(
+    Sound sound, {
+    bool downloadIfNeeded = true,
+  }) async {
     final libraryId = sound.libraryId;
     final relativePath = sound.relativePath;
     if (libraryId == null || relativePath == null) {
@@ -396,21 +415,42 @@ class LibraryRepository {
     final library = await _dataSource.getLibraryById(libraryId);
     if (library == null) return sound.filePath;
 
-    final client = _activeClient;
-    if (client == null) {
-      // Hors-ligne : on ne peut servir que ce qui est déjà en cache.
-      final localPath = _cacheManager.localPathFor(library, relativePath);
-      if (await File(localPath).exists()) return localPath;
-      throw StateError(
-        'Son indisponible hors-ligne (non mis en cache) : $relativePath',
-      );
+    final localPath = _cacheManager.localPathFor(library, relativePath);
+    final localFile = File(localPath);
+
+    if (await localFile.exists()) {
+      // Métadonnées manquantes (son indexé sans téléchargement) : mise à jour
+      // en arrière-plan sans bloquer la lecture.
+      if (sound.contentHash == null) {
+        unawaited(_refreshSoundMetadata(sound, localFile));
+      }
+      return localPath;
     }
 
-    return _cacheManager.ensureCached(
+    // Fichier absent du cache.
+    final client = _activeClient;
+    if (client == null) {
+      throw SoundNotAvailableLocallyException(isOffline: true);
+    }
+    if (!downloadIfNeeded) {
+      throw SoundNotAvailableLocallyException(isOffline: false);
+    }
+
+    await _cacheManager.ensureCached(
       client: client,
       library: library,
       relativePath: relativePath,
     );
+    unawaited(_refreshSoundMetadata(sound, localFile));
+    return localPath;
+  }
+
+  Future<void> _refreshSoundMetadata(Sound sound, File file) async {
+    try {
+      await _soundDataSource.refreshSoundMetadata(soundId: sound.id, file: file);
+    } catch (e) {
+      debugPrint('Échec mise à jour métadonnées ${sound.title}: $e');
+    }
   }
 
   /// Importe un fichier audio local dans une bibliothèque (upload Drive + cache)
@@ -470,27 +510,16 @@ class LibraryRepository {
 
       var processedCount = 0;
       var indexedCount = 0;
-      var failureCount = 0;
-      String? lastFailure;
 
       for (final audio in audioFiles) {
         processedCount++;
-        try {
-          final localPath = await _cacheManager.ensureCached(
-            client: client,
-            library: library,
-            relativePath: audio.relativePath,
-          );
-          final isNew = await _soundDataSource.indexLibraryAudioFile(
-            File(localPath),
-            libraryId: library.id,
-            relativePath: audio.relativePath,
-          );
-          if (isNew) indexedCount++;
-        } catch (e) {
-          failureCount++;
-          lastFailure = e.toString();
-        }
+        final localPath = _cacheManager.localPathFor(library, audio.relativePath);
+        final isNew = await _soundDataSource.indexLibraryAudioFileMetadataOnly(
+          libraryId: library.id,
+          relativePath: audio.relativePath,
+          localPath: localPath,
+        );
+        if (isNew) indexedCount++;
 
         onProgress?.call(
           IndexingProgress(
@@ -502,27 +531,13 @@ class LibraryRepository {
         );
       }
 
-      if (audioFiles.isNotEmpty && indexedCount == 0 && failureCount > 0) {
-        final error = lastFailure ?? 'Échec du téléchargement des fichiers audio';
-        onProgress?.call(
-          IndexingProgress(
-            path: library.name,
-            current: processedCount,
-            total: audioFiles.length,
-            isComplete: true,
-            error: error,
-          ),
-        );
-        throw StateError(error);
-      }
-
       onProgress?.call(
         IndexingProgress(
           path: library.name,
           current: processedCount,
           total: audioFiles.length,
           isComplete: true,
-          error: failureCount > 0 ? '$failureCount fichier(s) ignoré(s)' : null,
+          error: null,
         ),
       );
 

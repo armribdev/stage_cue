@@ -17,6 +17,10 @@ class PadButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (padItem.unavailabilityReason != null) {
+      return _buildUnavailableCard(context, padItem.unavailabilityReason!);
+    }
+
     final scheme = Theme.of(context).colorScheme;
     final colorValue = padItem.pad.colorValue;
     final customColor = colorValue != null ? Color(colorValue) : null;
@@ -133,6 +137,61 @@ class PadButton extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUnavailableCard(
+    BuildContext context,
+    PadUnavailabilityReason reason,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final icon = switch (reason) {
+      PadUnavailabilityReason.needsDownload => Icons.cloud_download_outlined,
+      PadUnavailabilityReason.offline => Icons.cloud_off_outlined,
+      PadUnavailabilityReason.missingFile => Icons.warning_amber_rounded,
+    };
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.3),
+        ),
+      ),
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+      child: _buildInteractiveChild(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  padItem.pad.displayName,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: scheme.onSurface.withValues(alpha: 0.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
