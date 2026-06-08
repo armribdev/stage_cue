@@ -131,6 +131,8 @@ class PadItem {
   final List<PadSoundSlot> slots;
   bool isPlaying;
   int _nextSoundIndex;
+  /// Indices déjà joués en mode aléatoire pendant la session courante du pad.
+  final Set<int> _playedSoundIndices = {};
   int? _currentPlayerIndex;
   int? pausedPlayerIndex;
   Duration? pausedPlaybackPosition;
@@ -169,6 +171,11 @@ class PadItem {
     while (slots.length > pad.sounds.length) {
       slots.removeLast().dispose();
     }
+  }
+
+  /// Réinitialise le cycle aléatoire (tous les sons redeviennent éligibles).
+  void resetRandomPlaySession() {
+    _playedSoundIndices.clear();
   }
 
   String get displayName =>
@@ -1366,14 +1373,25 @@ class SamplerNotifier extends ChangeNotifier {
       '[PICK] pad="${padItem.pad.displayName}" '
       'slots=${padItem.slots.length} readyIndices=$readyIndices '
       '_nextSoundIndex=${padItem._nextSoundIndex} '
+      'playedIndices=${padItem._playedSoundIndices} '
       'playMode=${padItem.pad.playMode}',
     );
     if (readyIndices.isEmpty) return 0;
     if (readyIndices.length == 1) return readyIndices.first;
 
     final chosen = switch (padItem.pad.playMode) {
-      PadPlayMode.random =>
-        readyIndices[_random.nextInt(readyIndices.length)],
+      PadPlayMode.random => () {
+          var available = readyIndices
+              .where((i) => !padItem._playedSoundIndices.contains(i))
+              .toList();
+          if (available.isEmpty) {
+            padItem.resetRandomPlaySession();
+            available = List<int>.from(readyIndices);
+          }
+          final idx = available[_random.nextInt(available.length)];
+          padItem._playedSoundIndices.add(idx);
+          return idx;
+        }(),
       PadPlayMode.sequential => () {
           final total = padItem.slots.length;
           for (var step = 0; step < total; step++) {
