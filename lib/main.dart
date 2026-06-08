@@ -23,6 +23,7 @@ void main() {
       }
 
       final services = AppServices.create();
+      await services.appPreferences.load();
       runApp(SoundboardApp(services: services));
     },
     (error, stack) {

@@ -4,6 +4,7 @@ import '../../features/sampler/domain/usecases/load_sounds_usecase.dart';
 import '../../features/sampler/domain/usecases/remove_sound_from_board_usecase.dart';
 import '../../features/sampler/presentation/providers/sync_controller.dart';
 import '../database/database.dart' as db;
+import '../settings/app_preferences.dart';
 import '../sync/auto_sync_coordinator.dart';
 
 /// Composition root des services partagés de l'application.
@@ -15,6 +16,7 @@ class AppServices {
   final AutoSyncCoordinator autoSyncCoordinator;
   final LoadSoundsUseCase loadSoundsUseCase;
   final RemoveSoundFromBoardUseCase removeSoundFromBoardUseCase;
+  final AppPreferences appPreferences;
 
   AppServices._({
     required this.database,
@@ -24,6 +26,7 @@ class AppServices {
     required this.autoSyncCoordinator,
     required this.loadSoundsUseCase,
     required this.removeSoundFromBoardUseCase,
+    required this.appPreferences,
   });
 
   factory AppServices.create() {
@@ -46,6 +49,7 @@ class AppServices {
       autoSyncCoordinator: autoSyncCoordinator,
       loadSoundsUseCase: LoadSoundsUseCase(repository),
       removeSoundFromBoardUseCase: RemoveSoundFromBoardUseCase(repository),
+      appPreferences: AppPreferences(),
     );
   }
 

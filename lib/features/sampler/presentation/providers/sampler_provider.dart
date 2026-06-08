@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/audio/audio_file_validation.dart';
@@ -135,6 +136,8 @@ class PadItem {
   bool isDownloading = false;
   int downloadDone = 0;
   int downloadTotal = 0;
+  /// Index du slot en cours de téléchargement (détail pad, variante unique).
+  int? downloadingSlotIndex;
 
   /// Révision par pad : incrémentée à chaque changement propre au pad (download,
   /// disponibilité). Permet un rebuild ciblé du seul PadButton via un
@@ -263,6 +266,8 @@ class SamplerNotifier extends ChangeNotifier {
   /// (download/cache à la demande). Null = sons purement locaux.
   final LibraryRepository? _libraryRepository;
 
+  final AppPreferences? _appPreferences;
+
   int? _activeBoardId;
   double _musicVolume = 1.0;
   double _musicVolumeBeforeMute = 1.0;
@@ -330,7 +335,8 @@ class SamplerNotifier extends ChangeNotifier {
     this._loadPadsUseCase, [
     this._removePadUseCase,
     this._libraryRepository,
-  ]);
+    AppPreferences? appPreferences,
+  ]) : _appPreferences = appPreferences;
 
   /// Résout le chemin local jouable d'un son (cache Drive si bibliothèque).
   ///
@@ -1061,6 +1067,72 @@ class SamplerNotifier extends ChangeNotifier {
   ///
   /// [priority] : tap utilisateur par défaut (double tout prefetch en attente).
   /// Une tâche annulée (changement de plateau) retourne l'état jouable courant.
+  /// Télécharge une variante précise du pad (tap depuis l'écran de détails).
+  Future<bool> downloadPadSoundAtIndex(PadItem padItem, int index) async {
+    final resolved = _resolveBoardPadItem(padItem);
+    if (index < 0 || index >= resolved.slots.length) return false;
+    final slot = resolved.slots[index];
+    if (slot.isReady) return true;
+    if (slot.availability == PadSoundAvailability.missingFile) return false;
+
+    try {
+      return await _downloadQueue.enqueue<bool>(
+        key: resolved.pad.id,
+        priority: _downloadPriorityTap,
+        task: () => _downloadPadSoundAtIndexImpl(resolved, index),
+      );
+    } on DownloadCancelledException {
+      final current = _resolveBoardPadItem(padItem);
+      return index < current.slots.length && current.slots[index].isReady;
+    }
+  }
+
+  Future<bool> _downloadPadSoundAtIndexImpl(PadItem padItem, int index) async {
+    if (padItem.isDownloading) {
+      return padItem.slots[index].isReady;
+    }
+
+    final slot = padItem.slots[index];
+    if (slot.isReady) return true;
+    if (slot.availability == PadSoundAvailability.missingFile) return false;
+
+    padItem.downloadingSlotIndex = index;
+    _notifyPad(padItem);
+
+    try {
+      final libraryRepository = _libraryRepository;
+      if (libraryRepository != null) {
+        final connected = await libraryRepository.ensureDriveConnected();
+        if (!connected) {
+          if (slot.availability == PadSoundAvailability.needsDownload ||
+              slot.availability == PadSoundAvailability.offline) {
+            padItem.slots[index] = PadSoundSlot(
+              availability: PadSoundAvailability.offline,
+            );
+          }
+          _finalizePadAvailability(padItem);
+          _notifyPad(padItem);
+          notifyListeners();
+          return false;
+        }
+      }
+
+      await _loadSlotAtIndex(padItem, index, downloadIfNeeded: true);
+
+      if (padItem.isPlayable) {
+        await _loadPlayersForPad(padItem, padItem.pad);
+      } else {
+        _finalizePadAvailability(padItem);
+      }
+      _notifyPad(padItem);
+      notifyListeners();
+      return padItem.slots[index].isReady;
+    } finally {
+      padItem.downloadingSlotIndex = null;
+      _notifyPad(padItem);
+    }
+  }
+
   Future<bool> downloadAndLoadPad(
     PadItem padItem, {
     int priority = _downloadPriorityTap,
@@ -1112,6 +1184,8 @@ class SamplerNotifier extends ChangeNotifier {
       }
 
       for (final index in pendingIndices) {
+        padItem.downloadingSlotIndex = index;
+        _notifyPad(padItem);
         await _loadSlotAtIndex(padItem, index, downloadIfNeeded: true);
         padItem.downloadDone++;
         _notifyPad(padItem);
@@ -1120,6 +1194,8 @@ class SamplerNotifier extends ChangeNotifier {
       padItem.isDownloading = false;
       padItem.downloadDone = 0;
       padItem.downloadTotal = 0;
+      padItem.downloadingSlotIndex = null;
+      _notifyPad(padItem);
     }
 
     if (padItem.isPlayable) {
@@ -2106,7 +2182,29 @@ class SamplerNotifier extends ChangeNotifier {
     if (sound == null) return;
 
     _applySoundAddedToPad(padItem, sound);
+    final slotIndex = padItem.pad.sounds.length - 1;
     unawaited(_reloadPadPlayersInBackground(padItem));
+    _maybeAutoDownloadPadSound(padItem, slotIndex);
+  }
+
+  void _maybeAutoDownloadPadSound(PadItem padItem, int slotIndex) {
+    if (_appPreferences?.autoDownloadPadSounds != true) return;
+    if (_libraryRepository == null) return;
+    if (slotIndex < 0 || slotIndex >= padItem.slots.length) return;
+    final slot = padItem.slots[slotIndex];
+    if (slot.isReady || slot.availability == PadSoundAvailability.missingFile) {
+      return;
+    }
+    unawaited(
+      downloadPadSoundAtIndex(padItem, slotIndex).catchError((_) => false),
+    );
+  }
+
+  void _maybeAutoDownloadPad(PadItem padItem) {
+    if (_appPreferences?.autoDownloadPadSounds != true) return;
+    if (_libraryRepository == null) return;
+    if (padItem.pendingDownloadCount == 0) return;
+    unawaited(downloadAndLoadPad(padItem).catchError((_) => false));
   }
 
   /// Retire un son d'un pad. Si c'est le dernier son, supprime le pad.
@@ -2207,6 +2305,8 @@ class SamplerNotifier extends ChangeNotifier {
     if (boardId == null) return null;
     final padId = await _repository.createPad(boardId, soundId);
     await loadSounds(boardId: boardId);
+    final padItem = _resolvePadItem(padId);
+    if (padItem != null) _maybeAutoDownloadPadSound(padItem, 0);
     return padId;
   }
 
@@ -2223,7 +2323,9 @@ class SamplerNotifier extends ChangeNotifier {
       soundIds: soundIds,
     );
     await loadSounds(boardId: boardId);
-    return _resolvePadItem(padId);
+    final padItem = _resolvePadItem(padId);
+    if (padItem != null) _maybeAutoDownloadPad(padItem);
+    return padItem;
   }
 
   // ── Tags ──────────────────────────────────────────────────────────────────

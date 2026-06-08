@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../../../core/database/database.dart' as db;
+import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/platform/saf_directory_bridge.dart';
 import '../../../../core/sync/drive_account_profile.dart';
 import '../../../../core/sync/google_oauth_config.dart';
@@ -27,6 +28,7 @@ class SettingsScreen extends StatefulWidget {
   final db.AppDatabase database;
   final LibraryRepository libraryRepository;
   final SyncController syncController;
+  final AppPreferences appPreferences;
   final bool isModal;
 
   const SettingsScreen({
@@ -34,6 +36,7 @@ class SettingsScreen extends StatefulWidget {
     required this.database,
     required this.libraryRepository,
     required this.syncController,
+    required this.appPreferences,
     this.isModal = false,
   });
 
@@ -43,6 +46,7 @@ class SettingsScreen extends StatefulWidget {
     required db.AppDatabase database,
     required LibraryRepository libraryRepository,
     required SyncController syncController,
+    required AppPreferences appPreferences,
   }) {
     return openAdaptiveScreen(
       context: context,
@@ -50,6 +54,7 @@ class SettingsScreen extends StatefulWidget {
         database: database,
         libraryRepository: libraryRepository,
         syncController: syncController,
+        appPreferences: appPreferences,
         isModal: isModal,
       ),
     );
@@ -1557,6 +1562,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildSamplerSection() {
+    return ListenableBuilder(
+      listenable: widget.appPreferences,
+      builder: (context, _) {
+        return _buildSettingsSectionCard(
+          title: _buildSectionTitleRow(
+            icon: Icons.grid_view_rounded,
+            title: 'Scène',
+          ),
+          child: SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Télécharger les sons ajoutés à un pad'),
+            subtitle: Text(
+              'Si connecté à Drive, les variantes sont récupérées dès l\'ajout.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            value: widget.appPreferences.autoDownloadPadSounds,
+            onChanged: (value) =>
+                unawaited(widget.appPreferences.setAutoDownloadPadSounds(value)),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildAutoDownloadToggle(domain.Library library) {
     final scheme = Theme.of(context).colorScheme;
     return Row(
@@ -1707,6 +1739,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _buildSamplerSection(),
+                      const SizedBox(height: 16),
                       _buildSettingsSectionCard(
                         title: _buildSectionTitleRow(
                           icon: Icons.storage,
