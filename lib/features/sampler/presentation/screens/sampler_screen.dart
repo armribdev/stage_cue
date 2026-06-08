@@ -4,7 +4,6 @@ import 'dart:math' show max;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import '../providers/sampler_provider.dart';
 import '../providers/sync_controller.dart';
 import '../widgets/pad_button.dart' show padSoundAvailabilityIcon;
@@ -24,13 +23,6 @@ import 'settings_screen.dart';
 import 'library_sync_screen.dart';
 import 'pad_details_screen.dart';
 import 'sound_library_manage_screen.dart';
-
-/// Marqueur pour le bouton d'ajout dans la grille
-const _addButtonMarker = _AddButtonMarker();
-
-class _AddButtonMarker {
-  const _AddButtonMarker();
-}
 
 class _UndoPadIntent extends Intent {
   const _UndoPadIntent();
@@ -63,10 +55,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   ScrollController get _activeGridScrollController =>
       _isEditMode ? _editGridScrollController : _normalGridScrollController;
-  int _gridCrossAxisCount = 2;
-  double _gridViewportWidth = 0;
   bool _isEditMode = false;
   bool _isPerformanceMode = false;
+  int? _draggingPadId;
+  ({int rowIndex, int position})? _dropTarget;
+  Offset? _lastDragGlobalOffset;
+  final _editGridKey = GlobalKey();
   int? _recentlyRestoredSoundId;
   int? _highlightedPadId;
   bool _didAutoOpenCreateForCurrentEmptyState = false;
@@ -412,7 +406,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
     if (!_isDesktopPlatform || !mounted || _isEditMode) return;
     final board = _notifier.state.selectedBoard;
     if (board == null) return;
-    await _openAddPadFlow(board);
+    final pads = _notifier.state.pads;
+    final lastRowIndex = pads.isEmpty
+        ? 0
+        : pads.map((p) => p.pad.rowIndex).reduce(max);
+    await _openAddPadFlow(board, rowIndex: lastRowIndex);
   }
 
   Future<void> _handleUndoShortcut() async {
@@ -436,15 +434,27 @@ class _SamplerScreenState extends State<SamplerScreen> {
   static const double _itemWidth = 180;
   static const Duration _padEmphasisDuration = Duration(milliseconds: 2200);
 
-  Future<void> _openAddPadFlow(SoundBoard board) async {
+  Future<void> _openAddPadFlow(SoundBoard board, {int rowIndex = 0}) async {
+    final draftPadId = _notifier.beginDraftPad(rowIndex: rowIndex);
+    if (draftPadId == null) return;
+
     final selectedSoundIds = await PadDetailsScreen.pickSoundsForNewPad(
       context,
       notifier: _notifier,
+      draftPadId: draftPadId,
     );
-    if (!mounted || selectedSoundIds.isEmpty) return;
+    if (!mounted) {
+      _notifier.cancelDraftPad(draftPadId);
+      return;
+    }
+    if (selectedSoundIds.isEmpty) {
+      _notifier.cancelDraftPad(draftPadId);
+      return;
+    }
 
-    final padItem = await _notifier.createPadWithSoundsOnActiveBoard(
-      selectedSoundIds,
+    final padItem = await _notifier.commitDraftPad(
+      draftPadId: draftPadId,
+      soundIds: selectedSoundIds,
     );
     if (!mounted || padItem == null) return;
 
@@ -455,34 +465,161 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
+  static const double _editRowGap = 14;
+
+  void _updateDropTarget(int rowIndex, int position) {
+    if (_dropTarget?.rowIndex == rowIndex &&
+        _dropTarget?.position == position) {
+      return;
+    }
+    setState(() => _dropTarget = (rowIndex: rowIndex, position: position));
+  }
+
+  double _editWrapHeight(int padCount, double cellHeight, int slotsPerRow) {
+    if (padCount == 0) return cellHeight;
+    final lines = (padCount / slotsPerRow).ceil();
+    return lines * cellHeight + (lines - 1) * _editRowGap;
+  }
+
+  int _editIndexFromLocalRow(
+    Offset local,
+    int visibleCount,
+    double cellWidth,
+    double cellHeight,
+    int slotsPerRow,
+  ) {
+    if (visibleCount == 0) return 0;
+    final strideX = cellWidth + _editRowGap;
+    final strideY = cellHeight + _editRowGap;
+    final line = (local.dy / strideY).floor().clamp(0, 999);
+    final col = (local.dx / strideX).floor().clamp(0, slotsPerRow - 1);
+    var index = line * slotsPerRow + col;
+    if (index >= visibleCount) return visibleCount;
+    final cellLeft = col * strideX;
+    if (local.dx > cellLeft + cellWidth / 2) index++;
+    return index.clamp(0, visibleCount);
+  }
+
+  ({int rowIndex, int position})? _resolveEditDropTarget({
+    required Offset global,
+    required Map<int, List<PadItem>> rowMap,
+    required List<int> rowIndices,
+    required int newRowIndex,
+    required double cellWidth,
+    required double cellHeight,
+    required int slotsPerRow,
+    int? excludePadId,
+  }) {
+    final box =
+        _editGridKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+
+    final draggedId = excludePadId ?? _draggingPadId;
+    final local = box.globalToLocal(global);
+    var y = 0.0;
+
+    for (final rowIdx in rowIndices) {
+      final pads = rowMap[rowIdx] ?? [];
+      final height = _editWrapHeight(pads.length, cellHeight, slotsPerRow);
+      if (local.dy < y + height + _editRowGap / 2) {
+        final visibleCount =
+            pads.where((p) => p.pad.id != draggedId).length;
+        final pos = _editIndexFromLocalRow(
+          Offset(local.dx, local.dy - y),
+          visibleCount,
+          cellWidth,
+          cellHeight,
+          slotsPerRow,
+        );
+        return (rowIndex: rowIdx, position: pos);
+      }
+      y += height + _editRowGap;
+    }
+
+    if (local.dy >= y) {
+      return (rowIndex: newRowIndex, position: 0);
+    }
+    return null;
+  }
+
+  Offset _editIndicatorOffset({
+    required int rowIndex,
+    required int position,
+    required Map<int, List<PadItem>> rowMap,
+    required List<int> rowIndices,
+    required int newRowIndex,
+    required double cellWidth,
+    required double cellHeight,
+    required int slotsPerRow,
+  }) {
+    var y = 0.0;
+    final strideX = cellWidth + _editRowGap;
+    final strideY = cellHeight + _editRowGap;
+
+    for (final rowIdx in rowIndices) {
+      final pads = rowMap[rowIdx] ?? [];
+      final height = _editWrapHeight(pads.length, cellHeight, slotsPerRow);
+      if (rowIdx == rowIndex) {
+        final line = position ~/ slotsPerRow;
+        final col = position % slotsPerRow;
+        return Offset(col * strideX, y + line * strideY);
+      }
+      y += height + _editRowGap;
+    }
+
+    if (rowIndex == newRowIndex) {
+      return Offset(0, y);
+    }
+    return Offset.zero;
+  }
+
+  void _finishPadDrag(
+    int padId,
+    Offset globalOffset, {
+    required Map<int, List<PadItem>> rowMap,
+    required List<int> rowIndices,
+    required int newRowIndex,
+    required double cellWidth,
+    required double cellHeight,
+    required int slotsPerRow,
+  }) {
+    if (_draggingPadId != padId) return;
+
+    final target = _resolveEditDropTarget(
+      global: globalOffset,
+      rowMap: rowMap,
+      rowIndices: rowIndices,
+      newRowIndex: newRowIndex,
+      cellWidth: cellWidth,
+      cellHeight: cellHeight,
+      slotsPerRow: slotsPerRow,
+      excludePadId: padId,
+    );
+
+    setState(() {
+      _draggingPadId = null;
+      _dropTarget = null;
+      _lastDragGlobalOffset = null;
+    });
+
+    if (target == null) return;
+
+    unawaited(_notifier.movePadToPosition(
+      padId,
+      target.rowIndex,
+      target.position,
+    ));
+  }
+
   void _scrollPadIntoView(int padId) {
     void tryScroll() {
       if (!mounted) return;
       final controller = _activeGridScrollController;
       if (!controller.hasClients || controller.positions.length != 1) return;
-      final index = _notifier.state.pads.indexWhere((p) => p.pad.id == padId);
-      if (index < 0 || _gridViewportWidth <= 0) return;
 
-      const padding = 16.0;
-      const crossSpacing = 14.0;
-      const mainSpacing = 14.0;
-      const aspectRatio = 1.4;
-
-      final contentWidth = _gridViewportWidth - (padding * 2);
-      final cellWidth =
-          (contentWidth - crossSpacing * (_gridCrossAxisCount - 1)) /
-          _gridCrossAxisCount;
-      final cellHeight = cellWidth / aspectRatio;
-      final row = index ~/ _gridCrossAxisCount;
-      final targetTop = padding + row * (cellHeight + mainSpacing);
-      final viewport = controller.position.viewportDimension;
-      final offset = (targetTop - viewport * 0.25).clamp(
-        0.0,
-        controller.position.maxScrollExtent,
-      );
-
+      // Les deux modes utilisent un layout par lignes : scroll vers le bas.
       controller.animateTo(
-        offset,
+        controller.position.maxScrollExtent,
         duration: const Duration(milliseconds: 500),
         curve: Curves.easeInOutCubic,
       );
@@ -542,66 +679,45 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
-  Widget _buildAddButtonCard(BuildContext context, SoundBoard selectedBoard) {
+  Widget _buildAddToRowButton(
+    BuildContext context,
+    SoundBoard board, {
+    required int rowIndex,
+  }) {
     final scheme = Theme.of(context).colorScheme;
     const borderRadius = 14.0;
-    final card = Card(
-        key: const ValueKey('add_button'),
-        elevation: 0,
-        margin: EdgeInsets.zero,
-        color: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(borderRadius),
+    Widget card = Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+      child: CustomPaint(
+        foregroundPainter: _DashedRoundedRectPainter(
+          color: scheme.outlineVariant.withValues(alpha: 0.45),
+          radius: borderRadius,
         ),
-        child: CustomPaint(
-          foregroundPainter: _DashedRoundedRectPainter(
-            color: scheme.outlineVariant.withValues(alpha: 0.45),
-            radius: borderRadius,
-          ),
-          child: InkWell(
-            onTap: () => _openAddPadFlow(selectedBoard),
-            borderRadius: BorderRadius.circular(borderRadius),
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.add_circle_outline_rounded,
-                      size: 22,
-                      color: scheme.onSurfaceVariant.withValues(alpha: 0.55),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Ajouter un pad',
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: scheme.onSurfaceVariant.withValues(alpha: 0.55),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+        child: InkWell(
+          onTap: () => _openAddPadFlow(board, rowIndex: rowIndex),
+          borderRadius: BorderRadius.circular(borderRadius),
+          child: Center(
+            child: Icon(
+              Icons.add_rounded,
+              size: 24,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
           ),
         ),
-    );
-    if (!_isDesktopPlatform) {
-      return _wrapMusicRegieTapTarget(card);
-    }
-    return _wrapMusicRegieTapTarget(
-      Tooltip(
-        message: 'Ajouter un pad (Ctrl+N)',
-        child: card,
       ),
     );
+    if (_isDesktopPlatform) {
+      card = Tooltip(message: 'Ajouter un pad (Ctrl+N)', child: card);
+    }
+    return _wrapMusicRegieTapTarget(card);
   }
+
+
 
   Widget _buildPadsGrid(
     BuildContext context,
@@ -612,62 +728,246 @@ class _SamplerScreenState extends State<SamplerScreen> {
       key: ValueKey<bool>(_isEditMode),
       builder: (context, constraints) {
         final screenWidth = constraints.maxWidth;
-        int crossAxisCount = (screenWidth / _itemWidth).floor();
-        crossAxisCount = max(2, crossAxisCount);
-        _gridCrossAxisCount = crossAxisCount;
-        _gridViewportWidth = screenWidth;
-        final gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: crossAxisCount,
-          crossAxisSpacing: 14,
-          mainAxisSpacing: 14,
-          childAspectRatio: 1.4,
-        );
+        final crossAxisCount = max(2, (screenWidth / _itemWidth).floor());
+
+        // Dimensions communes aux deux modes.
+        final availWidth = screenWidth - 32.0;
+        final cellWidth =
+            (availWidth - (crossAxisCount - 1) * 14.0) / crossAxisCount;
+        final cellHeight = cellWidth / 1.4;
+
+        // Grouper les pads par rowIndex (ordre stable dans chaque ligne).
+        final rowMap = <int, List<PadItem>>{};
+        for (final pad in state.pads) {
+          rowMap.putIfAbsent(pad.pad.rowIndex, () => []).add(pad);
+        }
+        for (final pads in rowMap.values) {
+          pads.sort((a, b) => a.pad.sortOrder.compareTo(b.pad.sortOrder));
+        }
+        final rowIndices = rowMap.keys.toList()..sort();
+        final hasPads = rowMap.isNotEmpty;
 
         if (_isEditMode) {
-          return ReorderableGridView.builder(
-            key: const ValueKey('pads_reorder_grid'),
+          if (!hasPads) return const SizedBox.shrink();
+
+          final newRowIndex = rowIndices.last + 1;
+          final scheme = Theme.of(context).colorScheme;
+
+          Widget buildInsertionIndicator() {
+            return IgnorePointer(
+              child: SizedBox(
+                width: cellWidth,
+                height: cellHeight,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: scheme.primary.withValues(alpha: 0.55),
+                      width: 2,
+                    ),
+                    color: scheme.primary.withValues(alpha: 0.07),
+                  ),
+                ),
+              ),
+            );
+          }
+
+          Widget buildEditPadCell(PadItem padItem) {
+            final isDragging = _draggingPadId == padItem.pad.id;
+            return SizedBox(
+              key: ValueKey('pad_${padItem.pad.id}'),
+              width: cellWidth,
+              height: cellHeight,
+              child: Opacity(
+                opacity: isDragging ? 0.3 : 1,
+                child: Stack(
+                  children: [
+                    _buildPadWidget(context, state, padItem),
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Draggable<int>(
+                        data: padItem.pad.id,
+                        dragAnchorStrategy: (draggable, context, position) =>
+                            Offset(cellWidth / 2, cellHeight / 2),
+                        onDragStarted: () {
+                          HapticFeedback.selectionClick();
+                          final rowIdx = padItem.pad.rowIndex;
+                          final rowPads = rowMap[rowIdx] ?? [];
+                          final indexInRow = rowPads
+                              .indexWhere((p) => p.pad.id == padItem.pad.id);
+                          setState(() {
+                            _draggingPadId = padItem.pad.id;
+                            _lastDragGlobalOffset = null;
+                            _dropTarget = (
+                              rowIndex: rowIdx,
+                              position: indexInRow < 0 ? 0 : indexInRow,
+                            );
+                          });
+                        },
+                        onDragUpdate: (details) {
+                          _lastDragGlobalOffset = details.globalPosition;
+                          final target = _resolveEditDropTarget(
+                            global: details.globalPosition,
+                            rowMap: rowMap,
+                            rowIndices: rowIndices,
+                            newRowIndex: newRowIndex,
+                            cellWidth: cellWidth,
+                            cellHeight: cellHeight,
+                            slotsPerRow: crossAxisCount,
+                            excludePadId: padItem.pad.id,
+                          );
+                          if (target != null) {
+                            _updateDropTarget(target.rowIndex, target.position);
+                          }
+                        },
+                        onDragEnd: (details) {
+                          _finishPadDrag(
+                            padItem.pad.id,
+                            _lastDragGlobalOffset ?? details.offset,
+                            rowMap: rowMap,
+                            rowIndices: rowIndices,
+                            newRowIndex: newRowIndex,
+                            cellWidth: cellWidth,
+                            cellHeight: cellHeight,
+                            slotsPerRow: crossAxisCount,
+                          );
+                        },
+                        feedback: Material(
+                          type: MaterialType.transparency,
+                          child: Opacity(
+                            opacity: 0.88,
+                            child: SizedBox(
+                              width: cellWidth,
+                              height: cellHeight,
+                              child: PadCard(
+                                padItem: padItem,
+                                isEditMode: false,
+                              ),
+                            ),
+                          ),
+                        ),
+                        childWhenDragging: const SizedBox.shrink(),
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            Icons.drag_indicator,
+                            size: 18,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final dropTarget = _dropTarget;
+          final indicatorOffset = dropTarget == null
+              ? null
+              : _editIndicatorOffset(
+                  rowIndex: dropTarget.rowIndex,
+                  position: dropTarget.position,
+                  rowMap: rowMap,
+                  rowIndices: rowIndices,
+                  newRowIndex: newRowIndex,
+                  cellWidth: cellWidth,
+                  cellHeight: cellHeight,
+                  slotsPerRow: crossAxisCount,
+                );
+
+          return SingleChildScrollView(
+            key: const ValueKey('pads_edit_rows'),
             controller: _editGridScrollController,
             padding: const EdgeInsets.all(16),
-            gridDelegate: gridDelegate,
-            itemCount: state.pads.length,
-            dragEnabled: true,
-            dragStartDelay: Duration.zero,
-            dragWidgetBuilder: (index, child) {
-              return Material(
-                type: MaterialType.transparency,
-                child: Opacity(opacity: 0.95, child: child),
-              );
-            },
-            onDragStart: (index) {
-              HapticFeedback.selectionClick();
-            },
-            onReorder: (oldIndex, newIndex) {
-              if (oldIndex == newIndex) return;
-              final reordered = List<PadItem>.from(state.pads);
-              final moved = reordered.removeAt(oldIndex);
-              reordered.insert(newIndex, moved);
-              _notifier.reorderSoundsFromList(reordered);
-            },
-            itemBuilder: (context, index) {
-              return _buildPadWidget(context, state, state.pads[index]);
-            },
+            child: Stack(
+              key: _editGridKey,
+              clipBehavior: Clip.none,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < rowIndices.length; i++) ...[
+                      if (i > 0) const SizedBox(height: _editRowGap),
+                      Wrap(
+                        spacing: _editRowGap,
+                        runSpacing: _editRowGap,
+                        children: [
+                          for (final pad in rowMap[rowIndices[i]] ?? [])
+                            buildEditPadCell(pad),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: _editRowGap),
+                    SizedBox(height: cellHeight),
+                  ],
+                ),
+                if (_draggingPadId != null && indicatorOffset != null)
+                  Positioned(
+                    left: indicatorOffset.dx,
+                    top: indicatorOffset.dy,
+                    child: buildInsertionIndicator(),
+                  ),
+              ],
+            ),
           );
         }
 
-        final gridItems = <Object>[...state.pads, _addButtonMarker];
-        return GridView.builder(
-          key: const ValueKey('pads_normal_grid'),
+        // Mode normal : layout par lignes (rows).
+        final displayRowIndices = hasPads ? rowIndices : [0];
+        final nextRowIndex = hasPads ? rowIndices.last + 1 : null;
+
+        Widget buildRowAddButton(int rowIndex) {
+          return SizedBox(
+            key: ValueKey('add_row_$rowIndex'),
+            width: cellWidth,
+            height: cellHeight,
+            child: _buildAddToRowButton(
+              context,
+              selectedBoard,
+              rowIndex: rowIndex,
+            ),
+          );
+        }
+
+        return SingleChildScrollView(
+          key: const ValueKey('pads_normal_rows'),
           controller: _normalGridScrollController,
           padding: const EdgeInsets.all(16),
-          gridDelegate: gridDelegate,
-          itemCount: gridItems.length,
-          itemBuilder: (context, index) {
-            final item = gridItems[index];
-            if (item == _addButtonMarker) {
-              return _buildAddButtonCard(context, selectedBoard);
-            }
-            return _buildPadWidget(context, state, item as PadItem);
-          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (int i = 0; i < displayRowIndices.length; i++) ...[
+                if (i > 0) const SizedBox(height: 14),
+                Wrap(
+                  spacing: 14,
+                  runSpacing: 14,
+                  children: [
+                    for (final pad in rowMap[displayRowIndices[i]] ?? [])
+                      SizedBox(
+                        key: ValueKey('pad_${pad.pad.id}'),
+                        width: cellWidth,
+                        height: cellHeight,
+                        child: _buildPadWidget(context, state, pad),
+                      ),
+                    buildRowAddButton(displayRowIndices[i]),
+                  ],
+                ),
+              ],
+              if (nextRowIndex != null) ...[
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 14,
+                  runSpacing: 14,
+                  children: [buildRowAddButton(nextRowIndex)],
+                ),
+              ],
+            ],
+          ),
         );
       },
     );

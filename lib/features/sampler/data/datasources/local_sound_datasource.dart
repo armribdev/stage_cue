@@ -1045,10 +1045,10 @@ class LocalPadDataSource {
   Future<List<domain_pad.Pad>> getBoardPads(int boardId) async {
     final padRows = await _database.customSelect(
       '''
-      SELECT id, board_id, name, color, sort_order, play_mode, volume, created_at
+      SELECT id, board_id, name, color, sort_order, row_index, play_mode, volume, created_at
       FROM pads
       WHERE board_id = ?
-      ORDER BY sort_order, created_at
+      ORDER BY row_index, sort_order, created_at
       ''',
       variables: [Variable<int>(boardId)],
     ).get();
@@ -1074,6 +1074,7 @@ class LocalPadDataSource {
         name: padRow.read<String?>('name'),
         colorValue: padRow.read<int?>('color'),
         sortOrder: padRow.read<int>('sort_order'),
+        rowIndex: padRow.read<int>('row_index'),
         playMode: padRow.read<int>('play_mode') == 0
             ? domain_pad.PadPlayMode.random
             : domain_pad.PadPlayMode.sequential,
@@ -1086,7 +1087,7 @@ class LocalPadDataSource {
   }
 
   /// Crée un pad avec un son initial, retourne l'id du pad créé.
-  Future<int> createPad(int boardId, int soundId) async {
+  Future<int> createPad(int boardId, int soundId, {int rowIndex = 0}) async {
     final countRow = await _database.customSelect(
       'SELECT COUNT(*) AS c FROM pads WHERE board_id = ?',
       variables: [Variable<int>(boardId)],
@@ -1097,6 +1098,7 @@ class LocalPadDataSource {
       db.PadsCompanion.insert(
         boardId: boardId,
         sortOrder: Value(nextOrder),
+        rowIndex: Value(rowIndex),
       ),
     );
     await _database.into(_database.padSounds).insert(
@@ -1114,6 +1116,7 @@ class LocalPadDataSource {
     double volume = 1.0,
     domain_pad.PadPlayMode playMode = domain_pad.PadPlayMode.random,
     int? sortOrder,
+    int rowIndex = 0,
   }) async {
     final nextOrder = sortOrder ??
         (await _database.customSelect(
@@ -1128,6 +1131,7 @@ class LocalPadDataSource {
         name: Value(name),
         color: Value(colorValue),
         sortOrder: Value(nextOrder),
+        rowIndex: Value(rowIndex),
         playMode: Value(
           playMode == domain_pad.PadPlayMode.random
               ? db_sounds.PadPlayMode.random
@@ -1201,6 +1205,27 @@ class LocalPadDataSource {
     });
   }
 
+  /// Met à jour row_index et sort_order de chaque pad en une transaction.
+  Future<void> applyPadsLayout(
+    int boardId,
+    List<({int padId, int rowIndex, int sortOrder})> layout,
+  ) async {
+    await _database.transaction(() async {
+      for (final entry in layout) {
+        await (_database.update(_database.pads)
+              ..where(
+                (p) => p.id.equals(entry.padId) & p.boardId.equals(boardId),
+              ))
+            .write(
+          db.PadsCompanion(
+            rowIndex: Value(entry.rowIndex),
+            sortOrder: Value(entry.sortOrder),
+          ),
+        );
+      }
+    });
+  }
+
   /// Met à jour les réglages d'un pad.
   Future<void> updatePadSettings({
     required int padId,
@@ -1226,6 +1251,12 @@ class LocalPadDataSource {
     await (_database.update(_database.pads)
           ..where((p) => p.id.equals(padId)))
         .write(companion);
+  }
+
+  Future<void> updatePadRowIndex(int padId, int newRowIndex) async {
+    await (_database.update(_database.pads)
+          ..where((p) => p.id.equals(padId)))
+        .write(db.PadsCompanion(rowIndex: Value(newRowIndex)));
   }
 
   /// Duplique tous les pads d'une board vers une autre board.

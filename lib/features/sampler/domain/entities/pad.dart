@@ -8,6 +8,7 @@ class Pad {
   final String? name;
   final int? colorValue;
   final int sortOrder;
+  final int rowIndex;
   final PadPlayMode playMode;
   final double volume;
   final DateTime createdAt;
@@ -19,6 +20,7 @@ class Pad {
     this.name,
     this.colorValue,
     required this.sortOrder,
+    this.rowIndex = 0,
     this.playMode = PadPlayMode.random,
     this.volume = 1.0,
     required this.createdAt,
@@ -64,6 +66,8 @@ class Pad {
     bool clearName = false,
     int? colorValue,
     bool clearColor = false,
+    int? sortOrder,
+    int? rowIndex,
     PadPlayMode? playMode,
     double? volume,
     List<Sound>? sounds,
@@ -73,7 +77,8 @@ class Pad {
       boardId: boardId,
       name: clearName ? null : (name ?? this.name),
       colorValue: clearColor ? null : (colorValue ?? this.colorValue),
-      sortOrder: sortOrder,
+      sortOrder: sortOrder ?? this.sortOrder,
+      rowIndex: rowIndex ?? this.rowIndex,
       playMode: playMode ?? this.playMode,
       volume: volume ?? this.volume,
       createdAt: createdAt,

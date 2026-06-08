@@ -141,6 +141,9 @@ class PadItem {
   /// Index du slot en cours de téléchargement (détail pad, variante unique).
   int? downloadingSlotIndex;
 
+  /// Pad temporaire affiché pendant le choix des sons (id négatif, hors base).
+  bool isDraft = false;
+
   /// Révision par pad : incrémentée à chaque changement propre au pad (download,
   /// disponibilité). Permet un rebuild ciblé du seul PadButton via un
   /// [ListenableBuilder], sans reconstruire toute la grille (refonte UX P2).
@@ -278,6 +281,7 @@ class SamplerNotifier extends ChangeNotifier {
   double _musicVolumeBeforeMute = 1.0;
   static const _musicVolumeSliderFadeDuration = Duration(milliseconds: 120);
   _RemovedPadSnapshot? _lastRemovedPad;
+  int _draftPadIdSeq = -1;
   final _random = Random();
   bool _skipMusicAutoAdvance = false;
 
@@ -915,6 +919,8 @@ class SamplerNotifier extends ChangeNotifier {
 
       final padItems = <PadItem>[];
       final padsToPreload = <PadItem>[];
+      final draftPads =
+          previousItems.where((item) => item.isDraft).toList(growable: false);
 
       for (final pad in pads) {
         final existing = previousItemsById[pad.id];
@@ -936,8 +942,10 @@ class SamplerNotifier extends ChangeNotifier {
         padsToPreload.add(padItem);
       }
 
+      padItems.addAll(draftPads);
+
       await Future.wait(
-        padItems.map(_probePadLocalAvailability),
+        padItems.where((item) => !item.isDraft).map(_probePadLocalAvailability),
       );
 
       _syncMultipadNumbers(padItems);
@@ -2038,6 +2046,83 @@ class SamplerNotifier extends ChangeNotifier {
     );
   }
 
+  Future<void> updatePadRowIndex(int padId, int newRowIndex) async {
+    await _repository.updatePadRowIndex(padId, newRowIndex);
+    await loadSounds(silent: true);
+  }
+
+  /// Déplace un pad vers une position précise dans une ligne cible.
+  Future<void> movePadToPosition(
+    int padId,
+    int targetRowIndex,
+    int insertionPosition,
+  ) async {
+    final boardId = _activeBoardId;
+    if (boardId == null) return;
+
+    final drafts =
+        _state.pads.where((item) => item.isDraft).toList(growable: false);
+
+    // Groupe les pads par ligne (ordre stable).
+    final byRow = <int, List<PadItem>>{};
+    for (final p in _state.pads) {
+      if (p.isDraft) continue;
+      (byRow[p.pad.rowIndex] ??= []).add(p);
+    }
+    for (final list in byRow.values) {
+      list.sort((a, b) => a.pad.sortOrder.compareTo(b.pad.sortOrder));
+    }
+
+    int? sourceRowIndex;
+    var sourceIndexInRow = -1;
+    for (final entry in byRow.entries) {
+      final idx = entry.value.indexWhere((p) => p.pad.id == padId);
+      if (idx != -1) {
+        sourceRowIndex = entry.key;
+        sourceIndexInRow = idx;
+        break;
+      }
+    }
+    if (sourceRowIndex == null) return;
+
+    final moved = byRow[sourceRowIndex]!.removeAt(sourceIndexInRow);
+    final targetList = byRow[targetRowIndex] ?? <PadItem>[];
+    final clampedPos = insertionPosition.clamp(0, targetList.length);
+
+    targetList.insert(clampedPos, moved);
+    byRow[targetRowIndex] = targetList;
+
+    final allRows = byRow.keys.toList()..sort();
+    final layout = <({int padId, int rowIndex, int sortOrder})>[];
+    final newPadItems = <PadItem>[];
+    var globalSort = 0;
+    for (final rowIdx in allRows) {
+      for (final item in byRow[rowIdx]!) {
+        item.pad = item.pad.copyWith(
+          rowIndex: rowIdx,
+          sortOrder: globalSort,
+        );
+        layout.add((
+          padId: item.pad.id,
+          rowIndex: rowIdx,
+          sortOrder: globalSort,
+        ));
+        newPadItems.add(item);
+        globalSort++;
+      }
+    }
+
+    _state = _state.copyWith(pads: [...newPadItems, ...drafts]);
+    notifyListeners();
+
+    try {
+      await _repository.applyPadsLayout(boardId, layout);
+    } catch (e) {
+      debugPrint('Erreur lors du déplacement du pad: $e');
+      await loadSounds();
+    }
+  }
+
   void _applyMusicVolumeToPlayingPads({bool smooth = false}) {
     for (final padItem in _state.pads) {
       if (padItem.isPlaying && padItem.pad.isMusicPad) {
@@ -2127,6 +2212,11 @@ class SamplerNotifier extends ChangeNotifier {
 
   /// Retire un pad de la board.
   Future<bool> removeSound(PadItem padItem) async {
+    if (padItem.isDraft) {
+      cancelDraftPad(padItem.pad.id);
+      return true;
+    }
+
     final currentBoardId = _activeBoardId;
     if (currentBoardId == null) return false;
 
@@ -2378,21 +2468,118 @@ class SamplerNotifier extends ChangeNotifier {
     return padId;
   }
 
-  /// Crée un pad avec les sons donnés sur le plateau actif et recharge.
-  /// Retourne le [PadItem] résolu, ou null si aucun plateau actif.
-  Future<PadItem?> createPadWithSoundsOnActiveBoard(
-    List<int> soundIds,
-  ) async {
-    if (soundIds.isEmpty) return null;
+  /// Affiche immédiatement un pad brouillon (avant le choix des sons).
+  int? beginDraftPad({required int rowIndex}) {
     final boardId = _activeBoardId;
     if (boardId == null) return null;
+
+    final draftId = _draftPadIdSeq--;
+    final pad = Pad(
+      id: draftId,
+      boardId: boardId,
+      sortOrder: _state.pads.where((item) => !item.isDraft).length,
+      rowIndex: rowIndex,
+      createdAt: DateTime.now(),
+    );
+    final item = PadItem(pad: pad)..isDraft = true;
+    _finalizePadAvailability(item);
+
+    final pads = [..._state.pads, item];
+    _syncMultipadNumbers(pads);
+    _state = _state.copyWith(pads: pads);
+    notifyListeners();
+    return draftId;
+  }
+
+  /// Met à jour visuellement un pad brouillon pendant la sélection des sons.
+  Future<void> updateDraftPadSounds(
+    int draftPadId,
+    List<int> soundIds,
+  ) async {
+    final item = findPadItemById(draftPadId);
+    if (item == null || !item.isDraft) return;
+
+    final sounds = <Sound>[];
+    for (final id in soundIds) {
+      final sound = await _repository.getSoundById(id);
+      if (sound != null) sounds.add(sound);
+    }
+
+    item.pad = item.pad.copyWith(sounds: sounds);
+    item.syncSlotCount();
+    await _probePadLocalAvailability(item);
+    _syncMultipadNumbers(_state.pads);
+    item.bumpRevision();
+    notifyListeners();
+  }
+
+  /// Retire un pad brouillon sans toucher à la base.
+  void cancelDraftPad(int draftPadId) {
+    final item = findPadItemById(draftPadId);
+    if (item == null || !item.isDraft) return;
+
+    item.dispose();
+    final pads =
+        _state.pads.where((pad) => pad.pad.id != draftPadId).toList();
+    _syncMultipadNumbers(pads);
+    _state = _state.copyWith(pads: pads);
+    notifyListeners();
+  }
+
+  /// Persiste un pad brouillon et le remplace par le pad réel chargé.
+  Future<PadItem?> commitDraftPad({
+    required int draftPadId,
+    required List<int> soundIds,
+  }) async {
+    if (soundIds.isEmpty) {
+      cancelDraftPad(draftPadId);
+      return null;
+    }
+
+    final draftIndex = _state.pads.indexWhere(
+      (item) => item.pad.id == draftPadId && item.isDraft,
+    );
+    if (draftIndex < 0) return null;
+
+    final draft = _state.pads[draftIndex];
+    final boardId = _activeBoardId;
+    if (boardId == null) return null;
+
     final padId = await _repository.createPadWithSettings(
       boardId: boardId,
       soundIds: soundIds,
+      rowIndex: draft.pad.rowIndex,
     );
-    await loadSounds(boardId: boardId);
-    final padItem = _resolvePadItem(padId);
-    if (padItem != null) _maybeAutoDownloadPad(padItem);
+
+    final pads = await _loadPadsUseCase(boardId);
+    Pad? createdPad;
+    for (final pad in pads) {
+      if (pad.id == padId) {
+        createdPad = pad;
+        break;
+      }
+    }
+    if (createdPad == null) {
+      cancelDraftPad(draftPadId);
+      await loadSounds(boardId: boardId, silent: true);
+      final fallback = _resolvePadItem(padId);
+      if (fallback != null) _maybeAutoDownloadPad(fallback);
+      return fallback;
+    }
+
+    draft.dispose();
+    final padItem = PadItem(pad: createdPad);
+    await _probePadLocalAvailability(padItem);
+
+    final nextPads = List<PadItem>.from(_state.pads);
+    nextPads[draftIndex] = padItem;
+    _syncMultipadNumbers(nextPads);
+    _state = _state.copyWith(pads: nextPads);
+    _syncMusicStateWithPads();
+    notifyListeners();
+
+    unawaited(_loadPlayersForPadSafe(padItem, createdPad));
+    _maybeAutoDownloadPad(padItem);
     return padItem;
   }
 

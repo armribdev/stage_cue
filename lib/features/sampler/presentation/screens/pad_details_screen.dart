@@ -44,6 +44,7 @@ class PadDetailsScreen extends StatefulWidget {
   static Future<List<int>> pickSoundsForNewPad(
     BuildContext context, {
     required SamplerNotifier notifier,
+    required int draftPadId,
   }) async {
     final selectedSoundIds = <int>[];
     final tagCatalog = await notifier.loadTagCatalog();
@@ -53,6 +54,7 @@ class PadDetailsScreen extends StatefulWidget {
       child: _AddSoundSheet(
         notifier: notifier,
         tagCatalog: tagCatalog,
+        draftPadId: draftPadId,
         draftSelectedIds: selectedSoundIds,
       ),
     );
@@ -690,6 +692,7 @@ class _SoundSlotAvatar extends StatelessWidget {
 
 class _AddSoundSheet extends StatefulWidget {
   final int? padId;
+  final int? draftPadId;
   final SamplerNotifier notifier;
   final List<TagCategoryWithTags> tagCatalog;
   final List<int>? draftSelectedIds;
@@ -697,6 +700,7 @@ class _AddSoundSheet extends StatefulWidget {
 
   const _AddSoundSheet({
     this.padId,
+    this.draftPadId,
     required this.notifier,
     required this.tagCatalog,
     this.draftSelectedIds,
@@ -758,14 +762,20 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
     }
   }
 
+  Future<void> _syncDraftPadVisual(List<int> draftIds) async {
+    final draftPadId = widget.draftPadId;
+    if (draftPadId == null) return;
+    await widget.notifier.updateDraftPadSounds(draftPadId, draftIds);
+  }
+
   Future<void> _addSound(Sound sound) async {
     if (_padSoundIds.contains(sound.id)) return;
     final draftIds = widget.draftSelectedIds;
     if (draftIds != null) {
-      setState(() {
-        draftIds.add(sound.id);
-        _syncPadSoundIds();
-      });
+      draftIds.add(sound.id);
+      await _syncDraftPadVisual(draftIds);
+      if (!mounted) return;
+      setState(_syncPadSoundIds);
       if (mounted) Navigator.of(context).pop();
       return;
     }
@@ -783,10 +793,10 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
     if (!_padSoundIds.contains(sound.id)) return;
     final draftIds = widget.draftSelectedIds;
     if (draftIds != null) {
-      setState(() {
-        draftIds.remove(sound.id);
-        _syncPadSoundIds();
-      });
+      draftIds.remove(sound.id);
+      await _syncDraftPadVisual(draftIds);
+      if (!mounted) return;
+      setState(_syncPadSoundIds);
       return;
     }
     if (_padSoundIds.length <= 1) return;
