@@ -41,6 +41,16 @@ class GoogleDriveClient implements DriveClient {
   /// Échappe les apostrophes pour les requêtes `q` de l'API Drive.
   String _escape(String value) => value.replaceAll("'", r"\'");
 
+  /// Exécute [fn] et convertit un 401 en [DriveAuthException].
+  Future<T> _guard<T>(Future<T> Function() fn) async {
+    try {
+      return await fn();
+    } on drive.DetailedApiRequestError catch (e) {
+      if (e.status == 401) throw const DriveAuthException();
+      rethrow;
+    }
+  }
+
   @override
   Future<List<DriveSharedDrive>> listSharedDrives() async {
     final results = <DriveSharedDrive>[];
@@ -91,27 +101,29 @@ class GoogleDriveClient implements DriveClient {
     required String q,
     String? sharedDriveId,
     int pageSize = 200,
-  }) async {
-    final results = <DriveFile>[];
-    String? pageToken;
-    do {
-      final fileList = await _api.files.list(
-        q: q,
-        spaces: 'drive',
-        $fields: 'nextPageToken, files($_fileFields)',
-        pageSize: pageSize,
-        pageToken: pageToken,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true,
-        driveId: sharedDriveId,
-        corpora: sharedDriveId != null ? 'drive' : null,
-      );
-      for (final f in fileList.files ?? const <drive.File>[]) {
-        results.add(_toDriveFile(f));
-      }
-      pageToken = fileList.nextPageToken;
-    } while (pageToken != null);
-    return results;
+  }) {
+    return _guard(() async {
+      final results = <DriveFile>[];
+      String? pageToken;
+      do {
+        final fileList = await _api.files.list(
+          q: q,
+          spaces: 'drive',
+          $fields: 'nextPageToken, files($_fileFields)',
+          pageSize: pageSize,
+          pageToken: pageToken,
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
+          driveId: sharedDriveId,
+          corpora: sharedDriveId != null ? 'drive' : null,
+        );
+        for (final f in fileList.files ?? const <drive.File>[]) {
+          results.add(_toDriveFile(f));
+        }
+        pageToken = fileList.nextPageToken;
+      } while (pageToken != null);
+      return results;
+    });
   }
 
   @override
@@ -156,21 +168,23 @@ class GoogleDriveClient implements DriveClient {
     required Stream<List<int>> data,
     required int length,
     String? mimeType,
-  }) async {
-    final metadata = drive.File()
-      ..name = name
-      ..parents = [parentId];
-    final media = drive.Media(
-      data,
-      length,
-      contentType: mimeType ?? 'application/octet-stream',
-    );
-    final created = await _api.files.create(
-      metadata,
-      uploadMedia: media,
-      $fields: _fileFields,
-    );
-    return _toDriveFile(created);
+  }) {
+    return _guard(() async {
+      final metadata = drive.File()
+        ..name = name
+        ..parents = [parentId];
+      final media = drive.Media(
+        data,
+        length,
+        contentType: mimeType ?? 'application/octet-stream',
+      );
+      final created = await _api.files.create(
+        metadata,
+        uploadMedia: media,
+        $fields: _fileFields,
+      );
+      return _toDriveFile(created);
+    });
   }
 
   @override
@@ -179,19 +193,21 @@ class GoogleDriveClient implements DriveClient {
     required Stream<List<int>> data,
     required int length,
     String? mimeType,
-  }) async {
-    final media = drive.Media(
-      data,
-      length,
-      contentType: mimeType ?? 'application/octet-stream',
-    );
-    final updated = await _api.files.update(
-      drive.File(),
-      fileId,
-      uploadMedia: media,
-      $fields: _fileFields,
-    );
-    return _toDriveFile(updated);
+  }) {
+    return _guard(() async {
+      final media = drive.Media(
+        data,
+        length,
+        contentType: mimeType ?? 'application/octet-stream',
+      );
+      final updated = await _api.files.update(
+        drive.File(),
+        fileId,
+        uploadMedia: media,
+        $fields: _fileFields,
+      );
+      return _toDriveFile(updated);
+    });
   }
 
   @override
@@ -207,50 +223,55 @@ class GoogleDriveClient implements DriveClient {
       ) as drive.File;
       return _toDriveFile(f);
     } on drive.DetailedApiRequestError catch (e) {
+      if (e.status == 401) throw const DriveAuthException();
       if (e.status == 404) return null;
       rethrow;
     }
   }
 
   @override
-  Future<List<int>> downloadBytes(String fileId) async {
-    final media = await _api.files.get(
-      fileId,
-      downloadOptions: drive.DownloadOptions.fullMedia,
-      supportsAllDrives: true,
-    ) as drive.Media;
-    final bytes = <int>[];
-    await for (final chunk in media.stream) {
-      bytes.addAll(chunk);
-    }
-    return bytes;
+  Future<List<int>> downloadBytes(String fileId) {
+    return _guard(() async {
+      final media = await _api.files.get(
+        fileId,
+        downloadOptions: drive.DownloadOptions.fullMedia,
+        supportsAllDrives: true,
+      ) as drive.Media;
+      final bytes = <int>[];
+      await for (final chunk in media.stream) {
+        bytes.addAll(chunk);
+      }
+      return bytes;
+    });
   }
 
   @override
   Future<void> downloadToFile({
     required String fileId,
     required String destinationPath,
-  }) async {
-    final media = await _api.files.get(
-      fileId,
-      downloadOptions: drive.DownloadOptions.fullMedia,
-      supportsAllDrives: true,
-    ) as drive.Media;
+  }) {
+    return _guard(() async {
+      final media = await _api.files.get(
+        fileId,
+        downloadOptions: drive.DownloadOptions.fullMedia,
+        supportsAllDrives: true,
+      ) as drive.Media;
 
-    final destination = File(destinationPath);
-    await destination.parent.create(recursive: true);
-    // Écriture vers un fichier temporaire puis renommage atomique : évite un
-    // fichier partiel si le téléchargement échoue en cours de route.
-    final tmp = File('$destinationPath.part');
-    final sink = tmp.openWrite();
-    try {
-      await media.stream.pipe(sink);
-    } catch (_) {
-      await sink.close();
-      if (await tmp.exists()) await tmp.delete();
-      rethrow;
-    }
-    await tmp.rename(destinationPath);
+      final destination = File(destinationPath);
+      await destination.parent.create(recursive: true);
+      // Écriture vers un fichier temporaire puis renommage atomique : évite un
+      // fichier partiel si le téléchargement échoue en cours de route.
+      final tmp = File('$destinationPath.part');
+      final sink = tmp.openWrite();
+      try {
+        await media.stream.pipe(sink);
+      } catch (_) {
+        await sink.close();
+        if (await tmp.exists()) await tmp.delete();
+        rethrow;
+      }
+      await tmp.rename(destinationPath);
+    });
   }
 
   @override
@@ -272,9 +293,8 @@ class GoogleDriveClient implements DriveClient {
       }
       return owners.first.emailAddress;
     } on drive.DetailedApiRequestError catch (e) {
-      if (e.status == 404 || e.status == 403) {
-        return null;
-      }
+      if (e.status == 401) throw const DriveAuthException();
+      if (e.status == 404 || e.status == 403) return null;
       rethrow;
     }
   }
@@ -298,9 +318,8 @@ class GoogleDriveClient implements DriveClient {
       }
       return owners.first.emailAddress;
     } on drive.DetailedApiRequestError catch (e) {
-      if (e.status == 404 || e.status == 403) {
-        return null;
-      }
+      if (e.status == 401) throw const DriveAuthException();
+      if (e.status == 404 || e.status == 403) return null;
       rethrow;
     }
   }
