@@ -69,8 +69,17 @@ class _SamplerScreenState extends State<SamplerScreen> {
   bool _didAutoOpenCreateForCurrentEmptyState = false;
   bool _isMusicRegieAdvanced = false;
   bool _isMusicRegieLocked = false;
+  double _musicRegieOccupiedHeight = 0;
 
   static const _musicRegieTapGroup = 'music-regie-dismiss';
+  static const _padsGridPadding = 16.0;
+
+  EdgeInsets get _padsGridScrollPadding => EdgeInsets.fromLTRB(
+        _padsGridPadding,
+        _padsGridPadding,
+        _padsGridPadding,
+        _padsGridPadding + _musicRegieOccupiedHeight,
+      );
 
   bool get _isDesktopPlatform =>
       !kIsWeb &&
@@ -912,7 +921,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
           return SingleChildScrollView(
             key: const ValueKey('pads_edit_rows'),
             controller: _editGridScrollController,
-            padding: const EdgeInsets.all(16),
+            padding: _padsGridScrollPadding,
             child: Stack(
               key: _editGridKey,
               clipBehavior: Clip.none,
@@ -981,7 +990,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
         return SingleChildScrollView(
           key: const ValueKey('pads_normal_rows'),
           controller: _normalGridScrollController,
-          padding: const EdgeInsets.all(16),
+          padding: _padsGridScrollPadding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1451,6 +1460,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
             unawaited(_notifier.fadeOutCurrentMusic(duration)),
         onTransitionToNext: (duration) =>
             unawaited(_notifier.crossfadeToNextMusic(duration)),
+        onOccupiedHeightChanged: (height) {
+          if ((height - _musicRegieOccupiedHeight).abs() < 0.5) return;
+          setState(() => _musicRegieOccupiedHeight = height);
+        },
       ),
     );
   }

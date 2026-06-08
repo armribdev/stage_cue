@@ -62,6 +62,9 @@ class MusicPreviewPanel extends StatefulWidget {
   final bool isLocked;
   final ValueChanged<bool>? onLockedChanged;
 
+  /// Hauteur occupée en bas de l'écran — pour réserver l'espace sous la grille.
+  final ValueChanged<double>? onOccupiedHeightChanged;
+
   const MusicPreviewPanel({
     super.key,
     required this.state,
@@ -80,6 +83,7 @@ class MusicPreviewPanel extends StatefulWidget {
     this.isDesktop = false,
     this.isLocked = false,
     this.onLockedChanged,
+    this.onOccupiedHeightChanged,
   });
 
   @override
@@ -106,6 +110,7 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
   double _drawerDragProgress = 0;
   double _drawerDragStartProgress = 0;
   double _drawerDragAccumulated = 0;
+  double _lastReportedOccupiedHeight = -1;
 
   Duration get _effectiveTransitionDuration =>
       _selectedTransitionDuration ?? _instantTransition;
@@ -268,6 +273,12 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
     setState(() => _expandedHeight = height);
   }
 
+  void _notifyOccupiedHeight(double height) {
+    if ((height - _lastReportedOccupiedHeight).abs() < 0.5) return;
+    _lastReportedOccupiedHeight = height;
+    widget.onOccupiedHeightChanged?.call(height);
+  }
+
   _MusicRegieDrawer _buildRegieDrawer({
     required bool isAdvanced,
     double? expandProgress,
@@ -307,13 +318,16 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
   Widget _buildDesktopPanel(double panelWidth) {
     return Align(
       alignment: Alignment.bottomCenter,
-      child: SizedBox(
-        width: panelWidth,
-        child: AnimatedSize(
-          duration: _drawerSnapDuration,
-          curve: _drawerSnapCurve,
-          alignment: Alignment.topCenter,
-          child: _buildRegieDrawer(isAdvanced: widget.isAdvanced),
+      child: _ReportSize(
+        onChange: (size) => _notifyOccupiedHeight(size.height),
+        child: SizedBox(
+          width: panelWidth,
+          child: AnimatedSize(
+            duration: _drawerSnapDuration,
+            curve: _drawerSnapCurve,
+            alignment: Alignment.topCenter,
+            child: _buildRegieDrawer(isAdvanced: widget.isAdvanced),
+          ),
         ),
       ),
     );
@@ -366,27 +380,33 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
                 onVerticalDragCancel: _handleDrawerDragCancel,
               );
 
+              Widget panel;
               if (!_hasDrawerHeights) {
-                return SizedBox(width: panelWidth, child: drawer);
+                panel = SizedBox(width: panelWidth, child: drawer);
+              } else {
+                final height = lerpDouble(
+                  _compactHeight,
+                  _expandedHeight,
+                  progress,
+                )!;
+
+                panel = SizedBox(
+                  width: panelWidth,
+                  height: height,
+                  child: ClipRect(
+                    child: OverflowBox(
+                      alignment: Alignment.topCenter,
+                      minHeight: _expandedHeight,
+                      maxHeight: _expandedHeight,
+                      child: drawer,
+                    ),
+                  ),
+                );
               }
 
-              final height = lerpDouble(
-                _compactHeight,
-                _expandedHeight,
-                progress,
-              )!;
-
-              return SizedBox(
-                width: panelWidth,
-                height: height,
-                child: ClipRect(
-                  child: OverflowBox(
-                    alignment: Alignment.topCenter,
-                    minHeight: _expandedHeight,
-                    maxHeight: _expandedHeight,
-                    child: drawer,
-                  ),
-                ),
+              return _ReportSize(
+                onChange: (size) => _notifyOccupiedHeight(size.height),
+                child: panel,
               );
             },
           ),
