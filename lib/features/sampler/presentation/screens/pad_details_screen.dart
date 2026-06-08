@@ -515,7 +515,8 @@ class _SoundRowState extends State<_SoundRow> {
 
   bool _canDownload(PadSoundAvailability availability) =>
       availability == PadSoundAvailability.needsDownload ||
-      availability == PadSoundAvailability.offline;
+      availability == PadSoundAvailability.offline ||
+      availability == PadSoundAvailability.missingFile;
 
   Future<void> _downloadSound() async {
     final padItem = _resolvedPadItem();

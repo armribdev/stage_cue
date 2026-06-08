@@ -447,6 +447,25 @@ class SamplerNotifier extends ChangeNotifier {
     };
   }
 
+  bool _isRetryableMissingLibrarySound(Sound sound) =>
+      sound.libraryId != null &&
+      sound.relativePath != null &&
+      sound.relativePath!.isNotEmpty;
+
+  Future<void> _prepareRetryForMissingLibrarySound(
+    PadItem padItem,
+    int index,
+  ) async {
+    final sound = padItem.pad.sounds[index];
+    if (!_isRetryableMissingLibrarySound(sound)) return;
+
+    await _libraryRepository?.clearPlaybackBlockForSound(sound);
+    padItem.slots[index] = PadSoundSlot(
+      availability: PadSoundAvailability.needsDownload,
+    );
+    _finalizePadAvailability(padItem);
+  }
+
   Future<PadSoundAvailability> _probeSoundLocalAvailability(Sound sound) async {
     final libraryRepository = _libraryRepository;
     if (libraryRepository != null &&
@@ -1138,7 +1157,12 @@ class SamplerNotifier extends ChangeNotifier {
     if (index < 0 || index >= resolved.slots.length) return false;
     final slot = resolved.slots[index];
     if (slot.isReady) return true;
-    if (slot.availability == PadSoundAvailability.missingFile) return false;
+    if (slot.availability == PadSoundAvailability.missingFile) {
+      if (!_isRetryableMissingLibrarySound(resolved.pad.sounds[index])) {
+        return false;
+      }
+      await _prepareRetryForMissingLibrarySound(resolved, index);
+    }
 
     try {
       return await _downloadQueue.enqueue<bool>(
@@ -1159,7 +1183,13 @@ class SamplerNotifier extends ChangeNotifier {
 
     final slot = padItem.slots[index];
     if (slot.isReady) return true;
-    if (slot.availability == PadSoundAvailability.missingFile) return false;
+    if (slot.availability == PadSoundAvailability.missingFile &&
+        !_isRetryableMissingLibrarySound(padItem.pad.sounds[index])) {
+      return false;
+    }
+    if (slot.availability == PadSoundAvailability.missingFile) {
+      await _prepareRetryForMissingLibrarySound(padItem, index);
+    }
 
     padItem.downloadingSlotIndex = index;
     _notifyPad(padItem);
@@ -1221,8 +1251,10 @@ class SamplerNotifier extends ChangeNotifier {
     for (var i = 0; i < padItem.slots.length; i++) {
       final slot = padItem.slots[i];
       if (slot.isReady) continue;
-      // Fichier local corrompu / illisible : inutile de boucler sur le téléchargement.
-      if (slot.availability == PadSoundAvailability.missingFile) continue;
+      if (slot.availability == PadSoundAvailability.missingFile) {
+        if (!_isRetryableMissingLibrarySound(padItem.pad.sounds[i])) continue;
+        await _prepareRetryForMissingLibrarySound(padItem, i);
+      }
       pendingIndices.add(i);
     }
     if (pendingIndices.isEmpty) {
@@ -2350,7 +2382,9 @@ class SamplerNotifier extends ChangeNotifier {
     if (_libraryRepository == null) return;
     if (slotIndex < 0 || slotIndex >= padItem.slots.length) return;
     final slot = padItem.slots[slotIndex];
-    if (slot.isReady || slot.availability == PadSoundAvailability.missingFile) {
+    if (slot.isReady) return;
+    if (slot.availability == PadSoundAvailability.missingFile &&
+        !_isRetryableMissingLibrarySound(padItem.pad.sounds[slotIndex])) {
       return;
     }
     unawaited(
