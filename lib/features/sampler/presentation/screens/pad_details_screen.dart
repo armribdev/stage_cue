@@ -542,81 +542,99 @@ class _SoundRowState extends State<_SoundRow> {
         final canDownload = _canDownload(availability) && !isDownloading;
         final mutedColor = scheme.onSurface.withValues(alpha: 0.42);
 
+        final soundContent = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SoundSlotAvatar(
+              type: sound.type,
+              isLocal: isLocal,
+              isDownloading: isDownloading,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    sound.displayName ?? sound.title,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: isLocal ? null : mutedColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    sound.typeDisplayLabel,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: isLocal
+                          ? scheme.onSurfaceVariant
+                          : mutedColor,
+                    ),
+                  ),
+                  if (_loaded && _tagIds.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 2,
+                      children: [
+                        for (final cat in widget.tagCatalog)
+                          ...cat.tags
+                              .where((t) => _tagIds.contains(t.id))
+                              .map(
+                                (t) => Chip(
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  padding: EdgeInsets.zero,
+                                  label: Text(
+                                    t.name,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall,
+                                  ),
+                                  backgroundColor:
+                                      Color(cat.category.color).withAlpha(40),
+                                ),
+                              ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (widget.canRemove)
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline, size: 20),
+                tooltip: 'Retirer ce son du pad',
+                onPressed: widget.onRemove,
+                color: scheme.error,
+                style: canDownload
+                    ? IconButton.styleFrom(
+                        hoverColor: Colors.transparent,
+                      )
+                    : null,
+              ),
+          ],
+        );
+
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SoundSlotAvatar(
-                type: sound.type,
-                isLocal: isLocal,
-                isDownloading: isDownloading,
-                onTap: canDownload ? () => unawaited(_downloadSound()) : null,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: InkWell(
-                  onTap: canDownload ? () => unawaited(_downloadSound()) : null,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        sound.displayName ?? sound.title,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: isLocal ? null : mutedColor,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        sound.typeDisplayLabel,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isLocal
-                              ? scheme.onSurfaceVariant
-                              : mutedColor,
-                        ),
-                      ),
-                      if (_loaded && _tagIds.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 4,
-                          runSpacing: 2,
-                          children: [
-                            for (final cat in widget.tagCatalog)
-                              ...cat.tags
-                                  .where((t) => _tagIds.contains(t.id))
-                                  .map(
-                                    (t) => Chip(
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                      padding: EdgeInsets.zero,
-                                      label: Text(
-                                        t.name,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall,
-                                      ),
-                                      backgroundColor:
-                                          Color(cat.category.color).withAlpha(40),
-                                    ),
-                                  ),
-                          ],
-                        ),
-                      ],
-                    ],
+          child: canDownload
+              ? Tooltip(
+                  message: 'Télécharger',
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () => unawaited(_downloadSound()),
+                      borderRadius: BorderRadius.circular(8),
+                      hoverColor: scheme.onSurface.withValues(alpha: 0.08),
+                      splashColor: scheme.onSurface.withValues(alpha: 0.12),
+                      child: soundContent,
+                    ),
                   ),
-                ),
-              ),
-              if (widget.canRemove)
-                IconButton(
-                  icon: const Icon(Icons.remove_circle_outline, size: 20),
-                  tooltip: 'Retirer ce son du pad',
-                  onPressed: widget.onRemove,
-                  color: scheme.error,
-                ),
-            ],
-          ),
+                )
+              : soundContent,
         );
       },
     );
@@ -628,13 +646,11 @@ class _SoundSlotAvatar extends StatelessWidget {
   final SoundType type;
   final bool isLocal;
   final bool isDownloading;
-  final VoidCallback? onTap;
 
   const _SoundSlotAvatar({
     required this.type,
     required this.isLocal,
     required this.isDownloading,
-    this.onTap,
   });
 
   static const double _radius = 16;
@@ -673,17 +689,6 @@ class _SoundSlotAvatar extends StatelessWidget {
         ],
       ),
     );
-
-    if (onTap != null) {
-      avatar = Tooltip(
-        message: 'Télécharger',
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(_radius + 4),
-          child: avatar,
-        ),
-      );
-    }
 
     return avatar;
   }
