@@ -126,6 +126,8 @@ class SamplerState {
 /// Item de pad — un [PadSoundSlot] par son, index aligné sur [Pad.sounds].
 class PadItem {
   Pad pad;
+  /// Numéro du multipad sur le plateau (1-based), null si pad simple.
+  int? multipadNumber;
   final List<PadSoundSlot> slots;
   bool isPlaying;
   int _nextSoundIndex;
@@ -165,6 +167,9 @@ class PadItem {
       slots.removeLast().dispose();
     }
   }
+
+  String get displayName =>
+      pad.resolveDisplayName(multipadNumber: multipadNumber);
 
   int get totalSoundCount => pad.sounds.length;
 
@@ -500,6 +505,13 @@ class SamplerNotifier extends ChangeNotifier {
   PadItem _resolveBoardPadItem(PadItem padItem) =>
       findPadItemById(padItem.pad.id) ?? padItem;
 
+  void _syncMultipadNumbers(Iterable<PadItem> padItems) {
+    final numbers = Pad.multipadNumbersFor(padItems.map((item) => item.pad));
+    for (final item in padItems) {
+      item.multipadNumber = numbers[item.pad.id];
+    }
+  }
+
   /// Recharge le type (et métadonnées) d'un son dans le pad après résolution du fichier.
   Future<void> _syncPadSoundMetadata(PadItem padItem, int index) async {
     if (index < 0 || index >= padItem.pad.sounds.length) return;
@@ -569,7 +581,7 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<void> _loadPlayersForPadSafe(PadItem padItem, Pad pad) async {
-    final padLabel = pad.displayName;
+    final padLabel = padItem.displayName;
     try {
       await _loadPlayersForPad(padItem, pad);
       _notifyPad(padItem);
@@ -928,6 +940,7 @@ class SamplerNotifier extends ChangeNotifier {
         padItems.map(_probePadLocalAvailability),
       );
 
+      _syncMultipadNumbers(padItems);
       _state = _state.copyWith(pads: padItems, isLoading: false, error: null);
       final keptIds = padItems.map((item) => item.pad.id).toSet();
       final removedItems =
@@ -2098,6 +2111,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   Future<void> reorderSoundsFromList(List<PadItem> newOrder) async {
     if (_activeBoardId == null) return;
+    _syncMultipadNumbers(newOrder);
     _state = _state.copyWith(pads: newOrder);
     notifyListeners();
     try {
@@ -2142,10 +2156,10 @@ class SamplerNotifier extends ChangeNotifier {
     }
     padItem.dispose();
 
-    _state = _state.copyWith(
-      pads: _state.pads.where((p) => p != padItem).toList(),
-      error: null,
-    );
+    final remainingPads =
+        _state.pads.where((p) => p != padItem).toList();
+    _syncMultipadNumbers(remainingPads);
+    _state = _state.copyWith(pads: remainingPads, error: null);
     _syncMusicStateWithPads();
     notifyListeners();
     return true;
@@ -2199,6 +2213,7 @@ class SamplerNotifier extends ChangeNotifier {
     );
     padItem.syncSlotCount();
     _finalizePadAvailability(padItem);
+    _syncMultipadNumbers(_state.pads);
     _notifyPad(padItem);
     notifyListeners();
   }
@@ -2213,6 +2228,7 @@ class SamplerNotifier extends ChangeNotifier {
     }
     padItem.syncSlotCount();
     _finalizePadAvailability(padItem);
+    _syncMultipadNumbers(_state.pads);
     _notifyPad(padItem);
     notifyListeners();
   }

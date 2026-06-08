@@ -1547,7 +1547,7 @@ class _CueSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final title = padItem?.pad.displayName ?? emptyLabel;
+    final title = padItem?.displayName ?? emptyLabel;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1650,7 +1650,7 @@ class _OnAirCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        padItem?.pad.displayName ?? 'Aucune musique lancée',
+                        padItem?.displayName ?? 'Aucune musique lancée',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context)
@@ -1952,7 +1952,7 @@ class _QueueRow extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  padItem.pad.displayName,
+                  padItem.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(

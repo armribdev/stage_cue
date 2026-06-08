@@ -25,8 +25,27 @@ class Pad {
     this.sounds = const [],
   });
 
-  String get displayName {
+  /// Numéros 1-based des multipads dans l'ordre d'affichage du plateau.
+  static Map<int, int> multipadNumbersFor(Iterable<Pad> padsInBoardOrder) {
+    var index = 0;
+    final numbers = <int, int>{};
+    for (final pad in padsInBoardOrder) {
+      if (pad.sounds.length > 1) {
+        index++;
+        numbers[pad.id] = index;
+      }
+    }
+    return numbers;
+  }
+
+  String get displayName => resolveDisplayName();
+
+  String resolveDisplayName({int? multipadNumber}) {
     if (name != null && name!.isNotEmpty) return name!;
+    if (sounds.length > 1) {
+      final number = multipadNumber;
+      return number != null ? 'Multipad #$number' : 'Multipad';
+    }
     if (sounds.isNotEmpty) {
       return sounds.first.displayName ?? sounds.first.title;
     }
