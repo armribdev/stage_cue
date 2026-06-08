@@ -847,55 +847,25 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
                 isOnPad && !isBusy && (isDraft || _padSoundIds.length > 1);
             final canAdd = !isOnPad && !isBusy;
             final canToggle = canAdd || canRemove;
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              elevation: 0,
-              color: isOnPad
-                  ? scheme.primaryContainer.withValues(alpha: 0.35)
-                  : null,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(
-                  color: isOnPad
-                      ? scheme.primary.withValues(alpha: 0.45)
-                      : scheme.outlineVariant.withValues(alpha: 0.4),
-                ),
-              ),
+            return Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              clipBehavior: Clip.antiAlias,
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
+                hoverColor: scheme.onSurface.withValues(alpha: 0.08),
+                splashColor: scheme.onSurface.withValues(alpha: 0.12),
                 onTap: canToggle ? () => unawaited(_toggleSound(s)) : null,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    children: [
-                      SoundTypeAvatar(type: s.type, radius: 18),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              s.displayName ?? s.title,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            Text(
-                              s.typeDisplayLabel,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: scheme.onSurfaceVariant),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (isBusy)
-                        SizedBox(
+                child: ListTile(
+                  tileColor: Colors.transparent,
+                  hoverColor: Colors.transparent,
+                  splashColor: Colors.transparent,
+                  focusColor: Colors.transparent,
+                  leading: SoundTypeAvatar(type: s.type, radius: 18),
+                  title: Text(s.displayName ?? s.title),
+                  subtitle: Text(s.typeDisplayLabel),
+                  trailing: isBusy
+                      ? SizedBox(
                           width: 24,
                           height: 24,
                           child: CircularProgressIndicator(
@@ -903,15 +873,12 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
                             color: scheme.primary,
                           ),
                         )
-                      else if (isOnPad)
-                        Icon(Icons.check_rounded, color: scheme.primary)
-                      else
-                        Icon(
-                          Icons.add_rounded,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                    ],
-                  ),
+                      : isOnPad
+                          ? Icon(Icons.check_rounded, color: scheme.primary)
+                          : Icon(
+                              Icons.add_rounded,
+                              color: scheme.onSurfaceVariant,
+                            ),
                 ),
               ),
             );
