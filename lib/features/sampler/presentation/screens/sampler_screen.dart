@@ -1068,9 +1068,29 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     final reason = resolved.unavailabilityReason;
 
-    // BLOQUÉ : feedback non-bloquant (jamais de modale auto, jamais de clic mort).
-    if (reason == PadUnavailabilityReason.offline ||
-        reason == PadUnavailabilityReason.missingFile) {
+    if (reason == PadUnavailabilityReason.offline) {
+      debugPrint('[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason');
+      unawaited(HapticFeedback.heavyImpact());
+      _showBlockedPadFeedback(resolved, reason);
+      return;
+    }
+
+    // Fichier introuvable : retenter le téléchargement pour les sons Drive.
+    if (reason == PadUnavailabilityReason.missingFile) {
+      final canRetryFromDrive = resolved.pad.sounds.any(
+        (sound) =>
+            sound.libraryId != null &&
+            sound.relativePath != null &&
+            sound.relativePath!.isNotEmpty,
+      );
+      if (canRetryFromDrive) {
+        debugPrint(
+          '[TAP] pad="${resolved.pad.displayName}" → retry Drive download',
+        );
+        unawaited(HapticFeedback.selectionClick());
+        await _preparePad(resolved);
+        return;
+      }
       debugPrint('[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason');
       unawaited(HapticFeedback.heavyImpact());
       _showBlockedPadFeedback(resolved, reason);
@@ -1166,7 +1186,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
         ),
       PadUnavailabilityReason.missingFile => (
           'Fichier introuvable',
-          'Le fichier audio de ce pad est introuvable. Re-synchronisez la bibliothèque.',
+          'Le fichier audio n\'a pas pu être chargé. Touchez le pad pour '
+              'retenter le téléchargement depuis Drive, ou resynchronisez la '
+              'bibliothèque dans les paramètres.',
         ),
     };
 

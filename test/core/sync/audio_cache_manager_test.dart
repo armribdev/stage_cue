@@ -94,6 +94,42 @@ void main() {
     expect(await File(result).exists(), isTrue);
   });
 
+  test('ensureCached : repli insensible à la casse sur le nom de fichier',
+      () async {
+    final manager = AudioCacheManager();
+    when(() => client.findInFolder(
+          parentId: any(named: 'parentId'),
+          name: any(named: 'name'),
+        )).thenAnswer((invocation) async {
+      final parentId = invocation.namedArguments[#parentId] as String;
+      final name = invocation.namedArguments[#name] as String;
+      if (parentId == 'folder-root' && name == '08 Green Hornet.m4a') {
+        return null;
+      }
+      return null;
+    });
+    when(() => client.listFolder(
+          any(),
+          sharedDriveId: any(named: 'sharedDriveId'),
+        )).thenAnswer((invocation) async {
+      final folderId = invocation.positionalArguments[0] as String;
+      if (folderId == 'folder-root') {
+        return [file('remote', '08 Green Hornet.M4A')];
+      }
+      return [];
+    });
+    stubDownloadWriting(50);
+
+    final result = await manager.ensureCached(
+      client: client,
+      library: library,
+      relativePath: '08 Green Hornet.m4a',
+    );
+
+    expect(result, p.join(rootDir.path, '08 Green Hornet.m4a'));
+    expect(await File(result).exists(), isTrue);
+  });
+
   test('ensureCached : repli par nom de fichier si chemin dossier incorrect',
       () async {
     final manager = AudioCacheManager();

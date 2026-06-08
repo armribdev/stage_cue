@@ -71,10 +71,11 @@ class AudioCacheManager {
 
     var remote = await _resolveRemote(client, library, normalizedPath);
     if (remote == null) {
-      final fallback = await _findUniqueFileByName(
+      final fallback = await _findFileByName(
         client,
         library,
         _nameOf(normalizedPath),
+        pathHint: normalizedPath,
       );
       if (fallback != null) {
         remote = fallback.file;
@@ -138,12 +139,15 @@ class AudioCacheManager {
   // ── Résolution distante ──────────────────────────────────────────────────
 
   /// Recherche un fichier audio par nom dans toute la bibliothèque Drive.
-  /// Retourne null si zéro ou plusieurs correspondances (ambigu).
-  Future<({DriveFile file, String relativePath})?> _findUniqueFileByName(
+  ///
+  /// Comparaison insensible à la casse. En cas de doublons, [pathHint] permet
+  /// de choisir le chemin relatif qui correspond (insensible à la casse).
+  Future<({DriveFile file, String relativePath})?> _findFileByName(
     DriveClient client,
     Library library,
-    String fileName,
-  ) async {
+    String fileName, {
+    String? pathHint,
+  }) async {
     final matches = <({DriveFile file, String relativePath})>[];
     await _collectFilesByName(
       client,
@@ -153,8 +157,17 @@ class AudioCacheManager {
       matches,
       sharedDriveId: library.sharedDriveId,
     );
-    if (matches.length != 1) return null;
-    return matches.first;
+    if (matches.isEmpty) return null;
+    if (matches.length == 1) return matches.first;
+
+    if (pathHint != null) {
+      final hint = pathHint.toLowerCase();
+      final hinted = matches
+          .where((m) => m.relativePath.toLowerCase() == hint)
+          .toList();
+      if (hinted.length == 1) return hinted.first;
+    }
+    return null;
   }
 
   Future<void> _collectFilesByName(
@@ -183,7 +196,7 @@ class AudioCacheManager {
           matches,
           sharedDriveId: sharedDriveId,
         );
-      } else if (child.name == fileName) {
+      } else if (_namesEqual(child.name, fileName)) {
         final relativePath = relativePrefix.isEmpty
             ? child.name
             : '$relativePrefix/${child.name}';
@@ -201,7 +214,8 @@ class AudioCacheManager {
     var parentId = library.driveFolderId;
     if (parentId == null) return null;
     for (var i = 0; i < segments.length - 1; i++) {
-      final folder = await client.findInFolder(
+      final folder = await _findInFolderCaseInsensitive(
+        client,
         parentId: parentId!,
         name: segments[i],
         sharedDriveId: library.sharedDriveId,
@@ -209,12 +223,39 @@ class AudioCacheManager {
       if (folder == null) return null;
       parentId = folder.id;
     }
-    return client.findInFolder(
+    return _findInFolderCaseInsensitive(
+      client,
       parentId: parentId!,
       name: segments.last,
       sharedDriveId: library.sharedDriveId,
     );
   }
+
+  /// Recherche exacte puis repli insensible à la casse dans le dossier parent.
+  Future<DriveFile?> _findInFolderCaseInsensitive(
+    DriveClient client, {
+    required String parentId,
+    required String name,
+    String? sharedDriveId,
+  }) async {
+    final exact = await client.findInFolder(
+      parentId: parentId,
+      name: name,
+      sharedDriveId: sharedDriveId,
+    );
+    if (exact != null) return exact;
+
+    final children = await client.listFolder(
+      parentId,
+      sharedDriveId: sharedDriveId,
+    );
+    for (final child in children) {
+      if (_namesEqual(child.name, name)) return child;
+    }
+    return null;
+  }
+
+  bool _namesEqual(String a, String b) => a.toLowerCase() == b.toLowerCase();
 
   Future<String> _ensureRemoteFolders(
     DriveClient client,
