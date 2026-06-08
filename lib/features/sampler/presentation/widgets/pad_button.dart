@@ -81,12 +81,13 @@ class PadButton extends StatelessWidget {
   Widget _buildReady(BuildContext context, ColorScheme scheme) {
     final colorValue = padItem.pad.colorValue;
     final customColor = colorValue != null ? Color(colorValue) : null;
+    final hasCustomColor = customColor != null;
     final defaultColor =
         scheme.surfaceContainerHighest.withValues(alpha: 0.75);
     final baseColor = customColor ?? defaultColor;
-    final playingColor = customColor != null
+    final playingColor = hasCustomColor
         ? customColor.withValues(alpha: 0.75)
-        : scheme.primaryContainer.withValues(alpha: 0.85);
+        : scheme.surfaceContainerHigh.withValues(alpha: 0.9);
     final label = padItem.displayName;
 
     return Card(
@@ -95,7 +96,9 @@ class PadButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
           color: padItem.isPlaying
-              ? scheme.primary.withValues(alpha: 0.5)
+              ? hasCustomColor
+                  ? scheme.primary.withValues(alpha: 0.5)
+                  : scheme.onSurfaceVariant.withValues(alpha: 0.55)
               : padItem.isPartiallyReady
                   ? scheme.tertiary.withValues(alpha: 0.45)
                   : scheme.outlineVariant.withValues(alpha: 0.45),
@@ -105,7 +108,7 @@ class PadButton extends StatelessWidget {
       child: _interactive(
         child: Stack(
           children: [
-            _buildPlaybackProgress(scheme),
+            _buildPlaybackProgress(scheme, hasCustomColor: hasCustomColor),
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -124,7 +127,7 @@ class PadButton extends StatelessWidget {
                         fontWeight: padItem.isPlaying
                             ? FontWeight.w700
                             : FontWeight.w500,
-                        color: padItem.isPlaying
+                        color: padItem.isPlaying && hasCustomColor
                             ? scheme.primary
                             : scheme.onSurface,
                       ),
@@ -147,7 +150,10 @@ class PadButton extends StatelessWidget {
   }
 
   /// Barre de progression de lecture (overlay) pendant que le pad joue.
-  Widget _buildPlaybackProgress(ColorScheme scheme) {
+  Widget _buildPlaybackProgress(
+    ColorScheme scheme, {
+    required bool hasCustomColor,
+  }) {
     return TweenAnimationBuilder<double>(
       key: ValueKey(
         'progress_${padItem.pad.id}_${padItem.isPlaying}'
@@ -169,7 +175,9 @@ class PadButton extends StatelessWidget {
               value: value,
               backgroundColor: Colors.transparent,
               valueColor: AlwaysStoppedAnimation<Color>(
-                scheme.primary.withValues(alpha: 0.22),
+                hasCustomColor
+                    ? scheme.primary.withValues(alpha: 0.22)
+                    : scheme.onSurfaceVariant.withValues(alpha: 0.22),
               ),
               minHeight: double.infinity,
             ),
