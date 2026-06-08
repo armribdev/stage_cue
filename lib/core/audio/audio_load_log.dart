@@ -1,10 +1,12 @@
 import 'dart:developer' as developer;
 
 import 'package:flutter_soloud/flutter_soloud.dart';
-
-import 'audio_file_validation.dart';
+import 'package:path/path.dart' as p;
 
 /// Journalisation audio via DevTools et la Debug Console (`developer.log`).
+///
+/// Messages concis : une ligne par problème, sans stack trace pour les
+/// échecs de chargement attendus (fichier corrompu, cache tronqué, etc.).
 class AudioLoadLog {
   AudioLoadLog._();
 
@@ -15,58 +17,50 @@ class AudioLoadLog {
     if (_loggedOnce.add(key)) log();
   }
 
+  static String _shortPath(String path) => p.basename(path);
+
   static void info(String message) => _emit(message);
 
-  static void warn(String message, {Object? error, StackTrace? stackTrace}) =>
-      _emit(message, level: 900, error: error, stackTrace: stackTrace);
+  static void warn(String message) => _emit(message, level: 900);
 
   static void severe(
     String message, {
     Object? error,
     StackTrace? stackTrace,
   }) =>
-      _emit(message, level: 1000, error: error, stackTrace: stackTrace);
+      _emit(
+        message,
+        level: 1000,
+        error: error,
+        stackTrace: stackTrace,
+      );
 
   static void engineReady() => info('Moteur SoLoud initialisé.');
 
   static void engineInitFailed(Object error, StackTrace stackTrace) {
     severe(
-      'Impossible d\'initialiser SoLoud — l\'app démarre sans audio.',
+      'Impossible d\'initialiser SoLoud — l\'app démarre sans audio : $error',
       error: error,
       stackTrace: stackTrace,
     );
   }
 
-  static void benignSoLoudSideEffect(Object error, StackTrace stackTrace) {
-    _once(
-      'soloud-side-effect:${error.runtimeType}',
-      () => warn(
-        'Erreur SoLoud absorbée (effet de bord du plugin) : $error',
-        error: error,
-        stackTrace: stackTrace,
-      ),
-    );
-  }
+  /// Doublon asynchrone du plugin flutter_soloud — déjà journalisé au chargement.
+  static void benignSoLoudSideEffect(Object error, StackTrace stackTrace) {}
 
   static void uncaughtZoneError(Object error, StackTrace stackTrace) {
     severe(
-      'Erreur non gérée dans la zone audio',
+      'Erreur non gérée dans la zone audio : $error',
       error: error,
       stackTrace: stackTrace,
     );
   }
 
-  static void preloadStarted({required int boardId, required int padCount}) {
-    info('Préchargement audio plateau #$boardId — $padCount pad(s).');
-  }
+  static void preloadStarted({required int boardId, required int padCount}) {}
 
-  static void preloadCancelled({required int boardId}) {
-    info('Préchargement audio annulé (plateau #$boardId remplacé).');
-  }
+  static void preloadCancelled({required int boardId}) {}
 
-  static void preloadFinished({required int boardId, required int padCount}) {
-    info('Préchargement audio terminé plateau #$boardId — $padCount pad(s).');
-  }
+  static void preloadFinished({required int boardId, required int padCount}) {}
 
   static void padPlayersFailed({
     required int padId,
@@ -74,10 +68,9 @@ class AudioLoadLog {
     required Object error,
     StackTrace? stackTrace,
   }) {
-    severe(
-      'Échec lecteurs pad id=$padId « $padLabel »',
-      error: error,
-      stackTrace: stackTrace,
+    _once(
+      'pad:$padId',
+      () => warn('Pad « $padLabel » (id=$padId) : $error'),
     );
   }
 
@@ -90,14 +83,14 @@ class AudioLoadLog {
     required Object error,
     StackTrace? stackTrace,
   }) {
-    final path = resolvedPath ?? legacyPath ?? '?';
+    final path = resolvedPath ?? legacyPath;
+    if (path != null) {
+      _fileFailed(path, error);
+      return;
+    }
     _once(
-      'sound:$soundId:$path',
-      () => severe(
-        'Échec son id=$soundId « $title » pad=$padId path=$path — $error',
-        error: error,
-        stackTrace: stackTrace,
-      ),
+      'sound:$soundId',
+      () => warn('Son « $title » (pad $padId) indisponible — $error'),
     );
   }
 
@@ -106,14 +99,7 @@ class AudioLoadLog {
     required Object error,
     StackTrace? stackTrace,
   }) {
-    _once(
-      'loadMem:$path',
-      () => severe(
-        'Échec loadMem : $path — $error',
-        error: error,
-        stackTrace: stackTrace,
-      ),
-    );
+    _fileFailed(path, error);
   }
 
   static void corruptCacheFile({
@@ -123,8 +109,8 @@ class AudioLoadLog {
     _once(
       'corrupt:$path',
       () => warn(
-        'Cache audio invalide ($bytes o, min $kMinimumValidAudioFileBytes o) '
-        '— suppression et nouveau téléchargement si possible : $path',
+        'Cache audio invalide (${_shortPath(path)}, $bytes o) '
+        '— re-téléchargement si possible',
       ),
     );
   }
@@ -133,11 +119,13 @@ class AudioLoadLog {
     required String path,
     required Object error,
   }) {
+    _fileFailed(path, error);
+  }
+
+  static void _fileFailed(String path, Object error) {
     _once(
-      'metadata:$path',
-      () => warn(
-        'Durée audio illisible (type par défaut) : $path — $error',
-      ),
+      'file:$path',
+      () => warn('Fichier audio illisible : ${_shortPath(path)} — $error'),
     );
   }
 

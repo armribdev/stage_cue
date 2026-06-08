@@ -316,6 +316,8 @@ class LibraryRepository {
     return true;
   }
 
+  static final Set<String> _driveOwnerRefreshLogged = {};
+
   /// Met à jour [ownerEmail] des bibliothèques Drive depuis l'API (propriétaire
   /// réel, y compris dossiers partagés).
   Future<void> refreshLibraryOwnerEmails() async {
@@ -334,9 +336,14 @@ class LibraryRepository {
         if (trimmed == library.ownerEmail?.trim()) continue;
         await _dataSource.updateOwnerEmail(library.id, trimmed);
       } catch (e) {
-        debugPrint(
-          'Refresh propriétaire Drive échoué pour ${library.name}: $e',
-        );
+        final message = e.toString();
+        // Session expirée ou non connecté — cas attendu, pas de log.
+        if (message.contains('invalid_token')) continue;
+        if (_driveOwnerRefreshLogged.add(library.name)) {
+          debugPrint(
+            'Refresh propriétaire Drive échoué pour ${library.name}: $e',
+          );
+        }
       }
     }
   }
