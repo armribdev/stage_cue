@@ -185,6 +185,7 @@ class LibrarySnapshotStore {
               libraryId: Value(libraryId),
               relativePath: Value(relativePath),
               contentHash: Value(contentHash),
+              typeDetected: const Value(true),
             ),
           );
       _soundIdMap[snapId] = newId;

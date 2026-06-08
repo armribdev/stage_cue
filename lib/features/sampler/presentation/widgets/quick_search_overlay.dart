@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
+import '../utils/sound_type_ui.dart';
 
 /// Recherche-éclair : overlay flottant (pas une route plein écran) pour trouver
 /// un son et agir en moins d'une seconde pendant un spectacle (refonte UX P1).
@@ -134,7 +135,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     final q = normalizeForSearch(_query);
     final scored = <(Sound, int)>[];
     for (final sound in _all) {
-      if (_typeFilter != null && sound.type != _typeFilter) continue;
+      if (_typeFilter != null && !sound.matchesSoundType(_typeFilter!)) continue;
       if (_favoritesOnly && !_isFav(sound)) continue;
       if (_localOnly && !_isLocal(sound)) continue;
       final name = normalizeForSearch(sound.displayName ?? sound.title);

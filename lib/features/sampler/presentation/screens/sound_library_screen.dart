@@ -130,14 +130,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       final soundIdToPadId =
           await _repository.getSoundIdToFirstPadIdInBoard(widget.boardId);
 
-      final availableSounds = allSounds
-          .where(
-            (s) =>
-                s.type == SoundType.soundEffect ||
-                s.type == SoundType.ambiance ||
-                s.type == SoundType.music,
-          )
-          .toList();
+      final availableSounds = allSounds.where((s) => s.isClassifiedForTypeFilter).toList();
 
       setState(() {
         _librariesById = {for (final lib in libraries) lib.id: lib};
@@ -302,7 +295,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   }
 
   List<Sound> get _soundsForSelectedType => _availableSounds
-      .where((sound) => sound.type == _selectedType)
+      .where((sound) => sound.matchesSoundType(_selectedType))
       .toList();
 
   void _onTypeChanged(SoundType type) {
@@ -565,7 +558,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                                 Row(
                                   children: [
                                     Text(
-                                      'Type: ${sound.type.label}',
+                                      'Type: ${sound.typeDisplayLabel}',
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: Colors.grey[600],

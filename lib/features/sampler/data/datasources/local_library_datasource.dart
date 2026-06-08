@@ -29,6 +29,7 @@ class LocalLibraryDataSource {
     String? drivePath,
     String? ownerEmail,
     String? sharedDriveId,
+    bool autoDownload = false,
   }) async {
     final id = await _database.into(_database.libraries).insert(
           LibraryModel.toInsertCompanion(
@@ -38,6 +39,7 @@ class LocalLibraryDataSource {
             drivePath: drivePath,
             ownerEmail: ownerEmail,
             sharedDriveId: sharedDriveId,
+            autoDownload: autoDownload,
           ),
         );
     final created = await getLibraryById(id);

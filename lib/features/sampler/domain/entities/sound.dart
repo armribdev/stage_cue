@@ -24,6 +24,9 @@ class Sound {
   /// Dernière lecture (pré-écoute / déclenchement) — tri par récence.
   final DateTime? lastPlayedAt;
 
+  /// false = type pas encore lu depuis le fichier (index Drive hors-ligne).
+  final bool typeDetected;
+
   Sound({
     required this.id,
     required this.title,
@@ -38,6 +41,7 @@ class Sound {
     this.contentHash,
     this.isFavorite = false,
     this.lastPlayedAt,
+    this.typeDetected = true,
   });
 }
 

@@ -57,6 +57,11 @@ class Sounds extends Table {
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
   /// Dernière lecture (pré-écoute ou déclenchement) — tri par récence.
   DateTimeColumn get lastPlayedAt => dateTime().nullable()();
+  /// Type choisi manuellement par l'opérateur — ne pas réécraser à l'auto-détection.
+  BoolColumn get typeManuallySet =>
+      boolean().withDefault(const Constant(false))();
+  /// false tant que le type n'a pas été lu depuis le fichier (index Drive sans cache).
+  BoolColumn get typeDetected => boolean().withDefault(const Constant(true))();
 }
 
 class SoundBoards extends Table {

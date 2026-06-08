@@ -567,7 +567,7 @@ class _SoundRowState extends State<_SoundRow> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        sound.type.label,
+                        sound.typeDisplayLabel,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: isLocal
                               ? scheme.onSurfaceVariant
@@ -715,7 +715,7 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
   SoundType _typeFilter = SoundType.soundEffect;
 
   List<Sound> get _filteredSounds =>
-      _sounds.where((s) => s.type == _typeFilter).toList();
+      _sounds.where((s) => s.matchesSoundType(_typeFilter)).toList();
 
   @override
   void initState() {
@@ -810,7 +810,7 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
             return ListTile(
               leading: SoundTypeAvatar(type: s.type, radius: 18),
               title: Text(s.displayName ?? s.title),
-              subtitle: Text(s.type.label),
+              subtitle: Text(s.typeDisplayLabel),
               trailing: isAdding
                   ? SizedBox(
                       width: 24,

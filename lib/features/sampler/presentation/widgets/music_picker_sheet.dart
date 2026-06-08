@@ -53,7 +53,12 @@ class _MusicPickerSheetState extends State<MusicPickerSheet> {
       if (!mounted) return;
       setState(() {
         _musicSounds =
-            allSounds.where((sound) => sound.type == SoundType.music).toList()
+            allSounds
+                .where(
+                  (sound) =>
+                      sound.matchesSoundType(SoundType.music),
+                )
+                .toList()
               ..sort(
                 (a, b) => (a.displayName ?? a.title).compareTo(
                   b.displayName ?? b.title,

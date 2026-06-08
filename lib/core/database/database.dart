@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration {
@@ -157,6 +157,19 @@ class AppDatabase extends _$AppDatabase {
           // Accès rapide live (P3) : favoris + horodatage de dernière lecture.
           await m.addColumn(sounds, sounds.isFavorite);
           await m.addColumn(sounds, sounds.lastPlayedAt);
+        }
+        if (from < 20) {
+          await m.addColumn(sounds, sounds.typeManuallySet);
+        }
+        if (from < 21) {
+          await m.addColumn(sounds, sounds.typeDetected);
+          // Sons Drive indexés sans fichier local : type provisoire, à reclasser.
+          await customStatement('''
+            UPDATE sounds SET type_detected = 0
+            WHERE library_id IS NOT NULL
+              AND content_hash IS NULL
+              AND type_manually_set = 0
+          ''');
         }
       },
       beforeOpen: (details) async {

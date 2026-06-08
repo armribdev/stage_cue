@@ -21,6 +21,7 @@ class SoundModel {
       contentHash: sound.contentHash,
       isFavorite: sound.isFavorite,
       lastPlayedAt: sound.lastPlayedAt,
+      typeDetected: sound.typeDetected,
     );
   }
 

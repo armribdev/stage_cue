@@ -249,6 +249,7 @@ class LibraryRepository {
     String? drivePath,
     String? ownerEmail,
     String? sharedDriveId,
+    bool autoDownload = false,
   }) async {
     final client = _activeClient;
     if (client == null) {
@@ -275,13 +276,17 @@ class LibraryRepository {
       drivePath: drivePath,
       ownerEmail: resolvedOwner,
       sharedDriveId: sharedDriveId,
+      autoDownload: autoDownload,
     );
   }
 
   /// Lance le consentement OAuth puis crée une bibliothèque : dossier Drive
   /// (réutilisé s'il existe déjà) + dossier de cache local + ligne en base.
   /// Retourne null si l'utilisateur annule la connexion.
-  Future<Library?> connectAndCreateLibrary({required String name}) async {
+  Future<Library?> connectAndCreateLibrary({
+    required String name,
+    bool autoDownload = false,
+  }) async {
     final client = await _authenticator.connect();
     if (client == null) return null;
     _activeClient = client;
@@ -297,6 +302,7 @@ class LibraryRepository {
       driveFolderId: folder.id,
       drivePath: name,
       ownerEmail: _authenticator.accountEmail,
+      autoDownload: autoDownload,
     );
   }
 
@@ -546,11 +552,9 @@ class LibraryRepository {
       if (await localFile.exists()) {
         if (await isPlausibleAudioFile(localFile)) {
           await _soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath);
-        if (sound.contentHash == null) {
-          await _refreshSoundMetadata(sound, localFile);
-        }
-        clearUnloadablePath(localPath);
-        return p.normalize(localFile.absolute.path);
+          await _materializeSoundFileMetadataIfNeeded(sound, localFile);
+          clearUnloadablePath(localPath);
+          return p.normalize(localFile.absolute.path);
         }
 
         final corruptSize = await localFile.length();
@@ -607,7 +611,7 @@ class LibraryRepository {
           resolvedLocalPath,
         );
       }
-      await _refreshSoundMetadata(sound, downloaded);
+      await _materializeSoundFileMetadataIfNeeded(sound, downloaded);
       clearUnloadablePath(resolvedLocalPath);
       return p.normalize(downloaded.absolute.path);
     }
@@ -623,11 +627,17 @@ class LibraryRepository {
     return p.normalize(legacyFile.absolute.path);
   }
 
-  Future<void> _refreshSoundMetadata(Sound sound, File file) async {
+  Future<void> _materializeSoundFileMetadataIfNeeded(
+    Sound sound,
+    File file,
+  ) async {
     try {
-      await _soundDataSource.refreshSoundMetadata(soundId: sound.id, file: file);
+      await _soundDataSource.materializeSoundFileMetadata(
+        soundId: sound.id,
+        file: file,
+      );
     } catch (e) {
-      debugPrint('Échec mise à jour métadonnées ${sound.title}: $e');
+      debugPrint('Échec matérialisation métadonnées ${sound.title}: $e');
     }
   }
 
@@ -699,9 +709,9 @@ class LibraryRepository {
           unawaited(
             _soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath),
           );
-          if (sound.contentHash == null) {
-            unawaited(_refreshSoundMetadata(sound, File(localPath)));
-          }
+          unawaited(
+            _materializeSoundFileMetadataIfNeeded(sound, File(localPath)),
+          );
           downloaded++;
         }
       } catch (e) {
@@ -773,13 +783,36 @@ class LibraryRepository {
 
       for (final audio in audioFiles) {
         processedCount++;
-        final localPath = _cacheManager.localPathFor(library, audio.relativePath);
-        final isNew = await _soundDataSource.syncLibrarySoundFromDriveIndex(
+        var localPath = _cacheManager.localPathFor(library, audio.relativePath);
+
+        final isNew = !await _soundDataSource.hasLibrarySound(
+          libraryId: library.id,
+          relativePath: audio.relativePath,
+        );
+        if (isNew) {
+          final localFile = File(localPath);
+          if (!await isPlausibleAudioFile(localFile) && library.autoDownload) {
+            try {
+              localPath = await _cacheManager.ensureCached(
+                client: client,
+                library: library,
+                relativePath: audio.relativePath,
+              );
+            } catch (e) {
+              debugPrint(
+                'Index Drive : téléchargement auto échoué pour '
+                '${audio.relativePath}: $e',
+              );
+            }
+          }
+        }
+
+        final created = await _soundDataSource.syncLibrarySoundFromDriveIndex(
           libraryId: library.id,
           relativePath: audio.relativePath,
           localPath: localPath,
         );
-        if (isNew) indexedCount++;
+        if (created) indexedCount++;
 
         onProgress?.call(
           IndexingProgress(

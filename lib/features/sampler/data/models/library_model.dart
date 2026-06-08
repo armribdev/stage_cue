@@ -27,6 +27,7 @@ class LibraryModel {
     String? drivePath,
     String? ownerEmail,
     String? sharedDriveId,
+    bool autoDownload = false,
   }) {
     return db.LibrariesCompanion.insert(
       name: name,
@@ -35,6 +36,7 @@ class LibraryModel {
       drivePath: Value(drivePath),
       ownerEmail: Value(ownerEmail),
       sharedDriveId: Value(sharedDriveId),
+      autoDownload: Value(autoDownload),
     );
   }
 }

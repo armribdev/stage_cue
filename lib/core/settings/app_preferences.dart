@@ -10,12 +10,18 @@ class AppPreferences extends ChangeNotifier {
   static const _subdir = '.stagecue';
   static const _fileName = 'app_preferences.json';
   static const _keyAutoDownloadPadSounds = 'auto_download_pad_sounds';
+  static const _keyAutoDownloadDriveByDefault =
+      'auto_download_drive_by_default';
 
   bool _autoDownloadPadSounds = false;
+  bool _autoDownloadDriveByDefault = false;
   bool _loaded = false;
 
   /// Télécharge automatiquement les sons ajoutés à un pad (si Drive connecté).
   bool get autoDownloadPadSounds => _autoDownloadPadSounds;
+
+  /// Active le téléchargement auto sur chaque nouvelle bibliothèque Drive liée.
+  bool get autoDownloadDriveByDefault => _autoDownloadDriveByDefault;
 
   bool get isLoaded => _loaded;
 
@@ -27,6 +33,8 @@ class AppPreferences extends ChangeNotifier {
         final data =
             jsonDecode(await file.readAsString()) as Map<String, dynamic>;
         _autoDownloadPadSounds = data[_keyAutoDownloadPadSounds] == true;
+        _autoDownloadDriveByDefault =
+            data[_keyAutoDownloadDriveByDefault] == true;
       } catch (_) {
         // Fichier corrompu : valeurs par défaut.
       }
@@ -37,6 +45,13 @@ class AppPreferences extends ChangeNotifier {
   Future<void> setAutoDownloadPadSounds(bool value) async {
     if (_autoDownloadPadSounds == value) return;
     _autoDownloadPadSounds = value;
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> setAutoDownloadDriveByDefault(bool value) async {
+    if (_autoDownloadDriveByDefault == value) return;
+    _autoDownloadDriveByDefault = value;
     notifyListeners();
     await _save();
   }
@@ -53,7 +68,10 @@ class AppPreferences extends ChangeNotifier {
   Future<void> _save() async {
     final file = await _preferencesFile();
     await file.writeAsString(
-      jsonEncode({_keyAutoDownloadPadSounds: _autoDownloadPadSounds}),
+      jsonEncode({
+        _keyAutoDownloadPadSounds: _autoDownloadPadSounds,
+        _keyAutoDownloadDriveByDefault: _autoDownloadDriveByDefault,
+      }),
     );
   }
 }

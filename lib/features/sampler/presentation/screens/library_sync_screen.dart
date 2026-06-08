@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
@@ -18,12 +19,14 @@ import '../widgets/app_modal.dart';
 class LibrarySyncScreen extends StatefulWidget {
   final LibraryRepository libraryRepository;
   final SyncController syncController;
+  final AppPreferences? appPreferences;
   final bool isModal;
 
   const LibrarySyncScreen({
     super.key,
     required this.libraryRepository,
     required this.syncController,
+    this.appPreferences,
     this.isModal = false,
   });
 
@@ -32,12 +35,14 @@ class LibrarySyncScreen extends StatefulWidget {
     BuildContext context, {
     required LibraryRepository libraryRepository,
     required SyncController syncController,
+    AppPreferences? appPreferences,
   }) {
     return openAdaptiveScreen(
       context: context,
       builder: ({required isModal}) => LibrarySyncScreen(
         libraryRepository: libraryRepository,
         syncController: syncController,
+        appPreferences: appPreferences,
         isModal: isModal,
       ),
     );
@@ -95,6 +100,7 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
     try {
       final library = await _repository.connectAndCreateLibrary(
         name: name.trim(),
+        autoDownload: widget.appPreferences?.autoDownloadDriveByDefault ?? false,
       );
       if (!mounted) return;
       if (library == null) {

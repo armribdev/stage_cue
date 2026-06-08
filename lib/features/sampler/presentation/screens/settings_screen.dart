@@ -813,6 +813,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         name: folderName,
         drivePath: relativeDrivePath,
         sharedDriveId: sharedDriveId,
+        autoDownload: widget.appPreferences.autoDownloadDriveByDefault,
       );
 
       if (!mounted) {
@@ -1562,6 +1563,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildDriveSection() {
+    return ListenableBuilder(
+      listenable: widget.appPreferences,
+      builder: (context, _) {
+        return _buildSettingsSectionCard(
+          title: _buildSectionTitleRow(
+            icon: Icons.cloud_outlined,
+            title: 'Google Drive',
+          ),
+          child: SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Activer le téléchargement automatique par défaut',
+            ),
+            subtitle: Text(
+              'À l\'ajout d\'un dossier Drive, télécharge les fichiers pour '
+              'classer correctement chaque son à l\'indexation.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            value: widget.appPreferences.autoDownloadDriveByDefault,
+            onChanged: (value) => unawaited(
+              widget.appPreferences.setAutoDownloadDriveByDefault(value),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildSamplerSection() {
     return ListenableBuilder(
       listenable: widget.appPreferences,
@@ -1740,6 +1772,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildSamplerSection(),
+                      const SizedBox(height: 16),
+                      _buildDriveSection(),
                       const SizedBox(height: 16),
                       _buildSettingsSectionCard(
                         title: _buildSectionTitleRow(
