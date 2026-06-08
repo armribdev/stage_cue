@@ -204,7 +204,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                     TextField(
                       controller: _displayNameController,
                       decoration: InputDecoration(
-                        hintText: pad.displayName,
+                        hintText: widget.padItem.displayName,
                         border: OutlineInputBorder(
                           borderSide:
                               BorderSide(color: scheme.outline),
@@ -712,6 +712,7 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
   bool _loading = true;
   Set<int> _padSoundIds = const {};
   final Set<int> _addingSoundIds = {};
+  final Set<int> _removingSoundIds = {};
   SoundType _typeFilter = SoundType.soundEffect;
 
   List<Sound> get _filteredSounds =>
@@ -745,16 +746,27 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
     });
   }
 
-  Future<void> _addSound(Sound sound) async {
-    if (_padSoundIds.contains(sound.id) || _addingSoundIds.contains(sound.id)) {
+  Future<void> _toggleSound(Sound sound) async {
+    if (_addingSoundIds.contains(sound.id) ||
+        _removingSoundIds.contains(sound.id)) {
       return;
     }
+    if (_padSoundIds.contains(sound.id)) {
+      await _removeSound(sound);
+    } else {
+      await _addSound(sound);
+    }
+  }
+
+  Future<void> _addSound(Sound sound) async {
+    if (_padSoundIds.contains(sound.id)) return;
     final draftIds = widget.draftSelectedIds;
     if (draftIds != null) {
       setState(() {
         draftIds.add(sound.id);
         _syncPadSoundIds();
       });
+      if (mounted) Navigator.of(context).pop();
       return;
     }
     setState(() => _addingSoundIds.add(sound.id));
@@ -762,6 +774,27 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
     if (!mounted) return;
     setState(() {
       _addingSoundIds.remove(sound.id);
+      _syncPadSoundIds();
+    });
+    widget.onPadUpdated?.call();
+  }
+
+  Future<void> _removeSound(Sound sound) async {
+    if (!_padSoundIds.contains(sound.id)) return;
+    final draftIds = widget.draftSelectedIds;
+    if (draftIds != null) {
+      setState(() {
+        draftIds.remove(sound.id);
+        _syncPadSoundIds();
+      });
+      return;
+    }
+    if (_padSoundIds.length <= 1) return;
+    setState(() => _removingSoundIds.add(sound.id));
+    await widget.notifier.removeSoundFromPad(widget.padId!, sound.id);
+    if (!mounted) return;
+    setState(() {
+      _removingSoundIds.remove(sound.id);
       _syncPadSoundIds();
     });
     widget.onPadUpdated?.call();
@@ -807,23 +840,80 @@ class _AddSoundSheetState extends State<_AddSoundSheet> {
             final s = filtered[i];
             final isOnPad = _padSoundIds.contains(s.id);
             final isAdding = _addingSoundIds.contains(s.id);
-            return ListTile(
-              leading: SoundTypeAvatar(type: s.type, radius: 18),
-              title: Text(s.displayName ?? s.title),
-              subtitle: Text(s.typeDisplayLabel),
-              trailing: isAdding
-                  ? SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: scheme.primary,
+            final isRemoving = _removingSoundIds.contains(s.id);
+            final isBusy = isAdding || isRemoving;
+            final isDraft = widget.draftSelectedIds != null;
+            final canRemove =
+                isOnPad && !isBusy && (isDraft || _padSoundIds.length > 1);
+            final canAdd = !isOnPad && !isBusy;
+            final canToggle = canAdd || canRemove;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              elevation: 0,
+              color: isOnPad
+                  ? scheme.primaryContainer.withValues(alpha: 0.35)
+                  : null,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: isOnPad
+                      ? scheme.primary.withValues(alpha: 0.45)
+                      : scheme.outlineVariant.withValues(alpha: 0.4),
+                ),
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: canToggle ? () => unawaited(_toggleSound(s)) : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      SoundTypeAvatar(type: s.type, radius: 18),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              s.displayName ?? s.title,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              s.typeDisplayLabel,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
                       ),
-                    )
-                  : isOnPad
-                      ? Icon(Icons.check_rounded, color: scheme.primary)
-                      : Icon(Icons.add_rounded, color: scheme.onSurfaceVariant),
-              onTap: isOnPad || isAdding ? null : () => unawaited(_addSound(s)),
+                      if (isBusy)
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: scheme.primary,
+                          ),
+                        )
+                      else if (isOnPad)
+                        Icon(Icons.check_rounded, color: scheme.primary)
+                      else
+                        Icon(
+                          Icons.add_rounded,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             );
           },
         );

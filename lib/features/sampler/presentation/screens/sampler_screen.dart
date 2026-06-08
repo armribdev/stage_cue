@@ -765,10 +765,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
     if (!mounted) return;
     final text = switch (reason) {
       PadUnavailabilityReason.offline =>
-        '« ${padItem.pad.displayName} » indisponible hors-ligne',
+        '« ${padItem.displayName} » indisponible hors-ligne',
       PadUnavailabilityReason.missingFile =>
-        'Fichier introuvable pour « ${padItem.pad.displayName} »',
-      _ => '« ${padItem.pad.displayName} » non téléchargé',
+        'Fichier introuvable pour « ${padItem.displayName} »',
+      _ => '« ${padItem.displayName} » non téléchargé',
     };
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()

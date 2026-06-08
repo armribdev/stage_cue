@@ -60,7 +60,7 @@ class PadButton extends StatelessWidget {
     final playingColor = customColor != null
         ? customColor.withValues(alpha: 0.75)
         : scheme.primaryContainer.withValues(alpha: 0.85);
-    final label = padItem.pad.displayName;
+    final label = padItem.displayName;
 
     return Card(
       elevation: 0,
@@ -185,7 +185,7 @@ class PadButton extends StatelessWidget {
   // ── EN ROUTE ──────────────────────────────────────────────────────────────
 
   Widget _buildEnRoute(BuildContext context, ColorScheme scheme) {
-    final label = padItem.pad.displayName;
+    final label = padItem.displayName;
     final downloading = padItem.isDownloading;
     final onColor = scheme.onTertiaryContainer;
 
@@ -256,7 +256,7 @@ class PadButton extends StatelessWidget {
   Widget _buildBlocked(BuildContext context, ColorScheme scheme) {
     final reason = padItem.unavailabilityReason;
     final isMissing = reason == PadUnavailabilityReason.missingFile;
-    final label = padItem.pad.displayName;
+    final label = padItem.displayName;
     final accent =
         isMissing ? scheme.error : scheme.onSurfaceVariant.withValues(alpha: 0.7);
     final (icon, hint) = isMissing
