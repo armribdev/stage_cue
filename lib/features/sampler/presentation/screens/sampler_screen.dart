@@ -684,6 +684,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
   Future<void> _handlePadTap(BuildContext context, PadItem padItem) async {
     final resolved = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
 
+    debugPrint(
+      '[TAP] pad="${resolved.pad.displayName}" id=${resolved.pad.id} '
+      'isPlayable=${resolved.isPlayable} appearsReady=${resolved.appearsReady} '
+      'isPlaying=${resolved.isPlaying} isDownloading=${resolved.isDownloading} '
+      'unavailabilityReason=${resolved.unavailabilityReason} '
+      'slots=${resolved.slots.length} readySlots=${resolved.slots.where((s) => s.isReady).length}',
+    );
+
     // PRÊT (bouton GO) : lecture immédiate garantie.
     if (resolved.isPlayable) {
       unawaited(HapticFeedback.selectionClick());
@@ -693,10 +701,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     // Fichier local validé, lecteur SoLoud pas encore chargé.
     if (resolved.appearsReady) {
+      debugPrint('[TAP] pad="${resolved.pad.displayName}" → appearsReady, refreshing players');
       unawaited(HapticFeedback.selectionClick());
       await _notifier.refreshPadPlayback(resolved.pad.id);
       if (!mounted) return;
       final after = _notifier.findPadItemById(resolved.pad.id) ?? resolved;
+      debugPrint('[TAP] pad="${resolved.pad.displayName}" → after refresh: isPlayable=${after.isPlayable}');
       if (after.isPlayable) {
         await _notifier.toggleSound(after);
       }
@@ -708,11 +718,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
     // BLOQUÉ : feedback non-bloquant (jamais de modale auto, jamais de clic mort).
     if (reason == PadUnavailabilityReason.offline ||
         reason == PadUnavailabilityReason.missingFile) {
+      debugPrint('[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason');
       unawaited(HapticFeedback.heavyImpact());
       _showBlockedPadFeedback(resolved, reason);
       return;
     }
 
+    debugPrint('[TAP] pad="${resolved.pad.displayName}" → EN ROUTE / preparing');
     // EN ROUTE (bouton DL) : on télécharge SANS jouer. Le moment de lecture
     // doit rester maîtrisé par l'opérateur → le pad devient un bouton GO une
     // fois prêt, et un second tap le déclenche immédiatement.

@@ -17,10 +17,15 @@ class AudioPlayerService {
 
   AudioPlayerService._(this._source) {
     _soundEventsSubscription = _source.soundEvents.listen((event) {
-      if (event.event == SoundEventType.handleIsNoMoreValid &&
-          event.handle == _currentHandle) {
-        _currentHandle = null;
-        _stateController.add(false);
+      if (event.event == SoundEventType.handleIsNoMoreValid) {
+        debugPrint(
+          '[AUDIO-EVT] handleIsNoMoreValid handle=${event.handle} '
+          'currentHandle=$_currentHandle match=${event.handle == _currentHandle}',
+        );
+        if (event.handle == _currentHandle) {
+          _currentHandle = null;
+          _stateController.add(false);
+        }
       }
     });
   }
@@ -48,18 +53,26 @@ class AudioPlayerService {
 
   /// Lance la lecture à [position] (reprise après pause).
   Future<void> playFromPosition(Duration position) async {
+    debugPrint(
+      '[AUDIO-PLAY] playFromPosition pos=$position '
+      'prevHandle=$_currentHandle '
+      'prevValid=${_currentHandle != null ? SoLoud.instance.getIsValidVoiceHandle(_currentHandle!) : false}',
+    );
     try {
       if (_currentHandle != null &&
           SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
         await SoLoud.instance.stop(_currentHandle!);
+        debugPrint('[AUDIO-PLAY] stopped prev handle=$_currentHandle');
       }
       _currentHandle = await SoLoud.instance.play(_source);
+      debugPrint('[AUDIO-PLAY] new handle=$_currentHandle duration=${SoLoud.instance.getLength(_source)}');
       if (position > Duration.zero) {
         SoLoud.instance.seek(_currentHandle!, position);
       }
       _stateController.add(true);
+      debugPrint('[AUDIO-PLAY] emitted true → stateController listeners=${_stateController.hasListener}');
     } catch (e) {
-      debugPrint('Erreur lors de la lecture: $e');
+      debugPrint('[AUDIO-PLAY] ERROR: $e');
     }
   }
 

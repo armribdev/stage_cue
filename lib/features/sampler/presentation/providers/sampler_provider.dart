@@ -612,6 +612,11 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<void> _loadPlayersForPad(PadItem padItem, Pad pad) async {
+    final alreadyReady = padItem.slots.where((s) => s.isReady).length;
+    debugPrint(
+      '[LOAD-PAD] pad="${pad.displayName}" id=${pad.id} '
+      'sounds=${pad.sounds.length} slotsReady=$alreadyReady',
+    );
     padItem.pad = pad;
     padItem.syncSlotCount();
 
@@ -622,14 +627,24 @@ class SamplerNotifier extends ChangeNotifier {
 
     _finalizePadAvailability(padItem);
     _attachPlayerListeners(padItem);
+    debugPrint(
+      '[LOAD-PAD] done pad="${pad.displayName}" '
+      'isPlayable=${padItem.isPlayable} unavailabilityReason=${padItem.unavailabilityReason}',
+    );
   }
 
   void _attachPlayerListeners(PadItem padItem) {
+    int attachedCount = 0;
     for (var i = 0; i < padItem.slots.length; i++) {
       final player = padItem.slots[i].player;
       if (player == null) continue;
+      attachedCount++;
       final idx = i;
       player.onPlayerStateChanged.listen((playing) {
+        debugPrint(
+          '[LISTENER] pad="${padItem.pad.displayName}" slot=$idx playing=$playing '
+          'currentPlayerIndex=${padItem._currentPlayerIndex} isPlaying=${padItem.isPlaying}',
+        );
         if (playing) {
           padItem._currentPlayerIndex = idx;
           padItem.isPlaying = true;
@@ -642,10 +657,22 @@ class SamplerNotifier extends ChangeNotifier {
           if (padItem.pad.isMusicPad) {
             _handleMusicPlaybackEnded(padItem);
           }
+        } else {
+          debugPrint(
+            '[LISTENER] ↩ false ignored: currentPlayerIndex=${padItem._currentPlayerIndex} != slot=$idx',
+          );
         }
+        debugPrint(
+          '[LISTENER] after: isPlaying=${padItem.isPlaying} '
+          'currentPlayerIndex=${padItem._currentPlayerIndex}',
+        );
         notifyListeners();
       });
     }
+    debugPrint(
+      '[ATTACH] pad="${padItem.pad.displayName}" attached $attachedCount listeners '
+      '(total slots=${padItem.slots.length})',
+    );
   }
 
   bool _padSoundsChanged(PadItem existing, Pad updated) {
@@ -978,19 +1005,35 @@ class SamplerNotifier extends ChangeNotifier {
   /// Joue ou arrête le pad selon son mode de lecture.
   Future<void> toggleSound(PadItem padItem) async {
     final resolved = _resolveBoardPadItem(padItem);
-    if (!resolved.isPlayable) return;
+    debugPrint(
+      '[TOGGLE] pad="${resolved.pad.displayName}" id=${resolved.pad.id} '
+      'isPlayable=${resolved.isPlayable} isPlaying=${resolved.isPlaying} '
+      'isMusicPad=${resolved.pad.isMusicPad} '
+      'slots=${resolved.slots.length} readySlots=${resolved.slots.where((s) => s.isReady).length} '
+      '_currentPlayerIndex=${resolved._currentPlayerIndex}',
+    );
+    if (!resolved.isPlayable) {
+      debugPrint('[TOGGLE] ↩ not playable, ignoring');
+      return;
+    }
     if (resolved.pad.isMusicPad) {
       await _toggleMusicPad(resolved);
       return;
     }
 
     if (resolved.isPlaying) {
+      debugPrint('[TOGGLE] → stopping current player (idx=${resolved._currentPlayerIndex})');
       await resolved.currentPlayer?.stop();
       return;
     }
 
     final soundIndex = _pickSoundIndex(resolved);
     final player = resolved.slots[soundIndex].player;
+    debugPrint(
+      '[TOGGLE] → play soundIndex=$soundIndex '
+      'playerNull=${player == null} '
+      '_nextSoundIndex=${resolved._nextSoundIndex}',
+    );
     if (player == null) return;
     player.setVolume(_effectiveVolume(resolved));
     await player.play();
@@ -1266,10 +1309,16 @@ class SamplerNotifier extends ChangeNotifier {
       for (var i = 0; i < padItem.slots.length; i++)
         if (padItem.slots[i].isReady) i,
     ];
+    debugPrint(
+      '[PICK] pad="${padItem.pad.displayName}" '
+      'slots=${padItem.slots.length} readyIndices=$readyIndices '
+      '_nextSoundIndex=${padItem._nextSoundIndex} '
+      'playMode=${padItem.pad.playMode}',
+    );
     if (readyIndices.isEmpty) return 0;
     if (readyIndices.length == 1) return readyIndices.first;
 
-    return switch (padItem.pad.playMode) {
+    final chosen = switch (padItem.pad.playMode) {
       PadPlayMode.random =>
         readyIndices[_random.nextInt(readyIndices.length)],
       PadPlayMode.sequential => () {
@@ -1284,6 +1333,8 @@ class SamplerNotifier extends ChangeNotifier {
           return readyIndices.first;
         }(),
     };
+    debugPrint('[PICK] → chosen=$chosen _nextSoundIndex(after)=${padItem._nextSoundIndex}');
+    return chosen;
   }
 
   Future<void> _toggleMusicPad(PadItem padItem) async {
