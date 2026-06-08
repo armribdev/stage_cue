@@ -2767,6 +2767,18 @@ class $PadsTable extends Pads with TableInfo<$PadsTable, Pad> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _rowIndexMeta = const VerificationMeta(
+    'rowIndex',
+  );
+  @override
+  late final GeneratedColumn<int> rowIndex = GeneratedColumn<int>(
+    'row_index',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   late final GeneratedColumnWithTypeConverter<PadPlayMode, int> playMode =
       GeneratedColumn<int>(
@@ -2806,6 +2818,7 @@ class $PadsTable extends Pads with TableInfo<$PadsTable, Pad> {
     name,
     color,
     sortOrder,
+    rowIndex,
     playMode,
     volume,
     createdAt,
@@ -2851,6 +2864,12 @@ class $PadsTable extends Pads with TableInfo<$PadsTable, Pad> {
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
       );
     }
+    if (data.containsKey('row_index')) {
+      context.handle(
+        _rowIndexMeta,
+        rowIndex.isAcceptableOrUnknown(data['row_index']!, _rowIndexMeta),
+      );
+    }
     if (data.containsKey('volume')) {
       context.handle(
         _volumeMeta,
@@ -2892,6 +2911,10 @@ class $PadsTable extends Pads with TableInfo<$PadsTable, Pad> {
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      rowIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}row_index'],
+      )!,
       playMode: $PadsTable.$converterplayMode.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -2924,6 +2947,7 @@ class Pad extends DataClass implements Insertable<Pad> {
   final String? name;
   final int? color;
   final int sortOrder;
+  final int rowIndex;
   final PadPlayMode playMode;
   final double volume;
   final DateTime createdAt;
@@ -2933,6 +2957,7 @@ class Pad extends DataClass implements Insertable<Pad> {
     this.name,
     this.color,
     required this.sortOrder,
+    required this.rowIndex,
     required this.playMode,
     required this.volume,
     required this.createdAt,
@@ -2949,6 +2974,7 @@ class Pad extends DataClass implements Insertable<Pad> {
       map['color'] = Variable<int>(color);
     }
     map['sort_order'] = Variable<int>(sortOrder);
+    map['row_index'] = Variable<int>(rowIndex);
     {
       map['play_mode'] = Variable<int>(
         $PadsTable.$converterplayMode.toSql(playMode),
@@ -2968,6 +2994,7 @@ class Pad extends DataClass implements Insertable<Pad> {
           ? const Value.absent()
           : Value(color),
       sortOrder: Value(sortOrder),
+      rowIndex: Value(rowIndex),
       playMode: Value(playMode),
       volume: Value(volume),
       createdAt: Value(createdAt),
@@ -2985,6 +3012,7 @@ class Pad extends DataClass implements Insertable<Pad> {
       name: serializer.fromJson<String?>(json['name']),
       color: serializer.fromJson<int?>(json['color']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      rowIndex: serializer.fromJson<int>(json['rowIndex']),
       playMode: $PadsTable.$converterplayMode.fromJson(
         serializer.fromJson<int>(json['playMode']),
       ),
@@ -3001,6 +3029,7 @@ class Pad extends DataClass implements Insertable<Pad> {
       'name': serializer.toJson<String?>(name),
       'color': serializer.toJson<int?>(color),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'rowIndex': serializer.toJson<int>(rowIndex),
       'playMode': serializer.toJson<int>(
         $PadsTable.$converterplayMode.toJson(playMode),
       ),
@@ -3015,6 +3044,7 @@ class Pad extends DataClass implements Insertable<Pad> {
     Value<String?> name = const Value.absent(),
     Value<int?> color = const Value.absent(),
     int? sortOrder,
+    int? rowIndex,
     PadPlayMode? playMode,
     double? volume,
     DateTime? createdAt,
@@ -3024,6 +3054,7 @@ class Pad extends DataClass implements Insertable<Pad> {
     name: name.present ? name.value : this.name,
     color: color.present ? color.value : this.color,
     sortOrder: sortOrder ?? this.sortOrder,
+    rowIndex: rowIndex ?? this.rowIndex,
     playMode: playMode ?? this.playMode,
     volume: volume ?? this.volume,
     createdAt: createdAt ?? this.createdAt,
@@ -3035,6 +3066,7 @@ class Pad extends DataClass implements Insertable<Pad> {
       name: data.name.present ? data.name.value : this.name,
       color: data.color.present ? data.color.value : this.color,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      rowIndex: data.rowIndex.present ? data.rowIndex.value : this.rowIndex,
       playMode: data.playMode.present ? data.playMode.value : this.playMode,
       volume: data.volume.present ? data.volume.value : this.volume,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -3049,6 +3081,7 @@ class Pad extends DataClass implements Insertable<Pad> {
           ..write('name: $name, ')
           ..write('color: $color, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('rowIndex: $rowIndex, ')
           ..write('playMode: $playMode, ')
           ..write('volume: $volume, ')
           ..write('createdAt: $createdAt')
@@ -3063,6 +3096,7 @@ class Pad extends DataClass implements Insertable<Pad> {
     name,
     color,
     sortOrder,
+    rowIndex,
     playMode,
     volume,
     createdAt,
@@ -3076,6 +3110,7 @@ class Pad extends DataClass implements Insertable<Pad> {
           other.name == this.name &&
           other.color == this.color &&
           other.sortOrder == this.sortOrder &&
+          other.rowIndex == this.rowIndex &&
           other.playMode == this.playMode &&
           other.volume == this.volume &&
           other.createdAt == this.createdAt);
@@ -3087,6 +3122,7 @@ class PadsCompanion extends UpdateCompanion<Pad> {
   final Value<String?> name;
   final Value<int?> color;
   final Value<int> sortOrder;
+  final Value<int> rowIndex;
   final Value<PadPlayMode> playMode;
   final Value<double> volume;
   final Value<DateTime> createdAt;
@@ -3096,6 +3132,7 @@ class PadsCompanion extends UpdateCompanion<Pad> {
     this.name = const Value.absent(),
     this.color = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.rowIndex = const Value.absent(),
     this.playMode = const Value.absent(),
     this.volume = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -3106,6 +3143,7 @@ class PadsCompanion extends UpdateCompanion<Pad> {
     this.name = const Value.absent(),
     this.color = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.rowIndex = const Value.absent(),
     this.playMode = const Value.absent(),
     this.volume = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -3116,6 +3154,7 @@ class PadsCompanion extends UpdateCompanion<Pad> {
     Expression<String>? name,
     Expression<int>? color,
     Expression<int>? sortOrder,
+    Expression<int>? rowIndex,
     Expression<int>? playMode,
     Expression<double>? volume,
     Expression<DateTime>? createdAt,
@@ -3126,6 +3165,7 @@ class PadsCompanion extends UpdateCompanion<Pad> {
       if (name != null) 'name': name,
       if (color != null) 'color': color,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (rowIndex != null) 'row_index': rowIndex,
       if (playMode != null) 'play_mode': playMode,
       if (volume != null) 'volume': volume,
       if (createdAt != null) 'created_at': createdAt,
@@ -3138,6 +3178,7 @@ class PadsCompanion extends UpdateCompanion<Pad> {
     Value<String?>? name,
     Value<int?>? color,
     Value<int>? sortOrder,
+    Value<int>? rowIndex,
     Value<PadPlayMode>? playMode,
     Value<double>? volume,
     Value<DateTime>? createdAt,
@@ -3148,6 +3189,7 @@ class PadsCompanion extends UpdateCompanion<Pad> {
       name: name ?? this.name,
       color: color ?? this.color,
       sortOrder: sortOrder ?? this.sortOrder,
+      rowIndex: rowIndex ?? this.rowIndex,
       playMode: playMode ?? this.playMode,
       volume: volume ?? this.volume,
       createdAt: createdAt ?? this.createdAt,
@@ -3172,6 +3214,9 @@ class PadsCompanion extends UpdateCompanion<Pad> {
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
+    if (rowIndex.present) {
+      map['row_index'] = Variable<int>(rowIndex.value);
+    }
     if (playMode.present) {
       map['play_mode'] = Variable<int>(
         $PadsTable.$converterplayMode.toSql(playMode.value),
@@ -3194,6 +3239,7 @@ class PadsCompanion extends UpdateCompanion<Pad> {
           ..write('name: $name, ')
           ..write('color: $color, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('rowIndex: $rowIndex, ')
           ..write('playMode: $playMode, ')
           ..write('volume: $volume, ')
           ..write('createdAt: $createdAt')
@@ -7387,6 +7433,7 @@ typedef $$PadsTableCreateCompanionBuilder =
       Value<String?> name,
       Value<int?> color,
       Value<int> sortOrder,
+      Value<int> rowIndex,
       Value<PadPlayMode> playMode,
       Value<double> volume,
       Value<DateTime> createdAt,
@@ -7398,6 +7445,7 @@ typedef $$PadsTableUpdateCompanionBuilder =
       Value<String?> name,
       Value<int?> color,
       Value<int> sortOrder,
+      Value<int> rowIndex,
       Value<PadPlayMode> playMode,
       Value<double> volume,
       Value<DateTime> createdAt,
@@ -7468,6 +7516,11 @@ class $$PadsTableFilterComposer extends Composer<_$AppDatabase, $PadsTable> {
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rowIndex => $composableBuilder(
+    column: $table.rowIndex,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7564,6 +7617,11 @@ class $$PadsTableOrderingComposer extends Composer<_$AppDatabase, $PadsTable> {
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get rowIndex => $composableBuilder(
+    column: $table.rowIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get playMode => $composableBuilder(
     column: $table.playMode,
     builder: (column) => ColumnOrderings(column),
@@ -7623,6 +7681,9 @@ class $$PadsTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<int> get rowIndex =>
+      $composableBuilder(column: $table.rowIndex, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<PadPlayMode, int> get playMode =>
       $composableBuilder(column: $table.playMode, builder: (column) => column);
@@ -7715,6 +7776,7 @@ class $$PadsTableTableManager
                 Value<String?> name = const Value.absent(),
                 Value<int?> color = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<int> rowIndex = const Value.absent(),
                 Value<PadPlayMode> playMode = const Value.absent(),
                 Value<double> volume = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -7724,6 +7786,7 @@ class $$PadsTableTableManager
                 name: name,
                 color: color,
                 sortOrder: sortOrder,
+                rowIndex: rowIndex,
                 playMode: playMode,
                 volume: volume,
                 createdAt: createdAt,
@@ -7735,6 +7798,7 @@ class $$PadsTableTableManager
                 Value<String?> name = const Value.absent(),
                 Value<int?> color = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<int> rowIndex = const Value.absent(),
                 Value<PadPlayMode> playMode = const Value.absent(),
                 Value<double> volume = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -7744,6 +7808,7 @@ class $$PadsTableTableManager
                 name: name,
                 color: color,
                 sortOrder: sortOrder,
+                rowIndex: rowIndex,
                 playMode: playMode,
                 volume: volume,
                 createdAt: createdAt,

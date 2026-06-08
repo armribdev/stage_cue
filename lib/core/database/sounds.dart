@@ -104,6 +104,7 @@ class Pads extends Table {
   TextColumn get name => text().nullable()();
   IntColumn get color => integer().nullable()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  IntColumn get rowIndex => integer().withDefault(const Constant(0))();
   IntColumn get playMode =>
       intEnum<PadPlayMode>().withDefault(const Constant(0))();
   RealColumn get volume => real().withDefault(const Constant(1.0))();

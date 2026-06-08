@@ -221,6 +221,7 @@ class SoundRepository {
     double volume = 1.0,
     PadPlayMode playMode = PadPlayMode.random,
     int? sortOrder,
+    int rowIndex = 0,
   }) async {
     return await _padDataSource.createPadWithSettings(
       boardId: boardId,
@@ -230,6 +231,7 @@ class SoundRepository {
       volume: volume,
       playMode: playMode,
       sortOrder: sortOrder,
+      rowIndex: rowIndex,
     );
   }
 
@@ -247,6 +249,13 @@ class SoundRepository {
 
   Future<void> reorderBoardPads(int boardId, List<int> padIdsInOrder) async {
     await _padDataSource.reorderBoardPads(boardId, padIdsInOrder);
+  }
+
+  Future<void> applyPadsLayout(
+    int boardId,
+    List<({int padId, int rowIndex, int sortOrder})> layout,
+  ) async {
+    await _padDataSource.applyPadsLayout(boardId, layout);
   }
 
   Future<void> updatePadSettings({
@@ -267,6 +276,10 @@ class SoundRepository {
       volume: volume,
       playMode: playMode,
     );
+  }
+
+  Future<void> updatePadRowIndex(int padId, int newRowIndex) async {
+    await _padDataSource.updatePadRowIndex(padId, newRowIndex);
   }
 
   Future<void> duplicatePads(int sourceBoardId, int targetBoardId) async {

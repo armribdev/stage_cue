@@ -13,7 +13,7 @@ import '../providers/sampler_provider.dart';
 /// Clé : `needsDownload` n'est PAS dans la même famille qu'`offline`. Le premier
 /// se règle d'un tap ; le second est réellement bloqué. Les confondre est l'erreur
 /// cognitive centrale de l'ancienne carte grisée uniforme.
-enum _PadVisual { ready, enRoute, blocked }
+enum _PadVisual { ready, enRoute, blocked, draft }
 
 /// Widget représentant un pad de son.
 class PadButton extends StatelessWidget {
@@ -29,6 +29,9 @@ class PadButton extends StatelessWidget {
   });
 
   _PadVisual get _visual {
+    if (padItem.isDraft && padItem.totalSoundCount == 0) {
+      return _PadVisual.draft;
+    }
     if (padItem.isPlayable || padItem.appearsReady) return _PadVisual.ready;
     final reason = padItem.unavailabilityReason;
     if (padItem.isDownloading ||
@@ -46,7 +49,31 @@ class PadButton extends StatelessWidget {
       _PadVisual.ready => _buildReady(context, scheme),
       _PadVisual.enRoute => _buildEnRoute(context, scheme),
       _PadVisual.blocked => _buildBlocked(context, scheme),
+      _PadVisual.draft => _buildDraft(context, scheme),
     };
+  }
+
+  // ── BROUILLON (création en cours, pas encore de son) ─────────────────────
+
+  Widget _buildDraft(BuildContext context, ColorScheme scheme) {
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.library_music_outlined,
+          size: 28,
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.35),
+        ),
+      ),
+    );
   }
 
   // ── PRÊT ──────────────────────────────────────────────────────────────────

@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration {
@@ -170,6 +170,9 @@ class AppDatabase extends _$AppDatabase {
               AND content_hash IS NULL
               AND type_manually_set = 0
           ''');
+        }
+        if (from < 22) {
+          await m.addColumn(pads, pads.rowIndex as GeneratedColumn<Object>);
         }
       },
       beforeOpen: (details) async {
