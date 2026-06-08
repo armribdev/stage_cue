@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../../core/sync/drive_client.dart';
 import '../../../../core/sync/library_sync_service.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../domain/entities/library.dart';
@@ -149,6 +150,8 @@ class SyncController extends ChangeNotifier {
     try {
       final outcome = await _repository.pushLibrary(library);
       _applyPushOutcome(outcome);
+    } on DriveAuthException {
+      await _onAuthError();
     } catch (e) {
       _set(_state.copyWith(status: SyncStatus.error, message: e.toString()));
     }
@@ -184,6 +187,8 @@ class SyncController extends ChangeNotifier {
             lastSyncedAt: DateTime.now(),
           ));
       }
+    } on DriveAuthException {
+      await _onAuthError();
     } catch (e) {
       _set(_state.copyWith(status: SyncStatus.error, message: e.toString()));
     }
@@ -201,6 +206,8 @@ class SyncController extends ChangeNotifier {
         overrideKnownRevision: remoteRevision,
       );
       _applyPushOutcome(outcome);
+    } on DriveAuthException {
+      await _onAuthError();
     } catch (e) {
       _set(_state.copyWith(status: SyncStatus.error, message: e.toString()));
     }
@@ -225,6 +232,8 @@ class SyncController extends ChangeNotifier {
             clearConflict: true,
           ));
       }
+    } on DriveAuthException {
+      await _onAuthError();
     } catch (e) {
       _set(_state.copyWith(status: SyncStatus.error, message: e.toString()));
     }
@@ -249,6 +258,16 @@ class SyncController extends ChangeNotifier {
   Future<bool> _ensureConnected() async {
     if (_repository.isConnected) return true;
     return _repository.reconnectSilently();
+  }
+
+  /// Déconnecte et passe en offline quand le token Google est révoqué.
+  Future<void> _onAuthError() async {
+    await _repository.disconnect();
+    _set(_state.copyWith(
+      status: SyncStatus.offline,
+      clearConflict: true,
+      message: 'Session Google expirée — reconnectez-vous dans les réglages.',
+    ));
   }
 
   @override

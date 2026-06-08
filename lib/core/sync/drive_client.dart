@@ -87,3 +87,16 @@ abstract class DriveAuthenticator {
   /// Profil du compte connecté (nom, photo…), ou null si déconnecté.
   DriveAccountProfile? get accountProfile;
 }
+
+/// Le token OAuth a été révoqué ou est définitivement invalide.
+///
+/// Levée par [GoogleDriveClient] sur une réponse 401 de l'API Google.
+/// Le [SyncController] doit déconnecter et signaler l'état offline.
+class DriveAuthException implements Exception {
+  const DriveAuthException([this.message]);
+  final String? message;
+
+  @override
+  String toString() =>
+      'DriveAuthException: ${message ?? "token révoqué ou expiré"}';
+}
