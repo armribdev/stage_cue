@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/settings/app_preferences.dart';
-import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
-import '../../../../core/sync/google_oauth_setup_dialog.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../domain/entities/library.dart';
 import '../providers/sync_controller.dart';
-import '../widgets/app_form_dialog.dart';
 import '../widgets/app_modal.dart';
 
 /// Écran de gestion de la synchronisation Drive : connexion d'une bibliothèque
@@ -85,39 +82,6 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
     });
   }
 
-  Future<void> _connect() async {
-    if (!await ensureGoogleOAuthConfigured(context)) {
-      return;
-    }
-    if (!mounted) {
-      return;
-    }
-
-    final name = await _promptLibraryName();
-    if (name == null || name.trim().isEmpty) return;
-
-    setState(() => _isBusy = true);
-    try {
-      final library = await _repository.connectAndCreateLibrary(
-        name: name.trim(),
-        autoDownload: widget.appPreferences?.autoDownloadDriveByDefault ?? false,
-      );
-      if (!mounted) return;
-      if (library == null) {
-        _snack('Connexion annulée');
-      } else {
-        _snack('Bibliothèque « ${library.name} » connectée');
-        await _loadLibraries();
-      }
-    } on GoogleOAuthNotConfiguredException catch (e) {
-      if (mounted) _snack(e.message, copyable: true);
-    } catch (e) {
-      if (mounted) _snack('Erreur de connexion : $e', copyable: true);
-    } finally {
-      if (mounted) setState(() => _isBusy = false);
-    }
-  }
-
   Future<void> _syncNow(Library library) async {
     await _syncController.syncNow(library);
     await _loadLibraries();
@@ -170,36 +134,6 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
     if (mounted) await _loadLibraries();
   }
 
-  Future<String?> _promptLibraryName() {
-    final controller = TextEditingController(text: 'Stage Cue');
-    return showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AppFormDialog(
-        title: 'Nouvelle bibliothèque Drive',
-        width: 400,
-        onClose: () => Navigator.of(dialogContext).pop(),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Nom de la bibliothèque',
-            hintText: 'Ex. Spectacle 2026',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('Connecter'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _snack(String message, {bool copyable = false}) {
     if (copyable) {
       showCopyableSnackBar(context, message);
@@ -222,7 +156,6 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
             email: _repository.connectedAccountEmail,
             sessionActive: _repository.isConnected,
             isBusy: _isBusy,
-            onConnect: _connect,
             onDisconnect:
                 _repository.isDriveSignedIn ? _disconnect : null,
           ),
@@ -268,19 +201,18 @@ class _ConnectionCard extends StatelessWidget {
   final String? email;
   final bool sessionActive;
   final bool isBusy;
-  final VoidCallback onConnect;
   final VoidCallback? onDisconnect;
 
   const _ConnectionCard({
     required this.email,
     required this.sessionActive,
     required this.isBusy,
-    required this.onConnect,
     required this.onDisconnect,
   });
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final signedIn = email != null;
     final statusLabel = switch ((signedIn, sessionActive)) {
       (true, true) => 'Connecté : $email',
@@ -290,45 +222,32 @@ class _ConnectionCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Icon(
-                  sessionActive
-                      ? Icons.cloud_done
-                      : signedIn
-                          ? Icons.cloud_queue
-                          : Icons.cloud_off,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    statusLabel,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-              ],
+            Icon(
+              sessionActive
+                  ? Icons.cloud_done
+                  : signedIn
+                      ? Icons.cloud_queue
+                      : Icons.cloud_off,
+              color: scheme.primary,
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  onPressed: isBusy ? null : onConnect,
-                  icon: const Icon(Icons.add_to_drive),
-                  label: const Text('Connecter une bibliothèque'),
-                ),
-                if (onDisconnect != null)
-                  OutlinedButton(
-                    onPressed: isBusy ? null : onDisconnect,
-                    child: const Text('Déconnecter'),
-                  ),
-              ],
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                statusLabel,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
+            if (onDisconnect != null)
+              IconButton(
+                tooltip: 'Déconnecter',
+                onPressed: isBusy ? null : onDisconnect,
+                icon: Icon(
+                  Icons.logout_outlined,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
           ],
         ),
       ),
