@@ -95,6 +95,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       widget.services.loadSoundsUseCase,
       widget.services.removeSoundFromBoardUseCase,
       widget.services.libraryRepository,
+      widget.services.appPreferences,
     );
 
     _notifier.addListener(_onStateChanged);
@@ -378,6 +379,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       database: _database,
       libraryRepository: widget.services.libraryRepository,
       syncController: widget.services.syncController,
+      appPreferences: widget.services.appPreferences,
     );
     if (!mounted) return;
     await _notifier.loadSounds();

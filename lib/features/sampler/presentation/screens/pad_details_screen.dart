@@ -5,7 +5,6 @@ import '../widgets/app_modal.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
-import '../widgets/pad_button.dart' show padSoundAvailabilityIcon;
 import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
@@ -314,10 +313,9 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                         children: [
                           for (var i = 0; i < sounds.length; i++)
                             _SoundRow(
+                              padItem: widget.padItem,
+                              slotIndex: i,
                               sound: sounds[i],
-                              availability: i < widget.padItem.slots.length
-                                  ? widget.padItem.slots[i].availability
-                                  : PadSoundAvailability.needsDownload,
                               canRemove: sounds.length > 1,
                               tagCatalog: _tagCatalog,
                               isTagsLoading: _isTagsLoading,
@@ -458,8 +456,9 @@ class _PlayModeSelector extends StatelessWidget {
 // ── Ligne d'un son ────────────────────────────────────────────────────────
 
 class _SoundRow extends StatefulWidget {
+  final PadItem padItem;
+  final int slotIndex;
   final Sound sound;
-  final PadSoundAvailability availability;
   final bool canRemove;
   final List<TagCategoryWithTags> tagCatalog;
   final bool isTagsLoading;
@@ -467,8 +466,9 @@ class _SoundRow extends StatefulWidget {
   final VoidCallback onRemove;
 
   const _SoundRow({
+    required this.padItem,
+    required this.slotIndex,
     required this.sound,
-    required this.availability,
     required this.canRemove,
     required this.tagCatalog,
     required this.isTagsLoading,
@@ -499,76 +499,190 @@ class _SoundRowState extends State<_SoundRow> {
     });
   }
 
+  PadItem _resolvedPadItem() =>
+      widget.notifier.findPadItemById(widget.padItem.pad.id) ?? widget.padItem;
+
+  PadSoundAvailability _availability(PadItem padItem) =>
+      widget.slotIndex < padItem.slots.length
+          ? padItem.slots[widget.slotIndex].availability
+          : PadSoundAvailability.needsDownload;
+
+  bool _isLocal(PadSoundAvailability availability) =>
+      availability == PadSoundAvailability.ready ||
+      availability == PadSoundAvailability.cached;
+
+  bool _canDownload(PadSoundAvailability availability) =>
+      availability == PadSoundAvailability.needsDownload ||
+      availability == PadSoundAvailability.offline;
+
+  Future<void> _downloadSound() async {
+    final padItem = _resolvedPadItem();
+    final availability = _availability(padItem);
+    if (!_canDownload(availability)) return;
+    if (padItem.downloadingSlotIndex == widget.slotIndex) return;
+
+    await widget.notifier.downloadPadSoundAtIndex(padItem, widget.slotIndex);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final sound = widget.sound;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          padSoundAvailabilityIcon(widget.availability, scheme, size: 20),
-          const SizedBox(width: 8),
-          SoundTypeAvatar(type: sound.type, radius: 16, iconSize: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  sound.displayName ?? sound.title,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  sound.type.label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                if (_loaded && _tagIds.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 4,
-                    runSpacing: 2,
+    return ListenableBuilder(
+      listenable: widget.padItem.revision,
+      builder: (context, _) {
+        final padItem = _resolvedPadItem();
+        final availability = _availability(padItem);
+        final isLocal = _isLocal(availability);
+        final isDownloading = padItem.downloadingSlotIndex == widget.slotIndex;
+        final canDownload = _canDownload(availability) && !isDownloading;
+        final mutedColor = scheme.onSurface.withValues(alpha: 0.42);
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SoundSlotAvatar(
+                type: sound.type,
+                isLocal: isLocal,
+                isDownloading: isDownloading,
+                onTap: canDownload ? () => unawaited(_downloadSound()) : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: InkWell(
+                  onTap: canDownload ? () => unawaited(_downloadSound()) : null,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final cat in widget.tagCatalog)
-                        ...cat.tags
-                            .where((t) => _tagIds.contains(t.id))
-                            .map(
-                              (t) => Chip(
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                padding: EdgeInsets.zero,
-                                label: Text(
-                                  t.name,
-                                  style:
-                                      Theme.of(context).textTheme.labelSmall,
-                                ),
-                                backgroundColor:
-                                    Color(cat.category.color).withAlpha(40),
-                              ),
-                            ),
+                      Text(
+                        sound.displayName ?? sound.title,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: isLocal ? null : mutedColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        sound.type.label,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isLocal
+                              ? scheme.onSurfaceVariant
+                              : mutedColor,
+                        ),
+                      ),
+                      if (_loaded && _tagIds.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 2,
+                          children: [
+                            for (final cat in widget.tagCatalog)
+                              ...cat.tags
+                                  .where((t) => _tagIds.contains(t.id))
+                                  .map(
+                                    (t) => Chip(
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      padding: EdgeInsets.zero,
+                                      label: Text(
+                                        t.name,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall,
+                                      ),
+                                      backgroundColor:
+                                          Color(cat.category.color).withAlpha(40),
+                                    ),
+                                  ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
-                ],
-              ],
-            ),
+                ),
+              ),
+              if (widget.canRemove)
+                IconButton(
+                  icon: const Icon(Icons.remove_circle_outline, size: 20),
+                  tooltip: 'Retirer ce son du pad',
+                  onPressed: widget.onRemove,
+                  color: scheme.error,
+                ),
+            ],
           ),
-          if (widget.canRemove)
-            IconButton(
-              icon: const Icon(Icons.remove_circle_outline, size: 20),
-              tooltip: 'Retirer ce son du pad',
-              onPressed: widget.onRemove,
-              color: scheme.error,
+        );
+      },
+    );
+  }
+}
+
+/// Avatar du son avec état local / téléchargement.
+class _SoundSlotAvatar extends StatelessWidget {
+  final SoundType type;
+  final bool isLocal;
+  final bool isDownloading;
+  final VoidCallback? onTap;
+
+  const _SoundSlotAvatar({
+    required this.type,
+    required this.isLocal,
+    required this.isDownloading,
+    this.onTap,
+  });
+
+  static const double _radius = 16;
+  static const double _iconSize = 18;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    const ringSize = _radius * 2 + 8;
+
+    Widget avatar = Opacity(
+      opacity: isLocal ? 1 : 0.38,
+      child: SoundTypeAvatar(
+        type: type,
+        radius: _radius,
+        iconSize: _iconSize,
+      ),
+    );
+
+    avatar = SizedBox(
+      width: ringSize,
+      height: ringSize,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (isDownloading)
+            SizedBox(
+              width: ringSize,
+              height: ringSize,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: scheme.primary,
+              ),
             ),
+          avatar,
         ],
       ),
     );
+
+    if (onTap != null) {
+      avatar = Tooltip(
+        message: 'Télécharger',
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(_radius + 4),
+          child: avatar,
+        ),
+      );
+    }
+
+    return avatar;
   }
 }
 
