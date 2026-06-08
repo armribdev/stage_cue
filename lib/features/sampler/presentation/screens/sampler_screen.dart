@@ -60,6 +60,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
   int? _draggingPadId;
   ({int rowIndex, int position})? _dropTarget;
   Offset? _lastDragGlobalOffset;
+  /// true après la 1re frame de drag — évite de reconstruire l'arbre pendant
+  /// l'accrochage du geste (sinon le Draggable est démonté et le pad reste bloqué).
+  bool _editDragUiReady = false;
   final _editGridKey = GlobalKey();
   int? _recentlyRestoredSoundId;
   int? _highlightedPadId;
@@ -472,7 +475,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
         _dropTarget?.position == position) {
       return;
     }
-    setState(() => _dropTarget = (rowIndex: rowIndex, position: position));
+    _dropTarget = (rowIndex: rowIndex, position: position);
+    if (_editDragUiReady) {
+      setState(() {});
+    }
   }
 
   double _editWrapHeight(int padCount, double cellHeight, int slotsPerRow) {
@@ -542,35 +548,53 @@ class _SamplerScreenState extends State<SamplerScreen> {
     return null;
   }
 
-  Offset _editIndicatorOffset({
-    required int rowIndex,
-    required int position,
+  /// Simule le layout après drop sans toucher à l'état.
+  Map<int, List<PadItem>> _previewRowMap({
     required Map<int, List<PadItem>> rowMap,
+    required int padId,
+    required int targetRowIndex,
+    required int insertionPosition,
+  }) {
+    final byRow = <int, List<PadItem>>{};
+    for (final entry in rowMap.entries) {
+      byRow[entry.key] = List<PadItem>.from(entry.value);
+    }
+
+    PadItem? moved;
+    for (final entry in byRow.entries) {
+      final idx = entry.value.indexWhere((p) => p.pad.id == padId);
+      if (idx != -1) {
+        moved = entry.value.removeAt(idx);
+        if (entry.value.isEmpty) byRow.remove(entry.key);
+        break;
+      }
+    }
+    if (moved == null) return rowMap;
+
+    final targetList = byRow[targetRowIndex] ?? <PadItem>[];
+    final pos = insertionPosition.clamp(0, targetList.length);
+    targetList.insert(pos, moved);
+    byRow[targetRowIndex] = targetList;
+    return byRow;
+  }
+
+  double _editGridTotalHeight({
     required List<int> rowIndices,
-    required int newRowIndex,
-    required double cellWidth,
+    required Map<int, List<PadItem>> rowMap,
     required double cellHeight,
     required int slotsPerRow,
+    required bool includeNewRowSpacer,
   }) {
     var y = 0.0;
-    final strideX = cellWidth + _editRowGap;
-    final strideY = cellHeight + _editRowGap;
-
-    for (final rowIdx in rowIndices) {
-      final pads = rowMap[rowIdx] ?? [];
-      final height = _editWrapHeight(pads.length, cellHeight, slotsPerRow);
-      if (rowIdx == rowIndex) {
-        final line = position ~/ slotsPerRow;
-        final col = position % slotsPerRow;
-        return Offset(col * strideX, y + line * strideY);
-      }
-      y += height + _editRowGap;
+    for (var i = 0; i < rowIndices.length; i++) {
+      if (i > 0) y += _editRowGap;
+      final count = rowMap[rowIndices[i]]?.length ?? 0;
+      y += _editWrapHeight(count, cellHeight, slotsPerRow);
     }
-
-    if (rowIndex == newRowIndex) {
-      return Offset(0, y);
+    if (includeNewRowSpacer) {
+      y += _editRowGap + cellHeight;
     }
-    return Offset.zero;
+    return y;
   }
 
   void _finishPadDrag(
@@ -600,6 +624,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       _draggingPadId = null;
       _dropTarget = null;
       _lastDragGlobalOffset = null;
+      _editDragUiReady = false;
     });
 
     if (target == null) return;
@@ -751,134 +776,138 @@ class _SamplerScreenState extends State<SamplerScreen> {
           if (!hasPads) return const SizedBox.shrink();
 
           final newRowIndex = rowIndices.last + 1;
-          final scheme = Theme.of(context).colorScheme;
 
-          Widget buildInsertionIndicator() {
-            return IgnorePointer(
-              child: SizedBox(
-                width: cellWidth,
-                height: cellHeight,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: scheme.primary.withValues(alpha: 0.55),
-                      width: 2,
-                    ),
-                    color: scheme.primary.withValues(alpha: 0.07),
-                  ),
-                ),
-              ),
-            );
-          }
+          final dropTarget = _dropTarget;
+          final showDragPreview =
+              _editDragUiReady && _draggingPadId != null;
+          final visualRowMap = showDragPreview && dropTarget != null
+              ? _previewRowMap(
+                  rowMap: rowMap,
+                  padId: _draggingPadId!,
+                  targetRowIndex: dropTarget.rowIndex,
+                  insertionPosition: dropTarget.position,
+                )
+              : rowMap;
+          final visualRowIndices = visualRowMap.keys.toList()..sort();
+
+          final hitTestHeight = _editGridTotalHeight(
+            rowIndices: rowIndices,
+            rowMap: rowMap,
+            cellHeight: cellHeight,
+            slotsPerRow: crossAxisCount,
+            includeNewRowSpacer: true,
+          );
 
           Widget buildEditPadCell(PadItem padItem) {
-            final isDragging = _draggingPadId == padItem.pad.id;
+            final rowIdx = padItem.pad.rowIndex;
+            final rowPads = rowMap[rowIdx] ?? [];
+            final indexInRow =
+                rowPads.indexWhere((p) => p.pad.id == padItem.pad.id);
+
             return SizedBox(
               key: ValueKey('pad_${padItem.pad.id}'),
               width: cellWidth,
               height: cellHeight,
-              child: Opacity(
-                opacity: isDragging ? 0.3 : 1,
-                child: Stack(
-                  children: [
-                    _buildPadWidget(context, state, padItem),
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Draggable<int>(
-                        data: padItem.pad.id,
-                        dragAnchorStrategy: (draggable, context, position) =>
-                            Offset(cellWidth / 2, cellHeight / 2),
-                        onDragStarted: () {
-                          HapticFeedback.selectionClick();
-                          final rowIdx = padItem.pad.rowIndex;
-                          final rowPads = rowMap[rowIdx] ?? [];
-                          final indexInRow = rowPads
-                              .indexWhere((p) => p.pad.id == padItem.pad.id);
-                          setState(() {
-                            _draggingPadId = padItem.pad.id;
-                            _lastDragGlobalOffset = null;
-                            _dropTarget = (
-                              rowIndex: rowIdx,
-                              position: indexInRow < 0 ? 0 : indexInRow,
-                            );
-                          });
-                        },
-                        onDragUpdate: (details) {
-                          _lastDragGlobalOffset = details.globalPosition;
-                          final target = _resolveEditDropTarget(
-                            global: details.globalPosition,
-                            rowMap: rowMap,
-                            rowIndices: rowIndices,
-                            newRowIndex: newRowIndex,
-                            cellWidth: cellWidth,
-                            cellHeight: cellHeight,
-                            slotsPerRow: crossAxisCount,
-                            excludePadId: padItem.pad.id,
-                          );
-                          if (target != null) {
-                            _updateDropTarget(target.rowIndex, target.position);
-                          }
-                        },
-                        onDragEnd: (details) {
-                          _finishPadDrag(
-                            padItem.pad.id,
-                            _lastDragGlobalOffset ?? details.offset,
-                            rowMap: rowMap,
-                            rowIndices: rowIndices,
-                            newRowIndex: newRowIndex,
-                            cellWidth: cellWidth,
-                            cellHeight: cellHeight,
-                            slotsPerRow: crossAxisCount,
-                          );
-                        },
-                        feedback: Material(
-                          type: MaterialType.transparency,
-                          child: Opacity(
-                            opacity: 0.88,
-                            child: SizedBox(
-                              width: cellWidth,
-                              height: cellHeight,
-                              child: PadCard(
-                                padItem: padItem,
-                                isEditMode: false,
-                              ),
-                            ),
-                          ),
-                        ),
-                        childWhenDragging: const SizedBox.shrink(),
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          child: Icon(
-                            Icons.drag_indicator,
-                            size: 18,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
+              child: Draggable<int>(
+                key: ValueKey('draggable_${padItem.pad.id}'),
+                data: padItem.pad.id,
+                dragAnchorStrategy: (draggable, context, position) =>
+                    Offset(cellWidth / 2, cellHeight / 2),
+                onDragStarted: () {
+                  HapticFeedback.selectionClick();
+                  _draggingPadId = padItem.pad.id;
+                  _lastDragGlobalOffset = null;
+                  _editDragUiReady = false;
+                  _dropTarget = (
+                    rowIndex: rowIdx,
+                    position: indexInRow < 0 ? 0 : indexInRow,
+                  );
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted || _draggingPadId != padItem.pad.id) {
+                      return;
+                    }
+                    setState(() => _editDragUiReady = true);
+                  });
+                },
+                onDragUpdate: (details) {
+                  _lastDragGlobalOffset = details.globalPosition;
+                  final target = _resolveEditDropTarget(
+                    global: details.globalPosition,
+                    rowMap: rowMap,
+                    rowIndices: rowIndices,
+                    newRowIndex: newRowIndex,
+                    cellWidth: cellWidth,
+                    cellHeight: cellHeight,
+                    slotsPerRow: crossAxisCount,
+                    excludePadId: padItem.pad.id,
+                  );
+                  if (target != null) {
+                    _updateDropTarget(target.rowIndex, target.position);
+                  }
+                },
+                onDragEnd: (details) {
+                  _finishPadDrag(
+                    padItem.pad.id,
+                    _lastDragGlobalOffset ?? details.offset,
+                    rowMap: rowMap,
+                    rowIndices: rowIndices,
+                    newRowIndex: newRowIndex,
+                    cellWidth: cellWidth,
+                    cellHeight: cellHeight,
+                    slotsPerRow: crossAxisCount,
+                  );
+                },
+                feedback: Material(
+                  type: MaterialType.transparency,
+                  child: Opacity(
+                    opacity: 0.88,
+                    child: SizedBox(
+                      width: cellWidth,
+                      height: cellHeight,
+                      child: PadCard(
+                        padItem: padItem,
+                        isEditMode: false,
                       ),
                     ),
-                  ],
+                  ),
                 ),
+                childWhenDragging: const SizedBox.shrink(),
+                child: _buildPadWidget(context, state, padItem),
               ),
             );
           }
 
-          final dropTarget = _dropTarget;
-          final indicatorOffset = dropTarget == null
-              ? null
-              : _editIndicatorOffset(
-                  rowIndex: dropTarget.rowIndex,
-                  position: dropTarget.position,
-                  rowMap: rowMap,
-                  rowIndices: rowIndices,
-                  newRowIndex: newRowIndex,
-                  cellWidth: cellWidth,
-                  cellHeight: cellHeight,
-                  slotsPerRow: crossAxisCount,
-                );
+          Widget buildPreviewColumn() {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < visualRowIndices.length; i++) ...[
+                  if (i > 0) const SizedBox(height: _editRowGap),
+                  Wrap(
+                    spacing: _editRowGap,
+                    runSpacing: _editRowGap,
+                    children: [
+                      for (final pad
+                          in visualRowMap[visualRowIndices[i]] ?? [])
+                        SizedBox(
+                          key: ValueKey('pad_prev_${pad.pad.id}'),
+                          width: cellWidth,
+                          height: cellHeight,
+                          child: PadCard(
+                            padItem: pad,
+                            isEditMode: true,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+                if (dropTarget?.rowIndex == newRowIndex) ...[
+                  const SizedBox(height: _editRowGap),
+                  SizedBox(height: cellHeight),
+                ],
+              ],
+            );
+          }
 
           return SingleChildScrollView(
             key: const ValueKey('pads_edit_rows'),
@@ -888,29 +917,44 @@ class _SamplerScreenState extends State<SamplerScreen> {
               key: _editGridKey,
               clipBehavior: Clip.none,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var i = 0; i < rowIndices.length; i++) ...[
-                      if (i > 0) const SizedBox(height: _editRowGap),
-                      Wrap(
-                        spacing: _editRowGap,
-                        runSpacing: _editRowGap,
-                        children: [
-                          for (final pad in rowMap[rowIndices[i]] ?? [])
-                            buildEditPadCell(pad),
-                        ],
-                      ),
+                // Grille interactive (invisible pendant la prévisualisation).
+                Opacity(
+                  opacity: showDragPreview ? 0 : 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var i = 0; i < rowIndices.length; i++) ...[
+                        if (i > 0) const SizedBox(height: _editRowGap),
+                        Wrap(
+                          spacing: _editRowGap,
+                          runSpacing: _editRowGap,
+                          children: [
+                            for (final pad in rowMap[rowIndices[i]] ?? [])
+                              buildEditPadCell(pad),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: _editRowGap),
+                      SizedBox(height: cellHeight),
                     ],
-                    const SizedBox(height: _editRowGap),
-                    SizedBox(height: cellHeight),
-                  ],
+                  ),
                 ),
-                if (_draggingPadId != null && indicatorOffset != null)
-                  Positioned(
-                    left: indicatorOffset.dx,
-                    top: indicatorOffset.dy,
-                    child: buildInsertionIndicator(),
+                // Zone de hit-test stable (layout courant, pas la prévisualisation).
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: hitTestHeight,
+                  child: const IgnorePointer(
+                    child: SizedBox.expand(),
+                  ),
+                ),
+                // Prévisualisation par-dessus (les événements passent au Draggable).
+                if (showDragPreview)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: buildPreviewColumn(),
+                    ),
                   ),
               ],
             ),
