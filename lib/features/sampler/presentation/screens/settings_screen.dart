@@ -81,7 +81,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isInitialLoad = true;
   bool _isSyncBusy = false;
   bool _isDriveAuthBusy = false;
-  DriveAccountProfile? _driveAccount;
 
   @override
   void initState() {
@@ -129,7 +128,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       await widget.libraryRepository.reconnectSilently();
-      final driveAccount = widget.libraryRepository.connectedAccountProfile;
 
       // Charger les dossiers locaux surveillés et les bibliothèques Drive
       final watchedPaths = await widget.database
@@ -155,7 +153,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _sounds = sounds;
         _dbPath = dbFile.path;
         _dbSize = dbSize;
-        _driveAccount = driveAccount;
         _isLoading = false;
         _isInitialLoad = false;
       });
@@ -186,10 +183,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return;
       }
 
-      setState(() {
-        _driveAccount = widget.libraryRepository.connectedAccountProfile;
-      });
-
       if (!connected) return;
     } on GoogleOAuthNotConfiguredException catch (e) {
       if (mounted) {
@@ -209,7 +202,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _disconnectDriveAccount() async {
-    final account = _driveAccount;
+    final account = widget.libraryRepository.connectedAccountProfile;
     if (account == null) {
       return;
     }
@@ -247,7 +240,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await widget.libraryRepository.disconnect();
       if (mounted) {
-        setState(() => _driveAccount = null);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Compte Google déconnecté'),
@@ -314,7 +306,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
 
-    final account = _driveAccount;
+    final account = widget.libraryRepository.connectedAccountProfile;
     final scheme = Theme.of(context).colorScheme;
 
     if (account == null) {
@@ -1996,7 +1988,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final body = _buildSettingsBody();
 
-    final accountAction = _buildAccountMenu(context);
+    final accountAction = ListenableBuilder(
+      listenable: widget.libraryRepository,
+      builder: (context, _) => _buildAccountMenu(context),
+    );
 
     if (widget.isModal) {
       return AppModalShell(

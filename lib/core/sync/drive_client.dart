@@ -79,6 +79,9 @@ abstract class DriveAuthenticator {
   /// Tente une reconnexion silencieuse si une session existe déjà. Null sinon.
   Future<DriveClient?> connectSilently();
 
+  /// Restaure le profil compte depuis le stockage local (sans client HTTP actif).
+  Future<void> restoreAccountProfile();
+
   Future<void> signOut();
 
   /// Email du compte connecté, ou null si déconnecté.

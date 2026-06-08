@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart' as gsi;
 import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:googleapis_auth/googleapis_auth.dart' show AccessDeniedException;
 import 'package:http/http.dart' as http;
 
 import 'drive_account_profile.dart';
@@ -41,10 +42,12 @@ class GoogleDriveClient implements DriveClient {
   /// Échappe les apostrophes pour les requêtes `q` de l'API Drive.
   String _escape(String value) => value.replaceAll("'", r"\'");
 
-  /// Exécute [fn] et convertit un 401 en [DriveAuthException].
+  /// Exécute [fn] et convertit les erreurs d'auth en [DriveAuthException].
   Future<T> _guard<T>(Future<T> Function() fn) async {
     try {
       return await fn();
+    } on AccessDeniedException {
+      throw const DriveAuthException();
     } on drive.DetailedApiRequestError catch (e) {
       if (e.status == 401) throw const DriveAuthException();
       rethrow;
@@ -414,6 +417,9 @@ class GoogleDriveAuthenticator implements DriveAuthenticator {
   Future<DriveClient?> connectSilently() => _delegate.connectSilently();
 
   @override
+  Future<void> restoreAccountProfile() => _delegate.restoreAccountProfile();
+
+  @override
   Future<void> signOut() => _delegate.signOut();
 }
 
@@ -471,6 +477,11 @@ class _MobileGoogleDriveAuthenticator implements DriveAuthenticator {
       return null;
     }
     return _clientForCurrentUser();
+  }
+
+  @override
+  Future<void> restoreAccountProfile() async {
+    await _googleSignIn.signInSilently();
   }
 
   @override

@@ -260,9 +260,9 @@ class SyncController extends ChangeNotifier {
     return _repository.reconnectSilently();
   }
 
-  /// Déconnecte et passe en offline quand le token Google est révoqué.
+  /// Libère la session HTTP et passe en offline sans effacer les tokens Google.
   Future<void> _onAuthError() async {
-    await _repository.disconnect();
+    await _repository.releaseDriveSession();
     _set(_state.copyWith(
       status: SyncStatus.offline,
       clearConflict: true,

@@ -216,11 +216,16 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _ConnectionCard(
-          email: _repository.connectedAccountEmail,
-          isBusy: _isBusy,
-          onConnect: _connect,
-          onDisconnect: _repository.isConnected ? _disconnect : null,
+        ListenableBuilder(
+          listenable: _repository,
+          builder: (context, _) => _ConnectionCard(
+            email: _repository.connectedAccountEmail,
+            sessionActive: _repository.isConnected,
+            isBusy: _isBusy,
+            onConnect: _connect,
+            onDisconnect:
+                _repository.isDriveSignedIn ? _disconnect : null,
+          ),
         ),
         const SizedBox(height: 16),
         ListenableBuilder(
@@ -261,12 +266,14 @@ class _LibrarySyncScreenState extends State<LibrarySyncScreen> {
 
 class _ConnectionCard extends StatelessWidget {
   final String? email;
+  final bool sessionActive;
   final bool isBusy;
   final VoidCallback onConnect;
   final VoidCallback? onDisconnect;
 
   const _ConnectionCard({
     required this.email,
+    required this.sessionActive,
     required this.isBusy,
     required this.onConnect,
     required this.onDisconnect,
@@ -274,7 +281,12 @@ class _ConnectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final connected = email != null;
+    final signedIn = email != null;
+    final statusLabel = switch ((signedIn, sessionActive)) {
+      (true, true) => 'Connecté : $email',
+      (true, false) => 'Compte $email — session à renouveler',
+      (_, _) => 'Non connecté à Drive',
+    };
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -284,13 +296,17 @@ class _ConnectionCard extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  connected ? Icons.cloud_done : Icons.cloud_off,
+                  sessionActive
+                      ? Icons.cloud_done
+                      : signedIn
+                          ? Icons.cloud_queue
+                          : Icons.cloud_off,
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    connected ? 'Connecté : $email' : 'Non connecté à Drive',
+                    statusLabel,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
