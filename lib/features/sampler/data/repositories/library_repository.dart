@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -57,7 +57,7 @@ class DriveFolderLinkInitResult {
 ///
 /// Conserve la session Drive active ([activeClient]) pour les opérations de
 /// synchronisation ultérieures (snapshot DB, cache audio).
-class LibraryRepository {
+class LibraryRepository extends ChangeNotifier {
   final LocalLibraryDataSource _dataSource;
   final DriveAuthenticator _authenticator;
   final LibrarySyncService _syncService;
@@ -93,8 +93,11 @@ class LibraryRepository {
   DriveClient? get activeClient => _activeClient;
   String? get connectedAccountEmail => _authenticator.accountEmail;
   DriveAccountProfile? get connectedAccountProfile =>
-      isConnected ? _authenticator.accountProfile : null;
+      _authenticator.accountProfile;
+  bool get isDriveSignedIn => _authenticator.accountProfile != null;
   bool get isConnected => _activeClient != null;
+
+  void _notifyDriveSessionChanged() => notifyListeners();
 
   /// Identifiant Drive d'un dossier choisi via le sélecteur SAF Android.
   ///
@@ -157,6 +160,7 @@ class LibraryRepository {
     final client = await _authenticator.connectSilently();
     if (client is GoogleDriveClient) {
       _activeClient = client;
+      _notifyDriveSessionChanged();
       return client;
     }
 
@@ -185,6 +189,7 @@ class LibraryRepository {
     if (fresh != null) {
       _activeClient?.dispose();
       _activeClient = fresh;
+      _notifyDriveSessionChanged();
       return true;
     }
 
@@ -195,8 +200,12 @@ class LibraryRepository {
     }
 
     final client = await _authenticator.connect();
-    if (client == null) return false;
+    if (client == null) {
+      _notifyDriveSessionChanged();
+      return false;
+    }
     _activeClient = client;
+    _notifyDriveSessionChanged();
     return true;
   }
 
@@ -290,6 +299,7 @@ class LibraryRepository {
     final client = await _authenticator.connect();
     if (client == null) return null;
     _activeClient = client;
+    _notifyDriveSessionChanged();
 
     // Réutilise un dossier homonyme créé précédemment par l'app, sinon crée-le.
     var folder = await client.findInFolder(parentId: 'root', name: name);
@@ -309,11 +319,22 @@ class LibraryRepository {
   /// Reconnexion silencieuse au démarrage (réutilise une session existante).
   /// Retourne true si une session a pu être rétablie.
   Future<bool> reconnectSilently() async {
+    await _authenticator.restoreAccountProfile();
     final client = await _authenticator.connectSilently();
-    if (client == null) return false;
-    _activeClient = client;
-    await refreshLibraryOwnerEmails();
-    return true;
+    if (client != null) {
+      _activeClient?.dispose();
+      _activeClient = client;
+      await refreshLibraryOwnerEmails();
+    }
+    _notifyDriveSessionChanged();
+    return client != null;
+  }
+
+  /// Ferme la session HTTP active sans révoquer les tokens Google stockés.
+  Future<void> releaseDriveSession() async {
+    _activeClient?.dispose();
+    _activeClient = null;
+    _notifyDriveSessionChanged();
   }
 
   static final Set<String> _driveOwnerRefreshLogged = {};
@@ -953,6 +974,7 @@ class LibraryRepository {
     _activeClient?.dispose();
     _activeClient = null;
     await _authenticator.signOut();
+    _notifyDriveSessionChanged();
   }
 
   Future<String> _createLocalRoot() async {
