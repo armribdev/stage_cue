@@ -66,7 +66,18 @@ class PadDetailsScreen extends StatefulWidget {
 }
 
 class _PadDetailsScreenState extends State<PadDetailsScreen> {
-  late Color? _selectedColor;
+  static const List<Color> _colorChoices = <Color>[
+    Colors.blue,
+    Colors.green,
+    Colors.orange,
+    Colors.purple,
+    Colors.red,
+    Colors.teal,
+    Colors.brown,
+    Colors.grey,
+  ];
+
+  late int? _selectedColorValue;
   late double _volume;
   late PadPlayMode _playMode;
   late final TextEditingController _displayNameController;
@@ -78,7 +89,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   void initState() {
     super.initState();
     final pad = widget.padItem.pad;
-    _selectedColor = pad.colorValue != null ? Color(pad.colorValue!) : null;
+    _selectedColorValue = pad.colorValue;
     _volume = pad.volume.clamp(0.0, 1.0);
     _playMode = pad.playMode;
     _displayNameController = TextEditingController(text: pad.name ?? '');
@@ -101,11 +112,11 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     });
   }
 
-  void _updateColor(Color? color) {
-    setState(() => _selectedColor = color);
+  void _updateColor(int? colorValue) {
+    setState(() => _selectedColorValue = colorValue);
     widget.notifier.updatePadItemSettings(
       widget.padItem,
-      buttonColor: color,
+      buttonColor: colorValue != null ? Color(colorValue) : null,
       updateColor: true,
     );
   }
@@ -170,17 +181,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     final scheme = Theme.of(context).colorScheme;
     final pad = widget.padItem.pad;
     final sounds = pad.sounds;
-    final colorChoices = <Color>[
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.red,
-      Colors.teal,
-      Colors.brown,
-      Colors.grey,
-    ];
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -241,7 +241,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                       runSpacing: 12,
                       children: [
                         _buildDefaultColorOption(context),
-                        for (final c in colorChoices)
+                        for (final c in _colorChoices)
                           _buildColorDot(context, c),
                       ],
                     ),
@@ -350,7 +350,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   }
 
   Widget _buildDefaultColorOption(BuildContext context) {
-    final isSelected = _selectedColor == null;
+    final isSelected = _selectedColorValue == null;
     final scheme = Theme.of(context).colorScheme;
     final borderColor = isSelected ? scheme.primary : scheme.outlineVariant;
     final onSurface = scheme.onSurfaceVariant;
@@ -392,12 +392,12 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   }
 
   Widget _buildColorDot(BuildContext context, Color color) {
-    final isSelected = _selectedColor == color;
+    final isSelected = _selectedColorValue == color.toARGB32();
     final scheme = Theme.of(context).colorScheme;
     final borderColor = isSelected ? scheme.primary : scheme.outlineVariant;
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () => _updateColor(color),
+      onTap: () => _updateColor(color.toARGB32()),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         width: 40,
