@@ -392,6 +392,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       context,
       libraryRepository: widget.services.libraryRepository,
       syncController: widget.services.syncController,
+      appPreferences: widget.services.appPreferences,
     );
     if (!mounted) return;
     await _notifier.loadBoards();

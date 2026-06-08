@@ -370,7 +370,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                type.label,
+                widget.sound.typeDisplayLabel,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),

@@ -29,17 +29,27 @@ class LocalSoundDataSource {
 
   LocalSoundDataSource(this._database);
 
-  Future<({db_sounds.SoundType type, String? contentHash})>
+  Future<({db_sounds.SoundType type, bool durationProbed, String? contentHash})>
       _resolveMetadataForFile(File file) async {
     if (!await file.exists() || await file.length() <= 0) {
-      return (type: db_sounds.SoundType.soundEffect, contentHash: null);
+      return (
+        type: db_sounds.SoundType.soundEffect,
+        durationProbed: false,
+        contentHash: null,
+      );
     }
-    final type = await _resolveSoundTypeFromDuration(file);
-    final contentHash = await computeQuickHash(file);
-    return (type: type, contentHash: contentHash);
+    final probe = await _probeSoundTypeFromDuration(file);
+    final contentHash =
+        probe.durationProbed ? await computeQuickHash(file) : null;
+    return (
+      type: probe.type,
+      durationProbed: probe.durationProbed,
+      contentHash: contentHash,
+    );
   }
 
-  Future<db_sounds.SoundType> _resolveSoundTypeFromDuration(File file) async {
+  Future<({db_sounds.SoundType type, bool durationProbed})>
+      _probeSoundTypeFromDuration(File file) async {
     if (!await isPlausibleAudioFile(file)) {
       AudioLoadLog.metadataProbeFailed(
         path: file.path,
@@ -48,28 +58,45 @@ class LocalSoundDataSource {
           '(min $kMinimumValidAudioFileBytes o)',
         ),
       );
-      return db_sounds.SoundType.soundEffect;
+      return (type: db_sounds.SoundType.soundEffect, durationProbed: false);
     }
 
+    final soloudDuration = await _readDurationViaSoLoud(file);
+    if (soloudDuration != null) {
+      return _typeFromDuration(soloudDuration);
+    }
+
+    return (type: db_sounds.SoundType.soundEffect, durationProbed: false);
+  }
+
+  ({db_sounds.SoundType type, bool durationProbed}) _typeFromDuration(
+    Duration duration,
+  ) {
+    if (duration > _musicThreshold) {
+      return (type: db_sounds.SoundType.music, durationProbed: true);
+    }
+    return (type: db_sounds.SoundType.soundEffect, durationProbed: true);
+  }
+
+  Future<Duration?> _readDurationViaSoLoud(File file) async {
     AudioSource? source;
     try {
       source = await loadAudioSourceFromFile(file);
       final duration = SoLoud.instance.getLength(source);
-      if (duration > _musicThreshold) {
-        return db_sounds.SoundType.music;
-      }
+      if (duration <= Duration.zero) return null;
+      return duration;
     } catch (e) {
       AudioLoadLog.metadataProbeFailed(path: file.path, error: e);
+      return null;
     } finally {
       if (source != null) {
         try {
           SoLoud.instance.disposeSource(source);
         } catch (e) {
-          debugPrint('Dispose metadata SoLoud échoué: $e');
+          debugPrint('Dispose SoLoud (probe durée) échoué: $e');
         }
       }
     }
-    return db_sounds.SoundType.soundEffect;
   }
 
   /// Récupère tous les sons
@@ -92,7 +119,8 @@ class LocalSoundDataSource {
         s.type AS type,
         COALESCE(bss.color, s.color) AS color,
         COALESCE(bss.volume, s.volume) AS volume,
-        s.created_at AS created_at
+        s.created_at AS created_at,
+        s.type_detected AS type_detected
       FROM sounds s
       INNER JOIN board_sounds bs
         ON bs.sound_id = s.id
@@ -123,6 +151,7 @@ class LocalSoundDataSource {
         colorValue: row.read<int?>('color'),
         volume: row.read<double>('volume'),
         createdAt: row.read<DateTime>('created_at'),
+        typeDetected: row.read<bool>('type_detected'),
       );
     }).toList();
   }
@@ -243,7 +272,13 @@ class LocalSoundDataSource {
       domain.SoundType.ambiance => db_sounds.SoundType.ambiance,
     };
     await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
-        .write(db.SoundsCompanion(type: Value(dbType)));
+        .write(
+      db.SoundsCompanion(
+        type: Value(dbType),
+        typeManuallySet: const Value(true),
+        typeDetected: const Value(true),
+      ),
+    );
   }
 
   /// Marque ou démarque un son comme favori (accès rapide en recherche).
@@ -327,8 +362,7 @@ class LocalSoundDataSource {
 
       // Extraire le nom du fichier sans extension pour le titre
       final title = p.basenameWithoutExtension(file.path);
-      final soundType = await _resolveSoundTypeFromDuration(file);
-      final contentHash = await computeQuickHash(file);
+      final metadata = await _resolveMetadataForFile(file);
 
       // Ajouter le fichier à la base de données
       await _database
@@ -337,8 +371,9 @@ class LocalSoundDataSource {
             db.SoundsCompanion.insert(
               title: title,
               filePath: file.path,
-              type: soundType,
-              contentHash: Value(contentHash),
+              type: metadata.type,
+              contentHash: Value(metadata.contentHash),
+              typeDetected: Value(metadata.durationProbed),
             ),
           );
     } catch (e) {
@@ -368,25 +403,25 @@ class LocalSoundDataSource {
     if (existing.isNotEmpty) return false;
 
     final title = p.basenameWithoutExtension(file.path);
-    final soundType = await _resolveSoundTypeFromDuration(file);
-    final contentHash = await computeQuickHash(file);
+    final metadata = await _resolveMetadataForFile(file);
 
     await _database.into(_database.sounds).insert(
           db.SoundsCompanion.insert(
             title: title,
             filePath: file.path,
-            type: soundType,
+            type: metadata.type,
             libraryId: Value(libraryId),
             relativePath: Value(relativePath),
-            contentHash: Value(contentHash),
+            contentHash: Value(metadata.contentHash),
+            typeDetected: Value(metadata.durationProbed),
           ),
         );
     return true;
   }
 
-  /// Met à jour le type et le hash d'un son après que son fichier a été matérialisé
-  /// (premier téléchargement). Ne touche pas aux champs de présentation.
-  Future<void> refreshSoundMetadata({
+  /// Persiste hash et/ou type initial si le fichier vient d'être matérialisé.
+  /// Ne modifie jamais un type déjà détecté ou fixé manuellement.
+  Future<void> materializeSoundFileMetadata({
     required int soundId,
     required File file,
   }) async {
@@ -394,22 +429,45 @@ class LocalSoundDataSource {
           ..where((s) => s.id.equals(soundId)))
         .getSingleOrNull();
     if (existing == null) return;
+    if (!await isPlausibleAudioFile(file)) return;
 
+    if (!existing.typeDetected && !existing.typeManuallySet) {
+      final probe = await _probeSoundTypeFromDuration(file);
+      final contentHash = probe.durationProbed
+          ? await computeQuickHash(file)
+          : existing.contentHash;
+      await (_database.update(_database.sounds)
+            ..where((s) => s.id.equals(soundId)))
+          .write(
+        db.SoundsCompanion(
+          type: probe.durationProbed ? Value(probe.type) : const Value.absent(),
+          typeDetected: Value(probe.durationProbed),
+          contentHash: Value(contentHash),
+        ),
+      );
+      return;
+    }
+
+    if (existing.contentHash != null) return;
     final contentHash = await computeQuickHash(file);
-    // Ne réécrase le type que si c'est la première détection (pas de hash connu).
-    // Protège les surcharges manuelles de type si le cache est évincé et re-téléchargé.
-    final typeValue = existing.contentHash == null
-        ? Value(await _resolveSoundTypeFromDuration(file))
-        : const Value<db_sounds.SoundType>.absent();
-
     await (_database.update(_database.sounds)
           ..where((s) => s.id.equals(soundId)))
-        .write(
-          db.SoundsCompanion(
-            type: typeValue,
-            contentHash: Value(contentHash),
-          ),
-        );
+        .write(db.SoundsCompanion(contentHash: Value(contentHash)));
+  }
+
+  /// true si un son `(libraryId, relativePath)` existe déjà en base.
+  Future<bool> hasLibrarySound({
+    required int libraryId,
+    required String relativePath,
+  }) async {
+    final existing = await (_database.select(_database.sounds)
+          ..where(
+            (s) =>
+                s.libraryId.equals(libraryId) &
+                s.relativePath.equals(relativePath),
+          ))
+        .get();
+    return existing.isNotEmpty;
   }
 
   /// Corrige le chemin relatif portable d'un son (déplacement/renommage Drive).
@@ -460,15 +518,6 @@ class LocalSoundDataSource {
     if (existing.isNotEmpty) {
       final existingRow = existing.first;
       await syncLibrarySoundLocalPath(existingRow.id, localPath);
-      if (existingRow.contentHash == null) {
-        final metadata = await _resolveMetadataForFile(File(localPath));
-        if (metadata.contentHash != null) {
-          await refreshSoundMetadata(
-            soundId: existingRow.id,
-            file: File(localPath),
-          );
-        }
-      }
       return false;
     }
 
@@ -483,6 +532,7 @@ class LocalSoundDataSource {
             libraryId: Value(libraryId),
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
+            typeDetected: Value(metadata.durationProbed),
           ),
         );
     return true;
@@ -556,8 +606,7 @@ class LocalSoundDataSource {
 
           // Extraire le nom du fichier sans extension pour le titre
           final title = p.basenameWithoutExtension(file.path);
-          final soundType = await _resolveSoundTypeFromDuration(file);
-          final contentHash = await computeQuickHash(file);
+          final metadata = await _resolveMetadataForFile(file);
 
           // Ajouter le fichier à la base de données
           await _database
@@ -566,8 +615,9 @@ class LocalSoundDataSource {
                 db.SoundsCompanion.insert(
                   title: title,
                   filePath: file.path,
-                  type: soundType,
-                  contentHash: Value(contentHash),
+                  type: metadata.type,
+                  contentHash: Value(metadata.contentHash),
+                  typeDetected: Value(metadata.durationProbed),
                 ),
               );
           indexedCount++;
@@ -743,6 +793,7 @@ class LocalSoundDataSource {
         libraryId: row.libraryId,
         relativePath: row.relativePath,
         contentHash: row.contentHash,
+        typeDetected: row.typeDetected,
       );
     }).toList();
   }
@@ -986,6 +1037,7 @@ class LocalPadDataSource {
       libraryId: row.read<int?>('library_id'),
       relativePath: row.read<String?>('relative_path'),
       contentHash: row.read<String?>('content_hash'),
+      typeDetected: row.read<bool>('type_detected'),
     );
   }
 
@@ -1007,7 +1059,7 @@ class LocalPadDataSource {
         '''
         SELECT s.id, s.title, s.display_name, s.file_path, s.type,
                s.color, s.volume, s.created_at,
-               s.library_id, s.relative_path, s.content_hash
+               s.library_id, s.relative_path, s.content_hash, s.type_detected
         FROM pad_sounds ps
         INNER JOIN sounds s ON s.id = ps.sound_id
         WHERE ps.pad_id = ?
