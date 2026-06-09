@@ -9,6 +9,7 @@ import '../providers/sync_controller.dart';
 import '../widgets/pad_button.dart' show padSoundAvailabilityIcon;
 import '../models/pad_sound_slot.dart';
 import '../widgets/pad_item.dart' show PadCard;
+import '../widgets/dashed_slot_frame.dart';
 import '../widgets/music_preview_panel.dart';
 import '../widgets/music_picker_sheet.dart';
 import '../widgets/quick_search_overlay.dart';
@@ -734,29 +735,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
     required int rowIndex,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    const borderRadius = 14.0;
-    Widget card = Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      color: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(borderRadius),
-      ),
-      child: CustomPaint(
-        foregroundPainter: _DashedRoundedRectPainter(
-          color: scheme.outlineVariant.withValues(alpha: 0.45),
-          radius: borderRadius,
-        ),
-        child: InkWell(
-          onTap: () => _openAddPadFlow(board, rowIndex: rowIndex),
-          borderRadius: BorderRadius.circular(borderRadius),
-          child: Center(
-            child: Icon(
-              Icons.add_rounded,
-              size: 24,
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
-            ),
-          ),
+    Widget card = DashedSlotFrame(
+      onTap: () => _openAddPadFlow(board, rowIndex: rowIndex),
+      child: Center(
+        child: Icon(
+          Icons.add_rounded,
+          size: 24,
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
         ),
       ),
     );
@@ -764,6 +749,126 @@ class _SamplerScreenState extends State<SamplerScreen> {
       card = Tooltip(message: 'Ajouter un pad (Ctrl+N)', child: card);
     }
     return _wrapMusicRegieTapTarget(card);
+  }
+
+  static const Duration _addSlotTransitionDuration = Duration(milliseconds: 240);
+
+  /// Le « + » de fin de ligne se transforme en pad ; un nouveau « + » apparaît à côté.
+  Widget _buildMorphingAddSlot(
+    BuildContext context, {
+    required SamplerState state,
+    required SoundBoard board,
+    required int rowIndex,
+    required PadItem? draft,
+  }) {
+    return AnimatedSwitcher(
+      duration: _addSlotTransitionDuration,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.94, end: 1).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            ),
+            child: child,
+          ),
+        );
+      },
+      child: draft != null
+          ? KeyedSubtree(
+              key: ValueKey<int>(draft.pad.id),
+              child: _buildPadWidget(context, state, draft),
+            )
+          : KeyedSubtree(
+              key: ValueKey<String>('add_pad_slot_$rowIndex'),
+              child: _buildAddToRowButton(
+                context,
+                board,
+                rowIndex: rowIndex,
+              ),
+            ),
+    );
+  }
+
+  Widget _buildAddSlotEntrance({required Widget child}) {
+    return TweenAnimationBuilder<double>(
+      key: const ValueKey<String>('add_slot_entrance'),
+      tween: Tween(begin: 0, end: 1),
+      duration: _addSlotTransitionDuration,
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.scale(
+            scale: 0.94 + 0.06 * value,
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+
+  List<Widget> _buildNormalRowCells({
+    required BuildContext context,
+    required SamplerState state,
+    required SoundBoard board,
+    required int rowIndex,
+    required List<PadItem> rowPads,
+    required double cellWidth,
+    required double cellHeight,
+  }) {
+    final committed = rowPads.where((pad) => !pad.isDraft).toList();
+    PadItem? draft;
+    for (final pad in rowPads) {
+      if (pad.isDraft) {
+        draft = pad;
+        break;
+      }
+    }
+
+    final cells = <Widget>[
+      for (final pad in committed)
+        SizedBox(
+          key: _padScrollKey(pad.pad.id),
+          width: cellWidth,
+          height: cellHeight,
+          child: _buildPadWidget(context, state, pad),
+        ),
+      SizedBox(
+        key: ValueKey<String>('row_${rowIndex}_tail_slot'),
+        width: cellWidth,
+        height: cellHeight,
+        child: _buildMorphingAddSlot(
+          context,
+          state: state,
+          board: board,
+          rowIndex: rowIndex,
+          draft: draft,
+        ),
+      ),
+    ];
+
+    if (draft != null) {
+      cells.add(
+        SizedBox(
+          key: ValueKey<String>('add_row_${rowIndex}_trailing'),
+          width: cellWidth,
+          height: cellHeight,
+          child: _buildAddSlotEntrance(
+            child: _buildAddToRowButton(
+              context,
+              board,
+              rowIndex: rowIndex,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return cells;
   }
 
 
@@ -989,19 +1094,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
         final displayRowIndices = hasPads ? rowIndices : [0];
         final nextRowIndex = hasPads ? rowIndices.last + 1 : null;
 
-        Widget buildRowAddButton(int rowIndex) {
-          return SizedBox(
-            key: ValueKey('add_row_$rowIndex'),
-            width: cellWidth,
-            height: cellHeight,
-            child: _buildAddToRowButton(
-              context,
-              selectedBoard,
-              rowIndex: rowIndex,
-            ),
-          );
-        }
-
         return SingleChildScrollView(
           key: const ValueKey('pads_normal_rows'),
           controller: _normalGridScrollController,
@@ -1014,16 +1106,15 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 Wrap(
                   spacing: 14,
                   runSpacing: 14,
-                  children: [
-                    for (final pad in rowMap[displayRowIndices[i]] ?? [])
-                      SizedBox(
-                        key: _padScrollKey(pad.pad.id),
-                        width: cellWidth,
-                        height: cellHeight,
-                        child: _buildPadWidget(context, state, pad),
-                      ),
-                    buildRowAddButton(displayRowIndices[i]),
-                  ],
+                  children: _buildNormalRowCells(
+                    context: context,
+                    state: state,
+                    board: selectedBoard,
+                    rowIndex: displayRowIndices[i],
+                    rowPads: rowMap[displayRowIndices[i]] ?? [],
+                    cellWidth: cellWidth,
+                    cellHeight: cellHeight,
+                  ),
                 ),
               ],
               if (nextRowIndex != null) ...[
@@ -1031,7 +1122,15 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 Wrap(
                   spacing: 14,
                   runSpacing: 14,
-                  children: [buildRowAddButton(nextRowIndex)],
+                  children: _buildNormalRowCells(
+                    context: context,
+                    state: state,
+                    board: selectedBoard,
+                    rowIndex: nextRowIndex,
+                    rowPads: const [],
+                    cellWidth: cellWidth,
+                    cellHeight: cellHeight,
+                  ),
                 ),
               ],
             ],
@@ -1319,7 +1418,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
               ),
             );
           }
-          final downloadableCount = state.pads.where((p) => !p.isFullyReady).length;
+          final downloadableCount = state.pads
+              .where((p) => !p.isDraft && !p.isFullyReady)
+              .length;
           final showPrepareBanner =
               downloadableCount > 0 || state.isBoardPreparing;
           return Column(
@@ -2410,50 +2511,3 @@ class _BoardTileIcon extends StatelessWidget {
   }
 }
 
-/// Contour pointillé pour le faux pad « Ajouter un pad ».
-class _DashedRoundedRectPainter extends CustomPainter {
-  const _DashedRoundedRectPainter({
-    required this.color,
-    required this.radius,
-  });
-
-  final Color color;
-  final double radius;
-  static const _strokeWidth = 1.0;
-  static const _dashLength = 5.0;
-  static const _dashGap = 4.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _strokeWidth;
-
-    final halfStroke = _strokeWidth / 2;
-    final rrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(
-        halfStroke,
-        halfStroke,
-        size.width - _strokeWidth,
-        size.height - _strokeWidth,
-      ),
-      Radius.circular(radius),
-    );
-
-    final path = Path()..addRRect(rrect);
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final end = (distance + _dashLength).clamp(0.0, metric.length);
-        canvas.drawPath(metric.extractPath(distance, end), paint);
-        distance += _dashLength + _dashGap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DashedRoundedRectPainter oldDelegate) {
-    return color != oldDelegate.color || radius != oldDelegate.radius;
-  }
-}

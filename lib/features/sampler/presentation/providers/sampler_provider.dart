@@ -1362,7 +1362,8 @@ class SamplerNotifier extends ChangeNotifier {
   Future<void> prepareBoardForOffline() async {
     if (_state.isBoardPreparing) return;
 
-    final toDownload = _state.pads.where((p) => !p.isFullyReady).toList();
+    final toDownload =
+        _state.pads.where((p) => !p.isDraft && !p.isFullyReady).toList();
     if (toDownload.isEmpty) return;
 
     _state = _state.copyWith(
