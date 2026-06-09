@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
+import '../utils/quick_search_prepare.dart';
 import '../utils/sound_type_ui.dart';
 
 /// Recherche-éclair : overlay flottant (pas une route plein écran) pour trouver
@@ -15,20 +16,19 @@ import '../utils/sound_type_ui.dart';
 /// - tri par pertinence puis récence ;
 /// - tap sur une ligne = pré-écoute (audition, reste ouvert) ;
 /// - `↑`/`↓` = parcourir les résultats ; `Entrée` = joue la sélection et ferme ;
-/// - `Ctrl/Cmd+Entrée` = l'ajoute à la scène et ferme ; `Échap` = ferme.
+/// - `Ctrl/Cmd+Entrée` = le prépare et ferme ; `Échap` = ferme.
 ///
-/// Renvoie l'id du pad créé si un son a été ajouté à la scène (pour le mettre en
-/// évidence), sinon null.
+/// Renvoie le résultat de préparation (pad à surligner pour les bruitages).
 class QuickSearchOverlay extends StatefulWidget {
   final SamplerNotifier notifier;
 
   const QuickSearchOverlay({super.key, required this.notifier});
 
-  static Future<int?> show(
+  static Future<QuickSearchPrepareResult?> show(
     BuildContext context, {
     required SamplerNotifier notifier,
   }) {
-    return showGeneralDialog<int?>(
+    return showGeneralDialog<QuickSearchPrepareResult?>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Fermer la recherche',
@@ -69,10 +69,6 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   /// Ids des sons jouables hors-ligne (cache présent / fichier legacy). Chargé
   /// en arrière-plan ; null tant que le calcul n'est pas terminé.
   Set<int>? _localIds;
-
-  /// Surcharges locales de l'état favori (mise à jour instantanée après un tap
-  /// sur l'étoile, sans recharger toute la liste).
-  final Map<int, bool> _favOverride = {};
 
   Set<int> _tagMatchIds = const {};
   String _tagToken = '';
@@ -125,8 +121,6 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     setState(() => _tagMatchIds = ids);
   }
 
-  bool _isFav(Sound s) => _favOverride[s.id] ?? s.isFavorite;
-
   DateTime _recencyKey(Sound s) => s.lastPlayedAt ?? s.createdAt;
 
   /// Résultats filtrés et classés : pertinence, puis favoris, puis récence.
@@ -136,7 +130,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     final scored = <(Sound, int)>[];
     for (final sound in _all) {
       if (_typeFilter != null && !sound.matchesSoundType(_typeFilter!)) continue;
-      if (_favoritesOnly && !_isFav(sound)) continue;
+      if (_favoritesOnly && !sound.isFavorite) continue;
       if (_localOnly && !_isLocal(sound)) continue;
       final name = normalizeForSearch(sound.displayName ?? sound.title);
       var score = fuzzyMatchScore(name, q);
@@ -148,7 +142,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     }
     scored.sort((a, b) {
       if (a.$2 != b.$2) return b.$2.compareTo(a.$2); // pertinence
-      final favA = _isFav(a.$1), favB = _isFav(b.$1);
+      final favA = a.$1.isFavorite, favB = b.$1.isFavorite;
       if (favA != favB) return favA ? -1 : 1; // favoris d'abord
       return _recencyKey(b.$1).compareTo(_recencyKey(a.$1)); // récence
     });
@@ -160,7 +154,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     final isBrowse = _query.isEmpty && !_favoritesOnly;
     if (!isBrowse) return results;
     return results
-        .where((s) => _isFav(s) || s.lastPlayedAt != null)
+        .where((s) => s.isFavorite || s.lastPlayedAt != null)
         .take(25)
         .toList();
   }
@@ -246,21 +240,15 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  Future<void> _toggleFav(Sound sound) async {
-    final next = await widget.notifier.toggleSoundFavorite(sound.id);
-    if (!mounted) return;
-    setState(() => _favOverride[sound.id] = next);
+  Future<void> _prepareAndClose(Sound sound) async {
+    final result = await widget.notifier.prepareSoundFromQuickSearch(sound.id);
+    if (mounted) Navigator.of(context).pop(result);
   }
 
-  Future<void> _addAndClose(Sound sound) async {
-    final padId = await widget.notifier.addSoundToActiveBoard(sound.id);
-    if (mounted) Navigator.of(context).pop(padId);
-  }
-
-  Future<void> _addSelectedAndClose() async {
+  Future<void> _prepareSelectedAndClose() async {
     final shown = _shownResults(_results);
     if (shown.isEmpty) return;
-    await _addAndClose(shown[_clampSelectedIndex(shown.length)]);
+    await _prepareAndClose(shown[_clampSelectedIndex(shown.length)]);
   }
 
   KeyEventResult _onSearchKey(FocusNode node, KeyEvent event) {
@@ -296,9 +284,9 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
         const SingleActivator(LogicalKeyboardKey.escape): () =>
             Navigator.of(context).pop(),
         const SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
-            unawaited(_addSelectedAndClose()),
+            unawaited(_prepareSelectedAndClose()),
         const SingleActivator(LogicalKeyboardKey.enter, meta: true): () =>
-            unawaited(_addSelectedAndClose()),
+            unawaited(_prepareSelectedAndClose()),
       },
       child: Align(
         alignment: Alignment.center,
@@ -464,7 +452,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
         child: Center(
           child: Text(
             isBrowse
-                ? 'Tapez pour chercher — ★ pour épingler vos sons'
+                ? 'Tapez pour chercher vos sons'
                 : 'Aucun son',
             textAlign: TextAlign.center,
             style: TextStyle(color: scheme.onSurfaceVariant),
@@ -499,7 +487,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
               itemBuilder: (context, index) {
                 final sound = shown[index];
                 final isSelected = index == selectedIndex;
-                final fav = _isFav(sound);
+                final fav = sound.isFavorite;
                 return Material(
                   key: _itemKey(sound.id),
                   color: isSelected
@@ -557,26 +545,30 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              if (fav) ...[
+                                Tooltip(
+                                  message: 'Favori',
+                                  child: SizedBox(
+                                    width: _actionButtonSize,
+                                    height: _actionButtonSize,
+                                    child: Icon(
+                                      Icons.star_rounded,
+                                      size: 18,
+                                      color: scheme.primary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
                               _roundActionButton(
                                 scheme: scheme,
-                                icon: fav
-                                    ? Icons.star_rounded
-                                    : Icons.star_border_rounded,
-                                tooltip: fav
-                                    ? 'Retirer des favoris'
-                                    : 'Ajouter aux favoris',
-                                iconColor: fav
-                                    ? scheme.primary
-                                    : scheme.onSurfaceVariant,
-                                onPressed: () => unawaited(_toggleFav(sound)),
-                              ),
-                              const SizedBox(width: 4),
-                              _roundActionButton(
-                                scheme: scheme,
-                                icon: Icons.add_rounded,
-                                tooltip: 'Ajouter à la scène',
+                                icon: sound.type == SoundType.music
+                                    ? Icons.playlist_add_rounded
+                                    : Icons.layers_rounded,
+                                tooltip: 'Préparer',
                                 iconColor: scheme.primary,
-                                onPressed: () => unawaited(_addAndClose(sound)),
+                                onPressed: () =>
+                                    unawaited(_prepareAndClose(sound)),
                               ),
                             ],
                           ),
@@ -634,7 +626,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
       child: Text(
-        '↑↓ sélectionner    ↵ jouer    ⌘/Ctrl+↵ ajouter    tap audition',
+        '↑↓ sélectionner    ↵ jouer    ⌘/Ctrl+↵ préparer    tap audition',
         style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
       ),
     );
