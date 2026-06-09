@@ -90,7 +90,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Laisse la transition de navigation se terminer avant de lancer
       // les lectures DB pour éviter les à-coups à l'ouverture.
       unawaited(_startInitialLoad());
-      unawaited(widget.libraryRepository.reconnectSilently());
     });
   }
 
