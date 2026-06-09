@@ -10,6 +10,7 @@ class PadCard extends StatefulWidget {
   final bool animateOnRestore;
   /// Bordure discrète pour indiquer le pad ciblé (ex. retour bibliothèque).
   final bool isHighlighted;
+  final bool Function(PadItem padItem) isTapBlocked;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onRemove;
@@ -18,6 +19,7 @@ class PadCard extends StatefulWidget {
     super.key,
     required this.padItem,
     required this.isEditMode,
+    required this.isTapBlocked,
     this.animateOnRestore = false,
     this.isHighlighted = false,
     this.onTap,
@@ -326,12 +328,16 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
       // global de la grille (refonte UX P2).
       child: ListenableBuilder(
         listenable: widget.padItem.revision,
-        builder: (context, _) => PadButton(
-          key: ValueKey<int>(widget.padItem.pad.id),
-          padItem: widget.padItem,
-          onTap: widget.onTap,
-          onLongPress: widget.onLongPress,
-        ),
+        builder: (context, _) {
+          final blocked =
+              widget.isEditMode || widget.isTapBlocked(widget.padItem);
+          return PadButton(
+            key: ValueKey<int>(widget.padItem.pad.id),
+            padItem: widget.padItem,
+            onTap: blocked ? null : widget.onTap,
+            onLongPress: widget.onLongPress,
+          );
+        },
       ),
     );
   }

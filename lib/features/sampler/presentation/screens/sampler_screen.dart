@@ -996,6 +996,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                       child: PadCard(
                         padItem: padItem,
                         isEditMode: false,
+                        isTapBlocked: (_) => false,
                       ),
                     ),
                   ),
@@ -1025,6 +1026,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                           child: PadCard(
                             padItem: pad,
                             isEditMode: true,
+                            isTapBlocked: (_) => false,
                           ),
                         ),
                     ],
@@ -1189,18 +1191,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
 
-    // Fichier introuvable : retenter le téléchargement uniquement si le son
-    // n'est pas confirmé absent du Drive en session (via _driveNotFoundSoundIds).
-    if (reason == PadUnavailabilityReason.missingFile) {
-      if (_notifier.isPadRetryableFromDrive(resolved)) {
-        debugPrint('[TAP] pad="${resolved.pad.displayName}" → retry Drive download');
-        unawaited(HapticFeedback.selectionClick());
-        await _preparePad(resolved);
-        return;
-      }
-      debugPrint('[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason (Drive confirmed absent)');
-      unawaited(HapticFeedback.heavyImpact());
-      _showBlockedPadFeedback(resolved, reason);
+    if (reason == PadUnavailabilityReason.missingFile ||
+        _notifier.isPadTapBlocked(resolved)) {
+      debugPrint('[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason');
       return;
     }
 
@@ -1293,9 +1286,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
         ),
       PadUnavailabilityReason.missingFile => (
           'Fichier introuvable',
-          'Le fichier audio n\'a pas pu être chargé. Touchez le pad pour '
-              'retenter le téléchargement depuis Drive, ou resynchronisez la '
-              'bibliothèque dans les paramètres.',
+          _notifier.isPadRetryableFromDrive(padItem)
+              ? 'Le fichier audio n\'a pas pu être chargé. Touchez le pad pour '
+                  'retenter le téléchargement depuis Drive, ou resynchronisez la '
+                  'bibliothèque dans les paramètres.'
+              : 'Le fichier audio n\'a pas pu être chargé. Resynchronisez la '
+                  'bibliothèque dans les paramètres.',
         ),
     };
 
@@ -1330,11 +1326,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
         key: ValueKey<int>(padItem.pad.id),
         padItem: padItem,
         isEditMode: _isEditMode,
+        isTapBlocked: _notifier.isPadTapBlocked,
         animateOnRestore: _recentlyRestoredSoundId == padItem.pad.id,
         isHighlighted: _highlightedPadId == padItem.pad.id,
-        onTap: _isEditMode
-            ? null
-            : () => unawaited(_handlePadTap(context, padItem)),
+        onTap: () => unawaited(_handlePadTap(context, padItem)),
         onLongPress: _isEditMode || _isPerformanceMode
             ? null
             : () => PadDetailsScreen.open(
@@ -1418,9 +1413,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
               ),
             );
           }
-          final downloadableCount = state.pads
-              .where((p) => !p.isDraft && !p.isFullyReady)
-              .length;
+          final downloadableCount =
+              state.pads.where(_notifier.isPadPreparable).length;
           final showPrepareBanner =
               downloadableCount > 0 || state.isBoardPreparing;
           return Column(

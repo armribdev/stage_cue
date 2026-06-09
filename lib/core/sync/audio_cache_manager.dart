@@ -136,6 +136,26 @@ class AudioCacheManager {
     return File(localPathFor(library, relativePath)).exists();
   }
 
+  /// Vérifie si un fichier audio existe sur Drive (sans téléchargement).
+  Future<bool> existsOnDrive({
+    required DriveClient client,
+    required Library library,
+    required String relativePath,
+  }) async {
+    final normalizedPath =
+        LibrarySoundPaths.normalizeRelativePath(relativePath);
+    if (await _resolveRemote(client, library, normalizedPath) != null) {
+      return true;
+    }
+    final fallback = await _findFileByName(
+      client,
+      library,
+      _nameOf(normalizedPath),
+      pathHint: normalizedPath,
+    );
+    return fallback != null;
+  }
+
   // ── Résolution distante ──────────────────────────────────────────────────
 
   /// Recherche un fichier audio par nom dans toute la bibliothèque Drive.

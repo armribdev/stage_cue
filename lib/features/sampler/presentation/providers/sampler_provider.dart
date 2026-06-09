@@ -200,6 +200,28 @@ class PadItem {
       .where((s) => s.availability == PadSoundAvailability.needsDownload)
       .length;
 
+  bool get hasMissingFileSlot => slots.any(
+        (s) => s.availability == PadSoundAvailability.missingFile,
+      );
+
+  /// Pad visuellement bloqué (fichier introuvable / hors-ligne).
+  bool get isBlockedForPlayback {
+    if (isPlayable || appearsReady || isDownloading) return false;
+    if (hasMissingFileSlot) return true;
+    return switch (unavailabilityReason) {
+      PadUnavailabilityReason.offline => true,
+      PadUnavailabilityReason.missingFile => true,
+      _ => false,
+    };
+  }
+
+  /// Éligible au bandeau « Préparer » (téléchargement encore possible).
+  bool get isPreparableForDownload {
+    if (isDraft || isFullyReady || isBlockedForPlayback) return false;
+    return pendingDownloadCount > 0 ||
+        unavailabilityReason == PadUnavailabilityReason.needsDownload;
+  }
+
   /// true pendant un téléchargement actif pour la régie.
   bool get showsRegieDownloadProgress => isDownloading;
 
@@ -460,6 +482,9 @@ class SamplerNotifier extends ChangeNotifier {
     };
   }
 
+  /// Bloque les retentatives Drive pour un son (échec confirmé en session).
+  void _blockSoundDriveRetry(int soundId) => _driveNotFoundSoundIds.add(soundId);
+
   bool _isRetryableMissingLibrarySound(Sound sound) =>
       sound.libraryId != null &&
       sound.relativePath != null &&
@@ -470,6 +495,12 @@ class SamplerNotifier extends ChangeNotifier {
   /// téléchargement Drive (non confirmé absent en session courante).
   bool isPadRetryableFromDrive(PadItem padItem) =>
       padItem.pad.sounds.any(_isRetryableMissingLibrarySound);
+
+  /// Pad éligible au bandeau « Préparer » / téléchargement de plateau.
+  bool isPadPreparable(PadItem padItem) => padItem.isPreparableForDownload;
+
+  /// Pad bloqué : pas de tap (ni retéléchargement, ni SnackBar d'erreur).
+  bool isPadTapBlocked(PadItem padItem) => padItem.isBlockedForPlayback;
 
   Future<void> _prepareRetryForMissingLibrarySound(
     PadItem padItem,
@@ -491,9 +522,13 @@ class SamplerNotifier extends ChangeNotifier {
         sound.libraryId != null &&
         sound.relativePath != null &&
         sound.relativePath!.isNotEmpty) {
-      return _availabilityFromProbe(
+      var availability = _availabilityFromProbe(
         await libraryRepository.probeLocalCache(sound),
       );
+      if (availability == PadSoundAvailability.needsDownload) {
+        availability = await _resolveRemoteAvailability(sound) ?? availability;
+      }
+      return availability;
     }
 
     if (isKnownUnloadablePath(sound.filePath)) {
@@ -509,16 +544,40 @@ class SamplerNotifier extends ChangeNotifier {
     return PadSoundAvailability.missingFile;
   }
 
+  /// Passe de needsDownload à missingFile si Drive confirme l'absence du fichier.
+  Future<PadSoundAvailability?> _resolveRemoteAvailability(Sound sound) async {
+    try {
+      final exists = await _libraryRepository?.probeRemotePresence(sound);
+      if (exists != false) return null;
+      _blockSoundDriveRetry(sound.id);
+      return PadSoundAvailability.missingFile;
+    } catch (e, stack) {
+      AudioLoadLog.severe(
+        'Sonde Drive échouée pour ${sound.displayName ?? sound.title}',
+        error: e,
+        stackTrace: stack,
+      );
+      return null;
+    }
+  }
+
+  Future<void> _probeSlotAtIndex(PadItem padItem, int index) async {
+    if (index < 0 || index >= padItem.slots.length) return;
+    final slot = padItem.slots[index];
+    if (slot.isReady || slot.isCached) return;
+    if (slot.availability == PadSoundAvailability.missingFile) return;
+
+    final availability = await _probeSoundLocalAvailability(
+      padItem.pad.sounds[index],
+    );
+    slot.dispose();
+    padItem.slots[index] = PadSoundSlot(availability: availability);
+  }
+
   Future<void> _probePadLocalAvailability(PadItem padItem) async {
     padItem.syncSlotCount();
     for (var i = 0; i < padItem.pad.sounds.length; i++) {
-      final slot = padItem.slots[i];
-      if (slot.isReady || slot.isCached) continue;
-      final availability = await _probeSoundLocalAvailability(
-        padItem.pad.sounds[i],
-      );
-      slot.dispose();
-      padItem.slots[i] = PadSoundSlot(availability: availability);
+      await _probeSlotAtIndex(padItem, i);
     }
     _finalizePadAvailability(padItem);
   }
@@ -607,10 +666,11 @@ class SamplerNotifier extends ChangeNotifier {
       if (resolvedPath != null) {
         markPathUnloadable(resolvedPath);
       }
-      // Fichier confirmé absent côté Drive : bloquer les retentatives pour
-      // cette session afin d'éviter un cycle "download → erreur → download".
-      if (e is StateError && e.message.contains('introuvable sur Drive')) {
-        _driveNotFoundSoundIds.add(sound.id);
+      // Bloquer les retentatives pour cette session après un échec de chargement
+      // ou téléchargement — évite le cycle "download → erreur → download".
+      if (downloadIfNeeded ||
+          (e is StateError && e.message.contains('introuvable sur Drive'))) {
+        _blockSoundDriveRetry(sound.id);
       }
       AudioLoadLog.soundLoadFailed(
         soundId: sound.id,
@@ -681,6 +741,11 @@ class SamplerNotifier extends ChangeNotifier {
 
     for (var i = 0; i < pad.sounds.length; i++) {
       if (padItem.slots[i].isReady) continue;
+      // Ne pas reprober un slot déjà signalé introuvable : _loadSlotAtIndex
+      // le réinitialiserait en needsDownload et casserait le blocage UI.
+      if (padItem.slots[i].availability == PadSoundAvailability.missingFile) {
+        continue;
+      }
       await _loadSlotAtIndex(padItem, i);
     }
 
@@ -937,9 +1002,12 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<void> _loadSoundsImpl(int? boardId, {bool silent = false}) async {
+    final previousBoardId = _activeBoardId;
     if (boardId != null) _activeBoardId = boardId;
     _lastRemovedPad = null;
-    _driveNotFoundSoundIds.clear();
+    if (boardId != null && boardId != previousBoardId) {
+      _driveNotFoundSoundIds.clear();
+    }
     final preloadGeneration = ++_padPreloadGeneration;
     final currentBoardId = _activeBoardId;
     if (currentBoardId == null) {
@@ -1171,6 +1239,12 @@ class SamplerNotifier extends ChangeNotifier {
   /// sans reconstruire toute la grille : chaque PadButton écoute `revision`.
   void _notifyPad(PadItem padItem) => padItem.bumpRevision();
 
+  /// Notifie le pad ciblé et le plateau (bandeau, onTap des pads…).
+  void _notifyPadAndBoard(PadItem padItem) {
+    _notifyPad(padItem);
+    notifyListeners();
+  }
+
   /// Télécharge les variantes manquantes puis recharge les slots concernés via
   /// la file priorisée. Retourne true si au moins une variante est jouable.
   ///
@@ -1284,11 +1358,8 @@ class SamplerNotifier extends ChangeNotifier {
     }
     if (pendingIndices.isEmpty) {
       if (padItem.isPlayable) return true;
-      // Aucun slot à télécharger (tous bloqués ou déjà prêts) : finaliser
-      // l'availability sans reprober le disque — _loadPlayersForPad réinitialise
-      // les slots missingFile vers needsDownload, cassant le blocage Drive.
       _finalizePadAvailability(padItem);
-      _notifyPad(padItem);
+      _notifyPadAndBoard(padItem);
       return padItem.isPlayable;
     }
 
@@ -1303,7 +1374,7 @@ class SamplerNotifier extends ChangeNotifier {
         final connected = await libraryRepository.ensureDriveConnected();
         if (!connected) {
           _markSlotsOffline(padItem);
-          _notifyPad(padItem);
+          _notifyPadAndBoard(padItem);
           return false;
         }
       }
@@ -1330,7 +1401,7 @@ class SamplerNotifier extends ChangeNotifier {
     } else {
       _finalizePadAvailability(padItem);
     }
-    _notifyPad(padItem);
+    _notifyPadAndBoard(padItem);
     return padItem.isPlayable;
   }
 
@@ -1350,6 +1421,7 @@ class SamplerNotifier extends ChangeNotifier {
   void _markSlotsMissingAfterFailedDownload(PadItem padItem) {
     for (var i = 0; i < padItem.slots.length; i++) {
       if (padItem.slots[i].availability == PadSoundAvailability.needsDownload) {
+        _blockSoundDriveRetry(padItem.pad.sounds[i].id);
         padItem.slots[i] = PadSoundSlot(
           availability: PadSoundAvailability.missingFile,
         );
@@ -1362,8 +1434,7 @@ class SamplerNotifier extends ChangeNotifier {
   Future<void> prepareBoardForOffline() async {
     if (_state.isBoardPreparing) return;
 
-    final toDownload =
-        _state.pads.where((p) => !p.isDraft && !p.isFullyReady).toList();
+    final toDownload = _state.pads.where(isPadPreparable).toList();
     if (toDownload.isEmpty) return;
 
     _state = _state.copyWith(
@@ -2370,7 +2441,11 @@ class SamplerNotifier extends ChangeNotifier {
   /// Met à jour le pad en mémoire dès qu'un son est ajouté ou retiré, sans
   /// attendre un rechargement complet du plateau (évite le délai perceptible
   /// sur la grille pendant le chargement des lecteurs audio).
-  void _applySoundAddedToPad(PadItem padItem, Sound sound) {
+  void _applySoundAddedToPad(
+    PadItem padItem,
+    Sound sound, {
+    bool notify = true,
+  }) {
     if (padItem.pad.sounds.any((s) => s.id == sound.id)) return;
     padItem.pad = padItem.pad.copyWith(
       sounds: [...padItem.pad.sounds, sound],
@@ -2378,6 +2453,7 @@ class SamplerNotifier extends ChangeNotifier {
     padItem.syncSlotCount();
     _finalizePadAvailability(padItem);
     _syncMultipadNumbers(_state.pads);
+    if (!notify) return;
     _notifyPad(padItem);
     notifyListeners();
   }
@@ -2413,8 +2489,11 @@ class SamplerNotifier extends ChangeNotifier {
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return;
 
-    _applySoundAddedToPad(padItem, sound);
+    _applySoundAddedToPad(padItem, sound, notify: false);
     final slotIndex = padItem.pad.sounds.length - 1;
+    await _probeSlotAtIndex(padItem, slotIndex);
+    _finalizePadAvailability(padItem);
+    _notifyPadAndBoard(padItem);
     unawaited(_reloadPadPlayersInBackground(padItem));
     _maybeAutoDownloadPadSound(padItem, slotIndex);
   }
