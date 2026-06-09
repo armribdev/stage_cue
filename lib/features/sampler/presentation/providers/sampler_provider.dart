@@ -20,6 +20,7 @@ import '../../domain/entities/tag_item.dart';
 import '../../domain/usecases/load_sounds_usecase.dart';
 import '../../domain/usecases/remove_sound_from_board_usecase.dart';
 import '../models/pad_sound_slot.dart';
+import '../utils/quick_search_prepare.dart';
 
 /// Raison pour laquelle un pad ne peut pas être joué.
 enum PadUnavailabilityReason {
@@ -2530,16 +2531,59 @@ class SamplerNotifier extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// Ajoute un son au plateau actif comme nouveau pad (recherche-éclair) et
-  /// recharge. Retourne l'id du pad créé, ou null si aucun plateau actif.
-  Future<int?> addSoundToActiveBoard(int soundId) async {
+  /// Prépare un son depuis la recherche-éclair :
+  /// - musique → file de passage ;
+  /// - bruitage / ambiance → pad dédié en fin de dernière ligne, ou
+  ///   surbrillance du pad dédié déjà présent (un seul son).
+  Future<QuickSearchPrepareResult> prepareSoundFromQuickSearch(
+    int soundId,
+  ) async {
+    final sound = await _repository.getSoundById(soundId);
+    if (sound == null) return const QuickSearchPrepareResult.none();
+
+    if (sound.type == SoundType.music) {
+      await enqueueMusicBySoundId(soundId);
+      return const QuickSearchPrepareResult.none();
+    }
+
+    return _prepareSfxPadOnBoard(soundId);
+  }
+
+  Iterable<({Pad pad, bool isDraft})> _padsOnBoardRefs() {
+    return [
+      for (final item in _state.pads) (pad: item.pad, isDraft: item.isDraft),
+    ];
+  }
+
+  Future<QuickSearchPrepareResult> _prepareSfxPadOnBoard(int soundId) async {
     final boardId = _activeBoardId;
-    if (boardId == null) return null;
-    final padId = await _repository.createPad(boardId, soundId);
-    await loadSounds(boardId: boardId);
-    final padItem = _resolvePadItem(padId);
-    if (padItem != null) _maybeAutoDownloadPadSound(padItem, 0);
-    return padId;
+    if (boardId == null) return const QuickSearchPrepareResult.none();
+
+    final result = await prepareSfxOnBoard(
+      soundId: soundId,
+      padsOnBoard: _padsOnBoardRefs(),
+      createPad: (placement) => _repository.createPadWithSettings(
+        boardId: boardId,
+        soundIds: [soundId],
+        rowIndex: placement.rowIndex,
+        sortOrder: placement.globalSortOrder,
+      ),
+      reloadPads: () async {
+        await loadSounds(boardId: boardId, silent: true);
+        return _padsOnBoardRefs();
+      },
+    );
+
+    final highlightId = result.highlightPadId;
+    if (highlightId != null) {
+      final padItem = findPadItemById(highlightId);
+      if (padItem != null) {
+        final slotIndex = padItem.pad.sounds.indexWhere((s) => s.id == soundId);
+        if (slotIndex >= 0) _maybeAutoDownloadPadSound(padItem, slotIndex);
+      }
+    }
+
+    return result;
   }
 
   /// Affiche immédiatement un pad brouillon (avant le choix des sons).

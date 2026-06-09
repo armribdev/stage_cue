@@ -64,6 +64,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   /// l'accrochage du geste (sinon le Draggable est démonté et le pad reste bloqué).
   bool _editDragUiReady = false;
   final _editGridKey = GlobalKey();
+  final _padScrollKeys = <int, GlobalKey>{};
   int? _recentlyRestoredSoundId;
   int? _highlightedPadId;
   bool _didAutoOpenCreateForCurrentEmptyState = false;
@@ -404,13 +405,15 @@ class _SamplerScreenState extends State<SamplerScreen> {
     await _notifier.loadBoards();
   }
 
-  /// Ouvre la recherche-éclair (overlay) ; met en évidence le pad créé si un
-  /// son a été ajouté à la scène depuis la recherche.
+  /// Ouvre la recherche-éclair (overlay) ; met en évidence le pad dédié préparé.
   Future<void> _openQuickSearch() async {
     if (_isEditMode) return;
-    final padId = await QuickSearchOverlay.show(context, notifier: _notifier);
-    if (!mounted || padId == null) return;
+    final result = await QuickSearchOverlay.show(context, notifier: _notifier);
+    if (!mounted) return;
     await _notifier.stopPreview();
+    if (!mounted) return;
+    final padId = result?.highlightPadId;
+    if (padId == null) return;
     _emphasizePad(padId);
   }
 
@@ -645,17 +648,19 @@ class _SamplerScreenState extends State<SamplerScreen> {
     ));
   }
 
+  GlobalKey _padScrollKey(int padId) =>
+      _padScrollKeys.putIfAbsent(padId, GlobalKey.new);
+
   void _scrollPadIntoView(int padId) {
     void tryScroll() {
       if (!mounted) return;
-      final controller = _activeGridScrollController;
-      if (!controller.hasClients || controller.positions.length != 1) return;
-
-      // Les deux modes utilisent un layout par lignes : scroll vers le bas.
-      controller.animateTo(
-        controller.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 500),
+      final context = _padScrollKey(padId).currentContext;
+      if (context == null) return;
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 450),
         curve: Curves.easeInOutCubic,
+        alignment: 0.28,
       );
     }
 
@@ -699,16 +704,26 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   void _emphasizePad(int padId) {
-    setState(() {
-      _highlightedPadId = padId;
+    final onStage = _notifier.state.pads.any(
+      (item) => !item.isDraft && item.pad.id == padId,
+    );
+    if (!onStage) return;
+
+    setState(() => _highlightedPadId = padId);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _highlightedPadId != padId) return;
+      _scrollPadIntoView(padId);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _highlightedPadId != padId) return;
+        _scrollPadIntoView(padId);
+      });
     });
-    _scrollPadIntoView(padId);
+
     unawaited(
       Future<void>.delayed(_padEmphasisDuration, () {
         if (!mounted || _highlightedPadId != padId) return;
-        setState(() {
-          _highlightedPadId = null;
-        });
+        setState(() => _highlightedPadId = null);
       }),
     );
   }
@@ -1002,7 +1017,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   children: [
                     for (final pad in rowMap[displayRowIndices[i]] ?? [])
                       SizedBox(
-                        key: ValueKey('pad_${pad.pad.id}'),
+                        key: _padScrollKey(pad.pad.id),
                         width: cellWidth,
                         height: cellHeight,
                         child: _buildPadWidget(context, state, pad),
