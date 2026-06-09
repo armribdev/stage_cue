@@ -51,6 +51,8 @@ class SamplerState {
   final int boardPrepareDone;
   /// Nombre total de pads à télécharger pendant la préparation.
   final int boardPrepareTotal;
+  /// Masque les pads sans son local et n'autorise que la lecture hors-ligne.
+  final bool offlineMode;
 
   SamplerState({
     required this.pads,
@@ -65,6 +67,7 @@ class SamplerState {
     this.isBoardPreparing = false,
     this.boardPrepareDone = 0,
     this.boardPrepareTotal = 0,
+    this.offlineMode = false,
   });
 
   /// Prochaine musique en file d'attente.
@@ -96,6 +99,7 @@ class SamplerState {
     bool? isBoardPreparing,
     int? boardPrepareDone,
     int? boardPrepareTotal,
+    bool? offlineMode,
   }) {
     return SamplerState(
       pads: pads ?? this.pads,
@@ -120,6 +124,7 @@ class SamplerState {
       isBoardPreparing: isBoardPreparing ?? this.isBoardPreparing,
       boardPrepareDone: boardPrepareDone ?? this.boardPrepareDone,
       boardPrepareTotal: boardPrepareTotal ?? this.boardPrepareTotal,
+      offlineMode: offlineMode ?? this.offlineMode,
     );
   }
 }
@@ -185,6 +190,9 @@ class PadItem {
   int get totalSoundCount => pad.sounds.length;
 
   int get readySoundCount => slots.where((s) => s.appearsReady).length;
+
+  /// Au moins une variante a un fichier local validé (prêt ou en cache).
+  bool get hasLocallyAvailableSound => slots.any((s) => s.appearsReady);
 
   bool get isPlayable => slots.any((s) => s.isReady);
 
@@ -353,6 +361,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   SamplerState _state = SamplerState(pads: []);
   SamplerState get state => _state;
+  bool get offlineMode => _state.offlineMode;
   double get musicVolume => _musicVolume;
 
   /// Dernière erreur de lecture musique (picker / régie), sans bloquer la grille.
@@ -373,6 +382,52 @@ class SamplerNotifier extends ChangeNotifier {
           : padItem.pad.volume;
   bool get canUndoLastRemoval =>
       _lastRemovedPad != null && _lastRemovedPad!.boardId == _activeBoardId;
+
+  /// Pad affiché sur le plateau en mode hors-ligne (au moins un son local).
+  bool isPadVisibleInOfflineMode(PadItem padItem) {
+    if (padItem.isDraft) return true;
+    return padItem.hasLocallyAvailableSound;
+  }
+
+  /// Index des variantes avec fichier local validé.
+  bool isSlotLocallyAvailable(PadItem padItem, int slotIndex) {
+    if (slotIndex < 0 || slotIndex >= padItem.slots.length) return false;
+    return padItem.slots[slotIndex].appearsReady;
+  }
+
+  Iterable<PadItem> _padsForMultipadNumbering() {
+    return _state.pads.where(
+      (item) => !item.isDraft && (!_state.offlineMode || item.hasLocallyAvailableSound),
+    );
+  }
+
+  /// Active ou désactive le mode hors-ligne : masque les pads sans son local
+  /// et interdit téléchargement / lecture des variantes absentes du cache.
+  Future<void> setOfflineMode(bool value) async {
+    if (_state.offlineMode == value) return;
+    _state = _state.copyWith(offlineMode: value);
+    if (value) {
+      _downloadQueue.cancelQueued((_, _) => true);
+      await _applyOfflineModeConstraints();
+    }
+    _syncMultipadNumbers(_padsForMultipadNumbering());
+    notifyListeners();
+  }
+
+  Future<void> _applyOfflineModeConstraints() async {
+    final current = _state.currentMusicPad;
+    if (current != null && !isPadVisibleInOfflineMode(current)) {
+      await _stopMusicPad(current, manual: true);
+    }
+    final visibleIds = _padsForMultipadNumbering()
+        .map((item) => item.pad.id)
+        .toSet();
+    final newQueue =
+        _state.musicQueuePadIds.where(visibleIds.contains).toList();
+    if (newQueue.length != _state.musicQueuePadIds.length) {
+      _state = _state.copyWith(musicQueuePadIds: newQueue);
+    }
+  }
 
   SamplerNotifier(
     this._repository,
@@ -740,6 +795,7 @@ class SamplerNotifier extends ChangeNotifier {
     padItem.syncSlotCount();
 
     for (var i = 0; i < pad.sounds.length; i++) {
+      if (_state.offlineMode && !padItem.slots[i].appearsReady) continue;
       if (padItem.slots[i].isReady) continue;
       // Ne pas reprober un slot déjà signalé introuvable : _loadSlotAtIndex
       // le réinitialiserait en needsDownload et casserait le blocage UI.
@@ -1060,7 +1116,7 @@ class SamplerNotifier extends ChangeNotifier {
         padItems.where((item) => !item.isDraft).map(_probePadLocalAvailability),
       );
 
-      _syncMultipadNumbers(padItems);
+      _syncMultipadNumbers(_padsForMultipadNumbering());
       _state = _state.copyWith(pads: padItems, isLoading: false, error: null);
       final keptIds = padItems.map((item) => item.pad.id).toSet();
       final removedItems =
@@ -1100,6 +1156,7 @@ class SamplerNotifier extends ChangeNotifier {
   /// basse : la [DownloadQueue] borne la concurrence et un tap utilisateur passe
   /// devant. La priorité aux favoris viendra avec P3.
   Future<void> _prefetchActiveBoard() async {
+    if (_state.offlineMode) return;
     final libraryRepository = _libraryRepository;
     if (libraryRepository == null) return;
 
@@ -1252,6 +1309,7 @@ class SamplerNotifier extends ChangeNotifier {
   /// Une tâche annulée (changement de plateau) retourne l'état jouable courant.
   /// Télécharge une variante précise du pad (tap depuis l'écran de détails).
   Future<bool> downloadPadSoundAtIndex(PadItem padItem, int index) async {
+    if (_state.offlineMode) return false;
     final resolved = _resolveBoardPadItem(padItem);
     if (index < 0 || index >= resolved.slots.length) return false;
     final slot = resolved.slots[index];
@@ -1331,6 +1389,7 @@ class SamplerNotifier extends ChangeNotifier {
     PadItem padItem, {
     int priority = _downloadPriorityTap,
   }) async {
+    if (_state.offlineMode) return _resolveBoardPadItem(padItem).isPlayable;
     final resolved = _resolveBoardPadItem(padItem);
     try {
       return await _downloadQueue.enqueue<bool>(
@@ -1432,6 +1491,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   /// Télécharge toutes les variantes manquantes du board actif.
   Future<void> prepareBoardForOffline() async {
+    if (_state.offlineMode) return;
     if (_state.isBoardPreparing) return;
 
     final toDownload = _state.pads.where(isPadPreparable).toList();
@@ -1459,10 +1519,16 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
+  bool _slotEligibleForPlayback(PadItem padItem, int index) {
+    if (!padItem.slots[index].isReady) return false;
+    if (_state.offlineMode && !padItem.slots[index].appearsReady) return false;
+    return true;
+  }
+
   int _pickSoundIndex(PadItem padItem) {
     final readyIndices = <int>[
       for (var i = 0; i < padItem.slots.length; i++)
-        if (padItem.slots[i].isReady) i,
+        if (_slotEligibleForPlayback(padItem, i)) i,
     ];
     debugPrint(
       '[PICK] pad="${padItem.pad.displayName}" '
@@ -1491,7 +1557,7 @@ class SamplerNotifier extends ChangeNotifier {
           final total = padItem.slots.length;
           for (var step = 0; step < total; step++) {
             final idx = (padItem._nextSoundIndex + step) % total;
-            if (padItem.slots[idx].isReady) {
+            if (_slotEligibleForPlayback(padItem, idx)) {
               padItem._nextSoundIndex = (idx + 1) % total;
               return idx;
             }
@@ -2585,7 +2651,10 @@ class SamplerNotifier extends ChangeNotifier {
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
     try {
-      final path = await _resolvePlayablePath(sound, downloadIfNeeded: true);
+      final path = await _resolvePlayablePath(
+        sound,
+        downloadIfNeeded: !_state.offlineMode,
+      );
       await stopPreview();
       final player = await AudioPlayerService.create(path);
       _previewPlayer = player;
