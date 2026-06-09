@@ -311,20 +311,43 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                         style: Theme.of(context).textTheme.bodyMedium,
                       )
                     else
-                      Column(
-                        children: [
-                          for (var i = 0; i < sounds.length; i++)
-                            _SoundRow(
-                              padItem: widget.padItem,
-                              slotIndex: i,
-                              sound: sounds[i],
-                              canRemove: sounds.length > 1,
-                              tagCatalog: _tagCatalog,
-                              isTagsLoading: _isTagsLoading,
-                              notifier: widget.notifier,
-                              onRemove: () => _removeSound(sounds[i].id),
-                            ),
-                        ],
+                      ListenableBuilder(
+                        listenable: widget.notifier,
+                        builder: (context, _) {
+                          final offlineMode = widget.notifier.offlineMode;
+                          final visibleIndices = <int>[
+                            for (var i = 0; i < sounds.length; i++)
+                              if (!offlineMode ||
+                                  widget.notifier.isSlotLocallyAvailable(
+                                    widget.padItem,
+                                    i,
+                                  ))
+                                i,
+                          ];
+                          if (visibleIndices.isEmpty) {
+                            return Text(
+                              offlineMode
+                                  ? 'Aucun son disponible hors-ligne'
+                                  : 'Aucun son',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            );
+                          }
+                          return Column(
+                            children: [
+                              for (final i in visibleIndices)
+                                _SoundRow(
+                                  padItem: widget.padItem,
+                                  slotIndex: i,
+                                  sound: sounds[i],
+                                  canRemove: sounds.length > 1,
+                                  tagCatalog: _tagCatalog,
+                                  isTagsLoading: _isTagsLoading,
+                                  notifier: widget.notifier,
+                                  onRemove: () => _removeSound(sounds[i].id),
+                                ),
+                            ],
+                          );
+                        },
                       ),
                   ],
                 ),

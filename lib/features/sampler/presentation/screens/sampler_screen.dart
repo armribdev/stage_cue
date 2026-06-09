@@ -671,6 +671,16 @@ class _SamplerScreenState extends State<SamplerScreen> {
     });
   }
 
+  bool _shouldShowPadOnGrid(PadItem pad) {
+    if (pad.isDraft || _isEditMode) return true;
+    if (!_notifier.offlineMode) return true;
+    return _notifier.isPadVisibleInOfflineMode(pad);
+  }
+
+  void _toggleOfflineMode() {
+    unawaited(_notifier.setOfflineMode(!_notifier.offlineMode));
+  }
+
   /// Entre/sort du Mode Spectacle : verrouille l'édition (long-press, grille)
   /// et suspend les push Drive auto pour éviter tout jank pendant le live.
   void _togglePerformanceMode() {
@@ -893,6 +903,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
         // Grouper les pads par rowIndex (ordre stable dans chaque ligne).
         final rowMap = <int, List<PadItem>>{};
         for (final pad in state.pads) {
+          if (!_shouldShowPadOnGrid(pad)) continue;
           rowMap.putIfAbsent(pad.pad.rowIndex, () => []).add(pad);
         }
         for (final pads in rowMap.values) {
@@ -1161,6 +1172,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
       'slots=${resolved.slots.length} readySlots=${resolved.slots.where((s) => s.isReady).length}',
     );
 
+    if (_notifier.offlineMode && !resolved.hasLocallyAvailableSound) {
+      return;
+    }
+
     // PRÊT (bouton GO) : lecture immédiate garantie.
     if (resolved.isPlayable) {
       unawaited(HapticFeedback.selectionClick());
@@ -1196,6 +1211,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
       debugPrint('[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason');
       return;
     }
+
+    if (_notifier.offlineMode) return;
 
     debugPrint('[TAP] pad="${resolved.pad.displayName}" → EN ROUTE / preparing');
     // EN ROUTE (bouton DL) : on télécharge SANS jouer. Le moment de lecture
@@ -1415,8 +1432,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
           }
           final downloadableCount =
               state.pads.where(_notifier.isPadPreparable).length;
-          final showPrepareBanner =
-              downloadableCount > 0 || state.isBoardPreparing;
+          final showPrepareBanner = !state.offlineMode &&
+              (downloadableCount > 0 || state.isBoardPreparing);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1675,6 +1692,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onToggleEditMode: _toggleEditMode,
                     isPerformanceMode: _isPerformanceMode,
                     onTogglePerformanceMode: _togglePerformanceMode,
+                    isOfflineMode: state.offlineMode,
+                    onToggleOfflineMode: _toggleOfflineMode,
                     onOpenLibrary: _openLibrary,
                     onOpenSettings: _openSettings,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
@@ -1687,10 +1706,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     selectedBoard: selectedBoard,
                     isEditMode: _isEditMode,
                     isPerformanceMode: _isPerformanceMode,
+                    isOfflineMode: state.offlineMode,
                     canToggleEditMode: state.pads.isNotEmpty,
                     onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
                     onToggleEditMode: _toggleEditMode,
                     onTogglePerformanceMode: _togglePerformanceMode,
+                    onToggleOfflineMode: _toggleOfflineMode,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
                     syncStatus: _SyncStatusPill(
                       syncController: widget.services.syncController,
@@ -1864,10 +1885,12 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final SoundBoard? selectedBoard;
   final bool isEditMode;
   final bool isPerformanceMode;
+  final bool isOfflineMode;
   final bool canToggleEditMode;
   final VoidCallback onOpenMenu;
   final VoidCallback onToggleEditMode;
   final VoidCallback onTogglePerformanceMode;
+  final VoidCallback onToggleOfflineMode;
   final VoidCallback onQuickSearch;
   final Widget syncStatus;
 
@@ -1875,10 +1898,12 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.selectedBoard,
     required this.isEditMode,
     required this.isPerformanceMode,
+    required this.isOfflineMode,
     required this.canToggleEditMode,
     required this.onOpenMenu,
     required this.onToggleEditMode,
     required this.onTogglePerformanceMode,
+    required this.onToggleOfflineMode,
     required this.onQuickSearch,
     required this.syncStatus,
   });
@@ -1905,6 +1930,10 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
         ),
+        _OfflineModeButton(
+          isOfflineMode: isOfflineMode,
+          onToggle: onToggleOfflineMode,
+        ),
         IconButton(
           icon: const Icon(Icons.search_rounded),
           tooltip: 'Rechercher un son',
@@ -1926,6 +1955,36 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+}
+
+// ---------- Bouton mode hors-ligne ----------
+
+/// Masque les pads sans fichier local et limite la lecture au cache.
+class _OfflineModeButton extends StatelessWidget {
+  final bool isOfflineMode;
+  final VoidCallback onToggle;
+
+  const _OfflineModeButton({
+    required this.isOfflineMode,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      icon: Icon(
+        isOfflineMode
+            ? Icons.offline_bolt_rounded
+            : Icons.offline_bolt_outlined,
+      ),
+      color: isOfflineMode ? scheme.primary : null,
+      tooltip: isOfflineMode
+          ? 'Mode hors-ligne actif — sons locaux uniquement'
+          : 'Mode hors-ligne (sons locaux uniquement)',
+      onPressed: onToggle,
+    );
+  }
 }
 
 // ---------- Bouton verrou Mode Spectacle ----------
@@ -2113,6 +2172,8 @@ class _SamplerDesktopAppBar extends StatelessWidget
   final VoidCallback onToggleEditMode;
   final bool isPerformanceMode;
   final VoidCallback onTogglePerformanceMode;
+  final bool isOfflineMode;
+  final VoidCallback onToggleOfflineMode;
   final Future<void> Function() onOpenLibrary;
   final Future<void> Function() onOpenSettings;
   final VoidCallback onQuickSearch;
@@ -2130,6 +2191,8 @@ class _SamplerDesktopAppBar extends StatelessWidget
     required this.onToggleEditMode,
     required this.isPerformanceMode,
     required this.onTogglePerformanceMode,
+    required this.isOfflineMode,
+    required this.onToggleOfflineMode,
     required this.onOpenLibrary,
     required this.onOpenSettings,
     required this.onQuickSearch,
@@ -2172,6 +2235,10 @@ class _SamplerDesktopAppBar extends StatelessWidget
         _PerformanceLockButton(
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
+        ),
+        _OfflineModeButton(
+          isOfflineMode: isOfflineMode,
+          onToggle: onToggleOfflineMode,
         ),
         IconButton(
           icon: const Icon(Icons.search_rounded),

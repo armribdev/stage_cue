@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/utils/string_utils.dart';
 import '../../domain/entities/sound.dart';
+import '../../domain/entities/tag_category_with_tags.dart';
+import '../../domain/entities/tag_item.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/quick_search_prepare.dart';
 import '../utils/sound_type_ui.dart';
@@ -74,29 +76,56 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   String _tagToken = '';
   Timer? _tagDebounce;
 
+  final Map<int, List<TagItem>> _soundTags = {};
+  List<TagCategoryWithTags> _tagCatalog = const [];
+  String _tagsLoadToken = '';
+  Timer? _tagsLoadDebounce;
+
+  bool get _effectiveLocalOnly =>
+      _localOnly || widget.notifier.offlineMode;
+
+  bool get _localFilterForced => widget.notifier.offlineMode;
+
   @override
   void initState() {
     super.initState();
     _focusNode = FocusNode(onKeyEvent: _onSearchKey);
+    widget.notifier.addListener(_onNotifierChanged);
     _load();
   }
 
+  void _onNotifierChanged() {
+    if (!mounted) return;
+    setState(() => _selectedIndex = 0);
+    _scheduleTagsLoad();
+  }
+
   Future<void> _load() async {
-    final sounds = await widget.notifier.getAllSounds();
+    final results = await Future.wait([
+      widget.notifier.getAllSounds(),
+      widget.notifier.loadTagCatalog(),
+    ]);
     if (!mounted) return;
     setState(() {
-      _all = sounds;
+      _all = results[0] as List<Sound>;
+      _tagCatalog = results[1] as List<TagCategoryWithTags>;
       _loading = false;
     });
+    _scheduleTagsLoad();
     // Disponibilité hors-ligne calculée en tâche de fond (I/O par son).
     final localIds = await widget.notifier.getLocallyAvailableSoundIds();
     if (!mounted) return;
     setState(() => _localIds = localIds);
   }
 
-  /// true si le son est jouable hors-ligne. Tant que le calcul n'est pas fini
-  /// (`_localIds` null), on n'exclut rien (optimiste).
-  bool _isLocal(Sound s) => _localIds?.contains(s.id) ?? true;
+  /// true si le son est jouable hors-ligne. Pendant le calcul (`_localIds` null),
+  /// on n'exclut rien sauf si un filtre local est actif (mode hors-ligne ou chip).
+  bool _isLocal(Sound s) {
+    if (_localIds == null) return !_effectiveLocalOnly;
+    return _localIds!.contains(s.id);
+  }
+
+  bool get _awaitingLocalIds => _effectiveLocalOnly && _localIds == null;
 
   void _onQueryChanged(String value) {
     setState(() {
@@ -107,6 +136,46 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     _tagDebounce = Timer(const Duration(milliseconds: 120), () {
       unawaited(_runTagSearch(value));
     });
+    _scheduleTagsLoad();
+  }
+
+  void _scheduleTagsLoad() {
+    _tagsLoadDebounce?.cancel();
+    _tagsLoadDebounce = Timer(const Duration(milliseconds: 120), () {
+      unawaited(_loadTagsForShownResults());
+    });
+  }
+
+  Future<void> _loadTagsForShownResults() async {
+    final shown = _shownResults(_results);
+    if (shown.isEmpty) {
+      if (!mounted) return;
+      setState(() => _soundTags.clear());
+      return;
+    }
+    final token = shown.map((s) => s.id).join(',');
+    _tagsLoadToken = token;
+    final entries = await Future.wait(
+      shown.map((sound) async {
+        final tags = await widget.notifier.getTagsForSound(sound.id);
+        return MapEntry(sound.id, tags);
+      }),
+    );
+    if (!mounted || _tagsLoadToken != token) return;
+    setState(() {
+      _soundTags
+        ..clear()
+        ..addEntries(entries);
+    });
+  }
+
+  Color? _categoryColor(int categoryId) {
+    for (final group in _tagCatalog) {
+      if (group.category.id == categoryId) {
+        return Color(group.category.color);
+      }
+    }
+    return null;
   }
 
   Future<void> _runTagSearch(String value) async {
@@ -119,6 +188,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     final ids = await widget.notifier.findSoundIdsByTagQuery(value);
     if (!mounted || _tagToken != norm) return;
     setState(() => _tagMatchIds = ids);
+    _scheduleTagsLoad();
   }
 
   DateTime _recencyKey(Sound s) => s.lastPlayedAt ?? s.createdAt;
@@ -131,7 +201,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     for (final sound in _all) {
       if (_typeFilter != null && !sound.matchesSoundType(_typeFilter!)) continue;
       if (_favoritesOnly && !sound.isFavorite) continue;
-      if (_localOnly && !_isLocal(sound)) continue;
+      if (_effectiveLocalOnly && !_isLocal(sound)) continue;
       final name = normalizeForSearch(sound.displayName ?? sound.title);
       var score = fuzzyMatchScore(name, q);
       // Repli sur la correspondance par tag si le nom ne matche pas.
@@ -163,7 +233,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
       count == 0 ? 0 : _selectedIndex.clamp(0, count - 1);
 
   /// Hauteur fixe des lignes — aligne le scroll clavier et évite le « saut » visuel.
-  static const _itemExtent = 64.0;
+  static const _itemExtent = 72.0;
 
   void _moveSelection(int delta) {
     final shown = _shownResults(_results);
@@ -266,7 +336,9 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
 
   @override
   void dispose() {
+    widget.notifier.removeListener(_onNotifierChanged);
     _tagDebounce?.cancel();
+    _tagsLoadDebounce?.cancel();
     _focusNode.dispose();
     _scrollController.dispose();
     _controller.dispose();
@@ -374,11 +446,13 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
           selected: selected,
           showCheckmark: false,
           visualDensity: VisualDensity.compact,
-          onSelected: (_) =>
-              setState(() {
-                _typeFilter = type;
-                _selectedIndex = 0;
-              }),
+          onSelected: (_) {
+            setState(() {
+              _typeFilter = type;
+              _selectedIndex = 0;
+            });
+            _scheduleTagsLoad();
+          },
         ),
       );
     }
@@ -409,22 +483,33 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
               iconColor: _favoritesOnly
                   ? scheme.primary
                   : scheme.onSurfaceVariant,
-              onPressed: () => setState(() {
-                _favoritesOnly = !_favoritesOnly;
-                _selectedIndex = 0;
-              }),
+              onPressed: () {
+                setState(() {
+                  _favoritesOnly = !_favoritesOnly;
+                  _selectedIndex = 0;
+                });
+                _scheduleTagsLoad();
+              },
             ),
             const SizedBox(width: 4),
             _roundActionButton(
               scheme: scheme,
               icon: Icons.offline_bolt_rounded,
-              tooltip: 'Local uniquement',
-              iconColor:
-                  _localOnly ? scheme.primary : scheme.onSurfaceVariant,
-              onPressed: () => setState(() {
-                _localOnly = !_localOnly;
-                _selectedIndex = 0;
-              }),
+              tooltip: _localFilterForced
+                  ? 'Mode hors-ligne actif — sons locaux uniquement'
+                  : 'Local uniquement',
+              iconColor: _effectiveLocalOnly
+                  ? scheme.primary
+                  : scheme.onSurfaceVariant,
+              onPressed: _localFilterForced
+                  ? null
+                  : () {
+                      setState(() {
+                        _localOnly = !_localOnly;
+                        _selectedIndex = 0;
+                      });
+                      _scheduleTagsLoad();
+                    },
             ),
           ],
         ),
@@ -433,7 +518,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   }
 
   Widget _buildResults(ColorScheme scheme, List<Sound> results) {
-    if (_loading) {
+    if (_loading || _awaitingLocalIds) {
       return const Padding(
         padding: EdgeInsets.all(24),
         child: Center(child: CircularProgressIndicator()),
@@ -451,9 +536,11 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
         padding: const EdgeInsets.all(24),
         child: Center(
           child: Text(
-            isBrowse
-                ? 'Tapez pour chercher vos sons'
-                : 'Aucun son',
+            _effectiveLocalOnly
+                ? 'Aucun son disponible hors-ligne'
+                : isBrowse
+                    ? 'Tapez pour chercher vos sons'
+                    : 'Aucun son',
             textAlign: TextAlign.center,
             style: TextStyle(color: scheme.onSurfaceVariant),
           ),
@@ -488,6 +575,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                 final sound = shown[index];
                 final isSelected = index == selectedIndex;
                 final fav = sound.isFavorite;
+                final tags = _soundTags[sound.id] ?? const <TagItem>[];
                 return Material(
                   key: _itemKey(sound.id),
                   color: isSelected
@@ -539,6 +627,10 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                                     ],
                                   ],
                                 ),
+                                if (tags.isNotEmpty) ...[
+                                  const SizedBox(height: 3),
+                                  _buildTagRow(scheme, tags),
+                                ],
                               ],
                             ),
                           ),
@@ -586,12 +678,55 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   }
 
   static const _actionButtonSize = 30.0;
+  static const _maxVisibleTags = 3;
+
+  Widget _buildTagRow(ColorScheme scheme, List<TagItem> tags) {
+    final visible = tags.take(_maxVisibleTags).toList();
+    final overflow = tags.length - visible.length;
+    return Row(
+      children: [
+        for (final tag in visible) ...[
+          _buildTagChip(scheme, tag),
+          const SizedBox(width: 4),
+        ],
+        if (overflow > 0)
+          Text(
+            '+$overflow',
+            style: TextStyle(
+              fontSize: 10,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTagChip(ColorScheme scheme, TagItem tag) {
+    final color = _categoryColor(tag.categoryId);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: color?.withAlpha(24),
+        borderRadius: BorderRadius.circular(4),
+        border: color == null ? null : Border.all(color: color),
+      ),
+      child: Text(
+        tag.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 10,
+          color: color ?? scheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
 
   Widget _roundActionButton({
     required ColorScheme scheme,
     required IconData icon,
     required String tooltip,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     required Color iconColor,
   }) {
     return SizedBox(
