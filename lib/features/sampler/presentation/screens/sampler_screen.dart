@@ -1075,23 +1075,16 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
 
-    // Fichier introuvable : retenter le téléchargement pour les sons Drive.
+    // Fichier introuvable : retenter le téléchargement uniquement si le son
+    // n'est pas confirmé absent du Drive en session (via _driveNotFoundSoundIds).
     if (reason == PadUnavailabilityReason.missingFile) {
-      final canRetryFromDrive = resolved.pad.sounds.any(
-        (sound) =>
-            sound.libraryId != null &&
-            sound.relativePath != null &&
-            sound.relativePath!.isNotEmpty,
-      );
-      if (canRetryFromDrive) {
-        debugPrint(
-          '[TAP] pad="${resolved.pad.displayName}" → retry Drive download',
-        );
+      if (_notifier.isPadRetryableFromDrive(resolved)) {
+        debugPrint('[TAP] pad="${resolved.pad.displayName}" → retry Drive download');
         unawaited(HapticFeedback.selectionClick());
         await _preparePad(resolved);
         return;
       }
-      debugPrint('[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason');
+      debugPrint('[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason (Drive confirmed absent)');
       unawaited(HapticFeedback.heavyImpact());
       _showBlockedPadFeedback(resolved, reason);
       return;

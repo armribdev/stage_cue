@@ -318,15 +318,30 @@ class LibraryRepository extends ChangeNotifier {
 
   /// Reconnexion silencieuse au démarrage (réutilise une session existante).
   /// Retourne true si une session a pu être rétablie.
+  ///
+  /// Idempotent : si la session est déjà active, retourne immédiatement true
+  /// sans rappeler les APIs d'authentification (évite les doubles appels
+  /// concurrents depuis AutoSyncCoordinator / SettingsScreen / LibrarySyncScreen).
   Future<bool> reconnectSilently() async {
-    await _authenticator.restoreAccountProfile();
+    // Déjà connecté : ne pas rappeler connectSilently() inutilement.
+    // Sur Android, deux signInSilently() simultanés peuvent se perturber.
+    if (_activeClient != null) {
+      _notifyDriveSessionChanged();
+      return true;
+    }
+
     final client = await _authenticator.connectSilently();
     if (client != null) {
       _activeClient?.dispose();
       _activeClient = client;
+      _notifyDriveSessionChanged();
       await refreshLibraryOwnerEmails();
+    } else {
+      // Pas de client actif : restaurer au moins le profil (email, avatar)
+      // pour l'affichage, sans établir de session HTTP.
+      await _authenticator.restoreAccountProfile();
+      _notifyDriveSessionChanged();
     }
-    _notifyDriveSessionChanged();
     return client != null;
   }
 

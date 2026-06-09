@@ -76,6 +76,10 @@ class SyncController extends ChangeNotifier {
   final Map<int, (Timer, Library)> _debounceTimers = {};
   SyncState _state = const SyncState();
 
+  /// Timer de masquage de la pastille : après un push/pull réussi, revient à
+  /// [SyncStatus.idle] (pastille masquée) après quelques secondes.
+  Timer? _syncedDisplayTimer;
+
   /// Mode Spectacle : suspend les push automatiques pour éviter tout jank audio
   /// (export `VACUUM INTO` + upload) pendant les déclenchements live.
   bool _autoSyncPaused = false;
@@ -92,8 +96,21 @@ class SyncController extends ChangeNotifier {
   SyncState get state => _state;
 
   void _set(SyncState next) {
+    _syncedDisplayTimer?.cancel();
+    _syncedDisplayTimer = null;
     _state = next;
     notifyListeners();
+    // Après un push/pull réussi : masquer la pastille au bout de 8 s.
+    // Le statut error/conflict/offline reste affiché jusqu'à résolution.
+    if (next.status == SyncStatus.synced) {
+      _syncedDisplayTimer = Timer(const Duration(seconds: 8), () {
+        _syncedDisplayTimer = null;
+        if (_state.status == SyncStatus.synced) {
+          _state = _state.copyWith(status: SyncStatus.idle);
+          notifyListeners();
+        }
+      });
+    }
   }
 
   /// Suspend les push automatiques (entrée en Mode Spectacle). Annule les push
@@ -188,7 +205,18 @@ class SyncController extends ChangeNotifier {
           ));
       }
     } on DriveAuthException {
-      await _onAuthError();
+      // Une erreur 401 au démarrage peut être transitoire (token en cours de
+      // rafraîchissement). On tente un refresh silencieux avant de déclencher
+      // la déconnexion, pour ne pas afficher « Session expirée » à tort.
+      final refreshed = await _repository.reconnectSilently();
+      if (refreshed) {
+        // Session restaurée : passer hors-ligne silencieusement.
+        // La prochaine synchro auto poussera les données.
+        _set(_state.copyWith(status: SyncStatus.offline));
+      } else {
+        // Impossible de restaurer la session : token révoqué ou invalide.
+        await _onAuthError();
+      }
     } catch (e) {
       _set(_state.copyWith(status: SyncStatus.error, message: e.toString()));
     }
@@ -272,6 +300,7 @@ class SyncController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _syncedDisplayTimer?.cancel();
     for (final entry in _debounceTimers.values) {
       entry.$1.cancel();
     }

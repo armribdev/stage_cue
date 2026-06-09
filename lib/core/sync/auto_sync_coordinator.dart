@@ -44,29 +44,35 @@ class AutoSyncCoordinator {
   }
 
   Future<void> _initialPull() async {
-    final reconnected = await _repository.reconnectSilently();
+    try {
+      final reconnected = await _repository.reconnectSilently();
 
-    final libraries = await _connectedLibraries();
-    if (libraries.isEmpty) return; // Usage 100 % local : la synchro reste idle.
+      final libraries = await _connectedLibraries();
+      if (libraries.isEmpty) return; // Usage 100 % local : la synchro reste idle.
 
-    if (!reconnected) {
-      // Bibliothèque Drive configurée mais pas de session (hors-ligne au
-      // lancement) : on signale l'état local plutôt que de rester silencieux.
-      _syncController.markOffline();
-      return;
-    }
-
-    for (final library in libraries) {
-      await _syncController.pullForLaunch(library);
-    }
-
-    // Indexe les fichiers ajoutés manuellement sur Drive (absents de la BDD).
-    for (final library in libraries) {
-      try {
-        await _repository.indexDriveFolder(library: library);
-      } catch (_) {
-        // Continue avec les autres dossiers si l'indexation échoue.
+      if (!reconnected) {
+        // Bibliothèque Drive configurée mais pas de session (hors-ligne au
+        // lancement) : on signale l'état local plutôt que de rester silencieux.
+        _syncController.markOffline();
+        return;
       }
+
+      for (final library in libraries) {
+        await _syncController.pullForLaunch(library);
+      }
+
+      // Indexe les fichiers ajoutés manuellement sur Drive (absents de la BDD).
+      for (final library in libraries) {
+        try {
+          await _repository.indexDriveFolder(library: library);
+        } catch (_) {
+          // Continue avec les autres dossiers si l'indexation échoue.
+        }
+      }
+    } catch (_) {
+      // Erreur inattendue au démarrage : passer en hors-ligne plutôt que
+      // de laisser la pastille bloquée sur « Synchro… ».
+      _syncController.markOffline();
     }
   }
 
