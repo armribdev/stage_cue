@@ -135,20 +135,22 @@ class GoogleDriveClient implements DriveClient {
     required String name,
     String? sharedDriveId,
   }) async {
-    final fileList = await _api.files.list(
-      q: "'${_escape(parentId)}' in parents and "
-          "name = '${_escape(name)}' and trashed = false",
-      spaces: 'drive',
-      $fields: 'files($_fileFields)',
-      pageSize: 1,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      driveId: sharedDriveId,
-      corpora: sharedDriveId != null ? 'drive' : null,
-    );
-    final files = fileList.files;
-    if (files == null || files.isEmpty) return null;
-    return _toDriveFile(files.first);
+    return _guard(() async {
+      final fileList = await _api.files.list(
+        q: "'${_escape(parentId)}' in parents and "
+            "name = '${_escape(name)}' and trashed = false",
+        spaces: 'drive',
+        $fields: 'files($_fileFields)',
+        pageSize: 1,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+        driveId: sharedDriveId,
+        corpora: sharedDriveId != null ? 'drive' : null,
+      );
+      final files = fileList.files;
+      if (files == null || files.isEmpty) return null;
+      return _toDriveFile(files.first);
+    });
   }
 
   @override

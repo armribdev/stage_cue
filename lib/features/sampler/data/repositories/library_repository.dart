@@ -586,6 +586,56 @@ class LibraryRepository extends ChangeNotifier {
     return LocalSoundProbeResult.needsDownload;
   }
 
+  /// Vérifie la présence distante d'un son de bibliothèque.
+  ///
+  /// - `true` : fichier trouvé sur Drive ;
+  /// - `false` : Drive joignable mais fichier absent ;
+  /// - `null` : son hors bibliothèque ou Drive inaccessible.
+  Future<bool?> probeRemotePresence(Sound sound) async {
+    final libraryId = sound.libraryId;
+    final rawRelativePath = sound.relativePath;
+    if (libraryId == null ||
+        rawRelativePath == null ||
+        rawRelativePath.isEmpty) {
+      return null;
+    }
+
+    // Renouvelle le token si besoin — évite un client périmé en cache mémoire.
+    if (!await ensureDriveConnected()) return null;
+
+    final client = await _ensureDriveClient();
+    if (client == null) return null;
+
+    final library = await _dataSource.getLibraryById(libraryId);
+    if (library == null) return null;
+
+    final relativePath =
+        LibrarySoundPaths.normalizeRelativePath(rawRelativePath);
+    try {
+      return await _cacheManager.existsOnDrive(
+        client: client,
+        library: library,
+        relativePath: relativePath,
+      );
+    } on DriveAuthException {
+      _invalidateDriveSession();
+      return null;
+    } catch (e, stack) {
+      AudioLoadLog.severe(
+        'Sonde Drive échouée pour ${sound.displayName ?? sound.title}',
+        error: e,
+        stackTrace: stack,
+      );
+      return null;
+    }
+  }
+
+  void _invalidateDriveSession() {
+    _activeClient?.dispose();
+    _activeClient = null;
+    _notifyDriveSessionChanged();
+  }
+
   /// Résout le chemin local jouable d'un son.
   ///
   /// - Son legacy (hors bibliothèque) : renvoie directement [Sound.filePath].
