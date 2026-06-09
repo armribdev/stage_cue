@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../domain/entities/pad.dart';
 import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
+import 'dashed_slot_frame.dart';
 
 /// Famille visuelle d'un pad — projette les 4 états d'availability sur 3 repères
 /// lisibles d'un coup d'œil sous stress live (refonte UX P0) :
@@ -45,32 +46,43 @@ class PadButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return switch (_visual) {
-      _PadVisual.ready => _buildReady(context, scheme),
-      _PadVisual.enRoute => _buildEnRoute(context, scheme),
-      _PadVisual.blocked => _buildBlocked(context, scheme),
-      _PadVisual.draft => _buildDraft(context, scheme),
-    };
+    final visual = _visual;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 220),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            ),
+            child: child,
+          ),
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey<_PadVisual>(visual),
+        child: switch (visual) {
+          _PadVisual.ready => _buildReady(context, scheme),
+          _PadVisual.enRoute => _buildEnRoute(context, scheme),
+          _PadVisual.blocked => _buildBlocked(context, scheme),
+          _PadVisual.draft => _buildDraft(context, scheme),
+        },
+      ),
+    );
   }
 
   // ── BROUILLON (création en cours, pas encore de son) ─────────────────────
 
   Widget _buildDraft(BuildContext context, ColorScheme scheme) {
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      color: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: scheme.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
+    return DashedSlotFrame(
       child: Center(
         child: Icon(
           Icons.library_music_outlined,
-          size: 28,
-          color: scheme.onSurfaceVariant.withValues(alpha: 0.35),
+          size: 24,
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
         ),
       ),
     );
