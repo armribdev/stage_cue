@@ -88,6 +88,10 @@ class SyncController extends ChangeNotifier {
   /// rejouer à la reprise.
   Library? _deferredPushLibrary;
 
+  /// Appelé après chaque merge de snapshot Drive réussi (PullStaged).
+  /// Permet au sampler de recharger ses boards sans redémarrage.
+  VoidCallback? onLibraryMerged;
+
   SyncController(
     this._repository, {
     Duration debounce = const Duration(seconds: 5),
@@ -198,6 +202,7 @@ class SyncController extends ChangeNotifier {
             status: SyncStatus.synced,
             lastSyncedAt: DateTime.now(),
           ));
+          onLibraryMerged?.call();
         case PullUpToDate():
           _set(_state.copyWith(
             status: SyncStatus.synced,
@@ -253,6 +258,7 @@ class SyncController extends ChangeNotifier {
             lastSyncedAt: DateTime.now(),
             clearConflict: true,
           ));
+          onLibraryMerged?.call();
         case PullUpToDate():
           _set(_state.copyWith(
             status: SyncStatus.synced,
@@ -305,6 +311,7 @@ class SyncController extends ChangeNotifier {
       entry.$1.cancel();
     }
     _debounceTimers.clear();
+    onLibraryMerged = null;
     super.dispose();
   }
 }
