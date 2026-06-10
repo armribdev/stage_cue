@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:drift/drift.dart' show OrderingTerm;
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/platform/saf_directory_bridge.dart';
@@ -22,6 +23,7 @@ import '../../data/models/indexing_progress.dart';
 import '../../domain/entities/library.dart' as domain;
 import '../../domain/entities/watched_path.dart' as domain;
 import '../providers/sync_controller.dart';
+import 'sound_library_screen.dart';
 
 /// Écran des paramètres
 class SettingsScreen extends StatefulWidget {
@@ -674,7 +676,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
 
         // Ajouter le dossier avec suivi de progression
-        await _repository.addWatchedPath(
+        final result = await _repository.addWatchedPath(
           watchedPath,
           onInserted: () {
             if (mounted) {
@@ -692,12 +694,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Dossier ajouté et indexé'),
-              duration: Duration(seconds: 2),
-            ),
-          );
+          final n = result.newSoundCount;
+          if (n > 0) {
+            await _offerAddNewSoundsToBoard(n);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Dossier ajouté et indexé'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
         }
 
         if (isSafTree && safInfo == null) {
@@ -721,6 +728,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
         showCopyableSnackBar(context, 'Erreur lors de l\'ajout du dossier: $e');
       }
     }
+  }
+
+  Future<void> _offerAddNewSoundsToBoard(int newSoundCount) async {
+    final boards = await (widget.database.select(widget.database.soundBoards)
+          ..orderBy([(b) => OrderingTerm(expression: b.createdAt)]))
+        .get();
+
+    if (!mounted) return;
+
+    if (boards.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$newSoundCount son${newSoundCount > 1 ? 's' : ''} indexé${newSoundCount > 1 ? 's' : ''}'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    int? targetBoardId;
+
+    if (boards.length == 1) {
+      targetBoardId = boards.first.id;
+    } else {
+      targetBoardId = await showDialog<int>(
+        context: context,
+        builder: (ctx) => SimpleDialog(
+          title: const Text('Ajouter au plateau'),
+          children: [
+            for (final board in boards)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, board.id),
+                child: Text(board.name),
+              ),
+          ],
+        ),
+      );
+    }
+
+    if (!mounted || targetBoardId == null) return;
+
+    await SoundLibraryScreen.open(
+      context,
+      database: widget.database,
+      boardId: targetBoardId,
+      libraryRepository: widget.libraryRepository,
+    );
   }
 
   Future<void> _addDriveDirectory() async {

@@ -114,7 +114,7 @@ class SoundRepository {
     return await _watchedPathDataSource.getAllWatchedPaths();
   }
 
-  Future<int> addWatchedPath(
+  Future<({int id, int newSoundCount})> addWatchedPath(
     WatchedPath watchedPath, {
     void Function(IndexingProgress)? onProgress,
     void Function()? onInserted,
@@ -127,15 +127,16 @@ class SoundRepository {
       );
     }
 
+    var newSoundCount = 0;
     try {
       if (SafDirectoryBridge.isSafTreeUri(watchedPath.path)) {
-        await _soundDataSource.indexContentTree(
+        newSoundCount = await _soundDataSource.indexContentTree(
           watchedPath.path,
           watchedPathId: id,
           onProgress: onProgress,
         );
       } else {
-        await _soundDataSource.indexDirectory(
+        newSoundCount = await _soundDataSource.indexDirectory(
           Directory(watchedPath.path),
           onProgress: onProgress,
         );
@@ -151,7 +152,7 @@ class SoundRepository {
         ),
       );
     }
-    return id;
+    return (id: id, newSoundCount: newSoundCount);
   }
 
   Future<void> updateWatchedPathAccount({
