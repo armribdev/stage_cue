@@ -95,6 +95,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     _database = widget.services.database;
     _initializeNotifier();
     _notifier.loadBoards();
+    widget.services.syncController.onLibraryMerged = _onLibraryMerged;
   }
 
   void _initializeNotifier() {
@@ -107,6 +108,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
 
     _notifier.addListener(_onStateChanged);
+  }
+
+  void _onLibraryMerged() {
+    if (!mounted) return;
+    _notifier.loadBoards();
   }
 
   void _onStateChanged() {
@@ -1612,6 +1618,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   @override
   void dispose() {
+    widget.services.syncController.onLibraryMerged = null;
     _normalGridScrollController.dispose();
     _editGridScrollController.dispose();
     _notifier.removeListener(_onStateChanged);

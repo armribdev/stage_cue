@@ -127,6 +127,30 @@ void main() {
 
       expect(controller.state.status, SyncStatus.synced);
     });
+
+    test('PullStaged déclenche onLibraryMerged', () async {
+      when(() => repo.pullLibrary(any()))
+          .thenAnswer((_) async => const PullStaged(7));
+      final controller = SyncController(repo);
+      var mergedCalled = false;
+      controller.onLibraryMerged = () => mergedCalled = true;
+
+      await controller.pullForLaunch(library);
+
+      expect(mergedCalled, isTrue);
+    });
+
+    test('PullUpToDate ne déclenche pas onLibraryMerged', () async {
+      when(() => repo.pullLibrary(any()))
+          .thenAnswer((_) async => const PullUpToDate());
+      final controller = SyncController(repo);
+      var mergedCalled = false;
+      controller.onLibraryMerged = () => mergedCalled = true;
+
+      await controller.pullForLaunch(library);
+
+      expect(mergedCalled, isFalse);
+    });
   });
 
   group('markOffline', () {
