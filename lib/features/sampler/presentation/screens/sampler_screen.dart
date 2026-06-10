@@ -65,7 +65,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   /// l'accrochage du geste (sinon le Draggable est démonté et le pad reste bloqué).
   bool _editDragUiReady = false;
   final _editGridKey = GlobalKey();
-  final _padScrollKeys = <int, GlobalKey>{};
+  double _lastGridWidth = 0;
   int? _recentlyRestoredSoundId;
   int? _highlightedPadId;
   bool _didAutoOpenCreateForCurrentEmptyState = false;
@@ -655,19 +655,57 @@ class _SamplerScreenState extends State<SamplerScreen> {
     ));
   }
 
-  GlobalKey _padScrollKey(int padId) =>
-      _padScrollKeys.putIfAbsent(padId, GlobalKey.new);
+  static const double _padScrollAlignment = 0.28;
+
+  double? _computePadTopOffset(int padId, double gridWidth) {
+    if (gridWidth <= 0) return null;
+
+    final state = _notifier.state;
+    PadItem? target;
+    for (final pad in state.pads) {
+      if (pad.pad.id == padId && !pad.isDraft && _shouldShowPadOnGrid(pad)) {
+        target = pad;
+        break;
+      }
+    }
+    if (target == null) return null;
+
+    const rowGap = 14.0;
+    final crossAxisCount = max(2, (gridWidth / _itemWidth).floor());
+    final availWidth = gridWidth - 32.0;
+    final cellHeight =
+        ((availWidth - (crossAxisCount - 1) * rowGap) / crossAxisCount) / 1.4;
+
+    final rowMap = <int, List<PadItem>>{};
+    for (final pad in state.pads) {
+      if (!_shouldShowPadOnGrid(pad)) continue;
+      rowMap.putIfAbsent(pad.pad.rowIndex, () => []).add(pad);
+    }
+    final rowIndices = rowMap.keys.toList()..sort();
+    final displayRowIndices = rowMap.isNotEmpty ? rowIndices : [0];
+    final visualRowIndex = displayRowIndices.indexOf(target.pad.rowIndex);
+    if (visualRowIndex < 0) return null;
+
+    return _padsGridPadding + visualRowIndex * (cellHeight + rowGap);
+  }
 
   void _scrollPadIntoView(int padId) {
     void tryScroll() {
       if (!mounted) return;
-      final context = _padScrollKey(padId).currentContext;
-      if (context == null) return;
-      Scrollable.ensureVisible(
-        context,
+      final controller = _activeGridScrollController;
+      if (!controller.hasClients || controller.positions.length != 1) return;
+
+      final padTop = _computePadTopOffset(padId, _lastGridWidth);
+      if (padTop == null) return;
+
+      final viewportHeight = controller.position.viewportDimension;
+      final targetOffset = (padTop - viewportHeight * _padScrollAlignment)
+          .clamp(0.0, controller.position.maxScrollExtent);
+
+      controller.animateTo(
+        targetOffset,
         duration: const Duration(milliseconds: 450),
         curve: Curves.easeInOutCubic,
-        alignment: 0.28,
       );
     }
 
@@ -848,7 +886,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final cells = <Widget>[
       for (final pad in committed)
         SizedBox(
-          key: _padScrollKey(pad.pad.id),
+          key: ValueKey<int>(pad.pad.id),
           width: cellWidth,
           height: cellHeight,
           child: _buildPadWidget(context, state, pad),
@@ -898,6 +936,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       key: ValueKey<bool>(_isEditMode),
       builder: (context, constraints) {
         final screenWidth = constraints.maxWidth;
+        _lastGridWidth = screenWidth;
         final crossAxisCount = max(2, (screenWidth / _itemWidth).floor());
 
         // Dimensions communes aux deux modes.
@@ -1394,7 +1433,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
         key: ValueKey<String>(
           selectedBoard == null
               ? (isBoardsLoading ? 'boards_loading' : 'boards_empty')
-              : state.isLoading
+              : state.isLoading && state.pads.isEmpty
               ? 'sounds_loading'
               : state.error != null && state.pads.isEmpty
               ? 'sounds_error'
@@ -1408,7 +1447,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   : const Text('Aucune scène disponible'),
             );
           }
-          if (state.isLoading) {
+          if (state.isLoading && state.pads.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
           if (state.error != null && state.pads.isEmpty) {
