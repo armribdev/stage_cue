@@ -44,8 +44,7 @@ class PullUpToDate extends PullOutcome {
   const PullUpToDate();
 }
 
-/// Un snapshot plus récent a été téléchargé et mis en attente. Il sera appliqué
-/// au prochain démarrage de l'application.
+/// Un snapshot plus récent a été téléchargé et fusionné en-place dans la base.
 class PullStaged extends PullOutcome {
   final int revision;
   const PullStaged(this.revision);

@@ -22,6 +22,10 @@ class AutoSyncCoordinator {
 
   StreamSubscription<Set<TableUpdate>>? _subscription;
 
+  // Vrai pendant _initialPull : supprime les schedulePush déclenchés par le
+  // merge en-place (le contenu vient du distant, pas d'une édition locale).
+  bool _ignoreUpdates = false;
+
   AutoSyncCoordinator(this._database, this._repository, this._syncController);
 
   /// Démarre l'écoute des modifications et lance un pull initial en arrière-plan.
@@ -31,6 +35,7 @@ class AutoSyncCoordinator {
   }
 
   Future<void> _onTablesUpdated(Set<TableUpdate> updates) async {
+    if (_ignoreUpdates) return;
     // Ignorer les écritures ne touchant QUE la table de bookkeeping `libraries`
     // (mise à jour de révision après un push) : sinon le push se relancerait en
     // boucle.
@@ -57,8 +62,13 @@ class AutoSyncCoordinator {
         return;
       }
 
-      for (final library in libraries) {
-        await _syncController.pullForLaunch(library);
+      _ignoreUpdates = true;
+      try {
+        for (final library in libraries) {
+          await _syncController.pullForLaunch(library);
+        }
+      } finally {
+        _ignoreUpdates = false;
       }
 
       // Indexe les fichiers ajoutés manuellement sur Drive (absents de la BDD).
