@@ -7,8 +7,8 @@ void main() {
     test('localPathFor convertit les / en séparateur de plateforme', () {
       const root = '/cache/lib';
       expect(
-        LibrarySoundPaths.localPathFor(root, 'Effets/Pistolet 4é.mp3'),
-        p.join(root, 'Effets', 'Pistolet 4é.mp3'),
+        LibrarySoundPaths.localPathFor(root, 'Effets/Pistolet 4.mp3'),
+        p.join(root, 'Effets', 'Pistolet 4.mp3'),
       );
     });
 

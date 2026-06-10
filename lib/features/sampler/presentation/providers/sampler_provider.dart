@@ -1271,7 +1271,6 @@ class SamplerNotifier extends ChangeNotifier {
           contentHash: s.contentHash,
           isFavorite: s.isFavorite,
           lastPlayedAt: s.lastPlayedAt,
-          typeDetected: true,
         );
         padItem.pad = padItem.pad.copyWith(sounds: updated);
         _notifyPad(padItem);

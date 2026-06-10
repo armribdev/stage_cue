@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration {
@@ -159,10 +159,14 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(sounds, sounds.lastPlayedAt);
         }
         if (from < 20) {
-          await m.addColumn(sounds, sounds.typeManuallySet);
+          await customStatement(
+            'ALTER TABLE sounds ADD COLUMN type_manually_set INTEGER NOT NULL DEFAULT 0',
+          );
         }
         if (from < 21) {
-          await m.addColumn(sounds, sounds.typeDetected);
+          await customStatement(
+            'ALTER TABLE sounds ADD COLUMN type_detected INTEGER NOT NULL DEFAULT 1',
+          );
           // Sons Drive indexés sans fichier local : type provisoire, à reclasser.
           await customStatement('''
             UPDATE sounds SET type_detected = 0
@@ -173,6 +177,23 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 22) {
           await m.addColumn(pads, pads.rowIndex as GeneratedColumn<Object>);
+        }
+        if (from < 23) {
+          // Simplifie le modèle de type : une seule colonne nullable remplace
+          // type (NOT NULL) + typeDetected + typeManuallySet.
+          // Règle : null = type inconnu (son Drive jamais téléchargé ou probe
+          // raté) ; valeur non-null = type connu (probe réussi ou choix user).
+          await m.alterTable(
+            TableMigration(
+              sounds,
+              columnTransformer: {
+                sounds.type: const CustomExpression<int>(
+                  'CASE WHEN type_detected = 0 AND type_manually_set = 0'
+                  ' THEN NULL ELSE type END',
+                ),
+              },
+            ),
+          );
         }
       },
       beforeOpen: (details) async {

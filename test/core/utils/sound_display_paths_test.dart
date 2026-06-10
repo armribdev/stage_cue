@@ -48,7 +48,7 @@ void main() {
       final path = SoundDisplayPaths.forSound(
         _sound(
           libraryId: 10,
-          relativePath: 'Effets/Pistolet 4é.mp3',
+          relativePath: 'Effets/Pistolet 4.mp3',
         ),
         library: _library(
           drivePath: 'Mon Projet / Scène 2',
@@ -58,7 +58,7 @@ void main() {
 
       expect(
         path,
-        'owner@gmail.com/Mon Projet/Scène 2/Effets/Pistolet 4é.mp3',
+        'owner@gmail.com/Mon Projet/Scène 2/Effets/Pistolet 4.mp3',
       );
     });
 

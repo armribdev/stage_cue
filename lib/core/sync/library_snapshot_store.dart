@@ -26,7 +26,9 @@ class LibrarySnapshotStore {
     try {
       await _database.customStatement('''
         CREATE TABLE snap.sounds AS
-        SELECT * FROM sounds WHERE library_id = $libraryId
+        SELECT id, title, display_name, file_path, type, color, volume,
+               created_at, library_id, relative_path, content_hash
+        FROM sounds WHERE library_id = $libraryId
       ''');
       await _database.customStatement('''
         CREATE TABLE snap.sound_boards AS
@@ -114,19 +116,71 @@ class LibrarySnapshotStore {
         if (await _snapHasTable('sound_tags')) {
           await _importSoundTags();
         }
+        await _restoreLocalAnnotations(libraryId);
       });
     } finally {
       await _detachSnapshot();
     }
   }
 
+  // Clé = relativePath (identifiant stable cross-merge).
+  // Peuplé par _purgeLibraryData, consommé par _restoreLocalAnnotations.
+  Map<String, ({bool isFavorite, DateTime? lastPlayedAt})> _localAnnotations = {};
+
   Future<void> _purgeLibraryData(int libraryId) async {
+    // Sauvegarder les annotations personnelles (favoris, récence) avant la
+    // purge : elles ne sont pas dans le snapshot Drive (données locales).
+    final existing = await (_database.select(_database.sounds)
+          ..where(
+            (s) =>
+                s.libraryId.equals(libraryId) & s.relativePath.isNotNull(),
+          ))
+        .get();
+    _localAnnotations = {
+      for (final s in existing)
+        if (s.relativePath != null)
+          s.relativePath!: (
+            isFavorite: s.isFavorite,
+            lastPlayedAt: s.lastPlayedAt,
+          ),
+    };
+
     await (_database.delete(_database.soundBoards)
           ..where((b) => b.libraryId.equals(libraryId)))
         .go();
     await (_database.delete(_database.sounds)
           ..where((s) => s.libraryId.equals(libraryId)))
         .go();
+  }
+
+  /// Ré-applique les annotations locales sur les sons fraîchement importés.
+  Future<void> _restoreLocalAnnotations(int libraryId) async {
+    if (_localAnnotations.isEmpty) return;
+
+    final imported = await (_database.select(_database.sounds)
+          ..where(
+            (s) =>
+                s.libraryId.equals(libraryId) & s.relativePath.isNotNull(),
+          ))
+        .get();
+
+    for (final sound in imported) {
+      final path = sound.relativePath;
+      if (path == null) continue;
+      final ann = _localAnnotations[path];
+      if (ann == null) continue;
+      if (!ann.isFavorite && ann.lastPlayedAt == null) continue;
+
+      await (_database.update(_database.sounds)
+            ..where((s) => s.id.equals(sound.id)))
+          .write(
+        db.SoundsCompanion(
+          isFavorite: Value(ann.isFavorite),
+          lastPlayedAt: Value(ann.lastPlayedAt),
+        ),
+      );
+    }
+    _localAnnotations = {};
   }
 
   final Map<int, int> _soundIdMap = {};
@@ -173,11 +227,14 @@ class LibrarySnapshotStore {
           ? LibrarySoundPaths.localPathFor(localRootPath, relativePath)
           : row.read<String>('file_path');
 
+      final rawType = row.read<int?>('type');
       final newId = await _database.into(_database.sounds).insert(
             db.SoundsCompanion.insert(
               title: row.read<String>('title'),
               filePath: filePath,
-              type: SoundType.values[row.read<int>('type')],
+              type: Value(
+                rawType != null ? SoundType.values[rawType] : null,
+              ),
               displayName: Value(row.read<String?>('display_name')),
               color: Value(row.read<int?>('color')),
               volume: Value(row.read<double>('volume')),
@@ -185,7 +242,6 @@ class LibrarySnapshotStore {
               libraryId: Value(libraryId),
               relativePath: Value(relativePath),
               contentHash: Value(contentHash),
-              typeDetected: const Value(true),
             ),
           );
       _soundIdMap[snapId] = newId;

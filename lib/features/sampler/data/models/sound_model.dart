@@ -12,7 +12,7 @@ class SoundModel {
       title: sound.title,
       displayName: sound.displayName,
       filePath: sound.filePath,
-      type: _mapSoundType(sound.type),
+      type: sound.type != null ? _mapSoundType(sound.type!) : null,
       colorValue: sound.color,
       volume: sound.volume,
       createdAt: sound.createdAt,
@@ -21,7 +21,6 @@ class SoundModel {
       contentHash: sound.contentHash,
       isFavorite: sound.isFavorite,
       lastPlayedAt: sound.lastPlayedAt,
-      typeDetected: sound.typeDetected,
     );
   }
 
@@ -31,7 +30,7 @@ class SoundModel {
       title: sound.title,
       displayName: Value(sound.displayName),
       filePath: sound.filePath,
-      type: _mapSoundTypeToDb(sound.type),
+      type: Value(sound.type != null ? _mapSoundTypeToDb(sound.type!) : null),
       color: Value(sound.colorValue),
       volume: Value(sound.volume),
       libraryId: Value(sound.libraryId),

@@ -29,27 +29,22 @@ class LocalSoundDataSource {
 
   LocalSoundDataSource(this._database);
 
-  Future<({db_sounds.SoundType type, bool durationProbed, String? contentHash})>
+  /// Résout les métadonnées d'un fichier audio local.
+  /// Retourne `type: null` si le fichier est absent ou si le probe de durée échoue.
+  Future<({db_sounds.SoundType? type, String? contentHash})>
       _resolveMetadataForFile(File file) async {
     if (!await file.exists() || await file.length() <= 0) {
-      return (
-        type: db_sounds.SoundType.soundEffect,
-        durationProbed: false,
-        contentHash: null,
-      );
+      return (type: null, contentHash: null);
     }
-    final probe = await _probeSoundTypeFromDuration(file);
+    final probeType = await _probeSoundTypeFromDuration(file);
     final contentHash =
-        probe.durationProbed ? await computeQuickHash(file) : null;
-    return (
-      type: probe.type,
-      durationProbed: probe.durationProbed,
-      contentHash: contentHash,
-    );
+        probeType != null ? await computeQuickHash(file) : null;
+    return (type: probeType, contentHash: contentHash);
   }
 
-  Future<({db_sounds.SoundType type, bool durationProbed})>
-      _probeSoundTypeFromDuration(File file) async {
+  /// Probe de type par durée SoLoud. Retourne null si le fichier est invalide
+  /// ou si SoLoud ne peut pas le lire.
+  Future<db_sounds.SoundType?> _probeSoundTypeFromDuration(File file) async {
     if (!await isPlausibleAudioFile(file)) {
       AudioLoadLog.metadataProbeFailed(
         path: file.path,
@@ -58,25 +53,18 @@ class LocalSoundDataSource {
           '(min $kMinimumValidAudioFileBytes o)',
         ),
       );
-      return (type: db_sounds.SoundType.soundEffect, durationProbed: false);
+      return null;
     }
 
-    final soloudDuration = await _readDurationViaSoLoud(file);
-    if (soloudDuration != null) {
-      return _typeFromDuration(soloudDuration);
-    }
-
-    return (type: db_sounds.SoundType.soundEffect, durationProbed: false);
+    final duration = await _readDurationViaSoLoud(file);
+    if (duration == null) return null;
+    return _typeFromDuration(duration);
   }
 
-  ({db_sounds.SoundType type, bool durationProbed}) _typeFromDuration(
-    Duration duration,
-  ) {
-    if (duration > _musicThreshold) {
-      return (type: db_sounds.SoundType.music, durationProbed: true);
-    }
-    return (type: db_sounds.SoundType.soundEffect, durationProbed: true);
-  }
+  db_sounds.SoundType _typeFromDuration(Duration duration) =>
+      duration > _musicThreshold
+          ? db_sounds.SoundType.music
+          : db_sounds.SoundType.soundEffect;
 
   Future<Duration?> _readDurationViaSoLoud(File file) async {
     AudioSource? source;
@@ -119,8 +107,7 @@ class LocalSoundDataSource {
         s.type AS type,
         COALESCE(bss.color, s.color) AS color,
         COALESCE(bss.volume, s.volume) AS volume,
-        s.created_at AS created_at,
-        s.type_detected AS type_detected
+        s.created_at AS created_at
       FROM sounds s
       INNER JOIN board_sounds bs
         ON bs.sound_id = s.id
@@ -135,23 +122,21 @@ class LocalSoundDataSource {
         .get();
 
     return rows.map((row) {
-      final typeValue = row.read<int>('type');
-      final soundType = switch (typeValue) {
-        0 => domain.SoundType.soundEffect,
-        1 => domain.SoundType.music,
-        2 => domain.SoundType.ambiance,
-        _ => domain.SoundType.soundEffect,
-      };
+      final typeValue = row.read<int?>('type');
       return domain.Sound(
         id: row.read<int>('id'),
         title: row.read<String>('title'),
         displayName: row.read<String?>('display_name'),
         filePath: row.read<String>('file_path'),
-        type: soundType,
+        type: switch (typeValue) {
+          0 => domain.SoundType.soundEffect,
+          1 => domain.SoundType.music,
+          2 => domain.SoundType.ambiance,
+          _ => null,
+        },
         colorValue: row.read<int?>('color'),
         volume: row.read<double>('volume'),
         createdAt: row.read<DateTime>('created_at'),
-        typeDetected: row.read<bool>('type_detected'),
       );
     }).toList();
   }
@@ -272,13 +257,7 @@ class LocalSoundDataSource {
       domain.SoundType.ambiance => db_sounds.SoundType.ambiance,
     };
     await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
-        .write(
-      db.SoundsCompanion(
-        type: Value(dbType),
-        typeManuallySet: const Value(true),
-        typeDetected: const Value(true),
-      ),
-    );
+        .write(db.SoundsCompanion(type: Value(dbType)));
   }
 
   /// Marque ou démarque un son comme favori (accès rapide en recherche).
@@ -371,9 +350,8 @@ class LocalSoundDataSource {
             db.SoundsCompanion.insert(
               title: title,
               filePath: file.path,
-              type: metadata.type,
+              type: Value(metadata.type),
               contentHash: Value(metadata.contentHash),
-              typeDetected: Value(metadata.durationProbed),
             ),
           );
     } catch (e) {
@@ -409,18 +387,17 @@ class LocalSoundDataSource {
           db.SoundsCompanion.insert(
             title: title,
             filePath: file.path,
-            type: metadata.type,
+            type: Value(metadata.type),
             libraryId: Value(libraryId),
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
-            typeDetected: Value(metadata.durationProbed),
           ),
         );
     return true;
   }
 
-  /// Persiste hash et/ou type initial si le fichier vient d'être matérialisé.
-  /// Ne modifie jamais un type déjà détecté ou fixé manuellement.
+  /// Persiste hash et/ou type si le fichier vient d'être matérialisé.
+  /// Ne modifie jamais un type déjà connu (`type != null`).
   Future<void> materializeSoundFileMetadata({
     required int soundId,
     required File file,
@@ -431,17 +408,16 @@ class LocalSoundDataSource {
     if (existing == null) return;
     if (!await isPlausibleAudioFile(file)) return;
 
-    if (!existing.typeDetected && !existing.typeManuallySet) {
-      final probe = await _probeSoundTypeFromDuration(file);
-      final contentHash = probe.durationProbed
+    if (existing.type == null) {
+      final probeType = await _probeSoundTypeFromDuration(file);
+      final contentHash = probeType != null
           ? await computeQuickHash(file)
           : existing.contentHash;
       await (_database.update(_database.sounds)
             ..where((s) => s.id.equals(soundId)))
           .write(
         db.SoundsCompanion(
-          type: probe.durationProbed ? Value(probe.type) : const Value.absent(),
-          typeDetected: Value(probe.durationProbed),
+          type: Value(probeType),
           contentHash: Value(contentHash),
         ),
       );
@@ -528,11 +504,10 @@ class LocalSoundDataSource {
           db.SoundsCompanion.insert(
             title: title,
             filePath: localPath,
-            type: metadata.type,
+            type: Value(metadata.type),
             libraryId: Value(libraryId),
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
-            typeDetected: Value(metadata.durationProbed),
           ),
         );
     return true;
@@ -615,9 +590,8 @@ class LocalSoundDataSource {
                 db.SoundsCompanion.insert(
                   title: title,
                   filePath: file.path,
-                  type: metadata.type,
+                  type: Value(metadata.type),
                   contentHash: Value(metadata.contentHash),
-                  typeDetected: Value(metadata.durationProbed),
                 ),
               );
           indexedCount++;
@@ -776,24 +750,23 @@ class LocalSoundDataSource {
           ))
         .get();
     return rows.map((row) {
-      final soundType = switch (row.type) {
-        db_sounds.SoundType.music => domain.SoundType.music,
-        db_sounds.SoundType.ambiance => domain.SoundType.ambiance,
-        _ => domain.SoundType.soundEffect,
-      };
       return domain.Sound(
         id: row.id,
         title: row.title,
         displayName: row.displayName,
         filePath: row.filePath,
-        type: soundType,
+        type: switch (row.type) {
+          db_sounds.SoundType.music => domain.SoundType.music,
+          db_sounds.SoundType.ambiance => domain.SoundType.ambiance,
+          db_sounds.SoundType.soundEffect => domain.SoundType.soundEffect,
+          null => null,
+        },
         colorValue: row.color,
         volume: row.volume,
         createdAt: row.createdAt,
         libraryId: row.libraryId,
         relativePath: row.relativePath,
         contentHash: row.contentHash,
-        typeDetected: row.typeDetected,
       );
     }).toList();
   }
@@ -1019,7 +992,7 @@ class LocalPadDataSource {
   LocalPadDataSource(this._database);
 
   domain.Sound _rowToSound(QueryRow row) {
-    final typeValue = row.read<int>('type');
+    final typeValue = row.read<int?>('type');
     return domain.Sound(
       id: row.read<int>('id'),
       title: row.read<String>('title'),
@@ -1029,7 +1002,7 @@ class LocalPadDataSource {
         0 => domain.SoundType.soundEffect,
         1 => domain.SoundType.music,
         2 => domain.SoundType.ambiance,
-        _ => domain.SoundType.soundEffect,
+        _ => null,
       },
       colorValue: row.read<int?>('color'),
       volume: row.read<double>('volume'),
@@ -1037,7 +1010,6 @@ class LocalPadDataSource {
       libraryId: row.read<int?>('library_id'),
       relativePath: row.read<String?>('relative_path'),
       contentHash: row.read<String?>('content_hash'),
-      typeDetected: row.read<bool>('type_detected'),
     );
   }
 
@@ -1059,7 +1031,7 @@ class LocalPadDataSource {
         '''
         SELECT s.id, s.title, s.display_name, s.file_path, s.type,
                s.color, s.volume, s.created_at,
-               s.library_id, s.relative_path, s.content_hash, s.type_detected
+               s.library_id, s.relative_path, s.content_hash
         FROM pad_sounds ps
         INNER JOIN sounds s ON s.id = ps.sound_id
         WHERE ps.pad_id = ?

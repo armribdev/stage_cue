@@ -666,7 +666,7 @@ class _SoundRowState extends State<_SoundRow> {
 
 /// Avatar du son avec état local / téléchargement.
 class _SoundSlotAvatar extends StatelessWidget {
-  final SoundType type;
+  final SoundType? type;
   final bool isLocal;
   final bool isDownloading;
 

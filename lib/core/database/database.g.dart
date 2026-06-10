@@ -743,14 +743,14 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     requiredDuringInsert: true,
   );
   @override
-  late final GeneratedColumnWithTypeConverter<SoundType, int> type =
+  late final GeneratedColumnWithTypeConverter<SoundType?, int> type =
       GeneratedColumn<int>(
         'type',
         aliasedName,
-        false,
+        true,
         type: DriftSqlType.int,
-        requiredDuringInsert: true,
-      ).withConverter<SoundType>($SoundsTable.$convertertype);
+        requiredDuringInsert: false,
+      ).withConverter<SoundType?>($SoundsTable.$convertertypen);
   static const VerificationMeta _colorMeta = const VerificationMeta('color');
   @override
   late final GeneratedColumn<int> color = GeneratedColumn<int>(
@@ -844,36 +844,6 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _typeManuallySetMeta = const VerificationMeta(
-    'typeManuallySet',
-  );
-  @override
-  late final GeneratedColumn<bool> typeManuallySet = GeneratedColumn<bool>(
-    'type_manually_set',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("type_manually_set" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _typeDetectedMeta = const VerificationMeta(
-    'typeDetected',
-  );
-  @override
-  late final GeneratedColumn<bool> typeDetected = GeneratedColumn<bool>(
-    'type_detected',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("type_detected" IN (0, 1))',
-    ),
-    defaultValue: const Constant(true),
-  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -889,8 +859,6 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     contentHash,
     isFavorite,
     lastPlayedAt,
-    typeManuallySet,
-    typeDetected,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -989,24 +957,6 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         ),
       );
     }
-    if (data.containsKey('type_manually_set')) {
-      context.handle(
-        _typeManuallySetMeta,
-        typeManuallySet.isAcceptableOrUnknown(
-          data['type_manually_set']!,
-          _typeManuallySetMeta,
-        ),
-      );
-    }
-    if (data.containsKey('type_detected')) {
-      context.handle(
-        _typeDetectedMeta,
-        typeDetected.isAcceptableOrUnknown(
-          data['type_detected']!,
-          _typeDetectedMeta,
-        ),
-      );
-    }
     return context;
   }
 
@@ -1032,11 +982,11 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.string,
         data['${effectivePrefix}file_path'],
       )!,
-      type: $SoundsTable.$convertertype.fromSql(
+      type: $SoundsTable.$convertertypen.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
           data['${effectivePrefix}type'],
-        )!,
+        ),
       ),
       color: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -1070,14 +1020,6 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_played_at'],
       ),
-      typeManuallySet: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}type_manually_set'],
-      )!,
-      typeDetected: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}type_detected'],
-      )!,
     );
   }
 
@@ -1088,6 +1030,8 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
 
   static JsonTypeConverter2<SoundType, int, int> $convertertype =
       const EnumIndexConverter<SoundType>(SoundType.values);
+  static JsonTypeConverter2<SoundType?, int?, int?> $convertertypen =
+      JsonTypeConverter2.asNullable($convertertype);
 }
 
 class Sound extends DataClass implements Insertable<Sound> {
@@ -1095,7 +1039,7 @@ class Sound extends DataClass implements Insertable<Sound> {
   final String title;
   final String? displayName;
   final String filePath;
-  final SoundType type;
+  final SoundType? type;
   final int? color;
   final double volume;
   final DateTime createdAt;
@@ -1108,18 +1052,12 @@ class Sound extends DataClass implements Insertable<Sound> {
 
   /// Dernière lecture (pré-écoute ou déclenchement) — tri par récence.
   final DateTime? lastPlayedAt;
-
-  /// Type choisi manuellement par l'opérateur — ne pas réécraser à l'auto-détection.
-  final bool typeManuallySet;
-
-  /// false tant que le type n'a pas été lu depuis le fichier (index Drive sans cache).
-  final bool typeDetected;
   const Sound({
     required this.id,
     required this.title,
     this.displayName,
     required this.filePath,
-    required this.type,
+    this.type,
     this.color,
     required this.volume,
     required this.createdAt,
@@ -1128,8 +1066,6 @@ class Sound extends DataClass implements Insertable<Sound> {
     this.contentHash,
     required this.isFavorite,
     this.lastPlayedAt,
-    required this.typeManuallySet,
-    required this.typeDetected,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1140,8 +1076,8 @@ class Sound extends DataClass implements Insertable<Sound> {
       map['display_name'] = Variable<String>(displayName);
     }
     map['file_path'] = Variable<String>(filePath);
-    {
-      map['type'] = Variable<int>($SoundsTable.$convertertype.toSql(type));
+    if (!nullToAbsent || type != null) {
+      map['type'] = Variable<int>($SoundsTable.$convertertypen.toSql(type));
     }
     if (!nullToAbsent || color != null) {
       map['color'] = Variable<int>(color);
@@ -1161,8 +1097,6 @@ class Sound extends DataClass implements Insertable<Sound> {
     if (!nullToAbsent || lastPlayedAt != null) {
       map['last_played_at'] = Variable<DateTime>(lastPlayedAt);
     }
-    map['type_manually_set'] = Variable<bool>(typeManuallySet);
-    map['type_detected'] = Variable<bool>(typeDetected);
     return map;
   }
 
@@ -1174,7 +1108,7 @@ class Sound extends DataClass implements Insertable<Sound> {
           ? const Value.absent()
           : Value(displayName),
       filePath: Value(filePath),
-      type: Value(type),
+      type: type == null && nullToAbsent ? const Value.absent() : Value(type),
       color: color == null && nullToAbsent
           ? const Value.absent()
           : Value(color),
@@ -1193,8 +1127,6 @@ class Sound extends DataClass implements Insertable<Sound> {
       lastPlayedAt: lastPlayedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastPlayedAt),
-      typeManuallySet: Value(typeManuallySet),
-      typeDetected: Value(typeDetected),
     );
   }
 
@@ -1208,8 +1140,8 @@ class Sound extends DataClass implements Insertable<Sound> {
       title: serializer.fromJson<String>(json['title']),
       displayName: serializer.fromJson<String?>(json['displayName']),
       filePath: serializer.fromJson<String>(json['filePath']),
-      type: $SoundsTable.$convertertype.fromJson(
-        serializer.fromJson<int>(json['type']),
+      type: $SoundsTable.$convertertypen.fromJson(
+        serializer.fromJson<int?>(json['type']),
       ),
       color: serializer.fromJson<int?>(json['color']),
       volume: serializer.fromJson<double>(json['volume']),
@@ -1219,8 +1151,6 @@ class Sound extends DataClass implements Insertable<Sound> {
       contentHash: serializer.fromJson<String?>(json['contentHash']),
       isFavorite: serializer.fromJson<bool>(json['isFavorite']),
       lastPlayedAt: serializer.fromJson<DateTime?>(json['lastPlayedAt']),
-      typeManuallySet: serializer.fromJson<bool>(json['typeManuallySet']),
-      typeDetected: serializer.fromJson<bool>(json['typeDetected']),
     );
   }
   @override
@@ -1231,7 +1161,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       'title': serializer.toJson<String>(title),
       'displayName': serializer.toJson<String?>(displayName),
       'filePath': serializer.toJson<String>(filePath),
-      'type': serializer.toJson<int>($SoundsTable.$convertertype.toJson(type)),
+      'type': serializer.toJson<int?>(
+        $SoundsTable.$convertertypen.toJson(type),
+      ),
       'color': serializer.toJson<int?>(color),
       'volume': serializer.toJson<double>(volume),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -1240,8 +1172,6 @@ class Sound extends DataClass implements Insertable<Sound> {
       'contentHash': serializer.toJson<String?>(contentHash),
       'isFavorite': serializer.toJson<bool>(isFavorite),
       'lastPlayedAt': serializer.toJson<DateTime?>(lastPlayedAt),
-      'typeManuallySet': serializer.toJson<bool>(typeManuallySet),
-      'typeDetected': serializer.toJson<bool>(typeDetected),
     };
   }
 
@@ -1250,7 +1180,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     String? title,
     Value<String?> displayName = const Value.absent(),
     String? filePath,
-    SoundType? type,
+    Value<SoundType?> type = const Value.absent(),
     Value<int?> color = const Value.absent(),
     double? volume,
     DateTime? createdAt,
@@ -1259,14 +1189,12 @@ class Sound extends DataClass implements Insertable<Sound> {
     Value<String?> contentHash = const Value.absent(),
     bool? isFavorite,
     Value<DateTime?> lastPlayedAt = const Value.absent(),
-    bool? typeManuallySet,
-    bool? typeDetected,
   }) => Sound(
     id: id ?? this.id,
     title: title ?? this.title,
     displayName: displayName.present ? displayName.value : this.displayName,
     filePath: filePath ?? this.filePath,
-    type: type ?? this.type,
+    type: type.present ? type.value : this.type,
     color: color.present ? color.value : this.color,
     volume: volume ?? this.volume,
     createdAt: createdAt ?? this.createdAt,
@@ -1275,8 +1203,6 @@ class Sound extends DataClass implements Insertable<Sound> {
     contentHash: contentHash.present ? contentHash.value : this.contentHash,
     isFavorite: isFavorite ?? this.isFavorite,
     lastPlayedAt: lastPlayedAt.present ? lastPlayedAt.value : this.lastPlayedAt,
-    typeManuallySet: typeManuallySet ?? this.typeManuallySet,
-    typeDetected: typeDetected ?? this.typeDetected,
   );
   Sound copyWithCompanion(SoundsCompanion data) {
     return Sound(
@@ -1303,12 +1229,6 @@ class Sound extends DataClass implements Insertable<Sound> {
       lastPlayedAt: data.lastPlayedAt.present
           ? data.lastPlayedAt.value
           : this.lastPlayedAt,
-      typeManuallySet: data.typeManuallySet.present
-          ? data.typeManuallySet.value
-          : this.typeManuallySet,
-      typeDetected: data.typeDetected.present
-          ? data.typeDetected.value
-          : this.typeDetected,
     );
   }
 
@@ -1327,9 +1247,7 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('relativePath: $relativePath, ')
           ..write('contentHash: $contentHash, ')
           ..write('isFavorite: $isFavorite, ')
-          ..write('lastPlayedAt: $lastPlayedAt, ')
-          ..write('typeManuallySet: $typeManuallySet, ')
-          ..write('typeDetected: $typeDetected')
+          ..write('lastPlayedAt: $lastPlayedAt')
           ..write(')'))
         .toString();
   }
@@ -1349,8 +1267,6 @@ class Sound extends DataClass implements Insertable<Sound> {
     contentHash,
     isFavorite,
     lastPlayedAt,
-    typeManuallySet,
-    typeDetected,
   );
   @override
   bool operator ==(Object other) =>
@@ -1368,9 +1284,7 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.relativePath == this.relativePath &&
           other.contentHash == this.contentHash &&
           other.isFavorite == this.isFavorite &&
-          other.lastPlayedAt == this.lastPlayedAt &&
-          other.typeManuallySet == this.typeManuallySet &&
-          other.typeDetected == this.typeDetected);
+          other.lastPlayedAt == this.lastPlayedAt);
 }
 
 class SoundsCompanion extends UpdateCompanion<Sound> {
@@ -1378,7 +1292,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<String> title;
   final Value<String?> displayName;
   final Value<String> filePath;
-  final Value<SoundType> type;
+  final Value<SoundType?> type;
   final Value<int?> color;
   final Value<double> volume;
   final Value<DateTime> createdAt;
@@ -1387,8 +1301,6 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<String?> contentHash;
   final Value<bool> isFavorite;
   final Value<DateTime?> lastPlayedAt;
-  final Value<bool> typeManuallySet;
-  final Value<bool> typeDetected;
   const SoundsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -1403,15 +1315,13 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.contentHash = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
-    this.typeManuallySet = const Value.absent(),
-    this.typeDetected = const Value.absent(),
   });
   SoundsCompanion.insert({
     this.id = const Value.absent(),
     required String title,
     this.displayName = const Value.absent(),
     required String filePath,
-    required SoundType type,
+    this.type = const Value.absent(),
     this.color = const Value.absent(),
     this.volume = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1420,11 +1330,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.contentHash = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
-    this.typeManuallySet = const Value.absent(),
-    this.typeDetected = const Value.absent(),
   }) : title = Value(title),
-       filePath = Value(filePath),
-       type = Value(type);
+       filePath = Value(filePath);
   static Insertable<Sound> custom({
     Expression<int>? id,
     Expression<String>? title,
@@ -1439,8 +1346,6 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<String>? contentHash,
     Expression<bool>? isFavorite,
     Expression<DateTime>? lastPlayedAt,
-    Expression<bool>? typeManuallySet,
-    Expression<bool>? typeDetected,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1456,8 +1361,6 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (contentHash != null) 'content_hash': contentHash,
       if (isFavorite != null) 'is_favorite': isFavorite,
       if (lastPlayedAt != null) 'last_played_at': lastPlayedAt,
-      if (typeManuallySet != null) 'type_manually_set': typeManuallySet,
-      if (typeDetected != null) 'type_detected': typeDetected,
     });
   }
 
@@ -1466,7 +1369,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<String>? title,
     Value<String?>? displayName,
     Value<String>? filePath,
-    Value<SoundType>? type,
+    Value<SoundType?>? type,
     Value<int?>? color,
     Value<double>? volume,
     Value<DateTime>? createdAt,
@@ -1475,8 +1378,6 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<String?>? contentHash,
     Value<bool>? isFavorite,
     Value<DateTime?>? lastPlayedAt,
-    Value<bool>? typeManuallySet,
-    Value<bool>? typeDetected,
   }) {
     return SoundsCompanion(
       id: id ?? this.id,
@@ -1492,8 +1393,6 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       contentHash: contentHash ?? this.contentHash,
       isFavorite: isFavorite ?? this.isFavorite,
       lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
-      typeManuallySet: typeManuallySet ?? this.typeManuallySet,
-      typeDetected: typeDetected ?? this.typeDetected,
     );
   }
 
@@ -1514,7 +1413,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     }
     if (type.present) {
       map['type'] = Variable<int>(
-        $SoundsTable.$convertertype.toSql(type.value),
+        $SoundsTable.$convertertypen.toSql(type.value),
       );
     }
     if (color.present) {
@@ -1541,12 +1440,6 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     if (lastPlayedAt.present) {
       map['last_played_at'] = Variable<DateTime>(lastPlayedAt.value);
     }
-    if (typeManuallySet.present) {
-      map['type_manually_set'] = Variable<bool>(typeManuallySet.value);
-    }
-    if (typeDetected.present) {
-      map['type_detected'] = Variable<bool>(typeDetected.value);
-    }
     return map;
   }
 
@@ -1565,9 +1458,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('relativePath: $relativePath, ')
           ..write('contentHash: $contentHash, ')
           ..write('isFavorite: $isFavorite, ')
-          ..write('lastPlayedAt: $lastPlayedAt, ')
-          ..write('typeManuallySet: $typeManuallySet, ')
-          ..write('typeDetected: $typeDetected')
+          ..write('lastPlayedAt: $lastPlayedAt')
           ..write(')'))
         .toString();
   }
@@ -5498,7 +5389,7 @@ typedef $$SoundsTableCreateCompanionBuilder =
       required String title,
       Value<String?> displayName,
       required String filePath,
-      required SoundType type,
+      Value<SoundType?> type,
       Value<int?> color,
       Value<double> volume,
       Value<DateTime> createdAt,
@@ -5507,8 +5398,6 @@ typedef $$SoundsTableCreateCompanionBuilder =
       Value<String?> contentHash,
       Value<bool> isFavorite,
       Value<DateTime?> lastPlayedAt,
-      Value<bool> typeManuallySet,
-      Value<bool> typeDetected,
     });
 typedef $$SoundsTableUpdateCompanionBuilder =
     SoundsCompanion Function({
@@ -5516,7 +5405,7 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<String> title,
       Value<String?> displayName,
       Value<String> filePath,
-      Value<SoundType> type,
+      Value<SoundType?> type,
       Value<int?> color,
       Value<double> volume,
       Value<DateTime> createdAt,
@@ -5525,8 +5414,6 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<String?> contentHash,
       Value<bool> isFavorite,
       Value<DateTime?> lastPlayedAt,
-      Value<bool> typeManuallySet,
-      Value<bool> typeDetected,
     });
 
 final class $$SoundsTableReferences
@@ -5634,7 +5521,7 @@ class $$SoundsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnWithTypeConverterFilters<SoundType, SoundType, int> get type =>
+  ColumnWithTypeConverterFilters<SoundType?, SoundType, int> get type =>
       $composableBuilder(
         column: $table.type,
         builder: (column) => ColumnWithTypeConverterFilters(column),
@@ -5672,16 +5559,6 @@ class $$SoundsTableFilterComposer
 
   ColumnFilters<DateTime> get lastPlayedAt => $composableBuilder(
     column: $table.lastPlayedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get typeManuallySet => $composableBuilder(
-    column: $table.typeManuallySet,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get typeDetected => $composableBuilder(
-    column: $table.typeDetected,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5853,16 +5730,6 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<bool> get typeManuallySet => $composableBuilder(
-    column: $table.typeManuallySet,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get typeDetected => $composableBuilder(
-    column: $table.typeDetected,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   $$LibrariesTableOrderingComposer get libraryId {
     final $$LibrariesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -5910,7 +5777,7 @@ class $$SoundsTableAnnotationComposer
   GeneratedColumn<String> get filePath =>
       $composableBuilder(column: $table.filePath, builder: (column) => column);
 
-  GeneratedColumnWithTypeConverter<SoundType, int> get type =>
+  GeneratedColumnWithTypeConverter<SoundType?, int> get type =>
       $composableBuilder(column: $table.type, builder: (column) => column);
 
   GeneratedColumn<int> get color =>
@@ -5939,16 +5806,6 @@ class $$SoundsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get lastPlayedAt => $composableBuilder(
     column: $table.lastPlayedAt,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<bool> get typeManuallySet => $composableBuilder(
-    column: $table.typeManuallySet,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<bool> get typeDetected => $composableBuilder(
-    column: $table.typeDetected,
     builder: (column) => column,
   );
 
@@ -6088,7 +5945,7 @@ class $$SoundsTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String?> displayName = const Value.absent(),
                 Value<String> filePath = const Value.absent(),
-                Value<SoundType> type = const Value.absent(),
+                Value<SoundType?> type = const Value.absent(),
                 Value<int?> color = const Value.absent(),
                 Value<double> volume = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -6097,8 +5954,6 @@ class $$SoundsTableTableManager
                 Value<String?> contentHash = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
-                Value<bool> typeManuallySet = const Value.absent(),
-                Value<bool> typeDetected = const Value.absent(),
               }) => SoundsCompanion(
                 id: id,
                 title: title,
@@ -6113,8 +5968,6 @@ class $$SoundsTableTableManager
                 contentHash: contentHash,
                 isFavorite: isFavorite,
                 lastPlayedAt: lastPlayedAt,
-                typeManuallySet: typeManuallySet,
-                typeDetected: typeDetected,
               ),
           createCompanionCallback:
               ({
@@ -6122,7 +5975,7 @@ class $$SoundsTableTableManager
                 required String title,
                 Value<String?> displayName = const Value.absent(),
                 required String filePath,
-                required SoundType type,
+                Value<SoundType?> type = const Value.absent(),
                 Value<int?> color = const Value.absent(),
                 Value<double> volume = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -6131,8 +5984,6 @@ class $$SoundsTableTableManager
                 Value<String?> contentHash = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
-                Value<bool> typeManuallySet = const Value.absent(),
-                Value<bool> typeDetected = const Value.absent(),
               }) => SoundsCompanion.insert(
                 id: id,
                 title: title,
@@ -6147,8 +5998,6 @@ class $$SoundsTableTableManager
                 contentHash: contentHash,
                 isFavorite: isFavorite,
                 lastPlayedAt: lastPlayedAt,
-                typeManuallySet: typeManuallySet,
-                typeDetected: typeDetected,
               ),
           withReferenceMapper: (p0) => p0
               .map(

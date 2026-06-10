@@ -4,7 +4,7 @@ class Sound {
   final String title;
   final String? displayName;
   final String filePath;
-  final SoundType type;
+  final SoundType? type;
   final int? colorValue;
   final double volume;
   final DateTime createdAt;
@@ -24,15 +24,12 @@ class Sound {
   /// Dernière lecture (pré-écoute / déclenchement) — tri par récence.
   final DateTime? lastPlayedAt;
 
-  /// false = type pas encore lu depuis le fichier (index Drive hors-ligne).
-  final bool typeDetected;
-
   Sound({
     required this.id,
     required this.title,
     this.displayName,
     required this.filePath,
-    required this.type,
+    this.type,
     this.colorValue,
     this.volume = 1.0,
     required this.createdAt,
@@ -41,7 +38,6 @@ class Sound {
     this.contentHash,
     this.isFavorite = false,
     this.lastPlayedAt,
-    this.typeDetected = true,
   });
 }
 
