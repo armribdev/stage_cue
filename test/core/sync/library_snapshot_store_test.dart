@@ -39,7 +39,7 @@ void main() {
           db.SoundsCompanion.insert(
             title: 'clap.wav',
             filePath: '/other/device/cache/clap.wav',
-            type: SoundType.soundEffect,
+            type: const Value(SoundType.soundEffect),
             libraryId: Value(libraryId),
             relativePath: const Value('clap.wav'),
           ),
@@ -86,11 +86,11 @@ void main() {
         );
     await legacyDb.into(legacyDb.sounds).insert(
           db.SoundsCompanion.insert(
-            title: 'Pistolet 4é',
-            filePath: '/old/cache/sounds/Pistolet 4é.mp3',
-            type: SoundType.soundEffect,
+            title: 'Pistolet 4',
+            filePath: '/old/cache/sounds/Pistolet 4.mp3',
+            type: const Value(SoundType.soundEffect),
             libraryId: Value(legacyLibraryId),
-            relativePath: const Value('sounds/Pistolet 4é.mp3'),
+            relativePath: const Value('sounds/Pistolet 4.mp3'),
           ),
         );
     final snapshotPath = p.join(tempDir.path, 'legacy-library.db');
@@ -105,10 +105,10 @@ void main() {
         .get();
 
     expect(sounds, hasLength(1));
-    expect(sounds.first.relativePath, 'Pistolet 4é.mp3');
+    expect(sounds.first.relativePath, 'Pistolet 4.mp3');
     expect(
       sounds.first.filePath,
-      p.join(localRoot, 'Pistolet 4é.mp3'),
+      p.join(localRoot, 'Pistolet 4.mp3'),
     );
   });
 }

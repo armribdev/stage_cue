@@ -40,7 +40,7 @@ class Sounds extends Table {
   TextColumn get title => text()(); // Nom de fichier sans extension
   TextColumn get displayName => text().nullable()(); // Nom affiché sur le pad
   TextColumn get filePath => text()(); // Chemin local (legacy ou cache dérivé)
-  IntColumn get type => intEnum<SoundType>()();
+  IntColumn get type => intEnum<SoundType>().nullable()();
   IntColumn get color => integer().nullable()(); // Couleur personnalisée (ARGB)
   RealColumn get volume => real().withDefault(const Constant(1.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -57,11 +57,6 @@ class Sounds extends Table {
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
   /// Dernière lecture (pré-écoute ou déclenchement) — tri par récence.
   DateTimeColumn get lastPlayedAt => dateTime().nullable()();
-  /// Type choisi manuellement par l'opérateur — ne pas réécraser à l'auto-détection.
-  BoolColumn get typeManuallySet =>
-      boolean().withDefault(const Constant(false))();
-  /// false tant que le type n'a pas été lu depuis le fichier (index Drive sans cache).
-  BoolColumn get typeDetected => boolean().withDefault(const Constant(true))();
 }
 
 class SoundBoards extends Table {

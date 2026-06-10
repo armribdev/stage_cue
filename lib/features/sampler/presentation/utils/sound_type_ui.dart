@@ -33,18 +33,19 @@ extension SoundTypeUi on SoundType {
       };
 }
 
-/// Filtre par type et libellé d'affichage (sons Drive non encore lus exclus).
+/// Filtre par type et libellé d'affichage (sons Drive non encore téléchargés exclus).
 extension SoundClassificationUi on Sound {
-  bool get isClassifiedForTypeFilter => typeDetected;
+  bool get isClassifiedForTypeFilter => type != null;
 
-  bool matchesSoundType(SoundType filter) => typeDetected && type == filter;
+  bool matchesSoundType(SoundType filter) => type == filter;
 
-  String get typeDisplayLabel => typeDetected ? type.label : 'Non classé';
+  String get typeDisplayLabel => type?.label ?? 'Non classé';
 }
 
 /// Avatar circulaire avec l'icône du type de son.
+/// [type] null = son non encore classé (icône neutre).
 class SoundTypeAvatar extends StatelessWidget {
-  final SoundType type;
+  final SoundType? type;
   final double radius;
   final double? iconSize;
 
@@ -58,12 +59,23 @@ class SoundTypeAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final colors = type.avatarColors(scheme);
+    if (type == null) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: scheme.surfaceContainerHighest,
+        child: Icon(
+          Icons.help_outline_rounded,
+          size: iconSize,
+          color: scheme.onSurfaceVariant,
+        ),
+      );
+    }
+    final colors = type!.avatarColors(scheme);
     return CircleAvatar(
       radius: radius,
       backgroundColor: colors.background,
       child: Icon(
-        type.icon,
+        type!.icon,
         size: iconSize,
         color: colors.foreground,
       ),

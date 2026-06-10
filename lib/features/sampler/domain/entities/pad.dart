@@ -57,9 +57,7 @@ class Pad {
   /// Vrai si le pad ne contient que des sons de type musique.
   bool get isMusicPad =>
       sounds.isNotEmpty &&
-      sounds.every(
-        (sound) => sound.typeDetected && sound.type == SoundType.music,
-      );
+      sounds.every((sound) => sound.type == SoundType.music);
 
   Pad copyWith({
     String? name,

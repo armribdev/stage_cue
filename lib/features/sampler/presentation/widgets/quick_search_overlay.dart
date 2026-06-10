@@ -767,15 +767,17 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     );
   }
 
-  IconData _typeIcon(SoundType type) => switch (type) {
+  IconData _typeIcon(SoundType? type) => switch (type) {
         SoundType.soundEffect => Icons.graphic_eq_rounded,
         SoundType.music => Icons.music_note_rounded,
         SoundType.ambiance => Icons.waves_rounded,
+        null => Icons.help_outline_rounded,
       };
 
-  String _typeLabel(SoundType type) => switch (type) {
+  String _typeLabel(SoundType? type) => switch (type) {
         SoundType.soundEffect => 'Effet',
         SoundType.music => 'Musique',
         SoundType.ambiance => 'Ambiance',
+        null => 'Non classé',
       };
 }
