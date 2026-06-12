@@ -512,7 +512,11 @@ class SamplerNotifier extends ChangeNotifier {
         if (playing) {
           padItem._currentPlayerIndex = idx;
           padItem.isPlaying = true;
-          if (padItem.pad.isMusicPad) {
+          // Ne pas mettre à jour currentMusicPad pendant un fondu enchaîné :
+          // crossfadeToNextMusic démarre le prochain lecteur à volume 0, ce qui
+          // déclenche playing=true avant la fin du fondu. La mise à jour
+          // explicite en fin de fondu est la source de vérité.
+          if (padItem.pad.isMusicPad && !_music._skipMusicAutoAdvance) {
             _state = _state.copyWith(currentMusicPad: padItem);
           }
         } else if (padItem._currentPlayerIndex == idx) {
