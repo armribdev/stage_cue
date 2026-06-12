@@ -510,7 +510,10 @@ class MusicController {
     _o._state = _o._state.copyWith(clearCurrentMusicPad: true);
     _o._notify();
 
-    if (queue.isEmpty) return;
+    if (queue.isEmpty) {
+      cleanupOffStagePads();
+      return;
+    }
 
     final nextId = queue.first;
     final next = _resolvePadItem(nextId);
@@ -580,6 +583,7 @@ class MusicController {
   }
 
   Future<PadItem?> _createOffStageMusicPad(int soundId) async {
+    cleanupOffStagePads();
     try {
       final sound = await _o._repository.getSoundById(soundId);
       if (sound == null) {
