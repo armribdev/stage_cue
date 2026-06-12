@@ -86,27 +86,37 @@ class MusicController {
   // ── Lecture musique ───────────────────────────────────────────────────────
 
   Future<void> _toggleMusicPad(PadItem padItem) async {
+    // Ce pad joue → pause (mémorise la position pour reprise)
+    if (padItem.isPlaying) {
+      await _stopMusicPad(padItem, manual: true, clearOnAir: false);
+      return;
+    }
+
+    // Ce pad est en pause → reprendre depuis la position mémorisée
+    if (padItem.isPaused && padItem.isPlayable) {
+      final current = _o._state.currentMusicPad;
+      if (current != null && current.pad.id != padItem.pad.id) {
+        if (current.isPlaying) {
+          await _stopMusicPad(current, manual: true);
+        } else if (current.isPaused) {
+          current.clearPausedPlayback();
+          _o._state = _o._state.copyWith(clearCurrentMusicPad: true);
+          _o._notify();
+        }
+      }
+      await _playMusicPad(
+        padItem,
+        fromPosition: padItem.pausedPlaybackPosition,
+        soundIndex: padItem.pausedPlayerIndex,
+      );
+      return;
+    }
+
+    // Ce pad n'est pas jouable → rien
     if (!padItem.isPlayable) return;
 
-    final currentMusic = _o._state.currentMusicPad;
-
-    if (padItem.isPlaying) {
-      await _stopMusicPad(padItem, manual: true);
-      return;
-    }
-
-    if (_o._state.musicQueuePadIds.contains(padItem.pad.id)) {
-      _removeFromMusicQueue(padItem.pad.id);
-      return;
-    }
-
-    if (currentMusic != null &&
-        currentMusic.pad.id != padItem.pad.id &&
-        currentMusic.isPlaying) {
-      enqueueMusicPad(padItem);
-      return;
-    }
-
+    // Ce pad n'est pas joué → jouer immédiatement (arrête l'éventuelle
+    // musique en cours, retire ce pad de la file s'il y était)
     await playMusicNow(padItem);
   }
 
@@ -114,10 +124,15 @@ class MusicController {
     if (!padItem.isPlayable) return;
 
     final current = _o._state.currentMusicPad;
-    if (current != null &&
-        current.pad.id != padItem.pad.id &&
-        current.isPlaying) {
-      await _stopMusicPad(current, manual: true);
+    if (current != null && current.pad.id != padItem.pad.id) {
+      if (current.isPlaying) {
+        await _stopMusicPad(current, manual: true);
+      } else if (current.isPaused) {
+        // Abandon la pause du pad courant avant d'en jouer un autre.
+        current.clearPausedPlayback();
+        _o._state = _o._state.copyWith(clearCurrentMusicPad: true);
+        _o._notify();
+      }
     }
 
     _o._state = _o._state.copyWith(
@@ -197,8 +212,14 @@ class MusicController {
 
   Future<void> stopCurrentMusic() async {
     final current = _o._state.currentMusicPad;
-    if (current == null || !current.isPlaying) return;
-    await _stopMusicPad(current, manual: true);
+    if (current == null) return;
+    if (current.isPlaying) {
+      await _stopMusicPad(current, manual: true);
+    } else if (current.isPaused) {
+      current.clearPausedPlayback();
+      _o._state = _o._state.copyWith(clearCurrentMusicPad: true);
+      _o._notify();
+    }
   }
 
   Future<void> toggleCurrentMusicPlayback() async {

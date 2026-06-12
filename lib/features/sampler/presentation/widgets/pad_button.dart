@@ -111,12 +111,20 @@ class PadButton extends StatelessWidget {
               ? hasCustomColor
                   ? scheme.primary.withValues(alpha: 0.5)
                   : scheme.onSurfaceVariant.withValues(alpha: 0.55)
-              : padItem.isPartiallyReady
-                  ? scheme.tertiary.withValues(alpha: 0.45)
-                  : scheme.outlineVariant.withValues(alpha: 0.45),
+              : padItem.isPaused
+                  ? scheme.primary.withValues(alpha: 0.3)
+                  : padItem.isPartiallyReady
+                      ? scheme.tertiary.withValues(alpha: 0.45)
+                      : scheme.outlineVariant.withValues(alpha: 0.45),
         ),
       ),
-      color: padItem.isPlaying ? playingColor : baseColor,
+      color: padItem.isPlaying
+          ? playingColor
+          : padItem.isPaused
+              ? (hasCustomColor
+                  ? customColor.withValues(alpha: 0.35)
+                  : scheme.surfaceContainerHigh.withValues(alpha: 0.6))
+              : baseColor,
       child: _interactive(
         child: Stack(
           children: [
@@ -152,9 +160,11 @@ class PadButton extends StatelessWidget {
                 ),
               ),
             ),
-            // Badge informatif seulement : le corps du pad porte l'action.
+            // Badges informatifs : le corps du pad porte l'action.
             if (padItem.isDownloading)
               _buildDownloadCorner(scheme.tertiary),
+            if (padItem.isPaused && !padItem.isDownloading)
+              _buildPauseCorner(scheme),
           ],
         ),
       ),
@@ -371,6 +381,15 @@ class PadButton extends StatelessWidget {
   }
 
   // ── Communs ───────────────────────────────────────────────────────────────
+
+  Widget _buildPauseCorner(ColorScheme scheme) {
+    final color = scheme.primary.withValues(alpha: 0.6);
+    return Positioned(
+      top: 6,
+      right: 6,
+      child: Icon(Icons.pause_rounded, size: 14, color: color),
+    );
+  }
 
   /// Pastille de progression de téléchargement (informative).
   Widget _buildDownloadCorner(Color color) {
