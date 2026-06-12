@@ -20,17 +20,28 @@ Future<T> _enqueueLoadMemTask<T>(Future<T> Function() task) {
   return run;
 }
 
+/// Formats natifs de miniaudio (SoLoud) — AAC/M4A exclus.
+const Set<String> supportedAudioExtensions = {
+  '.mp3', '.wav', '.ogg', '.opus', '.flac',
+};
+
 /// Charge un fichier audio dans SoLoud via [loadMem].
 ///
 /// Lit les octets côté Dart pour contourner les échecs d'ouverture C++ sur
 /// Windows (chemins Unicode, accents, etc.) tout en conservant [LoadMode.memory].
-/// Ne propage jamais d'exception SoLoud brute — uniquement [StateError].
+/// Ne propage jamais d'exception SoLoud brute — uniquement [StateError] ou
+/// [UnsupportedAudioFormatException] pour les formats non décodables.
 Future<AudioSource> loadAudioSourceFromFile(File file) async {
   if (!await file.exists()) {
     throw StateError('Fichier audio introuvable : ${file.path}');
   }
 
   final path = p.normalize(file.absolute.path);
+  final ext = p.extension(path).toLowerCase();
+  if (!supportedAudioExtensions.contains(ext)) {
+    throw UnsupportedAudioFormatException(ext, path);
+  }
+
   if (isKnownUnloadablePath(path)) {
     throw StateError('Fichier audio déjà signalé illisible : $path');
   }

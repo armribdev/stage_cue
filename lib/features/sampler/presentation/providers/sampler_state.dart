@@ -8,6 +8,8 @@ enum PadUnavailabilityReason {
   offline,
   /// Fichier local introuvable (supprimé ou déplacé).
   missingFile,
+  /// Fichier présent mais format non décodable par SoLoud sur cette plateforme.
+  unsupportedFormat,
 }
 
 /// État du sampler
@@ -190,7 +192,9 @@ class PadItem {
       .length;
 
   bool get hasMissingFileSlot => slots.any(
-        (s) => s.availability == PadSoundAvailability.missingFile,
+        (s) =>
+            s.availability == PadSoundAvailability.missingFile ||
+            s.availability == PadSoundAvailability.unsupportedFormat,
       );
 
   /// Pad visuellement bloqué (fichier introuvable / hors-ligne).
@@ -200,6 +204,7 @@ class PadItem {
     return switch (unavailabilityReason) {
       PadUnavailabilityReason.offline => true,
       PadUnavailabilityReason.missingFile => true,
+      PadUnavailabilityReason.unsupportedFormat => true,
       _ => false,
     };
   }

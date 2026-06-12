@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import 'audio_file_validation.dart';
 import 'soloud_file_loader.dart';
 import 'audio_load_log.dart';
 
@@ -36,6 +37,8 @@ class AudioPlayerService {
     try {
       final source = await loadAudioSourceFromFile(file);
       return AudioPlayerService._(source);
+    } on UnsupportedAudioFormatException {
+      rethrow;
     } catch (e) {
       if (e is! StateError) {
         AudioLoadLog.loadMemFailed(path: file.absolute.path, error: e);

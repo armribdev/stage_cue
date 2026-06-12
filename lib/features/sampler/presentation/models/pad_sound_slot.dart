@@ -10,6 +10,8 @@ enum PadSoundAvailability {
   needsDownload,
   offline,
   missingFile,
+  /// Fichier présent mais format non décodable par SoLoud sur cette plateforme.
+  unsupportedFormat,
 }
 
 /// Lecteur audio aligné sur un son du pad (même index que [Pad.sounds]).

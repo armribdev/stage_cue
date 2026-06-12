@@ -190,6 +190,7 @@ class SamplerNotifier extends ChangeNotifier {
     const priority = {
       PadUnavailabilityReason.offline: 0,
       PadUnavailabilityReason.missingFile: 1,
+      PadUnavailabilityReason.unsupportedFormat: 1,
       PadUnavailabilityReason.needsDownload: 2,
     };
     if (current == null) return next;
@@ -214,6 +215,8 @@ class SamplerNotifier extends ChangeNotifier {
       PadSoundAvailability.needsDownload => PadUnavailabilityReason.needsDownload,
       PadSoundAvailability.offline => PadUnavailabilityReason.offline,
       PadSoundAvailability.missingFile => PadUnavailabilityReason.missingFile,
+      PadSoundAvailability.unsupportedFormat =>
+        PadUnavailabilityReason.unsupportedFormat,
     };
   }
 
@@ -292,7 +295,10 @@ class SamplerNotifier extends ChangeNotifier {
     if (index < 0 || index >= padItem.slots.length) return;
     final slot = padItem.slots[index];
     if (slot.isReady || slot.isCached) return;
-    if (slot.availability == PadSoundAvailability.missingFile) return;
+    if (slot.availability == PadSoundAvailability.missingFile ||
+        slot.availability == PadSoundAvailability.unsupportedFormat) {
+      return;
+    }
 
     final availability = await _probeSoundLocalAvailability(
       padItem.pad.sounds[index],
@@ -385,6 +391,11 @@ class SamplerNotifier extends ChangeNotifier {
     } on SoundNotAvailableLocallyException catch (e) {
       padItem.slots[index] = PadSoundSlot(
         availability: _availabilityFromException(e),
+      );
+    } on UnsupportedAudioFormatException {
+      _blockSoundDriveRetry(sound.id);
+      padItem.slots[index] = PadSoundSlot(
+        availability: PadSoundAvailability.unsupportedFormat,
       );
     } catch (e, stack) {
       if (resolvedPath != null) {
@@ -983,6 +994,7 @@ class SamplerNotifier extends ChangeNotifier {
     if (index < 0 || index >= resolved.slots.length) return false;
     final slot = resolved.slots[index];
     if (slot.isReady) return true;
+    if (slot.availability == PadSoundAvailability.unsupportedFormat) return false;
     if (slot.availability == PadSoundAvailability.missingFile) {
       if (!_isRetryableMissingLibrarySound(resolved.pad.sounds[index])) {
         return false;
@@ -1009,6 +1021,7 @@ class SamplerNotifier extends ChangeNotifier {
 
     final slot = padItem.slots[index];
     if (slot.isReady) return true;
+    if (slot.availability == PadSoundAvailability.unsupportedFormat) return false;
     if (slot.availability == PadSoundAvailability.missingFile &&
         !_isRetryableMissingLibrarySound(padItem.pad.sounds[index])) {
       return false;
@@ -1078,6 +1091,7 @@ class SamplerNotifier extends ChangeNotifier {
     for (var i = 0; i < padItem.slots.length; i++) {
       final slot = padItem.slots[i];
       if (slot.isReady) continue;
+      if (slot.availability == PadSoundAvailability.unsupportedFormat) continue;
       if (slot.availability == PadSoundAvailability.missingFile) {
         if (!_isRetryableMissingLibrarySound(padItem.pad.sounds[i])) continue;
         await _prepareRetryForMissingLibrarySound(padItem, i);
@@ -1583,6 +1597,7 @@ class SamplerNotifier extends ChangeNotifier {
     if (slotIndex < 0 || slotIndex >= padItem.slots.length) return;
     final slot = padItem.slots[slotIndex];
     if (slot.isReady) return;
+    if (slot.availability == PadSoundAvailability.unsupportedFormat) return;
     if (slot.availability == PadSoundAvailability.missingFile &&
         !_isRetryableMissingLibrarySound(padItem.pad.sounds[slotIndex])) {
       return;
