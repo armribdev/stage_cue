@@ -72,11 +72,16 @@ class AutoSyncCoordinator {
       }
 
       // Indexe les fichiers ajoutés manuellement sur Drive (absents de la BDD).
+      // Timeout : évite de bloquer le lancement sur un dossier Drive volumineux
+      // ou une connexion lente. Les fichiers non indexés seront visibles au
+      // prochain lancement.
       for (final library in libraries) {
         try {
-          await _repository.indexDriveFolder(library: library);
+          await _repository
+              .indexDriveFolder(library: library)
+              .timeout(const Duration(seconds: 30));
         } catch (_) {
-          // Continue avec les autres dossiers si l'indexation échoue.
+          // Continue avec les autres dossiers si l'indexation échoue ou expire.
         }
       }
     } catch (_) {
