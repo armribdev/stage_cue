@@ -321,7 +321,8 @@ class SamplerNotifier extends ChangeNotifier {
   _RemovedPadSnapshot? _lastRemovedPad;
   int _draftPadIdSeq = -1;
   final _random = Random();
-  bool _skipMusicAutoAdvance = false;
+  int _musicAdvanceLockCount = 0;
+  bool get _skipMusicAutoAdvance => _musicAdvanceLockCount > 0;
 
   /// Pads musique "hors-scène" : créés à la volée depuis le sélecteur pour
   /// jouer une musique dans la régie sans l'ajouter au plateau.
@@ -1863,7 +1864,7 @@ class SamplerNotifier extends ChangeNotifier {
     bool clearOnAir = true,
   }) async {
     if (manual) {
-      _skipMusicAutoAdvance = true;
+      _musicAdvanceLockCount++;
     }
     if (!clearOnAir && manual) {
       _capturePausedPlayback(padItem);
@@ -1872,7 +1873,7 @@ class SamplerNotifier extends ChangeNotifier {
       await padItem.currentPlayer?.stop();
     } finally {
       if (manual) {
-        _skipMusicAutoAdvance = false;
+        if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
       }
     }
 
@@ -1965,7 +1966,7 @@ class SamplerNotifier extends ChangeNotifier {
     final player = current.currentPlayer;
     if (player == null) return;
 
-    _skipMusicAutoAdvance = true;
+    _musicAdvanceLockCount++;
     try {
       player.fadeVolumeTo(0, duration);
       await Future<void>.delayed(duration);
@@ -1975,7 +1976,7 @@ class SamplerNotifier extends ChangeNotifier {
       current._currentPlayerIndex = null;
       notifyListeners();
     } finally {
-      _skipMusicAutoAdvance = false;
+      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
     }
   }
 
@@ -2011,7 +2012,7 @@ class SamplerNotifier extends ChangeNotifier {
     }
     final targetVolume = _effectiveVolume(next);
 
-    _skipMusicAutoAdvance = true;
+    _musicAdvanceLockCount++;
     try {
       _state = _state.copyWith(
         musicQueuePadIds: _state.musicQueuePadIds.sublist(1),
@@ -2036,7 +2037,7 @@ class SamplerNotifier extends ChangeNotifier {
       _state = _state.copyWith(currentMusicPad: next);
       notifyListeners();
     } finally {
-      _skipMusicAutoAdvance = false;
+      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
     }
   }
 
@@ -2050,7 +2051,7 @@ class SamplerNotifier extends ChangeNotifier {
 
     final previous = _state.currentMusicPad;
 
-    _skipMusicAutoAdvance = true;
+    _musicAdvanceLockCount++;
     try {
       _state = _state.copyWith(
         musicQueuePadIds: _state.musicQueuePadIds.sublist(1),
@@ -2081,7 +2082,7 @@ class SamplerNotifier extends ChangeNotifier {
       _state = _state.copyWith(currentMusicPad: next);
       notifyListeners();
     } finally {
-      _skipMusicAutoAdvance = false;
+      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
     }
   }
 
@@ -2130,11 +2131,11 @@ class SamplerNotifier extends ChangeNotifier {
     final current = _state.currentMusicPad;
     if (current == null || !current.isPlayable) return;
     if (current.isPlaying) {
-      _skipMusicAutoAdvance = true;
+      _musicAdvanceLockCount++;
       try {
         await current.currentPlayer?.stop();
       } finally {
-        _skipMusicAutoAdvance = false;
+        if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
       }
     }
     await _playMusicPad(current);
@@ -2391,7 +2392,7 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<void> stopAllSounds() async {
-    _skipMusicAutoAdvance = true;
+    _musicAdvanceLockCount++;
     try {
       for (final padItem in _state.pads) {
         if (padItem.isPlaying) {
@@ -2401,7 +2402,7 @@ class SamplerNotifier extends ChangeNotifier {
         }
       }
     } finally {
-      _skipMusicAutoAdvance = false;
+      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
     }
     _clearMusicState();
     notifyListeners();
