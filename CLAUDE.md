@@ -6,7 +6,7 @@ Soundboard Flutter pour déclenchement audio en live (théâtre, streaming, JDR)
 
 - **Flutter** — multi-plateforme, cibles primaires iOS/Android
 - **Audio** — flutter_soloud (low-latency, preloading mémoire)
-- **DB** — Drift ORM sur SQLite, schéma v9, migrations incrémentales
+- **DB** — Drift ORM sur SQLite, schéma v23, migrations incrémentales
 - **State** — ChangeNotifier custom (`SamplerNotifier` + `SamplerState.copyWith()`)
 - **Codegen** — drift_dev + build_runner (requis après tout changement de schéma)
 
@@ -45,7 +45,7 @@ dart analyze
 - Noms de fichiers : `snake_case.dart` — classes : `PascalCase`
 - Commentaires en français, identifiants de code en anglais
 - `const` partout où possible dans les widgets
-- Les overrides de son par board vivent dans `board_sound_settings`, pas dans `board_sounds`
+- Les overrides de pad (nom, couleur, volume) vivent dans la table `pads` — `board_sound_settings` et `board_sounds` n'existent plus depuis v10
 - Les use cases sont intentionnellement minces — la logique reste dans le repository ou le domain
 
 ## Ce qu'il ne faut pas faire

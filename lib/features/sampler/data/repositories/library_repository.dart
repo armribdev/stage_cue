@@ -612,11 +612,13 @@ class LibraryRepository extends ChangeNotifier {
     final relativePath =
         LibrarySoundPaths.normalizeRelativePath(rawRelativePath);
     try {
-      return await _cacheManager.existsOnDrive(
-        client: client,
-        library: library,
-        relativePath: relativePath,
-      );
+      return await _cacheManager
+          .existsOnDrive(
+            client: client,
+            library: library,
+            relativePath: relativePath,
+          )
+          .timeout(const Duration(seconds: 10));
     } on DriveAuthException {
       _invalidateDriveSession();
       return null;
