@@ -269,13 +269,13 @@ class SamplerNotifier extends ChangeNotifier {
         sound.libraryId != null &&
         sound.relativePath != null &&
         sound.relativePath!.isNotEmpty) {
-      var availability = _availabilityFromProbe(
+      // Sonde uniquement le cache local — pas de requête Drive ici.
+      // Si le fichier est absent du cache, on reste en needsDownload.
+      // L'état missingFile est établi à l'échec réel du téléchargement,
+      // ce qui évite N requêtes Drive au chargement du plateau.
+      return _availabilityFromProbe(
         await libraryRepository.probeLocalCache(sound),
       );
-      if (availability == PadSoundAvailability.needsDownload) {
-        availability = await _resolveRemoteAvailability(sound) ?? availability;
-      }
-      return availability;
     }
 
     if (isKnownUnloadablePath(sound.filePath)) {
@@ -285,26 +285,7 @@ class SamplerNotifier extends ChangeNotifier {
     if (await isPlausibleAudioFile(file)) {
       return PadSoundAvailability.cached;
     }
-    if (await file.exists()) {
-      return PadSoundAvailability.missingFile;
-    }
     return PadSoundAvailability.missingFile;
-  }
-
-  Future<PadSoundAvailability?> _resolveRemoteAvailability(Sound sound) async {
-    try {
-      final exists = await _libraryRepository?.probeRemotePresence(sound);
-      if (exists != false) return null;
-      _blockSoundDriveRetry(sound.id);
-      return PadSoundAvailability.missingFile;
-    } catch (e, stack) {
-      AudioLoadLog.severe(
-        'Sonde Drive échouée pour ${sound.displayName ?? sound.title}',
-        error: e,
-        stackTrace: stack,
-      );
-      return null;
-    }
   }
 
   Future<void> _probeSlotAtIndex(PadItem padItem, int index) async {
@@ -862,7 +843,32 @@ class SamplerNotifier extends ChangeNotifier {
       (key, priority) => priority <= _downloadPriorityPrefetch,
     );
 
-    for (final padItem in List<PadItem>.from(_state.pads)) {
+    // Favoris d'abord, puis par dernière lecture (desc), puis par position grille.
+    // Les tâches sont enfilées dans cet ordre : à priorité égale la file est FIFO,
+    // donc le seq d'enqueue détermine l'ordre effectif de téléchargement.
+    final padsToFetch = List<PadItem>.from(_state.pads)
+      ..sort((a, b) {
+        final aFav = a.pad.sounds.any((s) => s.isFavorite) ? 1 : 0;
+        final bFav = b.pad.sounds.any((s) => s.isFavorite) ? 1 : 0;
+        if (aFav != bFav) return bFav - aFav;
+
+        DateTime? latestFor(PadItem item) => item.pad.sounds
+            .map((s) => s.lastPlayedAt)
+            .whereType<DateTime>()
+            .fold<DateTime?>(
+              null,
+              (best, d) => best == null || d.isAfter(best) ? d : best,
+            );
+
+        final aLast = latestFor(a);
+        final bLast = latestFor(b);
+        if (aLast == null && bLast == null) return 0;
+        if (aLast == null) return 1;
+        if (bLast == null) return -1;
+        return bLast.compareTo(aLast);
+      });
+
+    for (final padItem in padsToFetch) {
       if (padItem.pendingDownloadCount == 0) continue;
       unawaited(
         downloadAndLoadPad(padItem, priority: _downloadPriorityPrefetch)
