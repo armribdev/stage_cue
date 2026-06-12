@@ -593,7 +593,8 @@ class MusicController {
 
   bool _isMusicPadPermanentlyUnavailable(PadItem padItem) {
     return padItem.unavailabilityReason == PadUnavailabilityReason.offline ||
-        padItem.unavailabilityReason == PadUnavailabilityReason.missingFile;
+        padItem.unavailabilityReason == PadUnavailabilityReason.missingFile ||
+        padItem.unavailabilityReason == PadUnavailabilityReason.unsupportedFormat;
   }
 
   void _scheduleMusicPadDownload(PadItem padItem) {
@@ -640,6 +641,7 @@ class MusicController {
     _lastPlaybackError = switch (padItem?.unavailabilityReason) {
       PadUnavailabilityReason.offline => 'Son indisponible hors-ligne.',
       PadUnavailabilityReason.missingFile => 'Fichier audio introuvable.',
+      PadUnavailabilityReason.unsupportedFormat => 'Format audio non supporté.',
       _ => 'Fichier audio introuvable ou indisponible hors-ligne.',
     };
     _o._notify();

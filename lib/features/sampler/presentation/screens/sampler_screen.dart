@@ -1244,7 +1244,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     final reason = resolved.unavailabilityReason;
 
-    if (reason == PadUnavailabilityReason.offline) {
+    if (reason == PadUnavailabilityReason.offline ||
+        reason == PadUnavailabilityReason.unsupportedFormat) {
       debugPrint('[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason');
       unawaited(HapticFeedback.heavyImpact());
       _showBlockedPadFeedback(resolved, reason);
@@ -1303,6 +1304,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
         '« ${padItem.displayName} » indisponible hors-ligne',
       PadUnavailabilityReason.missingFile =>
         'Fichier introuvable pour « ${padItem.displayName} »',
+      PadUnavailabilityReason.unsupportedFormat =>
+        'Format audio non supporté pour « ${padItem.displayName} »',
       _ => '« ${padItem.displayName} » non téléchargé',
     };
     ScaffoldMessenger.of(context)
@@ -1354,6 +1357,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   'bibliothèque dans les paramètres.'
               : 'Le fichier audio n\'a pas pu être chargé. Resynchronisez la '
                   'bibliothèque dans les paramètres.',
+        ),
+      PadUnavailabilityReason.unsupportedFormat => (
+          'Format non supporté',
+          'Ce format audio n\'est pas pris en charge sur cette plateforme. '
+              'Convertissez le fichier en MP3 ou WAV pour l\'utiliser.',
         ),
     };
 
@@ -2544,12 +2552,15 @@ class _PadDownloadSheetState extends State<_PadDownloadSheet> {
             const SizedBox(height: 8),
             Text(
               padItem.unavailabilityReason ==
-                      PadUnavailabilityReason.missingFile
-                  ? 'Fichier introuvable sur Drive. Resynchronisez la bibliothèque dans les paramètres.'
+                      PadUnavailabilityReason.unsupportedFormat
+                  ? 'Format audio non supporté sur cette plateforme. Convertissez le fichier en MP3 ou WAV.'
                   : padItem.unavailabilityReason ==
-                          PadUnavailabilityReason.offline
-                      ? 'Hors-ligne. Reconnectez-vous à Drive dans les paramètres.'
-                      : 'Téléchargement échoué. Vérifiez la connexion.',
+                          PadUnavailabilityReason.missingFile
+                      ? 'Fichier introuvable sur Drive. Resynchronisez la bibliothèque dans les paramètres.'
+                      : padItem.unavailabilityReason ==
+                              PadUnavailabilityReason.offline
+                          ? 'Hors-ligne. Reconnectez-vous à Drive dans les paramètres.'
+                          : 'Téléchargement échoué. Vérifiez la connexion.',
               style: TextStyle(color: scheme.error, fontSize: 13),
             ),
           ],

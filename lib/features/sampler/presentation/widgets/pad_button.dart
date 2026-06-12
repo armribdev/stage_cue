@@ -313,12 +313,17 @@ class PadButton extends StatelessWidget {
   Widget _buildBlocked(BuildContext context, ColorScheme scheme) {
     final reason = padItem.unavailabilityReason;
     final isMissing = reason == PadUnavailabilityReason.missingFile;
+    final isUnsupportedFormat =
+        reason == PadUnavailabilityReason.unsupportedFormat;
     final label = padItem.displayName;
-    final accent =
-        isMissing ? scheme.error : scheme.onSurfaceVariant.withValues(alpha: 0.7);
+    final accent = (isMissing || isUnsupportedFormat)
+        ? scheme.error
+        : scheme.onSurfaceVariant.withValues(alpha: 0.7);
     final (icon, hint) = isMissing
         ? (Icons.warning_amber_rounded, 'fichier introuvable')
-        : (Icons.cloud_off_outlined, 'hors-ligne');
+        : isUnsupportedFormat
+            ? (Icons.block_outlined, 'format non supporté')
+            : (Icons.cloud_off_outlined, 'hors-ligne');
 
     return Card(
       elevation: 0,
@@ -454,6 +459,10 @@ Widget padSoundAvailabilityIcon(
       ),
     PadSoundAvailability.missingFile => (
         Icons.error_outline,
+        scheme.error,
+      ),
+    PadSoundAvailability.unsupportedFormat => (
+        Icons.block_outlined,
         scheme.error,
       ),
   };

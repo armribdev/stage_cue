@@ -41,6 +41,15 @@ void clearUnloadablePath(String path) {
   _knownUnloadablePaths.remove(normalizeAudioPath(path));
 }
 
+/// Format audio non supporté par le moteur (miniaudio/SoLoud) sur cette plateforme.
+class UnsupportedAudioFormatException implements Exception {
+  final String extension;
+  final String path;
+  const UnsupportedAudioFormatException(this.extension, this.path);
+  @override
+  String toString() => 'Format audio non supporté : $extension ($path)';
+}
+
 /// En-tête non HTML/JSON ; la taille minimale est vérifiée à part.
 bool hasPlausibleAudioHeader(Uint8List bytes) {
   if (bytes.isEmpty) return false;
