@@ -22,285 +22,8 @@ import '../../domain/usecases/remove_sound_from_board_usecase.dart';
 import '../models/pad_sound_slot.dart';
 import '../utils/quick_search_prepare.dart';
 
-/// Raison pour laquelle un pad ne peut pas être joué.
-enum PadUnavailabilityReason {
-  /// Sons présents en DB mais fichiers non encore téléchargés (connexion disponible).
-  needsDownload,
-  /// Appareil hors-ligne et fichiers absents du cache local.
-  offline,
-  /// Fichier local introuvable (supprimé ou déplacé).
-  missingFile,
-}
-
-/// État du sampler
-class SamplerState {
-  static const Object _unset = Object();
-
-  final List<PadItem> pads;
-  final bool isLoading;
-  final String? error;
-  final List<SoundBoard> boards;
-  final SoundBoard? selectedBoard;
-  final bool isBoardsLoading;
-  final String? boardsError;
-  final PadItem? currentMusicPad;
-  final List<int> musicQueuePadIds;
-  /// true pendant la préparation hors-ligne du board (téléchargements en cours).
-  final bool isBoardPreparing;
-  /// Nombre de pads déjà téléchargés pendant la préparation.
-  final int boardPrepareDone;
-  /// Nombre total de pads à télécharger pendant la préparation.
-  final int boardPrepareTotal;
-  /// Masque les pads sans son local et n'autorise que la lecture hors-ligne.
-  final bool offlineMode;
-
-  SamplerState({
-    required this.pads,
-    this.isLoading = false,
-    this.error,
-    this.boards = const [],
-    this.selectedBoard,
-    this.isBoardsLoading = false,
-    this.boardsError,
-    this.currentMusicPad,
-    this.musicQueuePadIds = const [],
-    this.isBoardPreparing = false,
-    this.boardPrepareDone = 0,
-    this.boardPrepareTotal = 0,
-    this.offlineMode = false,
-  });
-
-  /// Prochaine musique en file d'attente.
-  PadItem? queuedMusicPad(PadItem? Function(int padId) resolve) {
-    if (musicQueuePadIds.isEmpty) return null;
-    return resolve(musicQueuePadIds.first);
-  }
-
-  /// File d'attente résolue.
-  List<PadItem> musicQueue(PadItem? Function(int padId) resolve) {
-    return musicQueuePadIds
-        .map(resolve)
-        .whereType<PadItem>()
-        .toList(growable: false);
-  }
-
-  SamplerState copyWith({
-    List<PadItem>? pads,
-    bool? isLoading,
-    Object? error = _unset,
-    List<SoundBoard>? boards,
-    Object? selectedBoard = _unset,
-    bool? isBoardsLoading,
-    Object? boardsError = _unset,
-    Object? currentMusicPad = _unset,
-    List<int>? musicQueuePadIds,
-    bool clearCurrentMusicPad = false,
-    bool clearMusicQueue = false,
-    bool? isBoardPreparing,
-    int? boardPrepareDone,
-    int? boardPrepareTotal,
-    bool? offlineMode,
-  }) {
-    return SamplerState(
-      pads: pads ?? this.pads,
-      isLoading: isLoading ?? this.isLoading,
-      error: identical(error, _unset) ? this.error : error as String?,
-      boards: boards ?? this.boards,
-      selectedBoard: identical(selectedBoard, _unset)
-          ? this.selectedBoard
-          : selectedBoard as SoundBoard?,
-      isBoardsLoading: isBoardsLoading ?? this.isBoardsLoading,
-      boardsError: identical(boardsError, _unset)
-          ? this.boardsError
-          : boardsError as String?,
-      currentMusicPad: clearCurrentMusicPad
-          ? null
-          : identical(currentMusicPad, _unset)
-          ? this.currentMusicPad
-          : currentMusicPad as PadItem?,
-      musicQueuePadIds: clearMusicQueue
-          ? const []
-          : musicQueuePadIds ?? this.musicQueuePadIds,
-      isBoardPreparing: isBoardPreparing ?? this.isBoardPreparing,
-      boardPrepareDone: boardPrepareDone ?? this.boardPrepareDone,
-      boardPrepareTotal: boardPrepareTotal ?? this.boardPrepareTotal,
-      offlineMode: offlineMode ?? this.offlineMode,
-    );
-  }
-}
-
-/// Item de pad — un [PadSoundSlot] par son, index aligné sur [Pad.sounds].
-class PadItem {
-  Pad pad;
-  /// Numéro du multipad sur le plateau (1-based), null si pad simple.
-  int? multipadNumber;
-  final List<PadSoundSlot> slots;
-  bool isPlaying;
-  int _nextSoundIndex;
-  /// Indices déjà joués en mode aléatoire pendant la session courante du pad.
-  final Set<int> _playedSoundIndices = {};
-  int? _currentPlayerIndex;
-  int? pausedPlayerIndex;
-  Duration? pausedPlaybackPosition;
-  PadUnavailabilityReason? unavailabilityReason;
-  bool isDownloading = false;
-  int downloadDone = 0;
-  int downloadTotal = 0;
-  /// Index du slot en cours de téléchargement (détail pad, variante unique).
-  int? downloadingSlotIndex;
-
-  /// Pad temporaire affiché pendant le choix des sons (id négatif, hors base).
-  bool isDraft = false;
-
-  /// Révision par pad : incrémentée à chaque changement propre au pad (download,
-  /// disponibilité). Permet un rebuild ciblé du seul PadButton via un
-  /// [ListenableBuilder], sans reconstruire toute la grille (refonte UX P2).
-  final ValueNotifier<int> _revision = ValueNotifier<int>(0);
-  Listenable get revision => _revision;
-  void bumpRevision() => _revision.value++;
-
-  PadItem({
-    required this.pad,
-    List<PadSoundSlot>? slots,
-    this.isPlaying = false,
-    int nextSoundIndex = 0,
-    this.unavailabilityReason,
-  })  : slots = slots ?? [],
-        _nextSoundIndex = nextSoundIndex {
-    syncSlotCount();
-  }
-
-  void syncSlotCount() {
-    while (slots.length < pad.sounds.length) {
-      slots.add(PadSoundSlot());
-    }
-    while (slots.length > pad.sounds.length) {
-      slots.removeLast().dispose();
-    }
-  }
-
-  /// Réinitialise le cycle aléatoire (tous les sons redeviennent éligibles).
-  void resetRandomPlaySession() {
-    _playedSoundIndices.clear();
-  }
-
-  String get displayName =>
-      pad.resolveDisplayName(multipadNumber: multipadNumber);
-
-  int get totalSoundCount => pad.sounds.length;
-
-  int get readySoundCount => slots.where((s) => s.appearsReady).length;
-
-  /// Au moins une variante a un fichier local validé (prêt ou en cache).
-  bool get hasLocallyAvailableSound => slots.any((s) => s.appearsReady);
-
-  bool get isPlayable => slots.any((s) => s.isReady);
-
-  bool get appearsReady => slots.any((s) => s.appearsReady);
-
-  bool get isFullyReady =>
-      pad.sounds.isNotEmpty &&
-      slots.every((s) => s.isReady || s.isCached);
-
-  bool get isPartiallyReady => appearsReady && !isFullyReady;
-
-  int get pendingDownloadCount => slots
-      .where((s) => s.availability == PadSoundAvailability.needsDownload)
-      .length;
-
-  bool get hasMissingFileSlot => slots.any(
-        (s) => s.availability == PadSoundAvailability.missingFile,
-      );
-
-  /// Pad visuellement bloqué (fichier introuvable / hors-ligne).
-  bool get isBlockedForPlayback {
-    if (isPlayable || appearsReady || isDownloading) return false;
-    if (hasMissingFileSlot) return true;
-    return switch (unavailabilityReason) {
-      PadUnavailabilityReason.offline => true,
-      PadUnavailabilityReason.missingFile => true,
-      _ => false,
-    };
-  }
-
-  /// Éligible au bandeau « Préparer » (téléchargement encore possible).
-  bool get isPreparableForDownload {
-    if (isDraft || isFullyReady || isBlockedForPlayback) return false;
-    return pendingDownloadCount > 0 ||
-        unavailabilityReason == PadUnavailabilityReason.needsDownload;
-  }
-
-  /// true pendant un téléchargement actif pour la régie.
-  bool get showsRegieDownloadProgress => isDownloading;
-
-  /// Progression normalisée [0–1] pendant le téléchargement, sinon null.
-  double? get regieDownloadProgress => isDownloading && downloadTotal > 0
-      ? downloadDone / downloadTotal
-      : null;
-
-  /// Lecteur actuellement actif (celui qui joue ou vient de jouer).
-  AudioPlayerService? get currentPlayer {
-    final idx = _currentPlayerIndex;
-    if (idx == null || idx >= slots.length) return null;
-    return slots[idx].player;
-  }
-
-  /// Index du son actuellement joué (aligné sur [Pad.sounds]).
-  int? get currentSoundIndex => _currentPlayerIndex;
-
-  /// Lecteur de la piste en pause ou en cours (pour la barre de progression).
-  AudioPlayerService? get progressPlayer {
-    final idx = _currentPlayerIndex;
-    if (idx != null && idx < slots.length && slots[idx].player != null) {
-      return slots[idx].player;
-    }
-    final paused = pausedPlayerIndex;
-    if (paused != null && paused < slots.length && slots[paused].player != null) {
-      return slots[paused].player;
-    }
-    for (final slot in slots) {
-      if (slot.player != null) return slot.player;
-    }
-    return null;
-  }
-
-  PadSoundAvailability availabilityForSound(int soundId) {
-    final idx = pad.sounds.indexWhere((s) => s.id == soundId);
-    if (idx < 0) return PadSoundAvailability.missingFile;
-    return slots[idx].availability;
-  }
-
-  void disposeAllSlots() {
-    for (final slot in slots) {
-      slot.dispose();
-    }
-    slots.clear();
-  }
-
-  /// Libère le pad définitivement (slots + notifier de révision). À appeler
-  /// quand le pad disparaît de l'état (changement de plateau, suppression).
-  void dispose() {
-    disposeAllSlots();
-    _revision.dispose();
-  }
-
-  void clearPausedPlayback() {
-    pausedPlayerIndex = null;
-    pausedPlaybackPosition = null;
-  }
-}
-
-class _RemovedPadSnapshot {
-  final int boardId;
-  final Pad pad;
-  final int index;
-
-  const _RemovedPadSnapshot({
-    required this.boardId,
-    required this.pad,
-    required this.index,
-  });
-}
+part 'sampler_state.dart';
+part 'music_controller.dart';
 
 /// Provider/Notifier pour la gestion de l'état du sampler
 class SamplerNotifier extends ChangeNotifier {
@@ -315,43 +38,27 @@ class SamplerNotifier extends ChangeNotifier {
   final AppPreferences? _appPreferences;
 
   int? _activeBoardId;
-  double _musicVolume = 1.0;
-  double _musicVolumeBeforeMute = 1.0;
-  static const _musicVolumeSliderFadeDuration = Duration(milliseconds: 120);
   _RemovedPadSnapshot? _lastRemovedPad;
   int _draftPadIdSeq = -1;
   final _random = Random();
-  int _musicAdvanceLockCount = 0;
-  bool get _skipMusicAutoAdvance => _musicAdvanceLockCount > 0;
-
-  /// Pads musique "hors-scène" : créés à la volée depuis le sélecteur pour
-  /// jouer une musique dans la régie sans l'ajouter au plateau.
-  final Map<int, PadItem> _offStageMusicPads = {};
 
   /// Lecteur dédié à la pré-écoute (recherche-éclair) : indépendant des pads,
-  /// du master musique et de la file — auditionner ou déclencher un son sans
-  /// l'ajouter au plateau.
+  /// du master musique et de la file.
   AudioPlayerService? _previewPlayer;
 
-  /// File de téléchargement priorisée à concurrence bornée (refonte UX P2) :
-  /// un tap utilisateur double un prefetch en attente, et changer de plateau
-  /// annule le prefetch encore en file. La déduplication par padId remplace
-  /// l'ancien suivi manuel des tâches en vol.
+  /// File de téléchargement priorisée à concurrence bornée (refonte UX P2).
   final DownloadQueue _downloadQueue = DownloadQueue(maxConcurrent: 2);
 
-  /// Priorités de téléchargement : tap utilisateur > préparation manuelle >
-  /// prefetch d'arrière-plan.
   static const int _downloadPriorityTap = 100;
   static const int _downloadPriorityManualPrepare = 50;
   static const int _downloadPriorityPrefetch = 10;
 
-  /// Génération de préchargement courante : tout changement de plateau ou
-  /// rechargement l'incrémente, ce qui annule le prefetch en cours.
+  /// Génération de préchargement courante : incrémentée à chaque changement de
+  /// plateau pour annuler le prefetch en cours (annulation coopérative).
   int _prefetchGeneration = 0;
 
-  /// Sons dont le fichier est confirmé absent du Drive (erreur « introuvable
-  /// sur Drive »). Bloque les retentatives de téléchargement pour la session
-  /// courante. Réinitialisé à chaque rechargement de plateau.
+  /// Sons dont le fichier est confirmé absent du Drive. Bloque les retentatives
+  /// pour la session courante. Réinitialisé à chaque rechargement de plateau.
   final Set<int> _driveNotFoundSoundIds = {};
 
   /// Sérialise les rechargements de plateau pour éviter les courses async.
@@ -360,29 +67,34 @@ class SamplerNotifier extends ChangeNotifier {
   /// Annule le préchargement audio quand le plateau change.
   int _padPreloadGeneration = 0;
 
+  /// Contrôleur musique : file, fondus, volume global musique.
+  late final MusicController _music;
+
   SamplerState _state = SamplerState(pads: []);
   SamplerState get state => _state;
   bool get offlineMode => _state.offlineMode;
-  double get musicVolume => _musicVolume;
+  double get musicVolume => _music.musicVolume;
 
-  /// Dernière erreur de lecture musique (picker / régie), sans bloquer la grille.
-  String? _lastMusicPlaybackError;
-
-  /// Consomme le message d'erreur musique le plus récent (usage UI ponctuel).
-  String? consumeLastMusicPlaybackError() {
-    final message = _lastMusicPlaybackError;
-    _lastMusicPlaybackError = null;
-    return message;
-  }
-
-  /// Volume effectif d'un pad : les pads musique sont en plus soumis
-  /// au volume musique global, les autres pads jouent à leur volume propre.
-  double _effectiveVolume(PadItem padItem) =>
-      padItem.pad.isMusicPad
-          ? padItem.pad.volume * _musicVolume
-          : padItem.pad.volume;
   bool get canUndoLastRemoval =>
       _lastRemovedPad != null && _lastRemovedPad!.boardId == _activeBoardId;
+
+  SamplerNotifier(
+    this._repository,
+    this._loadPadsUseCase, [
+    this._removePadUseCase,
+    this._libraryRepository,
+    AppPreferences? appPreferences,
+  ]) : _appPreferences = appPreferences {
+    _music = MusicController(this);
+  }
+
+  /// Wrapper non-protected sur [notifyListeners] — permet à [MusicController]
+  /// (même bibliothèque) d'émettre des notifications sans déclencher un warning
+  /// sur l'annotation @protected de ChangeNotifier.
+  void _notify() => notifyListeners();
+
+  /// Volume effectif d'un pad : pads musique soumis au volume global.
+  double _effectiveVolume(PadItem padItem) => _music._effectiveVolume(padItem);
 
   /// Pad affiché sur le plateau en mode hors-ligne (au moins un son local).
   bool isPadVisibleInOfflineMode(PadItem padItem) {
@@ -402,8 +114,6 @@ class SamplerNotifier extends ChangeNotifier {
     );
   }
 
-  /// Active ou désactive le mode hors-ligne : masque les pads sans son local
-  /// et interdit téléchargement / lecture des variantes absentes du cache.
   Future<void> setOfflineMode(bool value) async {
     if (_state.offlineMode == value) return;
     _state = _state.copyWith(offlineMode: value);
@@ -418,7 +128,7 @@ class SamplerNotifier extends ChangeNotifier {
   Future<void> _applyOfflineModeConstraints() async {
     final current = _state.currentMusicPad;
     if (current != null && !isPadVisibleInOfflineMode(current)) {
-      await _stopMusicPad(current, manual: true);
+      await _music._stopMusicPad(current, manual: true);
     }
     final visibleIds = _padsForMultipadNumbering()
         .map((item) => item.pad.id)
@@ -430,26 +140,13 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  SamplerNotifier(
-    this._repository,
-    this._loadPadsUseCase, [
-    this._removePadUseCase,
-    this._libraryRepository,
-    AppPreferences? appPreferences,
-  ]) : _appPreferences = appPreferences;
-
   /// Résout le chemin local jouable d'un son (cache Drive si bibliothèque).
-  ///
-  /// [downloadIfNeeded] false (défaut) : lève [SoundNotAvailableLocallyException]
-  /// si le fichier n'est pas en cache, sans déclencher de téléchargement.
-  /// [downloadIfNeeded] true : télécharge depuis Drive si nécessaire.
   Future<String> _resolvePlayablePath(
     Sound sound, {
     bool downloadIfNeeded = false,
   }) async {
     final libraryRepository = _libraryRepository;
     if (libraryRepository != null) {
-      // SoundNotAvailableLocallyException remonte intentionnellement.
       try {
         final resolved = await libraryRepository.resolvePlayablePath(
           sound,
@@ -466,7 +163,6 @@ class SamplerNotifier extends ChangeNotifier {
         rethrow;
       } catch (e) {
         debugPrint('Résolution du chemin échouée pour ${sound.title}: $e');
-        // Sons de bibliothèque : pas de repli sur filePath (chemin d'un autre appareil).
         if (sound.libraryId != null && sound.relativePath != null) rethrow;
         final file = File(sound.filePath);
         if (!await file.exists() || !await isPlausibleAudioFile(file)) {
@@ -538,7 +234,6 @@ class SamplerNotifier extends ChangeNotifier {
     };
   }
 
-  /// Bloque les retentatives Drive pour un son (échec confirmé en session).
   void _blockSoundDriveRetry(int soundId) => _driveNotFoundSoundIds.add(soundId);
 
   bool _isRetryableMissingLibrarySound(Sound sound) =>
@@ -547,15 +242,11 @@ class SamplerNotifier extends ChangeNotifier {
       sound.relativePath!.isNotEmpty &&
       !_driveNotFoundSoundIds.contains(sound.id);
 
-  /// Indique si au moins un son [missingFile] du pad peut encore tenter un
-  /// téléchargement Drive (non confirmé absent en session courante).
   bool isPadRetryableFromDrive(PadItem padItem) =>
       padItem.pad.sounds.any(_isRetryableMissingLibrarySound);
 
-  /// Pad éligible au bandeau « Préparer » / téléchargement de plateau.
   bool isPadPreparable(PadItem padItem) => padItem.isPreparableForDownload;
 
-  /// Pad bloqué : pas de tap (ni retéléchargement, ni SnackBar d'erreur).
   bool isPadTapBlocked(PadItem padItem) => padItem.isBlockedForPlayback;
 
   Future<void> _prepareRetryForMissingLibrarySound(
@@ -600,7 +291,6 @@ class SamplerNotifier extends ChangeNotifier {
     return PadSoundAvailability.missingFile;
   }
 
-  /// Passe de needsDownload à missingFile si Drive confirme l'absence du fichier.
   Future<PadSoundAvailability?> _resolveRemoteAvailability(Sound sound) async {
     try {
       final exists = await _libraryRepository?.probeRemotePresence(sound);
@@ -651,7 +341,6 @@ class SamplerNotifier extends ChangeNotifier {
     padItem.unavailabilityReason = worst;
   }
 
-  /// Pad du plateau courant par id (évite les références périmées après reload).
   PadItem? findPadItemById(int padId) {
     for (final item in _state.pads) {
       if (item.pad.id == padId) return item;
@@ -669,7 +358,6 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  /// Recharge le type (et métadonnées) d'un son dans le pad après résolution du fichier.
   Future<void> _syncPadSoundMetadata(PadItem padItem, int index) async {
     if (index < 0 || index >= padItem.pad.sounds.length) return;
     final soundId = padItem.pad.sounds[index].id;
@@ -694,7 +382,6 @@ class SamplerNotifier extends ChangeNotifier {
       debugPrint('Dispose slot échoué: $e');
     }
 
-    // Conserver l'apparence « prêt » (phase 0) pendant le warm SoLoud.
     padItem.slots[index] = keepReadyAppearance
         ? PadSoundSlot(availability: PadSoundAvailability.cached)
         : PadSoundSlot();
@@ -722,8 +409,6 @@ class SamplerNotifier extends ChangeNotifier {
       if (resolvedPath != null) {
         markPathUnloadable(resolvedPath);
       }
-      // Bloquer les retentatives pour cette session après un échec de chargement
-      // ou téléchargement — évite le cycle "download → erreur → download".
       if (downloadIfNeeded ||
           (e is StateError && e.message.contains('introuvable sur Drive'))) {
         _blockSoundDriveRetry(sound.id);
@@ -798,8 +483,6 @@ class SamplerNotifier extends ChangeNotifier {
     for (var i = 0; i < pad.sounds.length; i++) {
       if (_state.offlineMode && !padItem.slots[i].appearsReady) continue;
       if (padItem.slots[i].isReady) continue;
-      // Ne pas reprober un slot déjà signalé introuvable : _loadSlotAtIndex
-      // le réinitialiserait en needsDownload et casserait le blocage UI.
       if (padItem.slots[i].availability == PadSoundAvailability.missingFile) {
         continue;
       }
@@ -819,10 +502,8 @@ class SamplerNotifier extends ChangeNotifier {
     for (var i = 0; i < padItem.slots.length; i++) {
       final slot = padItem.slots[i];
       final idx = i;
-      // attachListener annule toute subscription précédente sur ce slot avant
-      // d'en créer une nouvelle — garantit exactement un listener par player,
-      // même si _attachPlayerListeners est appelé plusieurs fois sur le même pad
-      // (ex. après un download qui complète un slot déjà partiellement chargé).
+      // attachListener annule toute subscription précédente — exactement un
+      // listener actif par player, même si appelé plusieurs fois sur le même pad.
       slot.attachListener((playing) {
         debugPrint(
           '[LISTENER] pad="${padItem.pad.displayName}" slot=$idx playing=$playing '
@@ -838,7 +519,7 @@ class SamplerNotifier extends ChangeNotifier {
           padItem.isPlaying = false;
           padItem._currentPlayerIndex = null;
           if (padItem.pad.isMusicPad) {
-            _handleMusicPlaybackEnded(padItem);
+            _music._handleMusicPlaybackEnded(padItem);
           }
         } else {
           debugPrint(
@@ -931,6 +612,7 @@ class SamplerNotifier extends ChangeNotifier {
 
     await stopAllSounds();
     _lastRemovedPad = null;
+    _music.cleanupOffStagePads();
     _state = _state.copyWith(selectedBoard: board);
     _activeBoardId = board.id;
     notifyListeners();
@@ -1116,8 +798,19 @@ class SamplerNotifier extends ChangeNotifier {
 
       padItems.addAll(draftPads);
 
+      // Sonde la disponibilité locale de chaque pad indépendamment : une erreur
+      // sur un pad n'annule pas les autres (Future.wait sans isolation causerait
+      // la perte de tous les résultats si l'un échoue).
       await Future.wait(
-        padItems.where((item) => !item.isDraft).map(_probePadLocalAvailability),
+        padItems.where((item) => !item.isDraft).map(
+          (item) => _probePadLocalAvailability(item).catchError((e, st) {
+            AudioLoadLog.severe(
+              'Sonde pad #${item.pad.id} échouée',
+              error: e,
+              stackTrace: st,
+            );
+          }),
+        ),
       );
 
       _syncMultipadNumbers(_padsForMultipadNumbering());
@@ -1126,7 +819,7 @@ class SamplerNotifier extends ChangeNotifier {
       final removedItems =
           previousItems.where((item) => !keptIds.contains(item.pad.id)).toList();
       _disposePadItems(removedItems);
-      _syncMusicStateWithPads();
+      _music._syncMusicStateWithPads();
 
       if (preloadGeneration == _padPreloadGeneration) {
         if (padsToPreload.isNotEmpty) {
@@ -1148,17 +841,6 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Précharge en arrière-plan les pads téléchargeables du plateau courant, dans
-  /// l'ordre de la grille (les plus accessibles d'abord), pour que l'opérateur
-  /// trouve des pads PRÊT sans rien demander (refonte UX P1 — « le système
-  /// anticipe »).
-  ///
-  /// Silencieux et non bloquant ; annulé dès qu'on change de plateau ou qu'un
-  /// nouveau chargement démarre (garde de génération + annulation de la file) ;
-  /// inopérant hors-ligne — seuls les pads `needsDownload` sont visés, les
-  /// `offline`/`missingFile` sont ignorés. Les pads sont mis en file à priorité
-  /// basse : la [DownloadQueue] borne la concurrence et un tap utilisateur passe
-  /// devant. La priorité aux favoris viendra avec P3.
   Future<void> _prefetchActiveBoard() async {
     if (_state.offlineMode) return;
     final libraryRepository = _libraryRepository;
@@ -1167,20 +849,17 @@ class SamplerNotifier extends ChangeNotifier {
     final generation = ++_prefetchGeneration;
     final boardId = _activeBoardId;
     if (boardId == null) return;
-    if (_state.isBoardPreparing) return; // la préparation manuelle prime.
+    if (_state.isBoardPreparing) return;
 
-    // Une seule vérification de connexion : inutile de marteler Drive hors-ligne.
     if (!await libraryRepository.ensureDriveConnected()) return;
     if (generation != _prefetchGeneration || _activeBoardId != boardId) return;
 
-    // Annule le prefetch encore en file d'un plateau précédent (les tâches déjà
-    // démarrées finissent en cache, sans gâchis ; les tap restent prioritaires).
     _downloadQueue.cancelQueued(
       (key, priority) => priority <= _downloadPriorityPrefetch,
     );
 
     for (final padItem in List<PadItem>.from(_state.pads)) {
-      if (padItem.pendingDownloadCount == 0) continue; // déjà prêt ou bloqué.
+      if (padItem.pendingDownloadCount == 0) continue;
       unawaited(
         downloadAndLoadPad(padItem, priority: _downloadPriorityPrefetch)
             .catchError((_) => false),
@@ -1188,7 +867,6 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  /// Recharge les lecteurs d'un pad depuis le cache local (après téléchargement).
   Future<void> refreshPadPlayback(int padId) async {
     final padItem = findPadItemById(padId);
     if (padItem == null) return;
@@ -1196,7 +874,6 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Joue ou arrête le pad selon son mode de lecture.
   Future<void> toggleSound(PadItem padItem) async {
     final resolved = _resolveBoardPadItem(padItem);
     debugPrint(
@@ -1211,7 +888,7 @@ class SamplerNotifier extends ChangeNotifier {
       return;
     }
     if (resolved.pad.isMusicPad) {
-      await _toggleMusicPad(resolved);
+      await _music._toggleMusicPad(resolved);
       return;
     }
 
@@ -1235,8 +912,6 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Enregistre l'instant de dernière lecture du son joué (tri par récence en
-  /// recherche). Fire-and-forget ; l'écriture est débouncée côté sync.
   void _markPlayed(int soundId) {
     unawaited(_repository.markSoundPlayed(soundId));
   }
@@ -1246,15 +921,7 @@ class SamplerNotifier extends ChangeNotifier {
     _markPlayed(padItem.pad.sounds[soundIndex].id);
   }
 
-  /// Change le type d'un son puis recharge le plateau : `isMusicPad` (et donc
-  /// le routage musique vs déclenchement) en dépend directement.
-  ///
-  /// La mise à jour en mémoire est synchrone (notifyListeners immédiat) pour
-  /// éviter une fenêtre où le routage utilise encore l'ancien type alors que
-  /// l'UI a déjà reflété le changement (race condition : `_changeType` est async
-  /// mais son appelant ne peut pas awaiter via `ValueChanged<SoundType>`).
   Future<void> updateSoundType(int soundId, SoundType type) async {
-    // 1. Mise à jour en mémoire immédiate — routage correct sans attendre la DB.
     for (final padItem in _state.pads) {
       final sounds = padItem.pad.sounds;
       final idx = sounds.indexWhere((s) => s.id == soundId);
@@ -1281,12 +948,10 @@ class SamplerNotifier extends ChangeNotifier {
       }
     }
     notifyListeners();
-    // 2. Persistance DB + rechargement complet pour synchroniser le reste.
     await _repository.updateSoundType(soundId, type);
     await loadSounds();
   }
 
-  /// Bascule l'état favori d'un son et persiste. Retourne le nouvel état.
   Future<bool> toggleSoundFavorite(int soundId) async {
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
@@ -1295,22 +960,13 @@ class SamplerNotifier extends ChangeNotifier {
     return next;
   }
 
-  /// Notifie le rebuild d'un seul pad (progression de download, disponibilité)
-  /// sans reconstruire toute la grille : chaque PadButton écoute `revision`.
   void _notifyPad(PadItem padItem) => padItem.bumpRevision();
 
-  /// Notifie le pad ciblé et le plateau (bandeau, onTap des pads…).
   void _notifyPadAndBoard(PadItem padItem) {
     _notifyPad(padItem);
     notifyListeners();
   }
 
-  /// Télécharge les variantes manquantes puis recharge les slots concernés via
-  /// la file priorisée. Retourne true si au moins une variante est jouable.
-  ///
-  /// [priority] : tap utilisateur par défaut (double tout prefetch en attente).
-  /// Une tâche annulée (changement de plateau) retourne l'état jouable courant.
-  /// Télécharge une variante précise du pad (tap depuis l'écran de détails).
   Future<bool> downloadPadSoundAtIndex(PadItem padItem, int index) async {
     if (_state.offlineMode) return false;
     final resolved = _resolveBoardPadItem(padItem);
@@ -1492,7 +1148,6 @@ class SamplerNotifier extends ChangeNotifier {
     _finalizePadAvailability(padItem);
   }
 
-  /// Télécharge toutes les variantes manquantes du board actif.
   Future<void> prepareBoardForOffline() async {
     if (_state.offlineMode) return;
     if (_state.isBoardPreparing) return;
@@ -1572,629 +1227,38 @@ class SamplerNotifier extends ChangeNotifier {
     return chosen;
   }
 
-  Future<void> _toggleMusicPad(PadItem padItem) async {
-    if (!padItem.isPlayable) return;
+  // ── Délégués musique (API publique) ───────────────────────────────────────
+
+  String? consumeLastMusicPlaybackError() => _music.consumeLastPlaybackError();
+
+  void enqueueMusicPad(PadItem p) => _music.enqueueMusicPad(p);
+  Future<void> playMusicNow(PadItem p) => _music.playMusicNow(p);
+  Future<PadItem?> playMusicBySoundId(int id) => _music.playMusicBySoundId(id);
+  Future<PadItem?> enqueueMusicBySoundId(int id) =>
+      _music.enqueueMusicBySoundId(id);
+  Future<bool> playNextInQueueNow() => _music.playNextInQueueNow();
+  Future<void> clearMusicQueue() => _music.clearMusicQueue();
+  Future<void> removeFromMusicQueue(int padId) =>
+      _music.removeFromMusicQueue(padId);
+  void reorderMusicQueue(int oldIndex, int newIndex) =>
+      _music.reorderMusicQueue(oldIndex, newIndex);
+  Future<void> toggleCurrentMusicPlayback() =>
+      _music.toggleCurrentMusicPlayback();
+  Future<void> restartCurrentMusic() => _music.restartCurrentMusic();
+  Future<void> skipToNextMusic() => _music.skipToNextMusic();
+  Future<void> stopCurrentMusic() => _music.stopCurrentMusic();
+  Future<void> fadeOutCurrentMusic(Duration d) =>
+      _music.fadeOutCurrentMusic(d);
+  Future<void> crossfadeToNextMusic(Duration d) =>
+      _music.crossfadeToNextMusic(d);
+  PadItem? findMusicPadForSound(int id) => _music.findMusicPadForSound(id);
+  PadItem? resolveMusicPad(int id) => _music.resolveMusicPad(id);
+  Future<void> setMusicVolume(double v, {bool smooth = false}) =>
+      _music.setMusicVolume(v, smooth: smooth);
+  Future<void> toggleMusicMute() => _music.toggleMusicMute();
+
+  // ── Paramètres pad ────────────────────────────────────────────────────────
 
-    final currentMusic = _state.currentMusicPad;
-
-    if (padItem.isPlaying) {
-      await _stopMusicPad(padItem, manual: true);
-      return;
-    }
-
-    if (_state.musicQueuePadIds.contains(padItem.pad.id)) {
-      _removeFromMusicQueue(padItem.pad.id);
-      return;
-    }
-
-    if (currentMusic != null &&
-        currentMusic.pad.id != padItem.pad.id &&
-        currentMusic.isPlaying) {
-      enqueueMusicPad(padItem);
-      return;
-    }
-
-    await playMusicNow(padItem);
-  }
-
-  void _removeFromMusicQueue(int padId) {
-    final nextQueue =
-        _state.musicQueuePadIds.where((id) => id != padId).toList();
-    if (nextQueue.length == _state.musicQueuePadIds.length) return;
-    _state = _state.copyWith(musicQueuePadIds: nextQueue);
-    notifyListeners();
-  }
-
-  void enqueueMusicPad(PadItem padItem) {
-    if (padItem.pad.id == _state.currentMusicPad?.pad.id) return;
-    if (_state.musicQueuePadIds.contains(padItem.pad.id)) return;
-    _state = _state.copyWith(
-      musicQueuePadIds: [..._state.musicQueuePadIds, padItem.pad.id],
-    );
-    notifyListeners();
-  }
-
-  Future<void> playMusicNow(PadItem padItem) async {
-    if (!padItem.isPlayable) return;
-
-    final current = _state.currentMusicPad;
-    if (current != null &&
-        current.pad.id != padItem.pad.id &&
-        current.isPlaying) {
-      await _stopMusicPad(current, manual: true);
-    }
-
-    _state = _state.copyWith(
-      musicQueuePadIds: _state.musicQueuePadIds
-          .where((id) => id != padItem.pad.id)
-          .toList(),
-    );
-    await _playMusicPad(padItem);
-  }
-
-  Future<PadItem?> playMusicBySoundId(int soundId) async {
-    final sound = await _repository.getSoundById(soundId);
-    if (sound == null) {
-      _setMusicLoadError();
-      return null;
-    }
-    if (sound.type != SoundType.music) {
-      _lastMusicPlaybackError = 'Ce son n\'est pas une musique.';
-      notifyListeners();
-      return null;
-    }
-
-    final padItem = await _findOrCreateMusicPadForSound(soundId);
-    if (padItem == null) return null;
-    final ready = await _prepareMusicPadForPlayback(
-      padItem,
-      downloadIfNeeded: true,
-    );
-    if (!ready) {
-      _setMusicLoadError(padItem);
-      return null;
-    }
-    await playMusicNow(padItem);
-    return padItem;
-  }
-
-  Future<PadItem?> enqueueMusicBySoundId(int soundId) async {
-    final padItem = await _findOrCreateMusicPadForSound(soundId);
-    if (padItem == null) return null;
-
-    await _refreshPadAvailability(padItem);
-    if (_isMusicPadPermanentlyUnavailable(padItem)) {
-      _setMusicLoadError(padItem);
-      return null;
-    }
-
-    final padId = padItem.pad.id;
-    final current = _state.currentMusicPad;
-
-    if (current?.pad.id == padId && (current?.isPlaying ?? false)) {
-      return padItem;
-    }
-    if (_state.musicQueuePadIds.contains(padId)) {
-      _scheduleMusicPadDownload(padItem);
-      return padItem;
-    }
-
-    enqueueMusicPad(padItem);
-    _scheduleMusicPadDownload(padItem);
-    return padItem;
-  }
-
-  Future<PadItem?> _findOrCreateMusicPadForSound(int soundId) async {
-    var existing = _findPadItemForSound(soundId);
-    if (existing != null) {
-      for (var i = 0; i < existing.pad.sounds.length; i++) {
-        await _syncPadSoundMetadata(existing, i);
-      }
-      return existing;
-    }
-
-    final boardId = _activeBoardId;
-    if (boardId != null) {
-      final padIdBySound =
-          await _repository.getSoundIdToFirstPadIdInBoard(boardId);
-      if (padIdBySound.containsKey(soundId)) {
-        await loadSounds(boardId: boardId);
-        existing = _findPadItemForSound(soundId);
-        if (existing != null) return existing;
-      }
-    }
-
-    return _createOffStageMusicPad(soundId);
-  }
-
-  Future<void> _refreshPadAvailability(PadItem padItem) async {
-    if (padItem.isPlayable) return;
-    await _loadPlayersForPad(padItem, padItem.pad);
-  }
-
-  Future<bool> _prepareMusicPadForPlayback(
-    PadItem padItem, {
-    required bool downloadIfNeeded,
-  }) async {
-    if (padItem.isPlayable) return true;
-    await _loadPlayersForPad(padItem, padItem.pad);
-    if (padItem.isPlayable) return true;
-    if (!downloadIfNeeded) return false;
-    return downloadAndLoadPad(padItem);
-  }
-
-  bool _isMusicPadPermanentlyUnavailable(PadItem padItem) {
-    return padItem.unavailabilityReason == PadUnavailabilityReason.offline ||
-        padItem.unavailabilityReason == PadUnavailabilityReason.missingFile;
-  }
-
-  void _scheduleMusicPadDownload(PadItem padItem) {
-    if (padItem.isPlayable) return;
-    if (_isMusicPadPermanentlyUnavailable(padItem)) return;
-    if (padItem.pendingDownloadCount == 0) return;
-    unawaited(downloadAndLoadPad(padItem));
-  }
-
-  /// Prépare une musique pour la régie sans l'ajouter au plateau — un son
-  /// peut être joué directement sans être lié à un pad sur la scène.
-  Future<PadItem?> _createOffStageMusicPad(int soundId) async {
-    try {
-      final sound = await _repository.getSoundById(soundId);
-      if (sound == null) {
-        _setMusicLoadError();
-        return null;
-      }
-      if (sound.type != SoundType.music) {
-        _lastMusicPlaybackError = 'Ce son n\'est pas une musique.';
-        notifyListeners();
-        return null;
-      }
-
-      final pad = Pad(
-        id: -soundId,
-        boardId: -1,
-        sortOrder: 0,
-        createdAt: DateTime.now(),
-        sounds: [sound],
-      );
-      final padItem = PadItem(pad: pad);
-      await _loadPlayersForPad(padItem, pad);
-      _offStageMusicPads[pad.id] = padItem;
-      return padItem;
-    } catch (e) {
-      debugPrint('Impossible de préparer la musique pour la régie: $e');
-      _lastMusicPlaybackError = 'Impossible de préparer cette musique.';
-      notifyListeners();
-      return null;
-    }
-  }
-
-  void _setMusicLoadError([PadItem? padItem]) {
-    _lastMusicPlaybackError = switch (padItem?.unavailabilityReason) {
-      PadUnavailabilityReason.offline => 'Son indisponible hors-ligne.',
-      PadUnavailabilityReason.missingFile => 'Fichier audio introuvable.',
-      _ => 'Fichier audio introuvable ou indisponible hors-ligne.',
-    };
-    notifyListeners();
-  }
-
-  PadItem? _findPadItemForSound(int soundId) {
-    for (final padItem in _state.pads) {
-      if (padItem.pad.sounds.any((sound) => sound.id == soundId)) {
-        return padItem;
-      }
-    }
-    for (final padItem in _offStageMusicPads.values) {
-      if (padItem.pad.sounds.any((sound) => sound.id == soundId)) {
-        return padItem;
-      }
-    }
-    return null;
-  }
-
-  /// Pad musique correspondant à un son, sur la scène ou hors-scène.
-  PadItem? findMusicPadForSound(int soundId) => _findPadItemForSound(soundId);
-
-  void _capturePausedPlayback(PadItem padItem) {
-    final player = padItem.currentPlayer;
-    if (player == null) return;
-    padItem.pausedPlaybackPosition = player.position;
-    padItem.pausedPlayerIndex = padItem._currentPlayerIndex;
-  }
-
-  Future<bool> _playMusicPad(
-    PadItem padItem, {
-    Duration? fromPosition,
-    int? soundIndex,
-  }) async {
-    if (!padItem.pad.isMusicPad) {
-      return false;
-    }
-
-    if (!padItem.isPlayable) {
-      final ready = await _prepareMusicPadForPlayback(
-        padItem,
-        downloadIfNeeded: true,
-      );
-      if (!ready) {
-        _setMusicLoadError(padItem);
-        return false;
-      }
-    }
-
-    final resumePosition = fromPosition;
-    final resumeIndex = soundIndex;
-
-    final index = () {
-      if (resumeIndex != null &&
-          resumeIndex < padItem.slots.length &&
-          padItem.slots[resumeIndex].isReady) {
-        return resumeIndex;
-      }
-      return _pickSoundIndex(padItem);
-    }();
-    final player = padItem.slots[index].player;
-    if (player == null) {
-      _setMusicLoadError(padItem);
-      return false;
-    }
-
-    padItem.clearPausedPlayback();
-    _state = _state.copyWith(
-      currentMusicPad: padItem,
-      musicQueuePadIds: _state.musicQueuePadIds
-          .where((id) => id != padItem.pad.id)
-          .toList(),
-    );
-
-    player.setVolume(_effectiveVolume(padItem));
-    if (resumePosition != null && resumePosition > Duration.zero) {
-      await player.playFromPosition(resumePosition);
-    } else {
-      await player.play();
-    }
-    _markPlayedAt(padItem, index);
-    notifyListeners();
-    return true;
-  }
-
-  Future<void> _stopMusicPad(
-    PadItem padItem, {
-    required bool manual,
-    bool clearOnAir = true,
-  }) async {
-    if (manual) {
-      _musicAdvanceLockCount++;
-    }
-    if (!clearOnAir && manual) {
-      _capturePausedPlayback(padItem);
-    }
-    try {
-      await padItem.currentPlayer?.stop();
-    } finally {
-      if (manual) {
-        if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
-      }
-    }
-
-    var nextState = _state;
-    if (clearOnAir && _state.currentMusicPad?.pad.id == padItem.pad.id) {
-      nextState = nextState.copyWith(clearCurrentMusicPad: true);
-    }
-    if (_state.musicQueuePadIds.contains(padItem.pad.id)) {
-      nextState = nextState.copyWith(
-        musicQueuePadIds: nextState.musicQueuePadIds
-            .where((id) => id != padItem.pad.id)
-            .toList(),
-      );
-    }
-    _state = nextState;
-    notifyListeners();
-  }
-
-  void _handleMusicPlaybackEnded(PadItem padItem) {
-    if (_skipMusicAutoAdvance) return;
-    if (_state.currentMusicPad?.pad.id != padItem.pad.id) return;
-
-    final queue = _state.musicQueuePadIds;
-    _state = _state.copyWith(clearCurrentMusicPad: true);
-    notifyListeners();
-
-    if (queue.isEmpty) return;
-
-    final nextId = queue.first;
-    final next = _resolvePadItem(nextId);
-    if (next == null) {
-      _setMusicLoadError();
-      return;
-    }
-    unawaited(_playMusicPad(next));
-  }
-
-  Future<void> removeFromMusicQueue(int padId) async {
-    _removeFromMusicQueue(padId);
-  }
-
-  void reorderMusicQueue(int oldIndex, int newIndex) {
-    final ids = List<int>.from(_state.musicQueuePadIds);
-    if (oldIndex < 0 || oldIndex >= ids.length) return;
-    if (newIndex < 0 || newIndex >= ids.length) return;
-    if (oldIndex == newIndex) return;
-
-    final moved = ids.removeAt(oldIndex);
-    ids.insert(newIndex, moved);
-    _state = _state.copyWith(musicQueuePadIds: ids);
-    notifyListeners();
-  }
-
-  Future<void> clearMusicQueue() async {
-    if (_state.musicQueuePadIds.isEmpty) return;
-    _state = _state.copyWith(clearMusicQueue: true);
-    notifyListeners();
-  }
-
-  Future<bool> playNextInQueueNow() async {
-    if (_state.musicQueuePadIds.isEmpty) return false;
-
-    final nextId = _state.musicQueuePadIds.first;
-    final next = await _prepareNextQueuedMusic(nextId);
-    if (next == null) return false;
-
-    final current = _state.currentMusicPad;
-    if (current != null && current.isPlaying) {
-      await _stopMusicPad(current, manual: true);
-    }
-
-    return _playMusicPad(next);
-  }
-
-  Future<void> stopCurrentMusic() async {
-    final current = _state.currentMusicPad;
-    if (current == null || !current.isPlaying) return;
-    await _stopMusicPad(current, manual: true);
-  }
-
-  /// Fondu sortant de la musique en cours (sans lancer la file).
-  /// Une durée nulle coupe immédiatement.
-  Future<void> fadeOutCurrentMusic(Duration duration) async {
-    final current = _state.currentMusicPad;
-    if (current == null || !current.isPlaying) return;
-    if (duration == Duration.zero) {
-      await _stopMusicPad(current, manual: true, clearOnAir: false);
-      return;
-    }
-    final player = current.currentPlayer;
-    if (player == null) return;
-
-    _musicAdvanceLockCount++;
-    try {
-      player.fadeVolumeTo(0, duration);
-      await Future<void>.delayed(duration);
-      _capturePausedPlayback(current);
-      await player.stop();
-      current.isPlaying = false;
-      current._currentPlayerIndex = null;
-      notifyListeners();
-    } finally {
-      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
-    }
-  }
-
-  /// Enchaîne vers la musique suivante en file, avec un fondu enchaîné.
-  /// Une durée nulle passe directement à la suivante.
-  /// « À l'antenne » n'est mis à jour qu'à la fin du fondu.
-  Future<void> crossfadeToNextMusic(Duration duration) async {
-    if (_state.musicQueuePadIds.isEmpty) return;
-
-    if (duration == Duration.zero) {
-      await playNextInQueueNow();
-      return;
-    }
-
-    final current = _state.currentMusicPad;
-    if (current == null || !current.isPlaying) {
-      await _fadeInNextFromQueue(duration);
-      return;
-    }
-
-    final nextId = _state.musicQueuePadIds.first;
-    final next = await _prepareNextQueuedMusic(nextId);
-    if (next == null) return;
-
-    final currentPlayer = current.currentPlayer;
-    if (currentPlayer == null) return;
-
-    final soundIndex = _pickSoundIndex(next);
-    final nextPlayer = next.slots[soundIndex].player;
-    if (nextPlayer == null) {
-      _setMusicLoadError(next);
-      return;
-    }
-    final targetVolume = _effectiveVolume(next);
-
-    _musicAdvanceLockCount++;
-    try {
-      _state = _state.copyWith(
-        musicQueuePadIds: _state.musicQueuePadIds.sublist(1),
-      );
-      notifyListeners();
-
-      await nextPlayer.playAtVolume(0);
-      next._currentPlayerIndex = soundIndex;
-      next.isPlaying = true;
-
-      currentPlayer.fadeVolumeTo(0, duration);
-      nextPlayer.fadeVolumeTo(targetVolume, duration);
-
-      await Future<void>.delayed(duration);
-
-      if (currentPlayer.isPlaying) {
-        await currentPlayer.stop();
-      }
-      current.isPlaying = false;
-      current._currentPlayerIndex = null;
-
-      _state = _state.copyWith(currentMusicPad: next);
-      notifyListeners();
-    } finally {
-      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
-    }
-  }
-
-  /// Lance la tête de file avec fondu entrant — sans couper l'antenne avant la fin.
-  Future<void> _fadeInNextFromQueue(Duration duration) async {
-    if (_state.musicQueuePadIds.isEmpty) return;
-
-    final nextId = _state.musicQueuePadIds.first;
-    final next = await _prepareNextQueuedMusic(nextId);
-    if (next == null) return;
-
-    final previous = _state.currentMusicPad;
-
-    _musicAdvanceLockCount++;
-    try {
-      _state = _state.copyWith(
-        musicQueuePadIds: _state.musicQueuePadIds.sublist(1),
-      );
-      notifyListeners();
-
-      final soundIndex = _pickSoundIndex(next);
-      final nextPlayer = next.slots[soundIndex].player;
-      if (nextPlayer == null) {
-        _setMusicLoadError(next);
-        return;
-      }
-      final targetVolume = _effectiveVolume(next);
-
-      await nextPlayer.playAtVolume(0);
-      next._currentPlayerIndex = soundIndex;
-      next.isPlaying = true;
-      nextPlayer.fadeVolumeTo(targetVolume, duration);
-
-      await Future<void>.delayed(duration);
-
-      if (previous != null && previous.pad.id != next.pad.id) {
-        await previous.currentPlayer?.stop();
-        previous.isPlaying = false;
-        previous._currentPlayerIndex = null;
-      }
-
-      _state = _state.copyWith(currentMusicPad: next);
-      notifyListeners();
-    } finally {
-      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
-    }
-  }
-
-  /// Prépare la tête de file pour une transition — ne retire pas l'entrée en cas d'échec.
-  Future<PadItem?> _prepareNextQueuedMusic(int nextId) async {
-    final next = _resolvePadItem(nextId);
-    if (next == null) {
-      _setMusicLoadError();
-      return null;
-    }
-
-    if (!next.isPlayable) {
-      final ready = await _prepareMusicPadForPlayback(
-        next,
-        downloadIfNeeded: true,
-      );
-      if (!ready) {
-        _setMusicLoadError(next);
-        return null;
-      }
-    }
-
-    return next;
-  }
-
-  Future<void> toggleCurrentMusicPlayback() async {
-    final current = _state.currentMusicPad;
-    if (current == null) {
-      if (_state.musicQueuePadIds.isNotEmpty) {
-        await playNextInQueueNow();
-      }
-      return;
-    }
-    if (current.isPlaying) {
-      await _stopMusicPad(current, manual: true, clearOnAir: false);
-      return;
-    }
-    await _playMusicPad(
-      current,
-      fromPosition: current.pausedPlaybackPosition,
-      soundIndex: current.pausedPlayerIndex,
-    );
-  }
-
-  Future<void> restartCurrentMusic() async {
-    final current = _state.currentMusicPad;
-    if (current == null || !current.isPlayable) return;
-    if (current.isPlaying) {
-      _musicAdvanceLockCount++;
-      try {
-        await current.currentPlayer?.stop();
-      } finally {
-        if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
-      }
-    }
-    await _playMusicPad(current);
-  }
-
-  Future<void> skipToNextMusic() async {
-    if (_state.musicQueuePadIds.isEmpty) {
-      await stopCurrentMusic();
-      return;
-    }
-    await playNextInQueueNow();
-  }
-
-  void _clearMusicState() {
-    _state = _state.copyWith(
-      clearCurrentMusicPad: true,
-      clearMusicQueue: true,
-    );
-  }
-
-  PadItem? _resolvePadItem(int? padId) {
-    if (padId == null) return null;
-    for (final padItem in _state.pads) {
-      if (padItem.pad.id == padId) return padItem;
-    }
-    return _offStageMusicPads[padId];
-  }
-
-  /// Résout un pad musique par id — sur la scène ou hors-scène (régie seule).
-  PadItem? resolveMusicPad(int padId) => _resolvePadItem(padId);
-
-  void _syncMusicStateWithPads() {
-    final currentId = _state.currentMusicPad?.pad.id;
-    final nextCurrent = _resolvePadItem(currentId);
-    final nextQueue = _state.musicQueuePadIds
-        .where((id) => _resolvePadItem(id) != null && id != nextCurrent?.pad.id)
-        .toList();
-
-    if (nextCurrent == _state.currentMusicPad &&
-        _listEquals(nextQueue, _state.musicQueuePadIds)) {
-      return;
-    }
-
-    _state = _state.copyWith(
-      currentMusicPad: nextCurrent,
-      musicQueuePadIds: nextQueue,
-      clearCurrentMusicPad: nextCurrent == null && currentId != null,
-    );
-  }
-
-  bool _listEquals(List<int> a, List<int> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
-
-  /// Met à jour les réglages d'un pad et persiste en base.
   Future<void> updatePadItemSettings(
     PadItem padItem, {
     Color? buttonColor,
@@ -2226,7 +1290,7 @@ class SamplerNotifier extends ChangeNotifier {
         hasChanged = true;
         if (padItem.isPlaying) {
           final effective = padItem.pad.isMusicPad
-              ? nextVolume * _musicVolume
+              ? nextVolume * _music._musicVolume
               : nextVolume;
           padItem.currentPlayer?.setVolume(effective);
         }
@@ -2265,7 +1329,6 @@ class SamplerNotifier extends ChangeNotifier {
     await loadSounds(silent: true);
   }
 
-  /// Déplace un pad vers une position précise dans une ligne cible.
   Future<void> movePadToPosition(
     int padId,
     int targetRowIndex,
@@ -2277,7 +1340,6 @@ class SamplerNotifier extends ChangeNotifier {
     final drafts =
         _state.pads.where((item) => item.isDraft).toList(growable: false);
 
-    // Groupe les pads par ligne (ordre stable).
     final byRow = <int, List<PadItem>>{};
     for (final p in _state.pads) {
       if (p.isDraft) continue;
@@ -2337,62 +1399,8 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  void _applyMusicVolumeToPlayingPads({bool smooth = false}) {
-    for (final padItem in _state.pads) {
-      if (padItem.isPlaying && padItem.pad.isMusicPad) {
-        _applyEffectiveVolumeToPlayer(padItem, smooth: smooth);
-      }
-    }
-    for (final padItem in _offStageMusicPads.values) {
-      if (padItem.isPlaying) {
-        _applyEffectiveVolumeToPlayer(padItem, smooth: smooth);
-      }
-    }
-  }
-
-  void _applyEffectiveVolumeToPlayer(
-    PadItem padItem, {
-    bool smooth = false,
-  }) {
-    final player = padItem.currentPlayer;
-    if (player == null) return;
-
-    final volume = _effectiveVolume(padItem);
-    if (smooth) {
-      player.fadeVolumeTo(volume, _musicVolumeSliderFadeDuration);
-    } else {
-      player.setVolume(volume);
-    }
-  }
-
-  /// Volume global de la musique — n'affecte que les pads musique.
-  ///
-  /// [smooth] : fondu court via SoLoud (slider) ; instantané pour mute, etc.
-  Future<void> setMusicVolume(double value, {bool smooth = false}) async {
-    final clamped = value.clamp(0.0, 1.0);
-    if (_musicVolume == clamped) return;
-    if (clamped > 0) {
-      _musicVolumeBeforeMute = clamped;
-    }
-    _musicVolume = clamped;
-    _applyMusicVolumeToPlayingPads(smooth: smooth);
-    notifyListeners();
-  }
-
-  /// Coupe ou rétablit le volume musique global.
-  Future<void> toggleMusicMute() async {
-    if (_musicVolume > 0) {
-      _musicVolumeBeforeMute = _musicVolume;
-      await setMusicVolume(0);
-      return;
-    }
-    await setMusicVolume(
-      _musicVolumeBeforeMute > 0 ? _musicVolumeBeforeMute : 1.0,
-    );
-  }
-
   Future<void> stopAllSounds() async {
-    _musicAdvanceLockCount++;
+    _music._musicAdvanceLockCount++;
     try {
       for (final padItem in _state.pads) {
         if (padItem.isPlaying) {
@@ -2402,9 +1410,9 @@ class SamplerNotifier extends ChangeNotifier {
         }
       }
     } finally {
-      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
+      if (_music._musicAdvanceLockCount > 0) _music._musicAdvanceLockCount--;
     }
-    _clearMusicState();
+    _music._clearMusicState();
     notifyListeners();
   }
 
@@ -2424,7 +1432,6 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  /// Retire un pad de la board.
   Future<bool> removeSound(PadItem padItem) async {
     if (padItem.isDraft) {
       cancelDraftPad(padItem.pad.id);
@@ -2464,12 +1471,11 @@ class SamplerNotifier extends ChangeNotifier {
         _state.pads.where((p) => p != padItem).toList();
     _syncMultipadNumbers(remainingPads);
     _state = _state.copyWith(pads: remainingPads, error: null);
-    _syncMusicStateWithPads();
+    _music._syncMusicStateWithPads();
     notifyListeners();
     return true;
   }
 
-  /// Annule la dernière suppression de pad.
   Future<int?> undoLastRemoval() async {
     final snapshot = _lastRemovedPad;
     final currentBoardId = _activeBoardId;
@@ -2492,7 +1498,6 @@ class SamplerNotifier extends ChangeNotifier {
       _state = _state.copyWith(error: null);
       notifyListeners();
 
-      // Retourner l'id du pad restauré (le nouvel id après recréation)
       final restored = _state.pads
           .where((p) => p.pad.sortOrder == snapshot.index)
           .firstOrNull;
@@ -2507,9 +1512,6 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  /// Met à jour le pad en mémoire dès qu'un son est ajouté ou retiré, sans
-  /// attendre un rechargement complet du plateau (évite le délai perceptible
-  /// sur la grille pendant le chargement des lecteurs audio).
   void _applySoundAddedToPad(
     PadItem padItem,
     Sound sound, {
@@ -2542,13 +1544,11 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Charge les lecteurs du pad en arrière-plan après un changement de liste.
   Future<void> _reloadPadPlayersInBackground(PadItem padItem) async {
     await _loadPlayersForPadSafe(padItem, padItem.pad);
     notifyListeners();
   }
 
-  /// Ajoute un son à un pad existant et recharge.
   Future<void> addSoundToPad(int padId, int soundId) async {
     final padItem = findPadItemById(padId);
     if (padItem == null) return;
@@ -2589,7 +1589,6 @@ class SamplerNotifier extends ChangeNotifier {
     unawaited(downloadAndLoadPad(padItem).catchError((_) => false));
   }
 
-  /// Retire un son d'un pad. Si c'est le dernier son, supprime le pad.
   Future<void> removeSoundFromPad(int padId, int soundId) async {
     final padItem = findPadItemById(padId);
     if (padItem == null) return;
@@ -2609,9 +1608,7 @@ class SamplerNotifier extends ChangeNotifier {
     for (final padItem in _state.pads) {
       padItem.dispose();
     }
-    for (final padItem in _offStageMusicPads.values) {
-      padItem.dispose();
-    }
+    _music._disposeOffStagePads();
     super.dispose();
   }
 
@@ -2621,13 +1618,10 @@ class SamplerNotifier extends ChangeNotifier {
     return await _repository.getAllSounds();
   }
 
-  /// Recherche les ids de sons par requête de tags (normalisée, sans accents).
   Future<Set<int>> findSoundIdsByTagQuery(String query) {
     return _repository.findSoundIdsByTagQuery(query);
   }
 
-  /// Ids des sons jouables immédiatement en local (cache présent ou fichier
-  /// legacy existant), pour le filtre « disponible hors-ligne » de la recherche.
   Future<Set<int>> getLocallyAvailableSoundIds() async {
     final sounds = await _repository.getAllSounds();
     final available = <int>{};
@@ -2639,7 +1633,6 @@ class SamplerNotifier extends ChangeNotifier {
 
   Future<bool> _isAvailableLocally(Sound sound) async {
     try {
-      // downloadIfNeeded:false → lève si non disponible localement.
       await _resolvePlayablePath(sound, downloadIfNeeded: false);
       return true;
     } catch (_) {
@@ -2647,9 +1640,6 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  /// Joue immédiatement un son par id sur le lecteur de pré-écoute, sans toucher
-  /// au plateau ni à la file musique (recherche-éclair). Télécharge à la demande.
-  /// Retourne false si le son est introuvable ou indisponible.
   Future<bool> previewSound(int soundId) async {
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
@@ -2670,7 +1660,6 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  /// Coupe la pré-écoute en cours (fermeture de la recherche, nouveau son…).
   Future<void> stopPreview() async {
     final player = _previewPlayer;
     _previewPlayer = null;
@@ -2683,10 +1672,6 @@ class SamplerNotifier extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// Prépare un son depuis la recherche-éclair :
-  /// - musique → file de passage ;
-  /// - bruitage / ambiance → pad dédié en fin de dernière ligne, ou
-  ///   surbrillance du pad dédié déjà présent (un seul son).
   Future<QuickSearchPrepareResult> prepareSoundFromQuickSearch(
     int soundId,
   ) async {
@@ -2738,7 +1723,6 @@ class SamplerNotifier extends ChangeNotifier {
     return result;
   }
 
-  /// Affiche immédiatement un pad brouillon (avant le choix des sons).
   int? beginDraftPad({required int rowIndex}) {
     final boardId = _activeBoardId;
     if (boardId == null) return null;
@@ -2761,7 +1745,6 @@ class SamplerNotifier extends ChangeNotifier {
     return draftId;
   }
 
-  /// Met à jour visuellement un pad brouillon pendant la sélection des sons.
   Future<void> updateDraftPadSounds(
     int draftPadId,
     List<int> soundIds,
@@ -2783,7 +1766,6 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Retire un pad brouillon sans toucher à la base.
   void cancelDraftPad(int draftPadId) {
     final item = findPadItemById(draftPadId);
     if (item == null || !item.isDraft) return;
@@ -2796,7 +1778,6 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Persiste un pad brouillon et le remplace par le pad réel chargé.
   Future<PadItem?> commitDraftPad({
     required int draftPadId,
     required List<int> soundIds,
@@ -2832,7 +1813,7 @@ class SamplerNotifier extends ChangeNotifier {
     if (createdPad == null) {
       cancelDraftPad(draftPadId);
       await loadSounds(boardId: boardId, silent: true);
-      final fallback = _resolvePadItem(padId);
+      final fallback = _music._resolvePadItem(padId);
       if (fallback != null) _maybeAutoDownloadPad(fallback);
       return fallback;
     }
@@ -2845,7 +1826,7 @@ class SamplerNotifier extends ChangeNotifier {
     nextPads[draftIndex] = padItem;
     _syncMultipadNumbers(nextPads);
     _state = _state.copyWith(pads: nextPads);
-    _syncMusicStateWithPads();
+    _music._syncMusicStateWithPads();
     notifyListeners();
 
     unawaited(_loadPlayersForPadSafe(padItem, createdPad));
