@@ -816,11 +816,13 @@ class SamplerNotifier extends ChangeNotifier {
   void _attachPlayerListeners(PadItem padItem) {
     int attachedCount = 0;
     for (var i = 0; i < padItem.slots.length; i++) {
-      final player = padItem.slots[i].player;
-      if (player == null) continue;
-      attachedCount++;
+      final slot = padItem.slots[i];
       final idx = i;
-      player.onPlayerStateChanged.listen((playing) {
+      // attachListener annule toute subscription précédente sur ce slot avant
+      // d'en créer une nouvelle — garantit exactement un listener par player,
+      // même si _attachPlayerListeners est appelé plusieurs fois sur le même pad
+      // (ex. après un download qui complète un slot déjà partiellement chargé).
+      slot.attachListener((playing) {
         debugPrint(
           '[LISTENER] pad="${padItem.pad.displayName}" slot=$idx playing=$playing '
           'currentPlayerIndex=${padItem._currentPlayerIndex} isPlaying=${padItem.isPlaying}',
@@ -848,6 +850,7 @@ class SamplerNotifier extends ChangeNotifier {
         );
         notifyListeners();
       });
+      if (slot.player != null) attachedCount++;
     }
     debugPrint(
       '[ATTACH] pad="${padItem.pad.displayName}" attached $attachedCount listeners '
