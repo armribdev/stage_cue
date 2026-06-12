@@ -182,6 +182,9 @@ class PadItem {
 
   bool get isPartiallyReady => appearsReady && !isFullyReady;
 
+  /// Pad musique mis en pause (position mémorisée, audio arrêté).
+  bool get isPaused => !isPlaying && pausedPlaybackPosition != null;
+
   int get pendingDownloadCount => slots
       .where((s) => s.availability == PadSoundAvailability.needsDownload)
       .length;
