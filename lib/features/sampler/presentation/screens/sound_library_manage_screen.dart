@@ -1,596 +1,365 @@
-import 'dart:async';
-
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
+
 import '../../../../core/database/database.dart' as db;
-import '../../../../core/utils/copyable_snackbar.dart';
-import '../../../../core/utils/sound_display_paths.dart';
 import '../../../../core/utils/string_utils.dart';
-import 'sound_details_screen.dart';
-import '../widgets/app_form_dialog.dart';
-import '../widgets/app_modal.dart';
-import '../../data/datasources/local_library_datasource.dart';
 import '../../data/repositories/sound_repository.dart';
-import '../../domain/entities/library.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
-import '../utils/sound_type_ui.dart';
+import '../providers/sampler_provider.dart';
+import '../widgets/app_form_dialog.dart';
+import '../widgets/sound_picker_overlay.dart';
+import 'sound_details_screen.dart';
 
-/// Écran bibliothèque dédié à l'édition des propriétés des sons.
-class SoundLibraryManageScreen extends StatefulWidget {
-  final db.AppDatabase database;
-  final bool isModal;
+/// Bibliothèque d'édition : utilise [SoundPickerOverlay] pour la navigation,
+/// ouvre le formulaire d'édition au tap sur un son.
+class SoundLibraryManageScreen {
+  SoundLibraryManageScreen._();
 
-  const SoundLibraryManageScreen({
-    super.key,
-    required this.database,
-    this.isModal = false,
-  });
-
-  /// Page plein écran sur téléphone, modale sur tablette et desktop.
   static Future<void> open(
     BuildContext context, {
+    required SamplerNotifier notifier,
     required db.AppDatabase database,
   }) {
-    return openAdaptiveScreen(
-      context: context,
-      builder: ({required isModal}) => SoundLibraryManageScreen(
-        database: database,
-        isModal: isModal,
+    final repository = SoundRepository.fromDatabase(database);
+    return SoundPickerOverlay.showForManage(
+      context,
+      notifier: notifier,
+      onTap: (ctx, sound, tagCatalog) =>
+          _openSoundEdit(ctx, sound, tagCatalog, repository),
+    );
+  }
+
+  // ── Dispatch mobile / tablette ────────────────────────────────────────────
+
+  static Future<void> _openSoundEdit(
+    BuildContext context,
+    Sound sound,
+    List<TagCategoryWithTags> tagCatalog,
+    SoundRepository repository,
+  ) async {
+    final width = MediaQuery.sizeOf(context).width;
+    if (width < 600) {
+      await _openEditPage(context, sound, tagCatalog, repository);
+    } else {
+      await _openEditDialog(context, sound, tagCatalog, repository);
+    }
+  }
+
+  // ── Page plein écran (mobile) ─────────────────────────────────────────────
+
+  static Future<void> _openEditPage(
+    BuildContext context,
+    Sound sound,
+    List<TagCategoryWithTags> tagCatalog,
+    SoundRepository repository,
+  ) async {
+    final initialTags = await repository.getTagsForSound(sound.id);
+    if (!context.mounted) return;
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SoundDetailsScreen(
+          sound: sound,
+          tagCatalog: tagCatalog,
+          initialTags: initialTags,
+          repository: repository,
+        ),
       ),
     );
   }
 
-  @override
-  State<SoundLibraryManageScreen> createState() =>
-      _SoundLibraryManageScreenState();
-}
+  // ── Dialogue (tablette / desktop) ────────────────────────────────────────
 
-class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
-  late final SoundRepository _repository;
-  List<Sound> _availableSounds = [];
-  final Map<int, List<TagItem>> _soundTags = {};
-  List<TagCategoryWithTags> _tagCatalog = [];
-  Map<int, Library> _librariesById = {};
-  bool _isLoading = true;
-  String _searchQuery = '';
-  Set<int>? _searchMatchedSoundIds;
-  Timer? _searchDebounce;
+  static Future<void> _openEditDialog(
+    BuildContext context,
+    Sound sound,
+    List<TagCategoryWithTags> tagCatalog,
+    SoundRepository repository,
+  ) async {
+    final initialTags = await repository.getTagsForSound(sound.id);
+    if (!context.mounted) return;
 
-  @override
-  void initState() {
-    super.initState();
-    _repository = SoundRepository.fromDatabase(widget.database);
-    _loadTagCatalog();
-    _loadSounds();
-  }
-
-  String _soundSortLabel(Sound sound) =>
-      normalizeForSearch(sound.displayName ?? sound.title);
-
-  Future<void> _loadSounds() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final libraries = await LocalLibraryDataSource(widget.database)
-          .getAllLibraries();
-      final allSounds = List<Sound>.from(await _repository.getAllSounds())
-        ..sort(
-          (a, b) => _soundSortLabel(a).compareTo(_soundSortLabel(b)),
-        );
-
-      setState(() {
-        _librariesById = {for (final lib in libraries) lib.id: lib};
-        _availableSounds = allSounds;
-        _isLoading = false;
-      });
-      await _loadTagsForSounds(allSounds);
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      if (mounted) {
-        showCopyableSnackBar(context, 'Erreur lors du chargement: $e');
-      }
-    }
-  }
-
-  Future<void> _loadTagCatalog() async {
-    final catalog = await _repository.getTagCatalog();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _tagCatalog = catalog;
-    });
-  }
-
-  Future<void> _loadTagsForSounds(List<Sound> sounds) async {
-    if (sounds.isEmpty) {
-      setState(() {
-        _soundTags.clear();
-      });
-      return;
-    }
-    final entries = await Future.wait(
-      sounds.map((sound) async {
-        final tags = await _repository.getTagsForSound(sound.id);
-        return MapEntry(sound.id, tags);
-      }),
-    );
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _soundTags
-        ..clear()
-        ..addEntries(entries);
-    });
-  }
-
-  List<String> _parseSearchTokens(String query) {
-    return query
-        .split(RegExp(r'[\s,]+'))
-        .map((t) => t.trim())
-        .where((t) => t.isNotEmpty && t.length >= 2)
-        .toList();
-  }
-
-  String _displayPath(Sound sound) {
-    return SoundDisplayPaths.forSound(
-      sound,
-      library: sound.libraryId != null
-          ? _librariesById[sound.libraryId]
-          : null,
-    );
-  }
-
-  bool _soundMatchesToken(Sound sound, String token) {
-    final normalizedToken = normalizeForSearch(token);
-    final matchInTitle = normalizeForSearch(
-      sound.title,
-    ).contains(normalizedToken);
-    final matchInDisplayName =
-        sound.displayName != null &&
-        normalizeForSearch(sound.displayName!).contains(normalizedToken);
-    final matchInPath = normalizeForSearch(
-      _displayPath(sound),
-    ).contains(normalizedToken);
-    return matchInTitle || matchInDisplayName || matchInPath;
-  }
-
-  void _scheduleSearch(String query) {
-    _searchDebounce?.cancel();
-    if (query.trim().isEmpty) {
-      setState(() {
-        _searchMatchedSoundIds = null;
-      });
-      return;
-    }
-    _searchDebounce = Timer(const Duration(milliseconds: 250), () async {
-      final tokens = _parseSearchTokens(query);
-      if (tokens.isEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _searchMatchedSoundIds = null;
-        });
-        return;
-      }
-
-      Set<int>? intersection;
-      for (final token in tokens) {
-        final tagIds = await _repository.findSoundIdsByTagQuery(token);
-        final titleIds = _availableSounds
-            .where((s) => _soundMatchesToken(s, token))
-            .map((s) => s.id)
-            .toSet();
-        final tokenMatchIds = tagIds.union(titleIds);
-
-        if (intersection == null) {
-          intersection = tokenMatchIds;
-        } else {
-          intersection = intersection.intersection(tokenMatchIds);
-        }
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _searchMatchedSoundIds = intersection ?? {};
-      });
-    });
-  }
-
-  Color? _getCategoryColor(int categoryId) {
-    for (final category in _tagCatalog) {
-      if (category.category.id == categoryId) {
-        return Color(category.category.color);
-      }
-    }
-    return null;
-  }
-
-  Widget _buildTagChip(TagItem tag) {
-    final color = _getCategoryColor(tag.categoryId);
-    return Chip(
-      label: Text(tag.name, style: const TextStyle(fontSize: 11)),
-      visualDensity: VisualDensity.compact,
-      backgroundColor: color?.withAlpha(24),
-      side: color == null ? null : BorderSide(color: color),
-    );
-  }
-
-  Widget _buildDialogTagInputChip(TagItem tag, VoidCallback onDeleted) {
-    final color = _getCategoryColor(tag.categoryId);
-    return InputChip(
-      label: Text(tag.name),
-      backgroundColor: color?.withAlpha(24),
-      side: color == null ? null : BorderSide(color: color),
-      onDeleted: onDeleted,
-    );
-  }
-
-  List<Sound> get _filteredSounds {
-    if (_searchQuery.trim().isEmpty || _searchMatchedSoundIds == null) {
-      return _availableSounds;
-    }
-    return _availableSounds
-        .where((s) => _searchMatchedSoundIds!.contains(s.id))
-        .toList();
-  }
-
-  Future<void> _openEditDialog(Sound sound) async {
-    final initialTags = await _repository.getTagsForSound(sound.id);
-    if (!mounted) {
-      return;
-    }
     final dialogScrollController = ScrollController();
     var selectedColorValue = sound.colorValue;
     var selectedVolume = sound.volume.clamp(0.0, 1.0);
     var displayNameValue = sound.displayName ?? '';
     final selectedTagIds = initialTags.map((t) => t.id).toSet();
-    var hasPersistedChanges = false;
     var tagAutocompleteText = '';
     TextEditingController? tagAutocompleteFieldController;
 
-    String? normalizedDisplayNameOrNull(String value) {
+    String? normalizedOrNull(String value) {
       final trimmed = value.trim();
       return trimmed.isEmpty ? null : trimmed;
     }
 
     List<TagItem> buildAllTags() {
       final tagsById = <int, TagItem>{};
-      for (final category in _tagCatalog) {
+      for (final category in tagCatalog) {
         for (final tag in category.tags) {
           tagsById[tag.id] = tag;
         }
       }
-      final tags = tagsById.values.toList()
-        ..sort(
-          (a, b) =>
-              normalizeForSearch(a.name).compareTo(normalizeForSearch(b.name)),
-        );
-      return tags;
+      return tagsById.values.toList()
+        ..sort((a, b) =>
+            normalizeForSearch(a.name).compareTo(normalizeForSearch(b.name)));
     }
 
     List<TagItem> buildSelectedTags(List<TagItem> allTags) {
-      final selected = allTags
-          .where((tag) => selectedTagIds.contains(tag.id))
-          .toList();
-      selected.sort((a, b) => a.name.compareTo(b.name));
-      return selected;
+      return allTags.where((t) => selectedTagIds.contains(t.id)).toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
     }
 
     List<TagItem> buildAvailableTags(List<TagItem> allTags, String query) {
-      final normalizedQuery = normalizeForSearch(query);
-      final available = allTags.where((tag) {
-        if (selectedTagIds.contains(tag.id)) {
-          return false;
-        }
-        if (normalizedQuery.isEmpty) {
-          return true;
-        }
-        return normalizeForSearch(tag.name).contains(normalizedQuery);
-      }).toList();
-      available.sort((a, b) => a.name.compareTo(b.name));
-      return available;
+      final q = normalizeForSearch(query);
+      return allTags.where((t) {
+        if (selectedTagIds.contains(t.id)) return false;
+        if (q.isEmpty) return true;
+        return normalizeForSearch(t.name).contains(q);
+      }).toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
     }
 
-    final didSave = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            const dialogSectionSpacing = 16.0;
+            const sectionSpacing = 16.0;
 
             return AppFormDialog(
               title: 'Modifier "${sound.title}"',
               onClose: () => Navigator.of(dialogContext).pop(false),
               content: Scrollbar(
+                controller: dialogScrollController,
+                thumbVisibility: true,
+                thickness: 8,
+                radius: const Radius.circular(8),
+                child: SingleChildScrollView(
                   controller: dialogScrollController,
-                  thumbVisibility: true,
-                  thickness: 8,
-                  radius: const Radius.circular(8),
-                  child: SingleChildScrollView(
-                    controller: dialogScrollController,
-                    padding: const EdgeInsets.only(right: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextFormField(
-                          initialValue: displayNameValue,
-                          onChanged: (value) {
-                            displayNameValue = value;
-                          },
-                          onFieldSubmitted: (value) {
-                            displayNameValue = value;
-                          },
-                          decoration: InputDecoration(
-                            hintText: sound.title,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        initialValue: displayNameValue,
+                        onChanged: (v) => displayNameValue = v,
+                        onFieldSubmitted: (v) => displayNameValue = v,
+                        decoration: InputDecoration(
+                          hintText: sound.title,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        const SizedBox(height: dialogSectionSpacing),
-                        Text(
-                          'Couleur par défaut',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            _buildColorChoice(
+                      ),
+                      const SizedBox(height: sectionSpacing),
+                      Text(
+                        'Couleur par défaut',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _colorSwatch(
+                            context: context,
+                            label: 'D',
+                            color: null,
+                            isSelected: selectedColorValue == null,
+                            onTap: () => setDialogState(
+                                () => selectedColorValue = null),
+                          ),
+                          for (final color in _defaultColorChoices)
+                            _colorSwatch(
                               context: context,
-                              label: 'D',
-                              color: null,
-                              isSelected: selectedColorValue == null,
-                              onTap: () {
-                                setDialogState(() {
-                                  selectedColorValue = null;
-                                });
-                              },
+                              color: color,
+                              isSelected:
+                                  selectedColorValue == color.toARGB32(),
+                              onTap: () => setDialogState(
+                                  () => selectedColorValue = color.toARGB32()),
                             ),
-                            for (final color in _defaultColorChoices)
-                              _buildColorChoice(
-                                context: context,
-                                color: color,
-                                isSelected:
-                                    selectedColorValue == color.toARGB32(),
-                                onTap: () {
-                                  setDialogState(() {
-                                    selectedColorValue = color.toARGB32();
-                                  });
-                                },
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: dialogSectionSpacing),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Volume par défaut',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
+                        ],
+                      ),
+                      const SizedBox(height: sectionSpacing),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Volume par défaut',
+                              style: Theme.of(context).textTheme.bodyMedium,
                             ),
-                            Text('${(selectedVolume * 100).round()}%'),
-                          ],
-                        ),
-                        Slider(
-                          value: selectedVolume,
-                          min: 0.0,
-                          max: 1.0,
-                          label: '${(selectedVolume * 100).round()}%',
-                          onChanged: (value) {
-                            setDialogState(() {
-                              selectedVolume = value.clamp(0.0, 1.0);
-                            });
+                          ),
+                          Text('${(selectedVolume * 100).round()}%'),
+                        ],
+                      ),
+                      Slider(
+                        value: selectedVolume,
+                        onChanged: (v) => setDialogState(
+                            () => selectedVolume = v.clamp(0.0, 1.0)),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tags',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      if (tagCatalog
+                          .where((c) => c.tags.isNotEmpty)
+                          .isEmpty)
+                        const Text('Aucun tag disponible')
+                      else
+                        Builder(
+                          builder: (context) {
+                            final allTags = buildAllTags();
+                            final selectedTags = buildSelectedTags(allTags);
+                            final availableTags = buildAvailableTags(
+                                allTags, tagAutocompleteText);
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (selectedTags.isNotEmpty) ...[
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      for (final tag in selectedTags)
+                                        _tagInputChip(
+                                          tag,
+                                          tagCatalog,
+                                          () => setDialogState(() =>
+                                              selectedTagIds.remove(tag.id)),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
+                                Autocomplete<TagItem>(
+                                  displayStringForOption: (t) => t.name,
+                                  optionsBuilder: (v) => buildAvailableTags(
+                                      buildAllTags(), v.text),
+                                  onSelected: (tag) {
+                                    setDialogState(() {
+                                      selectedTagIds.add(tag.id);
+                                      tagAutocompleteText = '';
+                                    });
+                                    tagAutocompleteFieldController?.clear();
+                                  },
+                                  optionsViewBuilder: (ctx, onSelected, opts) {
+                                    final scheme =
+                                        Theme.of(ctx).colorScheme;
+                                    return Align(
+                                      alignment: Alignment.topLeft,
+                                      child: Material(
+                                        elevation: 4,
+                                        borderRadius: BorderRadius.circular(8),
+                                        clipBehavior: Clip.antiAlias,
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                              maxHeight: 280),
+                                          child: ListView.builder(
+                                            padding: EdgeInsets.zero,
+                                            shrinkWrap: true,
+                                            itemCount: opts.length,
+                                            itemBuilder: (_, i) {
+                                              final tag = opts.elementAt(i);
+                                              final color = _categoryColor(
+                                                  tag.categoryId, tagCatalog);
+                                              return InkWell(
+                                                onTap: () => onSelected(tag),
+                                                child: Padding(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 10),
+                                                  child: Row(
+                                                    children: [
+                                                      Container(
+                                                        width: 10,
+                                                        height: 10,
+                                                        decoration: BoxDecoration(
+                                                          color: color ??
+                                                              scheme
+                                                                  .outlineVariant,
+                                                          shape:
+                                                              BoxShape.circle,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 10),
+                                                      Expanded(
+                                                        child: Text(
+                                                          tag.name,
+                                                          maxLines: 1,
+                                                          overflow:
+                                                              TextOverflow
+                                                                  .ellipsis,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  fieldViewBuilder: (ctx, ctrl, focus, submit) {
+                                    tagAutocompleteFieldController = ctrl;
+                                    return TextField(
+                                      controller: ctrl,
+                                      focusNode: focus,
+                                      decoration: InputDecoration(
+                                        labelText: 'Ajouter un tag',
+                                        hintText: 'Taper pour filtrer...',
+                                        prefixIcon: const Icon(Icons.search),
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                      onChanged: (v) => setDialogState(
+                                          () => tagAutocompleteText = v),
+                                      onSubmitted: (_) => submit(),
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 8),
+                                if (allTags.isEmpty)
+                                  const Text('Aucun tag disponible')
+                                else if (availableTags.isEmpty)
+                                  Text(
+                                    tagAutocompleteText.trim().isEmpty
+                                        ? 'Tous les tags sont déjà ajoutés'
+                                        : 'Aucun tag pour cette recherche',
+                                  ),
+                              ],
+                            );
                           },
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Tags',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        if (_tagCatalog
-                            .where((category) => category.tags.isNotEmpty)
-                            .isEmpty)
-                          const Text('Aucun tag disponible')
-                        else ...[
-                          Builder(
-                            builder: (context) {
-                              final allTags = buildAllTags();
-                              final selectedTags = buildSelectedTags(allTags);
-                              final availableTags =
-                                  buildAvailableTags(allTags, tagAutocompleteText);
-
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (selectedTags.isNotEmpty) ...[
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: [
-                                        for (final tag in selectedTags)
-                                          _buildDialogTagInputChip(tag, () {
-                                            setDialogState(() {
-                                              selectedTagIds.remove(tag.id);
-                                            });
-                                          }),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                  ],
-                                  Autocomplete<TagItem>(
-                                    displayStringForOption: (TagItem option) =>
-                                        option.name,
-                                    optionsBuilder:
-                                        (TextEditingValue textEditingValue) {
-                                      final all = buildAllTags();
-                                      return buildAvailableTags(
-                                        all,
-                                        textEditingValue.text,
-                                      );
-                                    },
-                                    onSelected: (TagItem selection) {
-                                      setDialogState(() {
-                                        selectedTagIds.add(selection.id);
-                                        tagAutocompleteText = '';
-                                      });
-                                      tagAutocompleteFieldController?.clear();
-                                    },
-                                    optionsViewBuilder: (
-                                      BuildContext context,
-                                      AutocompleteOnSelected<TagItem> onSelected,
-                                      Iterable<TagItem> options,
-                                    ) {
-                                      final scheme = Theme.of(context).colorScheme;
-                                      return Align(
-                                        alignment: Alignment.topLeft,
-                                        child: Material(
-                                          elevation: 4,
-                                          borderRadius: BorderRadius.circular(8),
-                                          clipBehavior: Clip.antiAlias,
-                                          child: ConstrainedBox(
-                                            constraints: const BoxConstraints(
-                                              maxHeight: 280,
-                                            ),
-                                            child: ListView.builder(
-                                              padding: EdgeInsets.zero,
-                                              shrinkWrap: true,
-                                              itemCount: options.length,
-                                              itemBuilder: (context, index) {
-                                                final tag = options.elementAt(
-                                                  index,
-                                                );
-                                                final color = _getCategoryColor(
-                                                  tag.categoryId,
-                                                );
-                                                return InkWell(
-                                                  onTap: () => onSelected(tag),
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 10,
-                                                    ),
-                                                    child: Row(
-                                                      children: [
-                                                        Container(
-                                                          width: 10,
-                                                          height: 10,
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            color: color ??
-                                                                scheme
-                                                                    .outlineVariant,
-                                                            shape:
-                                                                BoxShape.circle,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 10,
-                                                        ),
-                                                        Expanded(
-                                                          child: Text(
-                                                            tag.name,
-                                                            maxLines: 1,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    fieldViewBuilder: (
-                                      BuildContext context,
-                                      TextEditingController textEditingController,
-                                      FocusNode focusNode,
-                                      VoidCallback onFieldSubmitted,
-                                    ) {
-                                      tagAutocompleteFieldController =
-                                          textEditingController;
-                                      return TextField(
-                                        controller: textEditingController,
-                                        focusNode: focusNode,
-                                        decoration: InputDecoration(
-                                          labelText: 'Ajouter un tag',
-                                          hintText: 'Taper pour filtrer...',
-                                          prefixIcon: const Icon(Icons.search),
-                                          border: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                        onChanged: (value) {
-                                          setDialogState(() {
-                                            tagAutocompleteText = value;
-                                          });
-                                        },
-                                        onSubmitted: (_) =>
-                                            onFieldSubmitted(),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 8),
-                                  if (allTags.isEmpty)
-                                    const Text('Aucun tag disponible')
-                                  else if (availableTags.isEmpty)
-                                    Text(
-                                      tagAutocompleteText.trim().isEmpty
-                                          ? 'Tous les tags sont deja ajoutes'
-                                          : 'Aucun tag disponible pour cette recherche',
-                                    ),
-                                ],
-                              );
-                            },
-                          ),
-                        ],
-                      ],
-                    ),
+                    ],
                   ),
                 ),
+              ),
               actions: [
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 12,
-                    ),
+                        horizontal: 18, vertical: 12),
                   ),
                   onPressed: () async {
-                    await _repository.updateSoundSettings(
+                    await repository.updateSoundSettings(
                       id: sound.id,
                       colorValue: selectedColorValue,
                       updateColor: true,
-                      displayName: normalizedDisplayNameOrNull(displayNameValue),
+                      displayName: normalizedOrNull(displayNameValue),
                       updateDisplayName: true,
                       volume: selectedVolume,
                     );
-                    await _repository.setTagsForSound(
-                      sound.id,
-                      selectedTagIds.toList(),
-                    );
-                    hasPersistedChanges = true;
-                    if (!dialogContext.mounted) {
-                      return;
-                    }
+                    await repository.setTagsForSound(
+                        sound.id, selectedTagIds.toList());
+                    if (!dialogContext.mounted) return;
                     Navigator.of(dialogContext).pop(true);
                   },
                   child: const Text('Enregistrer'),
@@ -602,47 +371,33 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
       },
     );
     dialogScrollController.dispose();
-
-    if (didSave != true && !hasPersistedChanges) {
-      return;
-    }
-
-    await _loadSounds();
   }
 
-  Future<void> _openEditPage(Sound sound) async {
-    final initialTags = await _repository.getTagsForSound(sound.id);
-    if (!mounted) {
-      return;
+  // ── Helpers UI ────────────────────────────────────────────────────────────
+
+  static Color? _categoryColor(
+      int categoryId, List<TagCategoryWithTags> catalog) {
+    for (final c in catalog) {
+      if (c.category.id == categoryId) return Color(c.category.color);
     }
-    final didSave = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => SoundDetailsScreen(
-          sound: sound,
-          tagCatalog: _tagCatalog,
-          initialTags: initialTags,
-          repository: _repository,
-        ),
-      ),
+    return null;
+  }
+
+  static Widget _tagInputChip(
+    TagItem tag,
+    List<TagCategoryWithTags> catalog,
+    VoidCallback onDeleted,
+  ) {
+    final color = _categoryColor(tag.categoryId, catalog);
+    return InputChip(
+      label: Text(tag.name),
+      backgroundColor: color?.withAlpha(24),
+      side: color == null ? null : BorderSide(color: color),
+      onDeleted: onDeleted,
     );
-
-    if (didSave != true) {
-      return;
-    }
-
-    await _loadSounds();
   }
 
-  Future<void> _openSoundEdit(Sound sound) async {
-    final width = MediaQuery.sizeOf(context).width;
-    if (width < 600) {
-      await _openEditPage(sound);
-      return;
-    }
-    await _openEditDialog(sound);
-  }
-
-  Widget _buildColorChoice({
+  static Widget _colorSwatch({
     required BuildContext context,
     Color? color,
     required bool isSelected,
@@ -650,7 +405,6 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
     String? label,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    final borderColor = isSelected ? scheme.primary : scheme.outlineVariant;
     final effectiveColor = color ?? scheme.surfaceContainerHighest;
     return InkWell(
       borderRadius: BorderRadius.circular(20),
@@ -663,7 +417,10 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: effectiveColor,
-          border: Border.all(color: borderColor, width: isSelected ? 3 : 1),
+          border: Border.all(
+            color: isSelected ? scheme.primary : scheme.outlineVariant,
+            width: isSelected ? 3 : 1,
+          ),
         ),
         child: isSelected
             ? Icon(
@@ -671,145 +428,23 @@ class _SoundLibraryManageScreenState extends State<SoundLibraryManageScreen> {
                 size: 18,
                 color: color == null
                     ? scheme.onSurfaceVariant
-                    : _getCheckmarkColor(effectiveColor),
+                    : _checkmarkColor(effectiveColor),
               )
             : (label != null
-                  ? Text(
-                      label,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  : null),
+                ? Text(
+                    label,
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  )
+                : null),
       ),
     );
   }
 
-  Color _getCheckmarkColor(Color color) {
-    return color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
-  }
-
-  @override
-  void dispose() {
-    _searchDebounce?.cancel();
-    super.dispose();
-  }
-
-  bool get _isDesktopPlatform =>
-      defaultTargetPlatform == TargetPlatform.windows ||
-      defaultTargetPlatform == TargetPlatform.macOS ||
-      defaultTargetPlatform == TargetPlatform.linux;
-
-  Widget _buildSoundTile(Sound sound) {
-    final tags = _soundTags[sound.id] ?? [];
-    final pathLabel = _displayPath(sound);
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: ListTile(
-          leading: SoundTypeAvatar(type: sound.type),
-          title: Text(sound.displayName ?? sound.title),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                pathLabel,
-                style: const TextStyle(fontSize: 11),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (tags.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final tag in tags) _buildTagChip(tag),
-                  ],
-                ),
-              ],
-            ],
-          ),
-          trailing: IconButton(
-            icon: const Icon(Icons.edit_rounded),
-            tooltip: 'Modifier',
-            onPressed: () => _openSoundEdit(sound),
-          ),
-          onTap: _isDesktopPlatform ? null : () => _openSoundEdit(sound),
-          hoverColor: Colors.transparent,
-          splashColor: Colors.transparent,
-          focusColor: Colors.transparent,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          sliver: SliverToBoxAdapter(
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Rechercher un son...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-                _scheduleSearch(value);
-              },
-            ),
-          ),
-        ),
-        if (_isLoading)
-          const SliverFillRemaining(
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (_filteredSounds.isEmpty)
-          SliverFillRemaining(
-            child: Center(
-              child: Text(
-                _searchQuery.isEmpty
-                    ? 'Aucun son disponible'
-                    : 'Aucun son trouvé',
-              ),
-            ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _buildSoundTile(_filteredSounds[index]),
-                childCount: _filteredSounds.length,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final body = _buildBody();
-
-    if (widget.isModal) {
-      return AppModalShell(title: 'Gérer la bibliothèque', body: body);
-    }
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Gérer la bibliothèque')),
-      body: body,
-    );
-  }
+  static Color _checkmarkColor(Color bg) =>
+      bg.computeLuminance() > 0.6 ? Colors.black : Colors.white;
 
   static const List<Color> _defaultColorChoices = <Color>[
     Colors.blue,

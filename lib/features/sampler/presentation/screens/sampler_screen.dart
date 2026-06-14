@@ -380,7 +380,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   /// Ouvre la bibliothèque sans fermer de drawer (base method).
   Future<void> _openLibrary() async {
-    await SoundLibraryManageScreen.open(context, database: _database);
+    await SoundLibraryManageScreen.open(
+        context, notifier: _notifier, database: _database);
     if (!mounted) return;
     await _notifier.loadSounds();
   }
@@ -460,23 +461,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final draftPadId = _notifier.beginDraftPad(rowIndex: rowIndex);
     if (draftPadId == null) return;
 
-    final selectedSoundIds = await PadDetailsScreen.pickSoundsForNewPad(
-      context,
-      notifier: _notifier,
-      draftPadId: draftPadId,
-    );
-    if (!mounted) {
-      _notifier.cancelDraftPad(draftPadId);
-      return;
-    }
-    if (selectedSoundIds.isEmpty) {
-      _notifier.cancelDraftPad(draftPadId);
-      return;
-    }
-
     final padItem = await _notifier.commitDraftPad(
       draftPadId: draftPadId,
-      soundIds: selectedSoundIds,
+      soundIds: [],
     );
     if (!mounted || padItem == null) return;
 
@@ -484,7 +471,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
       context,
       padItem: padItem,
       notifier: _notifier,
+      openPickerOnStart: true,
     );
+
+    if (!mounted) return;
+    final current = _notifier.findPadItemById(padItem.pad.id);
+    if (current != null && current.pad.sounds.isEmpty) {
+      await _notifier.removeSound(current);
+    }
   }
 
   static const double _editRowGap = 14;

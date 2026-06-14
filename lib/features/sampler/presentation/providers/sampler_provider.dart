@@ -1807,11 +1807,6 @@ class SamplerNotifier extends ChangeNotifier {
     required int draftPadId,
     required List<int> soundIds,
   }) async {
-    if (soundIds.isEmpty) {
-      cancelDraftPad(draftPadId);
-      return null;
-    }
-
     final draftIndex = _state.pads.indexWhere(
       (item) => item.pad.id == draftPadId && item.isDraft,
     );
