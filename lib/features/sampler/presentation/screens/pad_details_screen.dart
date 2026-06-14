@@ -8,19 +8,21 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
-import '../widgets/app_bottom_sheet.dart';
+import '../widgets/sound_picker_overlay.dart';
 
 /// Écran de détails d'un pad — réglages, sons, mode de lecture.
 class PadDetailsScreen extends StatefulWidget {
   final PadItem padItem;
   final SamplerNotifier notifier;
   final bool isModal;
+  final bool openPickerOnStart;
 
   const PadDetailsScreen({
     super.key,
     required this.padItem,
     required this.notifier,
     this.isModal = false,
+    this.openPickerOnStart = false,
   });
 
   /// Page plein écran sur téléphone, fenêtre modale sur tablette et desktop.
@@ -28,6 +30,7 @@ class PadDetailsScreen extends StatefulWidget {
     BuildContext context, {
     required PadItem padItem,
     required SamplerNotifier notifier,
+    bool openPickerOnStart = false,
   }) {
     return openAdaptiveScreen(
       context: context,
@@ -35,30 +38,9 @@ class PadDetailsScreen extends StatefulWidget {
         padItem: padItem,
         notifier: notifier,
         isModal: isModal,
+        openPickerOnStart: openPickerOnStart,
       ),
     );
-  }
-
-  /// Ouvre le tiroir d'ajout de sons pour un futur pad (brouillon local).
-  /// Retourne les ids des sons sélectionnés (vide si fermé sans ajout).
-  static Future<List<int>> pickSoundsForNewPad(
-    BuildContext context, {
-    required SamplerNotifier notifier,
-    required int draftPadId,
-  }) async {
-    final selectedSoundIds = <int>[];
-    final tagCatalog = await notifier.loadTagCatalog();
-    if (!context.mounted) return selectedSoundIds;
-    await showAppBottomSheet<void>(
-      context: context,
-      child: _AddSoundSheet(
-        notifier: notifier,
-        tagCatalog: tagCatalog,
-        draftPadId: draftPadId,
-        draftSelectedIds: selectedSoundIds,
-      ),
-    );
-    return List<int>.from(selectedSoundIds);
   }
 
   @override
@@ -94,6 +76,11 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     _playMode = pad.playMode;
     _displayNameController = TextEditingController(text: pad.name ?? '');
     _loadTagCatalog();
+    if (widget.openPickerOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _addSound(context);
+      });
+    }
   }
 
   @override
@@ -152,17 +139,13 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   }
 
   Future<void> _addSound(BuildContext ctx) async {
-    final pad = widget.padItem.pad;
-    await showAppBottomSheet<void>(
-      context: ctx,
-      child: _AddSoundSheet(
-        padId: pad.id,
-        notifier: widget.notifier,
-        tagCatalog: _tagCatalog,
-        onPadUpdated: () {
-          if (mounted) setState(() {});
-        },
-      ),
+    await SoundPickerOverlay.showForPad(
+      ctx,
+      notifier: widget.notifier,
+      padId: widget.padItem.pad.id,
+      onPadUpdated: () {
+        if (mounted) setState(() {});
+      },
     );
     if (!mounted) return;
     setState(() {});
@@ -717,229 +700,3 @@ class _SoundSlotAvatar extends StatelessWidget {
   }
 }
 
-// ── Sheet d'ajout de sons ─────────────────────────────────────────────────
-
-class _AddSoundSheet extends StatefulWidget {
-  final int? padId;
-  final int? draftPadId;
-  final SamplerNotifier notifier;
-  final List<TagCategoryWithTags> tagCatalog;
-  final List<int>? draftSelectedIds;
-  final VoidCallback? onPadUpdated;
-
-  const _AddSoundSheet({
-    this.padId,
-    this.draftPadId,
-    required this.notifier,
-    required this.tagCatalog,
-    this.draftSelectedIds,
-    this.onPadUpdated,
-  });
-
-  @override
-  State<_AddSoundSheet> createState() => _AddSoundSheetState();
-}
-
-class _AddSoundSheetState extends State<_AddSoundSheet> {
-  List<Sound> _sounds = [];
-  bool _loading = true;
-  Set<int> _padSoundIds = const {};
-  final Set<int> _addingSoundIds = {};
-  final Set<int> _removingSoundIds = {};
-  SoundType _typeFilter = SoundType.soundEffect;
-
-  List<Sound> get _filteredSounds =>
-      _sounds.where((s) => s.matchesSoundType(_typeFilter)).toList();
-
-  @override
-  void initState() {
-    super.initState();
-    _syncPadSoundIds();
-    _loadSounds();
-  }
-
-  void _syncPadSoundIds() {
-    final draftIds = widget.draftSelectedIds;
-    if (draftIds != null) {
-      _padSoundIds = draftIds.toSet();
-      return;
-    }
-    final padItem = widget.notifier.state.pads
-        .where((p) => p.pad.id == widget.padId)
-        .firstOrNull;
-    _padSoundIds = padItem?.pad.sounds.map((s) => s.id).toSet() ?? const {};
-  }
-
-  Future<void> _loadSounds() async {
-    final all = await widget.notifier.getAllSounds();
-    if (!mounted) return;
-    setState(() {
-      _sounds = all;
-      _loading = false;
-    });
-  }
-
-  Future<void> _toggleSound(Sound sound) async {
-    if (_addingSoundIds.contains(sound.id) ||
-        _removingSoundIds.contains(sound.id)) {
-      return;
-    }
-    if (_padSoundIds.contains(sound.id)) {
-      await _removeSound(sound);
-    } else {
-      await _addSound(sound);
-    }
-  }
-
-  Future<void> _syncDraftPadVisual(List<int> draftIds) async {
-    final draftPadId = widget.draftPadId;
-    if (draftPadId == null) return;
-    await widget.notifier.updateDraftPadSounds(draftPadId, draftIds);
-  }
-
-  Future<void> _addSound(Sound sound) async {
-    if (_padSoundIds.contains(sound.id)) return;
-    final draftIds = widget.draftSelectedIds;
-    if (draftIds != null) {
-      draftIds.add(sound.id);
-      await _syncDraftPadVisual(draftIds);
-      if (!mounted) return;
-      setState(_syncPadSoundIds);
-      if (mounted) Navigator.of(context).pop();
-      return;
-    }
-    setState(() => _addingSoundIds.add(sound.id));
-    await widget.notifier.addSoundToPad(widget.padId!, sound.id);
-    if (!mounted) return;
-    setState(() {
-      _addingSoundIds.remove(sound.id);
-      _syncPadSoundIds();
-    });
-    widget.onPadUpdated?.call();
-  }
-
-  Future<void> _removeSound(Sound sound) async {
-    if (!_padSoundIds.contains(sound.id)) return;
-    final draftIds = widget.draftSelectedIds;
-    if (draftIds != null) {
-      draftIds.remove(sound.id);
-      await _syncDraftPadVisual(draftIds);
-      if (!mounted) return;
-      setState(_syncPadSoundIds);
-      return;
-    }
-    if (_padSoundIds.length <= 1) return;
-    setState(() => _removingSoundIds.add(sound.id));
-    await widget.notifier.removeSoundFromPad(widget.padId!, sound.id);
-    if (!mounted) return;
-    setState(() {
-      _removingSoundIds.remove(sound.id);
-      _syncPadSoundIds();
-    });
-    widget.onPadUpdated?.call();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final filtered = _filteredSounds;
-    return AppBottomSheetShell(
-      title: 'Ajouter des sons au pad',
-      header: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        child: SizedBox(
-          height: 40,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              _buildTypeChip(SoundType.soundEffect),
-              _buildTypeChip(SoundType.music),
-              _buildTypeChip(SoundType.ambiance),
-            ],
-          ),
-        ),
-      ),
-      bodyBuilder: (context, scrollController) {
-        if (_loading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (filtered.isEmpty) {
-          return Center(
-            child: Text(
-              'Aucun son',
-              style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
-          );
-        }
-        return ListView.builder(
-          controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-          itemCount: filtered.length,
-          itemBuilder: (_, i) {
-            final s = filtered[i];
-            final isOnPad = _padSoundIds.contains(s.id);
-            final isAdding = _addingSoundIds.contains(s.id);
-            final isRemoving = _removingSoundIds.contains(s.id);
-            final isBusy = isAdding || isRemoving;
-            final isDraft = widget.draftSelectedIds != null;
-            final canRemove =
-                isOnPad && !isBusy && (isDraft || _padSoundIds.length > 1);
-            final canAdd = !isOnPad && !isBusy;
-            final canToggle = canAdd || canRemove;
-            return Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                hoverColor: scheme.onSurface.withValues(alpha: 0.08),
-                splashColor: scheme.onSurface.withValues(alpha: 0.12),
-                onTap: canToggle ? () => unawaited(_toggleSound(s)) : null,
-                child: ListTile(
-                  tileColor: Colors.transparent,
-                  hoverColor: Colors.transparent,
-                  splashColor: Colors.transparent,
-                  focusColor: Colors.transparent,
-                  leading: SoundTypeAvatar(type: s.type, radius: 18),
-                  title: Text(s.displayName ?? s.title),
-                  subtitle: Text(s.typeDisplayLabel),
-                  trailing: isBusy
-                      ? SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: scheme.primary,
-                          ),
-                        )
-                      : isOnPad
-                          ? Icon(Icons.check_rounded, color: scheme.primary)
-                          : Icon(
-                              Icons.add_rounded,
-                              color: scheme.onSurfaceVariant,
-                            ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildTypeChip(SoundType type) {
-    final selected = _typeFilter == type;
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: FilterChip(
-        label: Text(type.label),
-        selected: selected,
-        showCheckmark: false,
-        visualDensity: VisualDensity.compact,
-        onSelected: (value) {
-          if (value) setState(() => _typeFilter = type);
-        },
-      ),
-    );
-  }
-}
