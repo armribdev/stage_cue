@@ -422,6 +422,9 @@ class GoogleDriveAuthenticator implements DriveAuthenticator {
   Future<void> restoreAccountProfile() => _delegate.restoreAccountProfile();
 
   @override
+  Future<void> refreshAccountProfile() => _delegate.refreshAccountProfile();
+
+  @override
   Future<void> signOut() => _delegate.signOut();
 }
 
@@ -483,6 +486,11 @@ class _MobileGoogleDriveAuthenticator implements DriveAuthenticator {
 
   @override
   Future<void> restoreAccountProfile() async {
+    await refreshAccountProfile();
+  }
+
+  @override
+  Future<void> refreshAccountProfile() async {
     await _googleSignIn.signInSilently();
   }
 

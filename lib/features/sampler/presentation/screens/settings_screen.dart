@@ -11,6 +11,7 @@ import '../../../../core/platform/saf_directory_bridge.dart';
 import '../../../../core/sync/drive_account_profile.dart';
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
+import '../../../../core/sync/drive_client.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../../../core/utils/layout_utils.dart';
@@ -23,6 +24,8 @@ import '../../data/models/indexing_progress.dart';
 import '../../domain/entities/library.dart' as domain;
 import '../../domain/entities/watched_path.dart' as domain;
 import '../providers/sync_controller.dart';
+import '../widgets/compact_switch.dart';
+import '../widgets/drive_sync_ui.dart';
 import 'sound_library_screen.dart';
 
 /// Écran des paramètres
@@ -32,6 +35,7 @@ class SettingsScreen extends StatefulWidget {
   final SyncController syncController;
   final AppPreferences appPreferences;
   final bool isModal;
+  final bool scrollToDriveSection;
 
   const SettingsScreen({
     super.key,
@@ -40,6 +44,7 @@ class SettingsScreen extends StatefulWidget {
     required this.syncController,
     required this.appPreferences,
     this.isModal = false,
+    this.scrollToDriveSection = false,
   });
 
   /// Page plein écran sur téléphone, modale sur tablette et desktop.
@@ -49,6 +54,7 @@ class SettingsScreen extends StatefulWidget {
     required LibraryRepository libraryRepository,
     required SyncController syncController,
     required AppPreferences appPreferences,
+    bool scrollToDriveSection = false,
   }) {
     return openAdaptiveScreen(
       context: context,
@@ -58,6 +64,7 @@ class SettingsScreen extends StatefulWidget {
         syncController: syncController,
         appPreferences: appPreferences,
         isModal: isModal,
+        scrollToDriveSection: scrollToDriveSection,
       ),
     );
   }
@@ -83,10 +90,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isInitialLoad = true;
   bool _isSyncBusy = false;
   bool _isDriveAuthBusy = false;
+  bool _shouldScrollToDriveSection = false;
+  final GlobalKey _driveSectionKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
+    _shouldScrollToDriveSection = widget.scrollToDriveSection;
     _initializeRepository();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Laisse la transition de navigation se terminer avant de lancer
@@ -105,6 +115,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _initializeRepository() {
     _repository = SoundRepository.fromDatabase(widget.database);
+  }
+
+  void _scrollToDriveSectionIfNeeded() {
+    if (!_shouldScrollToDriveSection) return;
+    _shouldScrollToDriveSection = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final sectionContext = _driveSectionKey.currentContext;
+      if (sectionContext == null) return;
+      Scrollable.ensureVisible(
+        sectionContext,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    });
   }
 
   Future<void> _reloadWatchedPaths() async {
@@ -128,7 +153,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     try {
-      await widget.libraryRepository.reconnectSilently();
+      if (isDriveAuthExpired(widget.syncController.state) ||
+          widget.libraryRepository.requiresInteractiveReconnect) {
+        await widget.libraryRepository.invalidateAuthSession();
+      } else {
+        await widget.libraryRepository.reconnectSilently();
+      }
 
       // Charger les dossiers locaux surveillés et les bibliothèques Drive
       final watchedPaths = await widget.database
@@ -157,6 +187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isLoading = false;
         _isInitialLoad = false;
       });
+      _scrollToDriveSectionIfNeeded();
       unawaited(_loadSafFolderInfo());
     } catch (e) {
       setState(() {
@@ -185,6 +216,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       if (!connected) return;
+      widget.syncController.clearAuthOfflineState();
+      await widget.libraryRepository.refreshConnectedAccountProfile();
+      await _loadDatabaseInfo();
     } on GoogleOAuthNotConfiguredException catch (e) {
       if (mounted) {
         showCopyableSnackBar(
@@ -258,7 +292,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildGoogleAccountAvatar(DriveAccountProfile account, {double radius = 22}) {
-    final photoUrl = account.photoUrl;
+    final photoUrl = account.photoUrlForDisplay(
+      sizePx: (radius * 2).round(),
+    );
     final size = radius * 2;
 
     Widget initialsAvatar() {
@@ -278,6 +314,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ClipOval(
       child: Image.network(
         photoUrl,
+        key: ValueKey(photoUrl),
         width: size,
         height: size,
         fit: BoxFit.cover,
@@ -298,88 +335,168 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAccountMenu(BuildContext context) {
-    if (_isDriveAuthBusy) {
-      return const SizedBox(
-        width: 24,
-        height: 24,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      );
-    }
-
-    final account = widget.libraryRepository.connectedAccountProfile;
+  Widget _buildDriveAccountHeader({
+    required SyncState syncState,
+    required bool authExpired,
+  }) {
     final scheme = Theme.of(context).colorScheme;
+    final account = widget.libraryRepository.connectedAccountProfile;
+    final sessionActive =
+        widget.libraryRepository.hasUsableDriveSession && !authExpired;
+    final signedIn = account != null;
 
-    if (account == null) {
-      return IconButton(
-        tooltip: 'Se connecter à Google Drive',
-        onPressed: _connectDriveAccount,
-        icon: Icon(Icons.account_circle_outlined, color: scheme.primary),
+    if (_isDriveAuthBusy) {
+      return const Row(
+        children: [
+          SizedBox(
+            width: 48,
+            height: 48,
+            child: Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+          SizedBox(width: 12),
+          Text('Connexion Google…'),
+        ],
       );
     }
 
-    const avatarRadius = 16.0;
-    const avatarSize = avatarRadius * 2;
+    if (!signedIn) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: scheme.primaryContainer,
+            child: Icon(Icons.account_circle_outlined, color: scheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Compte Google',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Connectez-vous pour synchroniser vos bibliothèques Drive.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          FilledButton.tonal(
+            onPressed: _connectDriveAccount,
+            child: const Text('Se connecter'),
+          ),
+        ],
+      );
+    }
 
-    return PopupMenuButton<String>(
-      tooltip: 'Compte Google',
-      offset: const Offset(0, 44),
-      padding: EdgeInsets.zero,
-      menuPadding: const EdgeInsets.symmetric(vertical: 4),
-      splashRadius: avatarRadius,
-      borderRadius: BorderRadius.circular(avatarRadius),
-      itemBuilder: (menuContext) => [
-        PopupMenuItem<String>(
-          height: 44,
-          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-          onTap: () {},
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      account.label,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+    final statusLabel = authExpired
+        ? 'Session expirée'
+        : sessionActive
+            ? 'Connecté'
+            : 'Session à renouveler';
+    final statusColor = authExpired
+        ? scheme.error
+        : sessionActive
+            ? scheme.primary
+            : scheme.tertiary;
+    final statusIcon = authExpired
+        ? Icons.cloud_off_outlined
+        : sessionActive
+            ? Icons.cloud_done_outlined
+            : Icons.cloud_queue;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildGoogleAccountAvatar(account, radius: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Compte Google',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 2),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    account.label,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  Text(
+                    account.email,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(statusIcon, size: 14, color: statusColor),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          statusLabel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: statusColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (authExpired) ...[
+                    const SizedBox(height: 4),
                     Text(
-                      account.email,
+                      'Reconnectez-vous pour synchroniser vos bibliothèques.',
                       style: TextStyle(
                         fontSize: 12,
                         color: scheme.onSurfaceVariant,
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
-              IconButton(
-                tooltip: 'Déconnecter',
-                onPressed: () {
-                  Navigator.of(menuContext).pop();
-                  unawaited(_disconnectDriveAccount());
-                },
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-                constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-                icon: Icon(
-                  Icons.logout_outlined,
-                  size: 20,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (!sessionActive)
+                  TextButton(
+                    onPressed: _connectDriveAccount,
+                    child: const Text('Renouveler'),
+                  )
+                else
+                  TextButton.icon(
+                    onPressed: _disconnectDriveAccount,
+                    icon: Icon(
+                      Icons.logout_outlined,
+                      size: 18,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    label: const Text('Déconnecter'),
+                  ),
+              ],
+            ),
+          ],
         ),
       ],
-      child: SizedBox(
-        width: avatarSize,
-        height: avatarSize,
-        child: _buildGoogleAccountAvatar(account, radius: avatarRadius),
-      ),
     );
   }
 
@@ -901,7 +1018,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         uploadSucceeded = syncStatus == SyncStatus.synced;
 
         if (syncStatus == SyncStatus.conflict) {
-          await _showSyncConflictDialog(currentLibrary);
+          await _resolveSyncConflict(currentLibrary);
           uploadSucceeded =
               widget.syncController.state.status == SyncStatus.synced;
         } else if (syncStatus == SyncStatus.offline) {
@@ -1015,117 +1132,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _removeWatchedPath(watchedPath);
   }
 
-  Future<void> _pullDriveLibrary(domain.Library library) async {
+  Future<void> _refreshAllFromDrive() async {
+    final connected =
+        _libraries.where((library) => library.isConnectedToDrive).toList();
+    if (connected.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Aucun dossier Drive indexé')),
+        );
+      }
+      return;
+    }
+
     setState(() => _isSyncBusy = true);
     try {
-      await widget.syncController.pullForLaunch(library);
+      for (final library in connected) {
+        await widget.syncController.pullForLaunch(library);
+        if (!mounted) return;
+
+        final progressKey = _driveProgressKey(library.id);
+        await widget.libraryRepository.indexDriveFolder(
+          library: library,
+          onProgress: (progress) {
+            if (mounted) {
+              setState(() {
+                _indexingProgress[progressKey] = progress;
+              });
+            }
+          },
+        );
+      }
+
       await _loadDatabaseInfo();
-
-      if (!mounted) return;
-
-      final progressKey = _driveProgressKey(library.id);
-      await widget.libraryRepository.indexDriveFolder(
-        library: library,
-        onProgress: (progress) {
-          if (mounted) {
-            setState(() {
-              _indexingProgress[progressKey] = progress;
-            });
-          }
-        },
-      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('« ${library.name} » est à jour'),
-            duration: const Duration(seconds: 2),
+          const SnackBar(
+            content: Text('Bibliothèque(s) Drive actualisée(s)'),
+            duration: Duration(seconds: 2),
           ),
         );
-        await _loadDatabaseInfo();
+      }
+    } on DriveAuthException {
+      await widget.syncController.handleAuthFailure();
+      if (mounted) {
+        showCopyableSnackBar(
+          context,
+          'Session Google expirée — reconnectez-vous via l\'icône compte.',
+        );
       }
     } catch (e) {
       if (mounted) {
-        showCopyableSnackBar(context, 'Erreur lors de la récupération : $e');
+        showCopyableSnackBar(context, 'Erreur lors de l\'actualisation : $e');
       }
     } finally {
       if (mounted) setState(() => _isSyncBusy = false);
     }
   }
 
-  Future<void> _syncDriveLibrary(domain.Library library) async {
+  Future<void> _resolveSyncConflict(domain.Library library) async {
     setState(() => _isSyncBusy = true);
     try {
-      await widget.syncController.syncNow(library);
-      await _loadDatabaseInfo();
-
-      if (!mounted) return;
-
-      if (widget.syncController.state.status == SyncStatus.conflict) {
-        await _showSyncConflictDialog(library);
-        return;
-      }
-
-      if (widget.syncController.state.status == SyncStatus.error) {
-        showCopyableSnackBar(
-          context,
-          widget.syncController.state.message ??
-              'Erreur lors de la synchronisation',
-        );
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('« ${library.name} » synchronisé vers Drive'),
-          duration: const Duration(seconds: 2),
-        ),
+      await showSyncConflictDialog(
+        context: context,
+        syncController: widget.syncController,
+        library: library,
+        onResolved: _loadDatabaseInfo,
       );
-    } catch (e) {
-      if (mounted) {
-        showCopyableSnackBar(
-          context,
-          'Erreur lors de la synchronisation : $e',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSyncBusy = false);
-    }
-  }
-
-  Future<void> _showSyncConflictDialog(domain.Library library) async {
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Conflit de synchronisation'),
-          content: const Text(
-            'Une version plus récente existe sur Drive. Quelle version garder ?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop('remote'),
-              child: const Text('Prendre Drive'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop('local'),
-              child: const Text('Garder local'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (!mounted || choice == null) return;
-
-    setState(() => _isSyncBusy = true);
-    try {
-      if (choice == 'local') {
-        await widget.syncController.keepLocal(library);
-      } else if (choice == 'remote') {
-        await widget.syncController.takeRemote(library);
-      }
-      await _loadDatabaseInfo();
     } finally {
       if (mounted) setState(() => _isSyncBusy = false);
     }
@@ -1187,135 +1260,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildDriveSyncMenu(domain.Library library) {
-    if (_isSyncBusy) {
-      return const SizedBox(
-        width: 32,
-        height: 32,
-        child: Padding(
-          padding: EdgeInsets.all(7),
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      );
-    }
-
+  Widget _buildDownloadAllButton(domain.Library library) {
     final scheme = Theme.of(context).colorScheme;
-    final iconColor = scheme.onSurfaceVariant.withValues(alpha: 0.55);
+    final downloadProgress = _downloadProgress[library.id];
+    final isDownloading =
+        downloadProgress != null && !downloadProgress.isComplete;
 
-    return PopupMenuButton<_DriveSyncAction>(
-      tooltip: 'Synchroniser',
+    return IconButton(
       padding: EdgeInsets.zero,
-      splashRadius: 16,
-      offset: const Offset(0, 36),
-      child: Icon(
-        Icons.sync,
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      visualDensity: VisualDensity.compact,
+      tooltip: 'Tout télécharger',
+      onPressed: isDownloading
+          ? null
+          : () => unawaited(_downloadAllLibraryAudio(library)),
+      icon: Icon(
+        Icons.download_for_offline_outlined,
         size: 20,
-        color: iconColor,
+        color: scheme.onSurfaceVariant.withValues(alpha: 0.55),
       ),
-      onSelected: (action) {
-        switch (action) {
-          case _DriveSyncAction.pull:
-            unawaited(_pullDriveLibrary(library));
-          case _DriveSyncAction.push:
-            unawaited(_syncDriveLibrary(library));
-          case _DriveSyncAction.downloadAll:
-            unawaited(_downloadAllLibraryAudio(library));
-        }
-      },
-      itemBuilder: (menuContext) => [
-        PopupMenuItem<_DriveSyncAction>(
-          value: _DriveSyncAction.pull,
-          height: 48,
-          child: Row(
-            children: [
-              Icon(
-                Icons.cloud_download_outlined,
-                size: 20,
-                color: scheme.primary,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text('Récupérer depuis Drive'),
-                    Text(
-                      'Appliquer la version distante',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        PopupMenuItem<_DriveSyncAction>(
-          value: _DriveSyncAction.push,
-          height: 48,
-          child: Row(
-            children: [
-              Icon(
-                Icons.cloud_upload_outlined,
-                size: 20,
-                color: scheme.primary,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text('Envoyer vers Drive'),
-                    Text(
-                      'Publier les changements locaux',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        PopupMenuItem<_DriveSyncAction>(
-          value: _DriveSyncAction.downloadAll,
-          height: 48,
-          enabled: _downloadProgress[library.id] == null ||
-              _downloadProgress[library.id]!.isComplete,
-          child: Row(
-            children: [
-              Icon(
-                Icons.download_for_offline_outlined,
-                size: 20,
-                color: scheme.primary,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text('Tout télécharger'),
-                    Text(
-                      'Rendre tous les sons disponibles hors-ligne',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -1609,60 +1572,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildDriveSection() {
-    return ListenableBuilder(
-      listenable: widget.appPreferences,
-      builder: (context, _) {
-        return _buildSettingsSectionCard(
-          title: _buildSectionTitleRow(
-            icon: Icons.cloud_outlined,
-            title: 'Google Drive',
-          ),
-          child: SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text(
-              'Activer le téléchargement automatique par défaut',
-            ),
-            subtitle: Text(
-              'À l\'ajout d\'un dossier Drive, télécharge les fichiers pour '
-              'classer correctement chaque son à l\'indexation.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            value: widget.appPreferences.autoDownloadDriveByDefault,
-            onChanged: (value) => unawaited(
-              widget.appPreferences.setAutoDownloadDriveByDefault(value),
-            ),
-          ),
-        );
-      },
-    );
-  }
+    final connectedCount =
+        _libraries.where((library) => library.isConnectedToDrive).length;
 
-  Widget _buildSamplerSection() {
-    return ListenableBuilder(
-      listenable: widget.appPreferences,
-      builder: (context, _) {
-        return _buildSettingsSectionCard(
-          title: _buildSectionTitleRow(
-            icon: Icons.grid_view_rounded,
-            title: 'Scène',
-          ),
-          child: SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Télécharger les sons ajoutés à un pad'),
-            subtitle: Text(
-              'Si connecté à Drive, les variantes sont récupérées dès l\'ajout.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+    return KeyedSubtree(
+      key: _driveSectionKey,
+      child: ListenableBuilder(
+        listenable: Listenable.merge([
+          widget.libraryRepository,
+          widget.syncController,
+          widget.appPreferences,
+        ]),
+        builder: (context, _) {
+          final scheme = Theme.of(context).colorScheme;
+          final syncState = widget.syncController.state;
+          final authExpired = isDriveAuthExpired(syncState);
+          return _buildSettingsSectionCard(
+            title: _buildSectionTitleRow(
+              icon: Icons.cloud_outlined,
+              title: 'Google Drive',
             ),
-            value: widget.appPreferences.autoDownloadPadSounds,
-            onChanged: (value) =>
-                unawaited(widget.appPreferences.setAutoDownloadPadSounds(value)),
-          ),
-        );
-      },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDriveAccountHeader(
+                  syncState: syncState,
+                  authExpired: authExpired,
+                ),
+                if (!authExpired && syncState.status != SyncStatus.idle) ...[
+                  const SizedBox(height: 12),
+                  SyncStatusBanner(state: syncState),
+                ],
+                const SizedBox(height: 12),
+                CompactSwitchListTile(
+                  title: const Text('Télécharger les sons ajoutés à un pad'),
+                  subtitle: Text(
+                    'Si connecté à Drive, les variantes sont récupérées dès l\'ajout.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  value: widget.appPreferences.autoDownloadPadSounds,
+                  onChanged: (value) => unawaited(
+                    widget.appPreferences.setAutoDownloadPadSounds(value),
+                  ),
+                ),
+                CompactSwitchListTile(
+                  title: const Text(
+                    'Activer le téléchargement automatique par défaut',
+                  ),
+                  subtitle: Text(
+                    'À l\'ajout d\'un dossier Drive, télécharge les fichiers pour '
+                    'classer correctement chaque son à l\'indexation.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  value: widget.appPreferences.autoDownloadDriveByDefault,
+                  onChanged: (value) => unawaited(
+                    widget.appPreferences.setAutoDownloadDriveByDefault(value),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -1670,23 +1645,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
-        SizedBox(
-          width: 28,
-          height: 20,
-          child: Transform.scale(
-            scale: 0.65,
-            alignment: Alignment.centerLeft,
-            child: Switch(
-              value: library.autoDownload,
-              onChanged: (value) async {
-                await widget.libraryRepository.setAutoDownload(
-                  library,
-                  value: value,
-                );
-                if (mounted) await _loadDatabaseInfo();
-              },
-            ),
-          ),
+        CompactSwitch(
+          value: library.autoDownload,
+          onChanged: (value) async {
+            await widget.libraryRepository.setAutoDownload(
+              library,
+              value: value,
+            );
+            if (mounted) await _loadDatabaseInfo();
+          },
         ),
         const SizedBox(width: 2),
         Text(
@@ -1816,8 +1783,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildSamplerSection(),
-                      const SizedBox(height: 16),
                       _buildDriveSection(),
                       const SizedBox(height: 16),
                       _buildSettingsSectionCard(
@@ -1989,7 +1954,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           if (!item.isLocal)
-                                            _buildDriveSyncMenu(
+                                            _buildDownloadAllButton(
                                               item.library!,
                                             ),
                                           SizedBox(width: 8),
@@ -2041,15 +2006,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final body = _buildSettingsBody();
 
-    final accountAction = ListenableBuilder(
-      listenable: widget.libraryRepository,
-      builder: (context, _) => _buildAccountMenu(context),
-    );
-
     if (widget.isModal) {
       return AppModalShell(
         title: 'Paramètres',
-        actions: [accountAction],
         body: body,
       );
     }
@@ -2057,12 +2016,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Paramètres'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: accountAction,
-          ),
-        ],
       ),
       body: body,
     );
@@ -2092,8 +2045,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
-
-enum _DriveSyncAction { pull, push, downloadAll }
 
 class _IndexedFolderItem {
   const _IndexedFolderItem.local(this.watchedPath) : library = null;

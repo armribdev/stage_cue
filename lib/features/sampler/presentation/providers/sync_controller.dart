@@ -36,12 +36,16 @@ class SyncState {
   /// Révision distante en cas de conflit (pour la résolution).
   final int? conflictRemoteRevision;
 
+  /// Bibliothèque concernée par le dernier conflit de push.
+  final int? conflictLibraryId;
+
   final String? message;
 
   const SyncState({
     this.status = SyncStatus.idle,
     this.lastSyncedAt,
     this.conflictRemoteRevision,
+    this.conflictLibraryId,
     this.message,
   });
 
@@ -49,6 +53,7 @@ class SyncState {
     SyncStatus? status,
     DateTime? lastSyncedAt,
     int? conflictRemoteRevision,
+    int? conflictLibraryId,
     bool clearConflict = false,
     String? message,
     bool clearMessage = false,
@@ -59,6 +64,9 @@ class SyncState {
       conflictRemoteRevision: clearConflict
           ? null
           : (conflictRemoteRevision ?? this.conflictRemoteRevision),
+      conflictLibraryId: clearConflict
+          ? null
+          : (conflictLibraryId ?? this.conflictLibraryId),
       message: clearMessage ? null : (message ?? this.message),
     );
   }
@@ -87,6 +95,9 @@ class SyncController extends ChangeNotifier {
   /// Dernière bibliothèque dont un push a été supprimé pendant la pause, à
   /// rejouer à la reprise.
   Library? _deferredPushLibrary;
+
+  /// Bibliothèque en cours de push (pour mémoriser l'origine d'un conflit).
+  Library? _pushInFlightLibrary;
 
   /// Appelé après chaque merge de snapshot Drive réussi (PullStaged).
   /// Permet au sampler de recharger ses boards sans redémarrage.
@@ -167,6 +178,7 @@ class SyncController extends ChangeNotifier {
       return;
     }
 
+    _pushInFlightLibrary = library;
     _set(_state.copyWith(status: SyncStatus.syncing, clearMessage: true));
     try {
       final outcome = await _repository.pushLibrary(library);
@@ -175,6 +187,8 @@ class SyncController extends ChangeNotifier {
       await _onAuthError();
     } catch (e) {
       _set(_state.copyWith(status: SyncStatus.error, message: e.toString()));
+    } finally {
+      _pushInFlightLibrary = null;
     }
   }
 
@@ -210,18 +224,7 @@ class SyncController extends ChangeNotifier {
           ));
       }
     } on DriveAuthException {
-      // Une erreur 401 au démarrage peut être transitoire (token en cours de
-      // rafraîchissement). On tente un refresh silencieux avant de déclencher
-      // la déconnexion, pour ne pas afficher « Session expirée » à tort.
-      final refreshed = await _repository.reconnectSilently();
-      if (refreshed) {
-        // Session restaurée : passer hors-ligne silencieusement.
-        // La prochaine synchro auto poussera les données.
-        _set(_state.copyWith(status: SyncStatus.offline));
-      } else {
-        // Impossible de restaurer la session : token révoqué ou invalide.
-        await _onAuthError();
-      }
+      await _onAuthError();
     } catch (e) {
       _set(_state.copyWith(status: SyncStatus.error, message: e.toString()));
     }
@@ -232,6 +235,7 @@ class SyncController extends ChangeNotifier {
     final remoteRevision = _state.conflictRemoteRevision;
     if (remoteRevision == null) return;
 
+    _pushInFlightLibrary = library;
     _set(_state.copyWith(status: SyncStatus.syncing, clearMessage: true));
     try {
       final outcome = await _repository.pushLibrary(
@@ -243,6 +247,8 @@ class SyncController extends ChangeNotifier {
       await _onAuthError();
     } catch (e) {
       _set(_state.copyWith(status: SyncStatus.error, message: e.toString()));
+    } finally {
+      _pushInFlightLibrary = null;
     }
   }
 
@@ -285,18 +291,32 @@ class SyncController extends ChangeNotifier {
         _set(_state.copyWith(
           status: SyncStatus.conflict,
           conflictRemoteRevision: remote.revision,
+          conflictLibraryId: _pushInFlightLibrary?.id,
         ));
     }
   }
 
   Future<bool> _ensureConnected() async {
-    if (_repository.isConnected) return true;
+    if (_repository.requiresInteractiveReconnect) {
+      return false;
+    }
     return _repository.reconnectSilently();
+  }
+
+  /// Session Google expirée ou révoquée : libère le client et signale l'état.
+  Future<void> handleAuthFailure() => _onAuthError();
+
+  /// Efface l'état hors-ligne après une reconnexion OAuth réussie.
+  void clearAuthOfflineState() {
+    if (_state.status != SyncStatus.offline || _state.message == null) {
+      return;
+    }
+    _set(_state.copyWith(status: SyncStatus.idle, clearMessage: true));
   }
 
   /// Libère la session HTTP et passe en offline sans effacer les tokens Google.
   Future<void> _onAuthError() async {
-    await _repository.releaseDriveSession();
+    await _repository.invalidateAuthSession();
     _set(_state.copyWith(
       status: SyncStatus.offline,
       clearConflict: true,

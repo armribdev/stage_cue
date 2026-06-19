@@ -36,6 +36,10 @@ void main() {
     repo = MockLibraryRepository();
     library = _library();
     when(() => repo.isConnected).thenReturn(true);
+    when(() => repo.requiresInteractiveReconnect).thenReturn(false);
+    when(() => repo.reconnectSilently()).thenAnswer((_) async => true);
+    when(() => repo.releaseDriveSession()).thenAnswer((_) async {});
+    when(() => repo.invalidateAuthSession()).thenAnswer((_) async {});
   });
 
   group('syncNow', () {
@@ -61,10 +65,12 @@ void main() {
 
       expect(controller.state.status, SyncStatus.conflict);
       expect(controller.state.conflictRemoteRevision, 5);
+      expect(controller.state.conflictLibraryId, 1);
     });
 
     test('non connecté et reconnexion impossible -> offline', () async {
       when(() => repo.isConnected).thenReturn(false);
+      when(() => repo.requiresInteractiveReconnect).thenReturn(false);
       when(() => repo.reconnectSilently()).thenAnswer((_) async => false);
       final controller = SyncController(repo);
 
@@ -93,6 +99,7 @@ void main() {
 
       expect(controller.state.status, SyncStatus.synced);
       expect(controller.state.conflictRemoteRevision, isNull);
+      expect(controller.state.conflictLibraryId, isNull);
       verify(() => repo.pushLibrary(any(), overrideKnownRevision: 5)).called(1);
     });
 

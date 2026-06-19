@@ -82,6 +82,9 @@ abstract class DriveAuthenticator {
   /// Restaure le profil compte depuis le stockage local (sans client HTTP actif).
   Future<void> restoreAccountProfile();
 
+  /// Recharge nom et photo depuis Google (après reconnexion OAuth).
+  Future<void> refreshAccountProfile();
+
   Future<void> signOut();
 
   /// Email du compte connecté, ou null si déconnecté.

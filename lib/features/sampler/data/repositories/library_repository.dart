@@ -66,6 +66,10 @@ class LibraryRepository extends ChangeNotifier {
 
   DriveClient? _activeClient;
 
+  /// Vrai après un 401 : bloque la reconnexion silencieuse jusqu'à un OAuth
+  /// interactif réussi (sinon [connectSilently] recrée un client périmé).
+  bool _requiresInteractiveReconnect = false;
+
   LibraryRepository(
     this._dataSource,
     this._authenticator,
@@ -96,6 +100,13 @@ class LibraryRepository extends ChangeNotifier {
       _authenticator.accountProfile;
   bool get isDriveSignedIn => _authenticator.accountProfile != null;
   bool get isConnected => _activeClient != null;
+
+  /// Session utilisable pour les appels API (pas seulement un client en cache).
+  bool get hasUsableDriveSession =>
+      _activeClient != null && !_requiresInteractiveReconnect;
+
+  /// OAuth interactif requis (token révoqué ou expiré).
+  bool get requiresInteractiveReconnect => _requiresInteractiveReconnect;
 
   void _notifyDriveSessionChanged() => notifyListeners();
 
@@ -153,6 +164,9 @@ class LibraryRepository extends ChangeNotifier {
 
   /// Client Drive actif ou reconnexion silencieuse (sans nouveau consentement).
   Future<GoogleDriveClient?> _ensureDriveClient() async {
+    if (_requiresInteractiveReconnect) {
+      return null;
+    }
     if (_activeClient is GoogleDriveClient) {
       return _activeClient as GoogleDriveClient;
     }
@@ -185,10 +199,29 @@ class LibraryRepository extends ChangeNotifier {
   /// déjà défini : les tokens Google expirent après ~1 h et l'API renverrait
   /// un 401 si on réutilisait un token périmé sans le renouveler.
   Future<bool> ensureDriveConnected() async {
+    if (_requiresInteractiveReconnect) {
+      if (_activeClient != null) {
+        _activeClient!.dispose();
+        _activeClient = null;
+      }
+      final client = await _authenticator.connect();
+      if (client == null) {
+        _notifyDriveSessionChanged();
+        return false;
+      }
+      _activeClient = client;
+      _requiresInteractiveReconnect = false;
+      await _authenticator.refreshAccountProfile();
+      _notifyDriveSessionChanged();
+      return true;
+    }
+
     final fresh = await _authenticator.connectSilently();
     if (fresh != null) {
       _activeClient?.dispose();
       _activeClient = fresh;
+      _requiresInteractiveReconnect = false;
+      await _authenticator.refreshAccountProfile();
       _notifyDriveSessionChanged();
       return true;
     }
@@ -205,6 +238,9 @@ class LibraryRepository extends ChangeNotifier {
       return false;
     }
     _activeClient = client;
+    _requiresInteractiveReconnect = false;
+    _notifyDriveSessionChanged();
+    await _authenticator.refreshAccountProfile();
     _notifyDriveSessionChanged();
     return true;
   }
@@ -319,30 +355,38 @@ class LibraryRepository extends ChangeNotifier {
   /// Reconnexion silencieuse au démarrage (réutilise une session existante).
   /// Retourne true si une session a pu être rétablie.
   ///
-  /// Idempotent : si la session est déjà active, retourne immédiatement true
-  /// sans rappeler les APIs d'authentification (évite les doubles appels
-  /// concurrents depuis AutoSyncCoordinator / SettingsScreen / LibrarySyncScreen).
+  /// Tente toujours [connectSilently] pour renouveler un access token expiré :
+  /// un [_activeClient] en cache ne garantit pas un token encore valide.
   Future<bool> reconnectSilently() async {
-    // Déjà connecté : ne pas rappeler connectSilently() inutilement.
-    // Sur Android, deux signInSilently() simultanés peuvent se perturber.
-    if (_activeClient != null) {
+    if (_requiresInteractiveReconnect) {
+      if (_activeClient != null) {
+        _activeClient!.dispose();
+        _activeClient = null;
+      }
+      await _authenticator.restoreAccountProfile();
+      _notifyDriveSessionChanged();
+      return false;
+    }
+
+    final previous = _activeClient;
+    final client = await _authenticator.connectSilently();
+    if (client != null) {
+      if (!identical(previous, client)) {
+        previous?.dispose();
+      }
+      _activeClient = client;
       _notifyDriveSessionChanged();
       return true;
     }
 
-    final client = await _authenticator.connectSilently();
-    if (client != null) {
-      _activeClient?.dispose();
-      _activeClient = client;
-      _notifyDriveSessionChanged();
-      await refreshLibraryOwnerEmails();
-    } else {
-      // Pas de client actif : restaurer au moins le profil (email, avatar)
-      // pour l'affichage, sans établir de session HTTP.
-      await _authenticator.restoreAccountProfile();
-      _notifyDriveSessionChanged();
+    if (_activeClient != null) {
+      _activeClient!.dispose();
+      _activeClient = null;
     }
-    return client != null;
+    // Pas de session HTTP : restaurer au moins le profil (email, avatar).
+    await _authenticator.restoreAccountProfile();
+    _notifyDriveSessionChanged();
+    return false;
   }
 
   /// Ferme la session HTTP active sans révoquer les tokens Google stockés.
@@ -350,6 +394,18 @@ class LibraryRepository extends ChangeNotifier {
     _activeClient?.dispose();
     _activeClient = null;
     _notifyDriveSessionChanged();
+  }
+
+  /// Recharge le profil Google (photo, nom) après reconnexion OAuth.
+  Future<void> refreshConnectedAccountProfile() async {
+    await _authenticator.refreshAccountProfile();
+    _notifyDriveSessionChanged();
+  }
+
+  /// Token expiré ou révoqué : libère la session et exige un OAuth interactif.
+  Future<void> invalidateAuthSession() async {
+    _requiresInteractiveReconnect = true;
+    await releaseDriveSession();
   }
 
   static final Set<String> _driveOwnerRefreshLogged = {};
@@ -434,20 +490,25 @@ class LibraryRepository extends ChangeNotifier {
     if (client == null || folderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
-    final outcome = await _syncService.push(
-      client: client,
-      libraryId: library.id,
-      libraryFolderId: folderId,
-      knownRevision: overrideKnownRevision ?? library.lastSyncedRevision,
-    );
-    if (outcome is PushSuccess) {
-      await _dataSource.updateSyncState(
-        id: library.id,
-        lastSyncedRevision: outcome.revision,
-        lastSyncedAt: DateTime.now(),
+    try {
+      final outcome = await _syncService.push(
+        client: client,
+        libraryId: library.id,
+        libraryFolderId: folderId,
+        knownRevision: overrideKnownRevision ?? library.lastSyncedRevision,
       );
+      if (outcome is PushSuccess) {
+        await _dataSource.updateSyncState(
+          id: library.id,
+          lastSyncedRevision: outcome.revision,
+          lastSyncedAt: DateTime.now(),
+        );
+      }
+      return outcome;
+    } on DriveAuthException {
+      await invalidateAuthSession();
+      rethrow;
     }
-    return outcome;
   }
 
   /// Télécharge et fusionne le snapshot distant de [library] s'il est plus récent.
@@ -457,20 +518,25 @@ class LibraryRepository extends ChangeNotifier {
     if (client == null || folderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
-    final outcome = await _syncService.pull(
-      client: client,
-      libraryId: library.id,
-      libraryFolderId: folderId,
-      knownRevision: library.lastSyncedRevision,
-    );
-    if (outcome is PullStaged) {
-      await _dataSource.updateSyncState(
-        id: library.id,
-        lastSyncedRevision: outcome.revision,
-        lastSyncedAt: DateTime.now(),
+    try {
+      final outcome = await _syncService.pull(
+        client: client,
+        libraryId: library.id,
+        libraryFolderId: folderId,
+        knownRevision: library.lastSyncedRevision,
       );
+      if (outcome is PullStaged) {
+        await _dataSource.updateSyncState(
+          id: library.id,
+          lastSyncedRevision: outcome.revision,
+          lastSyncedAt: DateTime.now(),
+        );
+      }
+      return outcome;
+    } on DriveAuthException {
+      await invalidateAuthSession();
+      rethrow;
     }
-    return outcome;
   }
 
   Future<Library?> getLibraryById(int id) => _dataSource.getLibraryById(id);
@@ -482,10 +548,15 @@ class LibraryRepository extends ChangeNotifier {
     if (client == null || folderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
-    return _syncService.hasRemoteSnapshot(
-      client: client,
-      libraryFolderId: folderId,
-    );
+    try {
+      return _syncService.hasRemoteSnapshot(
+        client: client,
+        libraryFolderId: folderId,
+      );
+    } on DriveAuthException {
+      await invalidateAuthSession();
+      rethrow;
+    }
   }
 
   /// Après liaison d'un dossier Drive : pull si BDD distante, indexation des
@@ -620,7 +691,7 @@ class LibraryRepository extends ChangeNotifier {
           )
           .timeout(const Duration(seconds: 10));
     } on DriveAuthException {
-      _invalidateDriveSession();
+      await invalidateAuthSession();
       return null;
     } catch (e, stack) {
       AudioLoadLog.severe(
@@ -630,12 +701,6 @@ class LibraryRepository extends ChangeNotifier {
       );
       return null;
     }
-  }
-
-  void _invalidateDriveSession() {
-    _activeClient?.dispose();
-    _activeClient = null;
-    _notifyDriveSessionChanged();
   }
 
   /// Résout le chemin local jouable d'un son.
@@ -977,6 +1042,9 @@ class LibraryRepository extends ChangeNotifier {
       );
 
       return indexedCount;
+    } on DriveAuthException {
+      await invalidateAuthSession();
+      rethrow;
     } catch (e) {
       onProgress?.call(
         IndexingProgress(
@@ -1235,6 +1303,7 @@ class LibraryRepository extends ChangeNotifier {
   Future<void> disconnect() async {
     _activeClient?.dispose();
     _activeClient = null;
+    _requiresInteractiveReconnect = false;
     await _authenticator.signOut();
     _notifyDriveSessionChanged();
   }
