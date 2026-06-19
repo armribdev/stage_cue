@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
-import '../../../../core/utils/string_utils.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../utils/sound_type_ui.dart';
+import '../widgets/tag_chips_editor.dart';
 
 /// Écran d'édition d'un son dans la bibliothèque.
 class SoundDetailsScreen extends StatefulWidget {
@@ -31,7 +31,6 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
   late int? _selectedColorValue;
   late double _selectedVolume;
   late Set<int> _selectedTagIds;
-  String _tagSearchQuery = '';
   bool _isSaving = false;
 
   static const List<Color> _defaultColorChoices = <Color>[
@@ -60,12 +59,8 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
   }
 
   Future<void> _save() async {
-    if (_isSaving) {
-      return;
-    }
-    setState(() {
-      _isSaving = true;
-    });
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
     try {
       await widget.repository.updateSoundSettings(
         id: widget.sound.id,
@@ -79,78 +74,18 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
         widget.sound.id,
         _selectedTagIds.toList(),
       );
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       showCopyableSnackBar(context, 'Erreur de sauvegarde: $error');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
-  }
-
-  List<TagItem> get _allTags {
-    final tagsById = <int, TagItem>{};
-    for (final category in widget.tagCatalog) {
-      for (final tag in category.tags) {
-        tagsById[tag.id] = tag;
-      }
-    }
-    final tags = tagsById.values.toList()
-      ..sort(
-        (a, b) => normalizeForSearch(a.name).compareTo(normalizeForSearch(b.name)),
-      );
-    return tags;
-  }
-
-  List<TagItem> get _selectedTags {
-    final selected = _allTags.where((tag) => _selectedTagIds.contains(tag.id)).toList();
-    selected.sort((a, b) => a.name.compareTo(b.name));
-    return selected;
-  }
-
-  List<TagItem> get _filteredTags {
-    final normalizedQuery = normalizeForSearch(_tagSearchQuery);
-    final matching = _allTags.where((tag) {
-      if (normalizedQuery.isEmpty) {
-        return true;
-      }
-      return normalizeForSearch(tag.name).contains(normalizedQuery);
-    }).toList();
-    matching.sort((a, b) {
-      final aSelected = _selectedTagIds.contains(a.id);
-      final bSelected = _selectedTagIds.contains(b.id);
-      if (aSelected != bSelected) {
-        return aSelected ? -1 : 1;
-      }
-      return a.name.compareTo(b.name);
-    });
-    return matching;
-  }
-
-  void _toggleTagSelection(TagItem tag, bool isSelected) {
-    setState(() {
-      if (isSelected) {
-        _selectedTagIds.add(tag.id);
-      } else {
-        _selectedTagIds.remove(tag.id);
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final selectedTags = _selectedTags;
-    final filteredTags = _filteredTags;
-
     return Scaffold(
       appBar: AppBar(
         title: Text('Édition du son "${widget.sound.title}"'),
@@ -181,9 +116,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
             const SizedBox(height: 8),
             TextFormField(
               initialValue: _displayNameValue,
-              onChanged: (value) {
-                _displayNameValue = value;
-              },
+              onChanged: (value) => _displayNameValue = value,
               decoration: InputDecoration(
                 hintText: widget.sound.title,
                 border: OutlineInputBorder(
@@ -206,22 +139,15 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
                   label: 'D',
                   color: null,
                   isSelected: _selectedColorValue == null,
-                  onTap: () {
-                    setState(() {
-                      _selectedColorValue = null;
-                    });
-                  },
+                  onTap: () => setState(() => _selectedColorValue = null),
                 ),
                 for (final color in _defaultColorChoices)
                   _buildColorChoice(
                     context: context,
                     color: color,
                     isSelected: _selectedColorValue == color.toARGB32(),
-                    onTap: () {
-                      setState(() {
-                        _selectedColorValue = color.toARGB32();
-                      });
-                    },
+                    onTap: () =>
+                        setState(() => _selectedColorValue = color.toARGB32()),
                   ),
               ],
             ),
@@ -242,64 +168,18 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
               min: 0.0,
               max: 1.0,
               label: '${(_selectedVolume * 100).round()}%',
-              onChanged: (value) {
-                setState(() {
-                  _selectedVolume = value.clamp(0.0, 1.0);
-                });
-              },
+              onChanged: (value) =>
+                  setState(() => _selectedVolume = value.clamp(0.0, 1.0)),
             ),
             const SizedBox(height: 8),
             Text('Tags', style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 8),
-            if (_allTags.isEmpty)
-              const Text('Aucun tag disponible')
-            else ...[
-              if (selectedTags.isNotEmpty) ...[
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final tag in selectedTags)
-                      InputChip(
-                        label: Text(tag.name),
-                        onDeleted: () => _toggleTagSelection(tag, false),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-              ],
-              TextField(
-                decoration: InputDecoration(
-                  hintText: 'Rechercher un tag...',
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onChanged: (value) {
-                  setState(() {
-                    _tagSearchQuery = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 8),
-              if (filteredTags.isEmpty)
-                const Text('Aucun tag trouvé')
-              else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final tag in filteredTags)
-                      FilterChip(
-                        label: Text(tag.name),
-                        selected: _selectedTagIds.contains(tag.id),
-                        onSelected: (selected) =>
-                            _toggleTagSelection(tag, selected),
-                      ),
-                  ],
-                ),
-            ],
+            TagChipsEditor(
+              tagCatalog: widget.tagCatalog,
+              selectedTagIds: _selectedTagIds,
+              onTagAdded: (id) => setState(() => _selectedTagIds.add(id)),
+              onTagRemoved: (id) => setState(() => _selectedTagIds.remove(id)),
+            ),
           ],
         ),
       ),
@@ -314,7 +194,6 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
     String? label,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    final borderColor = isSelected ? scheme.primary : scheme.outlineVariant;
     final effectiveColor = color ?? scheme.surfaceContainerHighest;
     return InkWell(
       borderRadius: BorderRadius.circular(20),
@@ -327,7 +206,10 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: effectiveColor,
-          border: Border.all(color: borderColor, width: isSelected ? 3 : 1),
+          border: Border.all(
+            color: isSelected ? scheme.primary : scheme.outlineVariant,
+            width: isSelected ? 3 : 1,
+          ),
         ),
         child: isSelected
             ? Icon(
@@ -338,20 +220,19 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
                     : _getCheckmarkColor(effectiveColor),
               )
             : (label != null
-                  ? Text(
-                      label,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  : null),
+                ? Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  )
+                : null),
       ),
     );
   }
 
-  Color _getCheckmarkColor(Color color) {
-    return color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
-  }
+  Color _getCheckmarkColor(Color color) =>
+      color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
 
   Widget _buildSoundTypeHeader(BuildContext context) {
     final type = widget.sound.type;
@@ -372,8 +253,8 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
               Text(
                 widget.sound.typeDisplayLabel,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
               ),
             ],
           ),
