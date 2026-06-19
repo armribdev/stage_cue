@@ -63,14 +63,119 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
 
   @override
   Future<void> restoreAccountProfile() async {
-    if (_cachedProfile != null) {
-      return;
-    }
+    await refreshAccountProfile();
+  }
+
+  @override
+  Future<void> refreshAccountProfile() async {
+    await _signIn.signInOffline();
     final stored = await _loadStoredCredentials();
     if (stored == null) {
+      _cachedProfile = null;
       return;
     }
-    _cachedProfile = await _resolveProfile(stored.credentials);
+    _cachedProfile = await _resolveProfileFromStored(stored);
+  }
+
+  /// Profil depuis le stockage local, avec userinfo via client à refresh auto.
+  Future<DriveAccountProfile?> _resolveProfileFromStored(
+    _StoredCredentials stored,
+  ) async {
+    final authClient = _createProfileAuthHttpClient(stored);
+    if (authClient == null) {
+      return _resolveProfile(stored.credentials);
+    }
+
+    try {
+      final fromIdToken = _profileFromIdToken(stored.credentials.idToken);
+      DriveAccountProfile? fromUserInfo;
+
+      for (final path in ['/oauth2/v3/userinfo', '/oauth2/v2/userinfo']) {
+        final response = await authClient.get(
+          Uri.https('www.googleapis.com', path),
+        );
+        if (response.statusCode != 200) {
+          continue;
+        }
+
+        final payload = jsonDecode(response.body) as Map<String, dynamic>;
+        final email = payload['email'] as String?;
+        if (email == null || email.isEmpty) {
+          continue;
+        }
+
+        fromUserInfo = DriveAccountProfile(
+          email: email,
+          displayName: payload['name'] as String?,
+          photoUrl: payload['picture'] as String?,
+        );
+        break;
+      }
+
+      if (fromIdToken == null && fromUserInfo == null) {
+        return null;
+      }
+      if (fromIdToken == null) {
+        return fromUserInfo;
+      }
+      if (fromUserInfo == null) {
+        return fromIdToken;
+      }
+
+      return DriveAccountProfile(
+        email: fromIdToken.email,
+        displayName: fromUserInfo.displayName ?? fromIdToken.displayName,
+        photoUrl: fromUserInfo.photoUrl ?? fromIdToken.photoUrl,
+      );
+    } finally {
+      authClient.close();
+    }
+  }
+
+  /// Client HTTP authentifié éphémère (sans écouter les mises à jour de token).
+  http.Client? _createProfileAuthHttpClient(_StoredCredentials stored) {
+    final credentials = stored.credentials;
+    final scopes =
+        credentials.scopes.isEmpty ? _kDriveScopes : credentials.scopes;
+    final expiry = stored.expiresAt;
+    final accessTokenExpiry = expiry == null || expiry.isBefore(DateTime.now())
+        ? DateTime.now().toUtc().subtract(const Duration(seconds: 1))
+        : expiry;
+    final refreshToken = credentials.refreshToken;
+
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      return auth.autoRefreshingClient(
+        auth.ClientId(
+          GoogleOAuthConfig.clientId,
+          GoogleOAuthConfig.clientSecret,
+        ),
+        auth.AccessCredentials(
+          auth.AccessToken(
+            credentials.tokenType ?? 'Bearer',
+            credentials.accessToken,
+            accessTokenExpiry,
+          ),
+          refreshToken,
+          scopes,
+          idToken: credentials.idToken,
+        ),
+        http.Client(),
+      );
+    }
+
+    return auth.authenticatedClient(
+      http.Client(),
+      auth.AccessCredentials(
+        auth.AccessToken(
+          credentials.tokenType ?? 'Bearer',
+          credentials.accessToken,
+          accessTokenExpiry,
+        ),
+        null,
+        scopes,
+        idToken: credentials.idToken,
+      ),
+    );
   }
 
   Future<DriveClient?> _clientForCredentials(
@@ -164,8 +269,6 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
     if (stored == null) {
       return null;
     }
-
-    _cachedProfile ??= await _resolveProfile(stored.credentials);
 
     final expiry = stored.expiresAt;
     final accessTokenExpiry = expiry == null || expiry.isBefore(DateTime.now())
@@ -289,11 +392,11 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
     GoogleSignInCredentials credentials,
   ) async {
     final fromIdToken = _profileFromIdToken(credentials.idToken);
-    if (fromIdToken != null && fromIdToken.photoUrl?.isNotEmpty == true) {
-      return fromIdToken;
-    }
-
     final fromUserInfo = await _profileFromUserInfo(credentials.accessToken);
+
+    if (fromIdToken == null && fromUserInfo == null) {
+      return null;
+    }
     if (fromIdToken == null) {
       return fromUserInfo;
     }
@@ -303,7 +406,7 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
 
     return DriveAccountProfile(
       email: fromIdToken.email,
-      displayName: fromIdToken.displayName ?? fromUserInfo.displayName,
+      displayName: fromUserInfo.displayName ?? fromIdToken.displayName,
       photoUrl: fromUserInfo.photoUrl ?? fromIdToken.photoUrl,
     );
   }
@@ -311,29 +414,32 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
   static Future<DriveAccountProfile?> _profileFromUserInfo(
     String accessToken,
   ) async {
-    try {
-      final response = await http.get(
-        Uri.https('www.googleapis.com', '/oauth2/v3/userinfo'),
-        headers: {'Authorization': 'Bearer $accessToken'},
-      );
-      if (response.statusCode != 200) {
-        return null;
-      }
+    for (final path in ['/oauth2/v3/userinfo', '/oauth2/v2/userinfo']) {
+      try {
+        final response = await http.get(
+          Uri.https('www.googleapis.com', path),
+          headers: {'Authorization': 'Bearer $accessToken'},
+        );
+        if (response.statusCode != 200) {
+          continue;
+        }
 
-      final payload = jsonDecode(response.body) as Map<String, dynamic>;
-      final email = payload['email'] as String?;
-      if (email == null || email.isEmpty) {
-        return null;
-      }
+        final payload = jsonDecode(response.body) as Map<String, dynamic>;
+        final email = payload['email'] as String?;
+        if (email == null || email.isEmpty) {
+          continue;
+        }
 
-      return DriveAccountProfile(
-        email: email,
-        displayName: payload['name'] as String?,
-        photoUrl: payload['picture'] as String?,
-      );
-    } catch (_) {
-      return null;
+        return DriveAccountProfile(
+          email: email,
+          displayName: payload['name'] as String?,
+          photoUrl: payload['picture'] as String?,
+        );
+      } catch (_) {
+        continue;
+      }
     }
+    return null;
   }
 
   static DriveAccountProfile? _profileFromIdToken(String? idToken) {

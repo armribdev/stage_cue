@@ -20,8 +20,8 @@ import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
+import '../widgets/drive_sync_ui.dart';
 import 'settings_screen.dart';
-import 'library_sync_screen.dart';
 import 'pad_details_screen.dart';
 import 'sound_library_manage_screen.dart';
 
@@ -400,14 +400,30 @@ class _SamplerScreenState extends State<SamplerScreen> {
     await _notifier.loadSounds();
   }
 
-  /// Ouvre la gestion de synchro Drive depuis la pastille ambiante de l'AppBar,
-  /// puis recharge scènes/sons (un pull a pu modifier la bibliothèque).
-  Future<void> _openLibrarySync() async {
-    await LibrarySyncScreen.open(
+  /// Ouvre Paramètres (section Drive) depuis la pastille ambiante, ou résout
+  /// un conflit directement si la pastille signale un état conflictuel.
+  Future<void> _openDriveSettings() async {
+    final syncController = widget.services.syncController;
+    if (syncController.state.status == SyncStatus.conflict) {
+      await resolveSyncConflictFromPill(
+        context: context,
+        syncController: syncController,
+        libraryRepository: widget.services.libraryRepository,
+        onResolved: () async {
+          if (!mounted) return;
+          await _notifier.loadBoards();
+        },
+      );
+      return;
+    }
+
+    await SettingsScreen.open(
       context,
+      database: _database,
       libraryRepository: widget.services.libraryRepository,
-      syncController: widget.services.syncController,
+      syncController: syncController,
       appPreferences: widget.services.appPreferences,
+      scrollToDriveSection: true,
     );
     if (!mounted) return;
     await _notifier.loadBoards();
@@ -1747,7 +1763,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onQuickSearch: () => unawaited(_openQuickSearch()),
                     syncStatus: _SyncStatusPill(
                       syncController: widget.services.syncController,
-                      onTap: _openLibrarySync,
+                      onTap: _openDriveSettings,
                     ),
                   )
                 : _SamplerAppBar(
@@ -1763,7 +1779,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onQuickSearch: () => unawaited(_openQuickSearch()),
                     syncStatus: _SyncStatusPill(
                       syncController: widget.services.syncController,
-                      onTap: _openLibrarySync,
+                      onTap: _openDriveSettings,
                     ),
                   ),
             drawer: isDesktop
@@ -1812,8 +1828,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
 ///
 /// Caché tant que la synchro est `idle` (aucun bruit pour un usage 100 % local) ;
 /// dès qu'une bibliothèque Drive est en jeu, il rend l'état d'un coup d'œil
-/// (couleur + libellé court) et ouvre la gestion de synchro au tap. Remplace
-/// l'enfouissement de la synchro dans Paramètres (refonte UX P1).
+/// (couleur + libellé court) et ouvre Paramètres (section Drive) au tap.
 class _SyncStatusPill extends StatelessWidget {
   final SyncController syncController;
   final VoidCallback onTap;

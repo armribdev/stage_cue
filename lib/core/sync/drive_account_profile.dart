@@ -25,4 +25,13 @@ class DriveAccountProfile {
     if (source.isEmpty) return '?';
     return source.substring(0, 1).toUpperCase();
   }
+
+  /// URL de photo normalisée pour l'affichage (taille fixe Google).
+  String? photoUrlForDisplay({int sizePx = 96}) {
+    final url = photoUrl;
+    if (url == null || url.isEmpty) return null;
+    if (!url.contains('googleusercontent.com')) return url;
+    final base = url.split('=').first;
+    return '$base=s$sizePx-c';
+  }
 }
