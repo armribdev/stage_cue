@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/database/database.dart' as db;
-import '../../../../core/utils/string_utils.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
-import '../../domain/entities/tag_item.dart';
 import '../providers/sampler_provider.dart';
 import '../widgets/app_form_dialog.dart';
 import '../widgets/sound_picker_overlay.dart';
+import '../widgets/tag_chips_editor.dart';
 import 'sound_details_screen.dart';
 
 /// Bibliothèque d'édition : utilise [SoundPickerOverlay] pour la navigation,
@@ -84,39 +83,10 @@ class SoundLibraryManageScreen {
     var selectedVolume = sound.volume.clamp(0.0, 1.0);
     var displayNameValue = sound.displayName ?? '';
     final selectedTagIds = initialTags.map((t) => t.id).toSet();
-    var tagAutocompleteText = '';
-    TextEditingController? tagAutocompleteFieldController;
 
     String? normalizedOrNull(String value) {
       final trimmed = value.trim();
       return trimmed.isEmpty ? null : trimmed;
-    }
-
-    List<TagItem> buildAllTags() {
-      final tagsById = <int, TagItem>{};
-      for (final category in tagCatalog) {
-        for (final tag in category.tags) {
-          tagsById[tag.id] = tag;
-        }
-      }
-      return tagsById.values.toList()
-        ..sort((a, b) =>
-            normalizeForSearch(a.name).compareTo(normalizeForSearch(b.name)));
-    }
-
-    List<TagItem> buildSelectedTags(List<TagItem> allTags) {
-      return allTags.where((t) => selectedTagIds.contains(t.id)).toList()
-        ..sort((a, b) => a.name.compareTo(b.name));
-    }
-
-    List<TagItem> buildAvailableTags(List<TagItem> allTags, String query) {
-      final q = normalizeForSearch(query);
-      return allTags.where((t) {
-        if (selectedTagIds.contains(t.id)) return false;
-        if (q.isEmpty) return true;
-        return normalizeForSearch(t.name).contains(q);
-      }).toList()
-        ..sort((a, b) => a.name.compareTo(b.name));
     }
 
     await showDialog<bool>(
@@ -204,140 +174,14 @@ class SoundLibraryManageScreen {
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 8),
-                      if (tagCatalog
-                          .where((c) => c.tags.isNotEmpty)
-                          .isEmpty)
-                        const Text('Aucun tag disponible')
-                      else
-                        Builder(
-                          builder: (context) {
-                            final allTags = buildAllTags();
-                            final selectedTags = buildSelectedTags(allTags);
-                            final availableTags = buildAvailableTags(
-                                allTags, tagAutocompleteText);
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (selectedTags.isNotEmpty) ...[
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      for (final tag in selectedTags)
-                                        _tagInputChip(
-                                          tag,
-                                          tagCatalog,
-                                          () => setDialogState(() =>
-                                              selectedTagIds.remove(tag.id)),
-                                        ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                ],
-                                Autocomplete<TagItem>(
-                                  displayStringForOption: (t) => t.name,
-                                  optionsBuilder: (v) => buildAvailableTags(
-                                      buildAllTags(), v.text),
-                                  onSelected: (tag) {
-                                    setDialogState(() {
-                                      selectedTagIds.add(tag.id);
-                                      tagAutocompleteText = '';
-                                    });
-                                    tagAutocompleteFieldController?.clear();
-                                  },
-                                  optionsViewBuilder: (ctx, onSelected, opts) {
-                                    final scheme =
-                                        Theme.of(ctx).colorScheme;
-                                    return Align(
-                                      alignment: Alignment.topLeft,
-                                      child: Material(
-                                        elevation: 4,
-                                        borderRadius: BorderRadius.circular(8),
-                                        clipBehavior: Clip.antiAlias,
-                                        child: ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                              maxHeight: 280),
-                                          child: ListView.builder(
-                                            padding: EdgeInsets.zero,
-                                            shrinkWrap: true,
-                                            itemCount: opts.length,
-                                            itemBuilder: (_, i) {
-                                              final tag = opts.elementAt(i);
-                                              final color = _categoryColor(
-                                                  tag.categoryId, tagCatalog);
-                                              return InkWell(
-                                                onTap: () => onSelected(tag),
-                                                child: Padding(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 10),
-                                                  child: Row(
-                                                    children: [
-                                                      Container(
-                                                        width: 10,
-                                                        height: 10,
-                                                        decoration: BoxDecoration(
-                                                          color: color ??
-                                                              scheme
-                                                                  .outlineVariant,
-                                                          shape:
-                                                              BoxShape.circle,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 10),
-                                                      Expanded(
-                                                        child: Text(
-                                                          tag.name,
-                                                          maxLines: 1,
-                                                          overflow:
-                                                              TextOverflow
-                                                                  .ellipsis,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  fieldViewBuilder: (ctx, ctrl, focus, submit) {
-                                    tagAutocompleteFieldController = ctrl;
-                                    return TextField(
-                                      controller: ctrl,
-                                      focusNode: focus,
-                                      decoration: InputDecoration(
-                                        labelText: 'Ajouter un tag',
-                                        hintText: 'Taper pour filtrer...',
-                                        prefixIcon: const Icon(Icons.search),
-                                        border: OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                      ),
-                                      onChanged: (v) => setDialogState(
-                                          () => tagAutocompleteText = v),
-                                      onSubmitted: (_) => submit(),
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: 8),
-                                if (allTags.isEmpty)
-                                  const Text('Aucun tag disponible')
-                                else if (availableTags.isEmpty)
-                                  Text(
-                                    tagAutocompleteText.trim().isEmpty
-                                        ? 'Tous les tags sont déjà ajoutés'
-                                        : 'Aucun tag pour cette recherche',
-                                  ),
-                              ],
-                            );
-                          },
-                        ),
+                      TagChipsEditor(
+                        tagCatalog: tagCatalog,
+                        selectedTagIds: selectedTagIds,
+                        onTagAdded: (id) =>
+                            setDialogState(() => selectedTagIds.add(id)),
+                        onTagRemoved: (id) =>
+                            setDialogState(() => selectedTagIds.remove(id)),
+                      ),
                     ],
                   ),
                 ),
@@ -374,28 +218,6 @@ class SoundLibraryManageScreen {
   }
 
   // ── Helpers UI ────────────────────────────────────────────────────────────
-
-  static Color? _categoryColor(
-      int categoryId, List<TagCategoryWithTags> catalog) {
-    for (final c in catalog) {
-      if (c.category.id == categoryId) return Color(c.category.color);
-    }
-    return null;
-  }
-
-  static Widget _tagInputChip(
-    TagItem tag,
-    List<TagCategoryWithTags> catalog,
-    VoidCallback onDeleted,
-  ) {
-    final color = _categoryColor(tag.categoryId, catalog);
-    return InputChip(
-      label: Text(tag.name),
-      backgroundColor: color?.withAlpha(24),
-      side: color == null ? null : BorderSide(color: color),
-      onDeleted: onDeleted,
-    );
-  }
 
   static Widget _colorSwatch({
     required BuildContext context,
