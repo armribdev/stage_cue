@@ -209,7 +209,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   bool _localOnly = false;
 
   // ── Recherche par tag ─────────────────────────────────────────────────────
-  Set<int> _tagMatchIds = const {};
+  // Un Set<int> par token (ordre identique à _normalizedTokens).
+  List<Set<int>> _tagMatchSetsPerToken = const [];
   String _tagToken = '';
   Timer? _tagDebounce;
 
@@ -364,16 +365,44 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     _scheduleTagsLoad();
   }
 
+  /// Tokens normalisés (≥ 2 chars) extraits de [_query].
+  List<String> get _normalizedTokens {
+    if (_query.trim().isEmpty) return const [];
+    return _query
+        .split(RegExp(r'[\s,]+'))
+        .map((t) => normalizeForSearch(t.trim()))
+        .where((t) => t.length >= 2)
+        .toList();
+  }
+
+  /// Tokens à mettre en gras : les tokens normalisés si disponibles,
+  /// sinon la requête entière normalisée (pour les mots courts / 1 token).
+  List<String> get _highlightTokens {
+    final tokens = _normalizedTokens;
+    if (tokens.isNotEmpty) return tokens;
+    final q = normalizeForSearch(_query);
+    return q.isEmpty ? const [] : [q];
+  }
+
   Future<void> _runTagSearch(String value) async {
     final norm = normalizeForSearch(value);
     _tagToken = norm;
     if (norm.isEmpty) {
-      if (mounted) setState(() => _tagMatchIds = const {});
+      if (mounted) setState(() => _tagMatchSetsPerToken = const []);
       return;
     }
-    final ids = await widget.notifier.findSoundIdsByTagQuery(value);
+    final tokens = value
+        .split(RegExp(r'[\s,]+'))
+        .map((t) => t.trim())
+        .where((t) => t.length >= 2)
+        .toList();
+    // Si aucun token valide (requête < 2 chars), cherche la requête entière.
+    final queries = tokens.isEmpty ? [value] : tokens;
+    final sets = await Future.wait(
+      queries.map((t) => widget.notifier.findSoundIdsByTagQuery(t)),
+    );
     if (!mounted || _tagToken != norm) return;
-    setState(() => _tagMatchIds = ids);
+    setState(() => _tagMatchSetsPerToken = sets);
     _scheduleTagsLoad();
   }
 
@@ -413,16 +442,43 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   List<Sound> get _results {
     final q = normalizeForSearch(_query);
+    final tokens = _normalizedTokens;
     final scored = <(Sound, int)>[];
     for (final sound in _all) {
       if (_effectiveTypeFilter != null &&
           !sound.matchesSoundType(_effectiveTypeFilter!)) { continue; }
       if (_favoritesOnly && !sound.isFavorite) { continue; }
       if (_effectiveLocalOnly && !_isLocal(sound)) { continue; }
-      final name = normalizeForSearch(sound.displayName ?? sound.title);
-      var score = fuzzyMatchScore(name, q);
-      if (score == null && _tagMatchIds.contains(sound.id)) score = 200;
-      if (q.isEmpty) score = 0;
+
+      int? score;
+      if (q.isEmpty) {
+        score = 0;
+      } else if (tokens.isEmpty) {
+        // Requête sans token valide (ex : 1 char) → fuzzy entier + tag fallback.
+        final name = normalizeForSearch(sound.displayName ?? sound.title);
+        score = fuzzyMatchScore(name, q);
+        if (score == null && _tagMatchSetsPerToken.isNotEmpty &&
+            _tagMatchSetsPerToken[0].contains(sound.id)) { score = 200; }
+      } else {
+        // Logique AND par token : chaque token doit matcher titre OU tag.
+        final name = normalizeForSearch(sound.displayName ?? sound.title);
+        var total = 0;
+        var allMatch = true;
+        for (var i = 0; i < tokens.length; i++) {
+          final ts = fuzzyMatchScore(name, tokens[i]);
+          if (ts != null) {
+            total += ts;
+          } else if (i < _tagMatchSetsPerToken.length &&
+                     _tagMatchSetsPerToken[i].contains(sound.id)) {
+            total += 200;
+          } else {
+            allMatch = false;
+            break;
+          }
+        }
+        if (allMatch) score = total;
+      }
+
       if (score == null) continue;
       scored.add((sound, score));
     }
@@ -959,8 +1015,11 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      sound.displayName ?? sound.title,
+                    Text.rich(
+                      buildHighlightedSpan(
+                        sound.displayName ?? sound.title,
+                        _highlightTokens,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1167,6 +1226,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   Widget _buildTagChip(ColorScheme scheme, TagItem tag) {
     final color = _categoryColor(tag.categoryId);
+    final matchingTokens = _highlightTokens
+        .where((t) => tag.normalizedName.contains(t))
+        .toList();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
@@ -1174,8 +1236,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         borderRadius: BorderRadius.circular(4),
         border: color == null ? null : Border.all(color: color),
       ),
-      child: Text(
-        tag.name,
+      child: Text.rich(
+        buildHighlightedSpan(tag.name, matchingTokens),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(fontSize: 10, color: color ?? scheme.onSurfaceVariant),
