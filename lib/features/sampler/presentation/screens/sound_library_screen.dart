@@ -31,6 +31,7 @@ class SoundLibraryScreenResult {
 /// Longueur minimale de la recherche pour ne pas reléguer les sons déjà en board.
 const int kMinPreciseSoundLibrarySearchLength = 5;
 
+
 /// Écran pour ajouter un son à la board.
 class SoundLibraryScreen extends StatefulWidget {
   final db.AppDatabase database;
@@ -250,10 +251,24 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     return null;
   }
 
-  Widget _buildTagChip(TagItem tag) {
+  List<String> get _normalizedSearchTokens {
+    if (_searchQuery.trim().isEmpty) return const [];
+    return _parseSearchTokens(_searchQuery)
+        .map(normalizeForSearch)
+        .where((t) => t.isNotEmpty)
+        .toList();
+  }
+
+  Widget _buildTagChip(TagItem tag, {List<String> highlightTokens = const []}) {
     final color = _getCategoryColor(tag.categoryId);
+    final matchingTokens = highlightTokens
+        .where((t) => tag.normalizedName.contains(t))
+        .toList();
     return Chip(
-      label: Text(tag.name, style: const TextStyle(fontSize: 11)),
+      label: Text.rich(
+        buildHighlightedSpan(tag.name, matchingTokens),
+        style: const TextStyle(fontSize: 11),
+      ),
       visualDensity: VisualDensity.compact,
       backgroundColor: color?.withAlpha(24),
       side: color == null ? null : BorderSide(color: color),
@@ -526,13 +541,18 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                           opacity: isInBoard ? 0.6 : 1.0,
                           child: ListTile(
                             leading: SoundTypeAvatar(type: sound.type),
-                            title: Text(
-                              sound.title,
+                            title: Text.rich(
+                              buildHighlightedSpan(
+                                sound.title,
+                                _normalizedSearchTokens,
+                              ),
                               style: TextStyle(
                                 fontWeight: isInBoard
                                     ? FontWeight.bold
                                     : FontWeight.normal,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -550,7 +570,11 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                                     spacing: 6,
                                     runSpacing: 6,
                                     children: [
-                                      for (final tag in tags) _buildTagChip(tag),
+                                      for (final tag in tags)
+                                        _buildTagChip(
+                                          tag,
+                                          highlightTokens: _normalizedSearchTokens,
+                                        ),
                                     ],
                                   ),
                                 ],
