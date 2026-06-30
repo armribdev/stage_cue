@@ -1,0 +1,40 @@
+name: CI
+
+# Vérifs légères sur chaque push et pull request : format, analyse statique, tests.
+# Aucun build de plateforme ici (voir release.yml pour ça).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  FLUTTER_VERSION: '3.44.1'
+  FLUTTER_CHANNEL: 'stable'
+
+jobs:
+  analyze-and-test:
+    name: Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - run: flutter pub get
+
+      # Codegen Drift requis avant analyse/tests (les *.g.dart ne sont pas versionnés).
+      - name: Codegen (Drift / build_runner)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Vérifier le formatage
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyse statique
+        run: dart analyze
+
+      - name: Tests
+        run: flutter test
