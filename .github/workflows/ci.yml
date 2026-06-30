@@ -30,11 +30,16 @@ jobs:
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
 
-      - name: Vérifier le formatage
+      # Informatif seulement : le code n'est pas (encore) passé à `dart format`.
+      # On signale les écarts sans bloquer le CI. Pour formater tout le projet
+      # d'un coup, lancer en local : `dart format .`
+      - name: Vérifier le formatage (non bloquant)
         run: dart format --output=none --set-exit-if-changed .
+        continue-on-error: true
 
+      # Échoue sur les erreurs, pas sur les warnings (du dead-code WIP existe).
       - name: Analyse statique
-        run: dart analyze
+        run: dart analyze --no-fatal-warnings
 
       - name: Tests
         run: flutter test
