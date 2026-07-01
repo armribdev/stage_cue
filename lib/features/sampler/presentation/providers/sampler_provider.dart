@@ -73,7 +73,11 @@ class SamplerNotifier extends ChangeNotifier {
 
   SamplerState _state = SamplerState(pads: []);
   SamplerState get state => _state;
-  bool get offlineMode => _state.offlineMode;
+  bool get offlineMode => isLiveOfflineMode;
+  bool get isLiveOfflineMode =>
+      _appPreferences?.isLiveOfflineMode ?? false;
+  bool get allowsSoundDownload =>
+      _appPreferences?.allowsSoundDownload ?? true;
   double get musicVolume => _music.musicVolume;
 
   bool get canUndoLastRemoval =>
@@ -87,6 +91,7 @@ class SamplerNotifier extends ChangeNotifier {
     AppPreferences? appPreferences,
   ]) : _appPreferences = appPreferences {
     _music = MusicController(this);
+    appPreferences?.addListener(_onConnectivityModeChanged);
   }
 
   /// Wrapper non-protected sur [notifyListeners] — permet à [MusicController]
@@ -111,22 +116,22 @@ class SamplerNotifier extends ChangeNotifier {
 
   Iterable<PadItem> _padsForMultipadNumbering() {
     return _state.pads.where(
-      (item) => !item.isDraft && (!_state.offlineMode || item.hasLocallyAvailableSound),
+      (item) =>
+          !item.isDraft &&
+          (!isLiveOfflineMode || item.hasLocallyAvailableSound),
     );
   }
 
-  Future<void> setOfflineMode(bool value) async {
-    if (_state.offlineMode == value) return;
-    _state = _state.copyWith(offlineMode: value);
-    if (value) {
+  void _onConnectivityModeChanged() {
+    if (isLiveOfflineMode) {
       _downloadQueue.cancelQueued((_, _) => true);
-      await _applyOfflineModeConstraints();
+      unawaited(_applyLiveOfflineConstraints());
     }
     _syncMultipadNumbers(_padsForMultipadNumbering());
     notifyListeners();
   }
 
-  Future<void> _applyOfflineModeConstraints() async {
+  Future<void> _applyLiveOfflineConstraints() async {
     final current = _state.currentMusicPad;
     if (current != null && !isPadVisibleInOfflineMode(current)) {
       await _music._stopMusicPad(current, manual: true);
@@ -474,7 +479,7 @@ class SamplerNotifier extends ChangeNotifier {
     padItem.syncSlotCount();
 
     for (var i = 0; i < pad.sounds.length; i++) {
-      if (_state.offlineMode && !padItem.slots[i].appearsReady) continue;
+      if (isLiveOfflineMode && !padItem.slots[i].appearsReady) continue;
       if (padItem.slots[i].isReady) continue;
       if (padItem.slots[i].availability == PadSoundAvailability.missingFile) {
         continue;
@@ -852,7 +857,7 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<void> _prefetchActiveBoard() async {
-    if (_state.offlineMode) return;
+    if (!allowsSoundDownload) return;
     final libraryRepository = _libraryRepository;
     if (libraryRepository == null) return;
 
@@ -1052,7 +1057,7 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<bool> downloadPadSoundAtIndex(PadItem padItem, int index) async {
-    if (_state.offlineMode) return false;
+    if (!allowsSoundDownload) return false;
     final resolved = _resolveBoardPadItem(padItem);
     if (index < 0 || index >= resolved.slots.length) return false;
     final slot = resolved.slots[index];
@@ -1134,7 +1139,7 @@ class SamplerNotifier extends ChangeNotifier {
     PadItem padItem, {
     int priority = _downloadPriorityTap,
   }) async {
-    if (_state.offlineMode) return _resolveBoardPadItem(padItem).isPlayable;
+    if (isLiveOfflineMode) return _resolveBoardPadItem(padItem).isPlayable;
     final resolved = _resolveBoardPadItem(padItem);
     try {
       return await _downloadQueue.enqueue<bool>(
@@ -1236,7 +1241,7 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<void> prepareBoardForOffline() async {
-    if (_state.offlineMode) return;
+    if (!allowsSoundDownload) return;
     if (_state.isBoardPreparing) return;
 
     final toDownload = _state.pads.where(isPadPreparable).toList();
@@ -1266,7 +1271,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   bool _slotEligibleForPlayback(PadItem padItem, int index) {
     if (!padItem.slots[index].isReady) return false;
-    if (_state.offlineMode && !padItem.slots[index].appearsReady) return false;
+    if (isLiveOfflineMode && !padItem.slots[index].appearsReady) return false;
     return true;
   }
 
@@ -1688,6 +1693,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
+    _appPreferences?.removeListener(_onConnectivityModeChanged);
     _downloadQueue.dispose();
     stopAllPreviews();
     for (final padItem in _state.pads) {
@@ -1740,7 +1746,7 @@ class SamplerNotifier extends ChangeNotifier {
     try {
       final path = await _resolvePlayablePath(
         sound,
-        downloadIfNeeded: !_state.offlineMode,
+        downloadIfNeeded: allowsSoundDownload,
       );
       final player = await AudioPlayerService.create(path);
       _previewPlayers.add(player);

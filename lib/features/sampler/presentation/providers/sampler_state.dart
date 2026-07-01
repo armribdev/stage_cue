@@ -31,8 +31,6 @@ class SamplerState {
   final int boardPrepareDone;
   /// Nombre total de pads à télécharger pendant la préparation.
   final int boardPrepareTotal;
-  /// Masque les pads sans son local et n'autorise que la lecture hors-ligne.
-  final bool offlineMode;
 
   SamplerState({
     required this.pads,
@@ -47,7 +45,6 @@ class SamplerState {
     this.isBoardPreparing = false,
     this.boardPrepareDone = 0,
     this.boardPrepareTotal = 0,
-    this.offlineMode = false,
   });
 
   /// Prochaine musique en file d'attente.
@@ -79,7 +76,6 @@ class SamplerState {
     bool? isBoardPreparing,
     int? boardPrepareDone,
     int? boardPrepareTotal,
-    bool? offlineMode,
   }) {
     return SamplerState(
       pads: pads ?? this.pads,
@@ -104,7 +100,6 @@ class SamplerState {
       isBoardPreparing: isBoardPreparing ?? this.isBoardPreparing,
       boardPrepareDone: boardPrepareDone ?? this.boardPrepareDone,
       boardPrepareTotal: boardPrepareTotal ?? this.boardPrepareTotal,
-      offlineMode: offlineMode ?? this.offlineMode,
     );
   }
 }

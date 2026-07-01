@@ -34,10 +34,12 @@ class AppServices {
     final repository = SoundRepository.fromDatabase(database);
     final libraryRepository = LibraryRepository.fromDatabase(database);
     final syncController = SyncController(libraryRepository);
+    final appPreferences = AppPreferences();
     final autoSyncCoordinator = AutoSyncCoordinator(
       database,
       libraryRepository,
       syncController,
+      appPreferences,
     );
     // Démarre l'écoute des modifications + le pull initial au lancement.
     autoSyncCoordinator.start();
@@ -49,7 +51,7 @@ class AppServices {
       autoSyncCoordinator: autoSyncCoordinator,
       loadSoundsUseCase: LoadSoundsUseCase(repository),
       removeSoundFromBoardUseCase: RemoveSoundFromBoardUseCase(repository),
-      appPreferences: AppPreferences(),
+      appPreferences: appPreferences,
     );
   }
 
