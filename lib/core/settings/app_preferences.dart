@@ -133,7 +133,7 @@ class AppPreferences extends ChangeNotifier {
   }
 
   Future<File> _preferencesFile() async {
-    final docs = await getApplicationDocumentsDirectory();
+    final docs = await getApplicationSupportDirectory();
     final dir = Directory(p.join(docs.path, _subdir));
     if (!await dir.exists()) {
       await dir.create(recursive: true);

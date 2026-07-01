@@ -723,7 +723,7 @@ class LocalSoundDataSource {
         ),
       );
 
-      final docs = await getApplicationDocumentsDirectory();
+      final docs = await getApplicationSupportDirectory();
       final cacheRoot = SafDirectoryBridge.cacheRootForWatchedPath(
         watchedPathId,
         docs.path,
@@ -872,7 +872,7 @@ class LocalSoundDataSource {
         )..where((s) => s.id.equals(sound.id))).go();
       }
 
-      final docs = await getApplicationDocumentsDirectory();
+      final docs = await getApplicationSupportDirectory();
       final cacheDir = Directory(
         SafDirectoryBridge.cacheRootForWatchedPath(watchedPathId, docs.path),
       );

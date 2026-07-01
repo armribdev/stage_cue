@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart' show OrderingTerm;
 import '../../../../core/database/database.dart' as db;
@@ -170,9 +169,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Charger tous les sons de la base de données
       final sounds = await widget.database.select(widget.database.sounds).get();
 
-      // Obtenir le chemin de la base de données
-      final directory = await getApplicationDocumentsDirectory();
-      final dbFile = File(p.join(directory.path, db.kDbFileName));
+      // Obtenir le chemin de la base de données (source de vérité unique)
+      final dbFile = await db.resolveDatabaseFile();
 
       int dbSize = 0;
       if (await dbFile.exists()) {
