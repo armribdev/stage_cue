@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import '../providers/sampler_provider.dart';
 import 'pad_button.dart';
 
-/// Widget affichant un pad dans la grille (animations, mode édition).
+/// Widget affichant un pad dans la grille (animations, suppression, surbrillance).
 class PadCard extends StatefulWidget {
   final PadItem padItem;
-  final bool isEditMode;
+
+  /// Mode classique éditable : affiche la croix de suppression et autorise le
+  /// déplacement. Aucun wiggle — les affordances d'édition sont permanentes.
+  final bool isEditable;
+
   /// Petit pop d'apparition (ex. annulation).
   final bool animateOnRestore;
+
   /// Bordure discrète pour indiquer le pad ciblé (ex. retour bibliothèque).
   final bool isHighlighted;
   final bool Function(PadItem padItem) isTapBlocked;
@@ -15,16 +20,20 @@ class PadCard extends StatefulWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onRemove;
 
+  /// Ouvre les détails du pad (bouton crayon en mode classique éditable).
+  final VoidCallback? onEdit;
+
   const PadCard({
     super.key,
     required this.padItem,
-    required this.isEditMode,
+    required this.isEditable,
     required this.isTapBlocked,
     this.animateOnRestore = false,
     this.isHighlighted = false,
     this.onTap,
     this.onLongPress,
     this.onRemove,
+    this.onEdit,
   });
 
   @override
@@ -32,10 +41,6 @@ class PadCard extends StatefulWidget {
 }
 
 class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
-  static const double _maxRotationRadians = 0.012;
-  static const double _maxOffsetX = 0.6;
-  late final AnimationController _controller;
-  late final Animation<double> _wiggle;
   late final AnimationController _deleteController;
   late final Animation<double> _deleteScale;
   late final AnimationController _restoreController;
@@ -44,38 +49,27 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
   late final Animation<double> _highlightFade;
   late final AnimationController _highlightBreathController;
   bool _animationsDisabled = false;
-  late final double _amplitudeFactor;
-  late final double _speedFactor;
-  late final double _phaseSign;
 
   @override
   void initState() {
     super.initState();
-    final seed = widget.padItem.pad.id;
-    _amplitudeFactor = 0.85 + ((seed % 5) * 0.05);
-    _speedFactor = 0.9 + ((seed % 4) * 0.06);
-    _phaseSign = seed.isEven ? 1.0 : -1.0;
-    _controller = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: (180 / _speedFactor).round()),
-    );
-    _wiggle = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
-    _controller.value = (seed % 100) / 100;
     _deleteController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 140),
     );
     _deleteScale = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 0.95).chain(
-          CurveTween(curve: Curves.easeOut),
-        ),
+        tween: Tween<double>(
+          begin: 1.0,
+          end: 0.95,
+        ).chain(CurveTween(curve: Curves.easeOut)),
         weight: 45,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 0.95, end: 1.0).chain(
-          CurveTween(curve: Curves.easeOutBack),
-        ),
+        tween: Tween<double>(
+          begin: 0.95,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOutBack)),
         weight: 55,
       ),
     ]).animate(_deleteController);
@@ -108,7 +102,6 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
     if (widget.isHighlighted) {
       _applyHighlighted(true);
     }
-    _syncAnimationState();
   }
 
   void _onHighlightFadeStatus(AnimationStatus status) {
@@ -156,9 +149,6 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(covariant PadCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isEditMode != widget.isEditMode) {
-      _syncAnimationState();
-    }
     if (!oldWidget.animateOnRestore &&
         widget.animateOnRestore &&
         !widget.isHighlighted &&
@@ -170,23 +160,12 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
     }
   }
 
-  void _syncAnimationState() {
-    if (!mounted) return;
-    if (widget.isEditMode && !_animationsDisabled) {
-      _controller.repeat(reverse: true);
-    } else {
-      _controller.stop();
-      _controller.value = 0.0;
-    }
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final disabled = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     if (disabled != _animationsDisabled) {
       _animationsDisabled = disabled;
-      _syncAnimationState();
       _applyHighlighted(widget.isHighlighted);
     }
   }
@@ -198,7 +177,6 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
     _highlightFadeController.dispose();
     _restoreController.dispose();
     _deleteController.dispose();
-    _controller.dispose();
     super.dispose();
   }
 
@@ -222,7 +200,7 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final deleteButton = widget.isEditMode && widget.onRemove != null
+    final deleteButton = widget.isEditable && widget.onRemove != null
         ? Positioned(
             top: 6,
             right: 6,
@@ -238,23 +216,32 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
           )
         : null;
 
+    final editButton = widget.isEditable && widget.onEdit != null
+        ? Positioned(
+            top: 6,
+            left: 6,
+            child: IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              tooltip: 'Modifier le pad',
+              onPressed: widget.onEdit,
+              color: Colors.grey.shade600,
+              splashRadius: 16,
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+          )
+        : null;
+
     final scheme = Theme.of(context).colorScheme;
 
     return AnimatedBuilder(
       animation: Listenable.merge([
-        _wiggle,
+        _deleteController,
         _restoreCurve,
         _highlightFadeController,
         _highlightBreathController,
       ]),
       builder: (context, child) {
-        final t = (_wiggle.value * 2.0) - 1.0;
-        final rotation = widget.isEditMode
-            ? t * _maxRotationRadians * _phaseSign * _amplitudeFactor
-            : 0.0;
-        final offsetX = widget.isEditMode
-            ? t * _maxOffsetX * _phaseSign * _amplitudeFactor
-            : 0.0;
         final deleteScale = _animationsDisabled ? 1.0 : _deleteScale.value;
         final restoreT = _animationsDisabled ? 1.0 : _restoreCurve.value;
         final useRestorePop =
@@ -273,52 +260,47 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
 
         final overlayScale = 1.0 + (fade * (0.01 + (0.008 * breath)));
 
-        return Transform.translate(
-          offset: Offset(offsetX, 0),
-          child: Transform.rotate(
-            angle: rotation,
-            child: Transform.scale(
-              scale: scale,
-              child: Opacity(
-                opacity: opacity,
-                child: Stack(
-                  children: [
-                    RepaintBoundary(child: child!),
-                    if (fade > 0)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: Transform.scale(
-                            scale: overlayScale,
-                            child: Opacity(
-                              opacity: fade.clamp(0.0, 1.0),
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: scheme.primary.withValues(
-                                        alpha: 0.1 + (0.06 * breath),
-                                      ),
-                                      blurRadius: 10 + (2 * breath),
-                                      spreadRadius: 0,
-                                    ),
-                                  ],
-                                  border: Border.all(
-                                    color: scheme.primary.withValues(
-                                      alpha: 0.3 + (0.15 * breath),
-                                    ),
-                                    width: 2,
+        return Transform.scale(
+          scale: scale,
+          child: Opacity(
+            opacity: opacity,
+            child: Stack(
+              children: [
+                RepaintBoundary(child: child!),
+                if (fade > 0)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Transform.scale(
+                        scale: overlayScale,
+                        child: Opacity(
+                          opacity: fade.clamp(0.0, 1.0),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: scheme.primary.withValues(
+                                    alpha: 0.1 + (0.06 * breath),
                                   ),
+                                  blurRadius: 10 + (2 * breath),
+                                  spreadRadius: 0,
                                 ),
+                              ],
+                              border: Border.all(
+                                color: scheme.primary.withValues(
+                                  alpha: 0.3 + (0.15 * breath),
+                                ),
+                                width: 2,
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ?deleteButton,
-                  ],
-                ),
-              ),
+                    ),
+                  ),
+                ?editButton,
+                ?deleteButton,
+              ],
             ),
           ),
         );
@@ -329,8 +311,7 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
       child: ListenableBuilder(
         listenable: widget.padItem.revision,
         builder: (context, _) {
-          final blocked =
-              widget.isEditMode || widget.isTapBlocked(widget.padItem);
+          final blocked = widget.isTapBlocked(widget.padItem);
           return PadButton(
             key: ValueKey<int>(widget.padItem.pad.id),
             padItem: widget.padItem,
