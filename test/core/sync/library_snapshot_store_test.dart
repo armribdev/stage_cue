@@ -67,6 +67,43 @@ void main() {
     expect(sounds.first.relativePath, 'clap.wav');
   });
 
+  test('le round-trip snapshot préserve driveFileId (identité forte)', () async {
+    const localRoot = '/device/cache';
+    final libraryId = await database.into(database.libraries).insert(
+          db.LibrariesCompanion.insert(
+            name: 'Test Drive',
+            localRootPath: localRoot,
+          ),
+        );
+
+    await database.into(database.sounds).insert(
+          db.SoundsCompanion.insert(
+            title: 'clap.wav',
+            filePath: '/other/device/cache/clap.wav',
+            type: const Value(SoundType.soundEffect),
+            libraryId: Value(libraryId),
+            relativePath: const Value('clap.wav'),
+            driveFileId: const Value('DRIVE_ID_42'),
+          ),
+        );
+
+    final snapshotPath = p.join(tempDir.path, 'library.db');
+    await store.exportLibrarySnapshot(libraryId, snapshotPath);
+
+    await (database.delete(database.sounds)
+          ..where((s) => s.libraryId.equals(libraryId)))
+        .go();
+
+    await store.mergeLibrarySnapshot(libraryId, snapshotPath);
+
+    final sounds = await (database.select(database.sounds)
+          ..where((s) => s.libraryId.equals(libraryId)))
+        .get();
+
+    expect(sounds, hasLength(1));
+    expect(sounds.first.driveFileId, 'DRIVE_ID_42');
+  });
+
   test('mergeLibrarySnapshot normalise relativePath legacy sounds/', () async {
     const localRoot = '/device/cache';
     final libraryId = await database.into(database.libraries).insert(

@@ -27,7 +27,8 @@ class LibrarySnapshotStore {
       await _database.customStatement('''
         CREATE TABLE snap.sounds AS
         SELECT id, title, display_name, file_path, type, color, volume,
-               created_at, library_id, relative_path, content_hash
+               created_at, library_id, relative_path, content_hash,
+               drive_file_id
         FROM sounds WHERE library_id = $libraryId
       ''');
       await _database.customStatement('''
@@ -216,6 +217,9 @@ class LibrarySnapshotStore {
             .customSelect('SELECT * FROM snap.sounds ORDER BY id')
             .get();
 
+    // Les snapshots pré-v24 n'ont pas la colonne d'identité forte.
+    final hasDriveFileId = await _snapColumnExists('sounds', 'drive_file_id');
+
     for (final row in rows) {
       final snapId = row.read<int>('id');
       final rawRelativePath = row.read<String?>('relative_path');
@@ -223,6 +227,8 @@ class LibrarySnapshotStore {
           ? LibrarySoundPaths.normalizeRelativePath(rawRelativePath)
           : null;
       final contentHash = row.read<String?>('content_hash');
+      final driveFileId =
+          hasDriveFileId ? row.read<String?>('drive_file_id') : null;
       final filePath = relativePath != null && localRootPath != null
           ? LibrarySoundPaths.localPathFor(localRootPath, relativePath)
           : row.read<String>('file_path');
@@ -242,6 +248,7 @@ class LibrarySnapshotStore {
               libraryId: Value(libraryId),
               relativePath: Value(relativePath),
               contentHash: Value(contentHash),
+              driveFileId: Value(driveFileId),
             ),
           );
       _soundIdMap[snapId] = newId;

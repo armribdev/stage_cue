@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration {
@@ -194,6 +194,13 @@ class AppDatabase extends _$AppDatabase {
               },
             ),
           );
+        }
+        if (from < 24) {
+          // Identité forte des sons Drive : l'ID de fichier Drive (stable au
+          // renommage/déplacement) devient la clé de déduplication et de
+          // réconciliation, en remplacement de l'heuristique par chemin/nom.
+          // Backfill par un scan Drive ultérieur (indexDriveFolder) — null OK.
+          await m.addColumn(sounds, sounds.driveFileId);
         }
       },
       beforeOpen: (details) async {

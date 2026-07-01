@@ -4,7 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_tokens.dart';
 
-typedef BoardCreationResult = ({String name, int? color});
+typedef BoardCreationResult = ({String name, int? color, int? libraryId});
+
+/// Destination proposée à la création d'un board : le local ou une bibliothèque
+/// Drive connectée. `id` null n'existe pas ici — le local est représenté par
+/// l'absence de sélection (`libraryId` null dans le résultat).
+typedef BoardLibraryOption = ({int id, String name});
 
 /// Dialog réutilisable pour uniformiser les formulaires de l'application.
 class AppFormDialog extends StatelessWidget {
@@ -289,17 +294,34 @@ const _kBoardColors = <int>[
 
 /// Dialogue de création de scène avec saisie du nom et choix de couleur.
 class AppBoardCreationDialog extends StatefulWidget {
-  const AppBoardCreationDialog({super.key, required this.suggestedName});
+  const AppBoardCreationDialog({
+    super.key,
+    required this.suggestedName,
+    this.libraries = const [],
+    this.initialLibraryId,
+  });
 
   final String suggestedName;
+
+  /// Bibliothèques Drive proposables. Vide → pas de sélecteur (board local).
+  final List<BoardLibraryOption> libraries;
+
+  /// Destination pré-sélectionnée ; null = local.
+  final int? initialLibraryId;
 
   static Future<BoardCreationResult?> show(
     BuildContext context, {
     required String suggestedName,
+    List<BoardLibraryOption> libraries = const [],
+    int? initialLibraryId,
   }) {
     return showDialog<BoardCreationResult>(
       context: context,
-      builder: (_) => AppBoardCreationDialog(suggestedName: suggestedName),
+      builder: (_) => AppBoardCreationDialog(
+        suggestedName: suggestedName,
+        libraries: libraries,
+        initialLibraryId: initialLibraryId,
+      ),
     );
   }
 
@@ -311,12 +333,14 @@ class _AppBoardCreationDialogState extends State<AppBoardCreationDialog> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
   int? _selectedColor;
+  int? _selectedLibraryId;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController();
     _focusNode = FocusNode();
+    _selectedLibraryId = widget.initialLibraryId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_focusNode.canRequestFocus && !_focusNode.hasFocus) {
         _focusNode.requestFocus();
@@ -334,7 +358,9 @@ class _AppBoardCreationDialogState extends State<AppBoardCreationDialog> {
   void _submit() {
     final raw = _controller.text.trim();
     final name = raw.isEmpty ? widget.suggestedName : raw;
-    Navigator.of(context).pop((name: name, color: _selectedColor));
+    Navigator.of(context).pop(
+      (name: name, color: _selectedColor, libraryId: _selectedLibraryId),
+    );
   }
 
   @override
@@ -402,6 +428,22 @@ class _AppBoardCreationDialogState extends State<AppBoardCreationDialog> {
               selected: _selectedColor,
               onSelect: (c) => setState(() => _selectedColor = c),
             ),
+            if (widget.libraries.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'Destination',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _DestinationSelector(
+                libraries: widget.libraries,
+                selectedLibraryId: _selectedLibraryId,
+                onSelect: (id) => setState(() => _selectedLibraryId = id),
+              ),
+            ],
           ],
         ),
       ),
@@ -416,6 +458,46 @@ class _AppBoardCreationDialogState extends State<AppBoardCreationDialog> {
 }
 
 // ── Sous-widgets ──────────────────────────────────────────────────────────────
+
+/// Choix de la destination d'un board : local ou l'une des bibliothèques Drive.
+/// La puce « Local » représente `libraryId = null` ; chaque bibliothèque
+/// restreint ensuite les sons proposés à ceux qui lui appartiennent.
+class _DestinationSelector extends StatelessWidget {
+  const _DestinationSelector({
+    required this.libraries,
+    required this.selectedLibraryId,
+    required this.onSelect,
+  });
+
+  final List<BoardLibraryOption> libraries;
+  final int? selectedLibraryId;
+  final ValueChanged<int?> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.xs,
+      children: [
+        ChoiceChip(
+          label: const Text('Local'),
+          avatar: const Icon(Icons.smartphone_rounded, size: 18),
+          selected: selectedLibraryId == null,
+          showCheckmark: false,
+          onSelected: (_) => onSelect(null),
+        ),
+        for (final library in libraries)
+          ChoiceChip(
+            label: Text(library.name),
+            avatar: const Icon(Icons.folder_shared_rounded, size: 18),
+            selected: selectedLibraryId == library.id,
+            showCheckmark: false,
+            onSelected: (_) => onSelect(library.id),
+          ),
+      ],
+    );
+  }
+}
 
 class _ColorRow extends StatelessWidget {
   const _ColorRow({

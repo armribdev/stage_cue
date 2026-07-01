@@ -476,27 +476,69 @@ class LocalSoundDataSource {
 
   /// Synchronise un son de bibliothèque avec l'index Drive.
   ///
-  /// Clé unique : `(libraryId, relativePath)`. Met à jour `filePath` si le son
-  /// existe déjà. Retourne `true` si un nouveau son a été créé.
+  /// Identité forte : l'`driveFileId` (immuable au renommage/déplacement) est la
+  /// clé de déduplication. Ordre de résolution :
+  /// 1. match `(libraryId, driveFileId)` → même fichier : corrige le chemin
+  ///    relatif/local s'il a bougé (aucun doublon créé) ;
+  /// 2. sinon match `(libraryId, relativePath)` legacy → adopte l'`driveFileId`
+  ///    (backfill des sons indexés avant l'identité forte) ;
+  /// 3. sinon nouveau son.
+  ///
+  /// Retourne `true` si un nouveau son a été créé.
   Future<bool> syncLibrarySoundFromDriveIndex({
     required int libraryId,
     required String relativePath,
     required String localPath,
+    String? driveFileId,
   }) async {
-    final existing = await (_database.select(_database.sounds)
+    // 1. Identité forte : le fichier est déjà connu par son ID Drive.
+    if (driveFileId != null) {
+      final byFileId = await (_database.select(_database.sounds)
+            ..where(
+              (s) =>
+                  s.libraryId.equals(libraryId) &
+                  s.driveFileId.equals(driveFileId),
+            ))
+          .get();
+      if (byFileId.isNotEmpty) {
+        final row = byFileId.first;
+        if (row.relativePath != relativePath || row.filePath != localPath) {
+          await (_database.update(_database.sounds)
+                ..where((s) => s.id.equals(row.id)))
+              .write(
+            db.SoundsCompanion(
+              relativePath: Value(relativePath),
+              filePath: Value(localPath),
+            ),
+          );
+        }
+        return false;
+      }
+    }
+
+    // 2. Legacy : son déjà indexé par chemin, sans identité forte → on l'adopte.
+    final byPath = await (_database.select(_database.sounds)
           ..where(
             (s) =>
                 s.libraryId.equals(libraryId) &
                 s.relativePath.equals(relativePath),
           ))
         .get();
-
-    if (existing.isNotEmpty) {
-      final existingRow = existing.first;
-      await syncLibrarySoundLocalPath(existingRow.id, localPath);
+    if (byPath.isNotEmpty) {
+      final row = byPath.first;
+      await (_database.update(_database.sounds)
+            ..where((s) => s.id.equals(row.id)))
+          .write(
+        db.SoundsCompanion(
+          filePath: Value(localPath),
+          driveFileId:
+              driveFileId != null ? Value(driveFileId) : const Value.absent(),
+        ),
+      );
       return false;
     }
 
+    // 3. Nouveau son.
     final title = p.basenameWithoutExtension(relativePath);
     final metadata = await _resolveMetadataForFile(File(localPath));
 
@@ -508,6 +550,7 @@ class LocalSoundDataSource {
             libraryId: Value(libraryId),
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
+            driveFileId: Value(driveFileId),
           ),
         );
     return true;
