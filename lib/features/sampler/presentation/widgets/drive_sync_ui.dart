@@ -137,7 +137,6 @@ class DriveConnectionStatusRow extends StatelessWidget {
               ),
             if (onDisconnect != null)
               IconButton(
-                tooltip: 'Déconnecter',
                 onPressed: isBusy ? null : onDisconnect,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints.tightFor(width: 32, height: 32),

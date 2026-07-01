@@ -109,7 +109,6 @@ class AppModalShell extends StatelessWidget {
                 ],
                 if (modalActions.isNotEmpty) const SizedBox(width: 12),
                 IconButton(
-                  tooltip: 'Fermer',
                   onPressed: onClose ?? () => Navigator.of(context).pop(),
                   padding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,

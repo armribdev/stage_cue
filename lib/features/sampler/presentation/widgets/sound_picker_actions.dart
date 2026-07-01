@@ -12,7 +12,6 @@ class SoundPickerActionButtons extends StatelessWidget {
     required this.onSecondary,
     this.secondaryEnabled = true,
     required this.secondaryIcon,
-    required this.secondaryTooltip,
   });
 
   final VoidCallback? onGo;
@@ -20,7 +19,6 @@ class SoundPickerActionButtons extends StatelessWidget {
   final VoidCallback? onSecondary;
   final bool secondaryEnabled;
   final IconData secondaryIcon;
-  final String secondaryTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +40,6 @@ class SoundPickerActionButtons extends StatelessWidget {
           width: _secondaryButtonSize,
           height: _secondaryButtonSize,
           child: IconButton(
-            tooltip: secondaryTooltip,
             onPressed: secondaryEnabled ? onSecondary : null,
             icon: Icon(secondaryIcon, size: 18),
             padding: EdgeInsets.zero,

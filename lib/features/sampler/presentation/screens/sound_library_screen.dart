@@ -457,7 +457,6 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
           prefixIcon: const Icon(Icons.search),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
-                  tooltip: 'Effacer la recherche',
                   onPressed: _clearSearch,
                   icon: const Icon(Icons.close_rounded),
                 )
@@ -599,9 +598,6 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                               secondaryIcon: isInBoard
                                   ? Icons.check_rounded
                                   : Icons.view_comfy_alt_rounded,
-                              secondaryTooltip: isInBoard
-                                  ? 'Déjà sur la scène'
-                                  : 'Ajouter comme pad',
                             ),
                           ),
                         ),

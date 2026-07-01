@@ -360,12 +360,10 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     final scheme = Theme.of(context).colorScheme;
     final borderColor = isSelected ? scheme.primary : scheme.outlineVariant;
     final onSurface = scheme.onSurfaceVariant;
-    return Tooltip(
-      message: 'Couleur par défaut',
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => _updateColor(null),
-        child: AnimatedContainer(
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => _updateColor(null),
+      child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           width: 40,
           height: 40,
@@ -393,7 +391,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                   ),
                 ),
         ),
-      ),
     );
   }
 
@@ -610,7 +607,6 @@ class _SoundRowState extends State<_SoundRow> {
             if (widget.canRemove)
               IconButton(
                 icon: const Icon(Icons.remove_circle_outline, size: 20),
-                tooltip: 'Retirer ce son du pad',
                 onPressed: widget.onRemove,
                 color: scheme.error,
                 style: canDownload
@@ -625,19 +621,16 @@ class _SoundRowState extends State<_SoundRow> {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: canDownload
-              ? Tooltip(
-                  message: 'Télécharger',
-                  child: Material(
-                    color: Colors.transparent,
+              ? Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () => unawaited(_downloadSound()),
                     borderRadius: BorderRadius.circular(8),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () => unawaited(_downloadSound()),
-                      borderRadius: BorderRadius.circular(8),
-                      hoverColor: scheme.onSurface.withValues(alpha: 0.08),
-                      splashColor: scheme.onSurface.withValues(alpha: 0.12),
-                      child: soundContent,
-                    ),
+                    hoverColor: scheme.onSurface.withValues(alpha: 0.08),
+                    splashColor: scheme.onSurface.withValues(alpha: 0.12),
+                    child: soundContent,
                   ),
                 )
               : soundContent,
