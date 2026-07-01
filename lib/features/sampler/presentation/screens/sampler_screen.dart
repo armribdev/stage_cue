@@ -148,9 +148,18 @@ class _SamplerScreenState extends State<SamplerScreen> {
     if (!mounted) return;
 
     final suggestedName = _buildSuggestedBoardName(_notifier.state.boards);
+    final libraries = await _notifier.getConnectedLibraries();
+    if (!mounted) return;
+    // Une seule bibliothèque : pré-sélectionnée (conserve l'ancien comportement
+    // auto). Sinon défaut « Local » et l'opérateur choisit explicitement.
+    final initialLibraryId = libraries.length == 1 ? libraries.first.id : null;
     final result = await AppBoardCreationDialog.show(
       context,
       suggestedName: suggestedName,
+      libraries: [
+        for (final library in libraries) (id: library.id, name: library.name),
+      ],
+      initialLibraryId: initialLibraryId,
     );
 
     if (result == null || !mounted) return;
@@ -163,6 +172,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final newBoard = await _notifier.createBoard(
       result.name,
       color: result.color,
+      libraryId: result.libraryId,
     );
     if (!mounted) return;
     if (newBoard == null) {

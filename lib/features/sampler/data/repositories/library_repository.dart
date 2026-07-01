@@ -983,6 +983,15 @@ class LibraryRepository extends ChangeNotifier {
       var processedCount = 0;
       var indexedCount = 0;
 
+      // Réaligne d'abord les chemins des sons legacy (sans driveFileId) dont le
+      // fichier a bougé sur Drive : ainsi la boucle les réidentifie par chemin
+      // et leur adopte l'ID Drive, au lieu de créer un doublon. L'identité forte
+      // (driveFileId) prend ensuite le relais pour tous les scans suivants.
+      await _reconcileOrphanedSoundPaths(
+        library: library,
+        driveRelativePaths: audioFiles.map((e) => e.relativePath).toList(),
+      );
+
       for (final audio in audioFiles) {
         processedCount++;
         var localPath = _cacheManager.localPathFor(library, audio.relativePath);
@@ -1013,6 +1022,7 @@ class LibraryRepository extends ChangeNotifier {
           libraryId: library.id,
           relativePath: audio.relativePath,
           localPath: localPath,
+          driveFileId: audio.driveFileId,
         );
         if (created) indexedCount++;
 
@@ -1025,11 +1035,6 @@ class LibraryRepository extends ChangeNotifier {
           ),
         );
       }
-
-      await _reconcileOrphanedSoundPaths(
-        library: library,
-        driveRelativePaths: audioFiles.map((e) => e.relativePath).toList(),
-      );
 
       onProgress?.call(
         IndexingProgress(
@@ -1074,13 +1079,14 @@ class LibraryRepository extends ChangeNotifier {
     }
   }
 
-  Future<List<({String relativePath})>> _collectDriveAudioFiles(
+  Future<List<({String relativePath, String driveFileId})>>
+      _collectDriveAudioFiles(
     DriveClient client,
     String folderId,
     String relativePrefix, {
     String? sharedDriveId,
   }) async {
-    final results = <({String relativePath})>[];
+    final results = <({String relativePath, String driveFileId})>[];
     final children = await client.listFolder(
       folderId,
       sharedDriveId: sharedDriveId,
@@ -1104,7 +1110,9 @@ class LibraryRepository extends ChangeNotifier {
         final relativePath = relativePrefix.isEmpty
             ? child.name
             : '$relativePrefix/${child.name}';
-        results.add((relativePath: relativePath));
+        // On conserve l'ID Drive (immuable) : c'est l'identité forte qui
+        // remplace l'heuristique de nom/chemin pour la déduplication.
+        results.add((relativePath: relativePath, driveFileId: child.id));
       }
     }
 

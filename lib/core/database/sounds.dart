@@ -52,6 +52,10 @@ class Sounds extends Table {
   TextColumn get relativePath => text().nullable()();
   // Empreinte de contenu (FNV-1a) pour réidentifier un fichier déplacé/renommé.
   TextColumn get contentHash => text().nullable()();
+  // Identifiant Drive stable du fichier : immuable au renommage/déplacement,
+  // c'est la source de vérité de l'identité d'un son de bibliothèque Drive.
+  // null pour un son local ou pas encore réconcilié avec l'index Drive.
+  TextColumn get driveFileId => text().nullable()();
   // ── Accès rapide live (refonte UX P3) ────────────────────────────────────
   /// Marqué favori par l'opérateur : accès 1-tap aux sons du spectacle.
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();

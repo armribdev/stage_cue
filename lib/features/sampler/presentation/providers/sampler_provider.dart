@@ -12,6 +12,7 @@ import '../../../../core/sync/download_queue.dart';
 import '../../data/repositories/library_repository.dart'
     show LibraryRepository, SoundNotAvailableLocallyException;
 import '../../data/repositories/sound_repository.dart';
+import '../../domain/entities/library.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
@@ -634,9 +635,23 @@ class SamplerNotifier extends ChangeNotifier {
     await loadSounds();
   }
 
-  Future<SoundBoard?> createBoard(String name, {int? color}) async {
+  /// Bibliothèques Drive connectées, proposables comme destination d'un board.
+  /// Vide si aucune session Drive n'est configurée (le board sera local).
+  Future<List<Library>> getConnectedLibraries() async {
+    final repository = _libraryRepository;
+    if (repository == null) return const [];
+    final libraries = await repository.getLibraries();
+    return libraries.where((library) => library.isConnectedToDrive).toList();
+  }
+
+  /// Crée un board. [libraryId] null = board local ; sinon board rattaché à la
+  /// bibliothèque Drive choisie (il ne proposera que les sons de cette biblio).
+  Future<SoundBoard?> createBoard(
+    String name, {
+    int? color,
+    int? libraryId,
+  }) async {
     try {
-      final libraryId = await _libraryRepository?.singleConnectedLibraryId();
       final newBoardId = await _repository.createSoundBoard(
         name,
         color: color,
