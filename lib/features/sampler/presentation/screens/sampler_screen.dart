@@ -78,11 +78,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
   static const _musicRegieTapGroup = 'music-regie-dismiss';
   static const _padsGridPadding = 16.0;
 
-  EdgeInsets get _padsGridScrollPadding => EdgeInsets.fromLTRB(
+  EdgeInsets _padsGridScrollPadding(BuildContext context) => EdgeInsets.fromLTRB(
     _padsGridPadding,
     _padsGridPadding,
     _padsGridPadding,
-    _padsGridPadding + _musicRegieOccupiedHeight,
+    _padsGridPadding +
+        (context.prefersDesktopUi ? 0 : _musicRegieOccupiedHeight),
   );
 
   @override
@@ -958,7 +959,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
           return SingleChildScrollView(
             key: const ValueKey('pads_locked_rows'),
             controller: _normalGridScrollController,
-            padding: _padsGridScrollPadding,
+            padding: _padsGridScrollPadding(context),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1181,7 +1182,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
         return SingleChildScrollView(
           key: const ValueKey('pads_editable_rows'),
           controller: _normalGridScrollController,
-          padding: _padsGridScrollPadding,
+          padding: _padsGridScrollPadding(context),
           child: Stack(
             key: _editGridKey,
             clipBehavior: Clip.none,
@@ -1732,10 +1733,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
             unawaited(_notifier.fadeOutCurrentMusic(duration)),
         onTransitionToNext: (duration) =>
             unawaited(_notifier.crossfadeToNextMusic(duration)),
-        onOccupiedHeightChanged: (height) {
-          if ((height - _musicRegieOccupiedHeight).abs() < 0.5) return;
-          setState(() => _musicRegieOccupiedHeight = height);
-        },
+        onOccupiedHeightChanged: context.prefersDesktopUi
+            ? null
+            : (height) {
+                if ((height - _musicRegieOccupiedHeight).abs() < 0.5) return;
+                setState(() => _musicRegieOccupiedHeight = height);
+              },
       ),
     );
   }
@@ -1770,6 +1773,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
     } else if (boards.isNotEmpty && _didAutoOpenCreateForCurrentEmptyState) {
       _didAutoOpenCreateForCurrentEmptyState = false;
     }
+
+    final musicPreviewPanel = ListenableBuilder(
+      listenable: _notifier,
+      builder: (context, _) =>
+          _buildMusicPreviewPanel(context, _notifier.state),
+    );
 
     return Shortcuts(
       shortcuts: isNativeDesktopPlatform()
@@ -1859,16 +1868,22 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     },
                   ),
             body: SafeArea(
-              child: Stack(
-                children: [
-                  Positioned.fill(child: _buildSamplerContent(context, state)),
-                  ListenableBuilder(
-                    listenable: _notifier,
-                    builder: (context, _) =>
-                        _buildMusicPreviewPanel(context, _notifier.state),
-                  ),
-                ],
-              ),
+              child: prefersDesktopUi
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: _buildSamplerContent(context, state)),
+                        musicPreviewPanel,
+                      ],
+                    )
+                  : Stack(
+                      children: [
+                        Positioned.fill(
+                          child: _buildSamplerContent(context, state),
+                        ),
+                        musicPreviewPanel,
+                      ],
+                    ),
             ),
           ),
         ),

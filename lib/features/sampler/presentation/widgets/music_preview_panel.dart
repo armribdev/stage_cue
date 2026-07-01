@@ -316,19 +316,13 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
   }
 
   Widget _buildDesktopPanel(double panelWidth) {
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: _ReportSize(
-        onChange: (size) => _notifyOccupiedHeight(size.height),
-        child: SizedBox(
-          width: panelWidth,
-          child: AnimatedSize(
-            duration: _drawerSnapDuration,
-            curve: _drawerSnapCurve,
-            alignment: Alignment.topCenter,
-            child: _buildRegieDrawer(isAdvanced: widget.isAdvanced),
-          ),
-        ),
+    return SizedBox(
+      width: panelWidth,
+      child: AnimatedSize(
+        duration: _drawerSnapDuration,
+        curve: _drawerSnapCurve,
+        alignment: Alignment.topCenter,
+        child: _buildRegieDrawer(isAdvanced: widget.isAdvanced),
       ),
     );
   }
@@ -528,6 +522,17 @@ class _MusicRegieDrawer extends StatefulWidget {
 class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
   bool get _isInteractive => widget.expandProgress != null && !widget.isDesktop;
 
+  bool get _canTapToExpand {
+    final progress = widget.expandProgress;
+    if (progress != null) return progress < 0.5;
+    return !widget.isAdvanced;
+  }
+
+  void _handleTapToExpand() {
+    if (!_canTapToExpand) return;
+    widget.onModeToggle();
+  }
+
   _OnAirControls _buildOnAirControls({
     required bool isPlaying,
     required bool hasCurrent,
@@ -700,12 +705,6 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
                       isLocked: widget.isLocked,
                       onTap: () => widget.onLockedChanged!(!widget.isLocked),
                     ),
-                  if (widget.isDesktop)
-                    _DrawerExpandButton(
-                      scheme: scheme,
-                      isExpanded: widget.isAdvanced,
-                      onTap: widget.onModeToggle,
-                    ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -784,54 +783,66 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
       progress: progress,
     );
 
-    final drawerContent = _isInteractive
-        ? Semantics(
-            label: (progress ?? 0) >= 0.5
-                ? 'Réduire la régie'
-                : 'Développer la régie',
-            hint:
-                'Glisser vers le haut pour développer, '
-                'vers le bas pour réduire',
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onVerticalDragStart: (_) => widget.onVerticalDragStart?.call(),
-              onVerticalDragUpdate: widget.onVerticalDragUpdate,
-              onVerticalDragEnd: widget.onVerticalDragEnd,
-              onVerticalDragCancel: widget.onVerticalDragCancel,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  drawerBody,
-                  Positioned(
-                    top: 4,
-                    left: 0,
-                    right: 0,
-                    child: IgnorePointer(
-                      child: Center(
-                        child: Container(
-                          width: 24,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: scheme.onSurfaceVariant.withValues(
-                              alpha: 0.35,
-                            ),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+    final Widget drawerContent;
+    if (_isInteractive) {
+      drawerContent = Semantics(
+        label: (progress ?? 0) >= 0.5
+            ? 'Réduire la régie'
+            : 'Développer la régie',
+        hint:
+            'Appuyer ou glisser vers le haut pour développer, '
+            'vers le bas pour réduire',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _handleTapToExpand,
+          onVerticalDragStart: (_) => widget.onVerticalDragStart?.call(),
+          onVerticalDragUpdate: widget.onVerticalDragUpdate,
+          onVerticalDragEnd: widget.onVerticalDragEnd,
+          onVerticalDragCancel: widget.onVerticalDragCancel,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              drawerBody,
+              Positioned(
+                top: 4,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: Center(
+                    child: Container(
+                      width: 24,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: scheme.onSurfaceVariant.withValues(
+                          alpha: 0.35,
                         ),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          )
-        : drawerBody;
+            ],
+          ),
+        ),
+      );
+    } else if (_canTapToExpand) {
+      drawerContent = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _handleTapToExpand,
+        child: drawerBody,
+      );
+    } else {
+      drawerContent = drawerBody;
+    }
 
     return Material(
       color: scheme.surfaceContainerLow,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      shape: widget.isDesktop
+          ? const RoundedRectangleBorder()
+          : const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
       clipBehavior: Clip.none,
       child: drawerContent,
     );
@@ -862,35 +873,6 @@ class _DrawerLockButton extends StatelessWidget {
         color: isLocked
             ? scheme.primary
             : scheme.onSurfaceVariant.withValues(alpha: 0.75),
-      ),
-    );
-  }
-}
-
-class _DrawerExpandButton extends StatelessWidget {
-  final ColorScheme scheme;
-  final bool isExpanded;
-  final VoidCallback? onTap;
-
-  const _DrawerExpandButton({
-    required this.scheme,
-    required this.isExpanded,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: onTap,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-      icon: Icon(
-        isExpanded
-            ? Icons.keyboard_arrow_down_rounded
-            : Icons.keyboard_arrow_up_rounded,
-        size: 22,
-        color: scheme.onSurfaceVariant.withValues(alpha: 0.75),
       ),
     );
   }
