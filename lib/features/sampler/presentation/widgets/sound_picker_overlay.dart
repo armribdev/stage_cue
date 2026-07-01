@@ -248,9 +248,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   SoundType? get _lockedTypeFilter => _isMusicPicker ? SoundType.music : null;
   SoundType? get _effectiveTypeFilter => _lockedTypeFilter ?? _typeFilter;
 
-  bool get _effectiveLocalOnly =>
-      _isQuickSearch && (_localOnly || widget.notifier.offlineMode);
-  bool get _localFilterForced => _isQuickSearch && widget.notifier.offlineMode;
+  bool get _effectiveLocalOnly => _isQuickSearch && _localOnly;
 
   bool _isLocal(Sound s) {
     if (_localIds == null) return !_effectiveLocalOnly;
@@ -294,6 +292,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     _focusNode = FocusNode(onKeyEvent: _onSearchKey);
     widget.notifier.addListener(_onNotifierChanged);
     if (_isPadPicker) _typeFilter = SoundType.soundEffect;
+    if (_isQuickSearch && widget.notifier.isLiveOfflineMode) {
+      _localOnly = true;
+    }
     _load();
   }
 
@@ -895,15 +896,13 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                 iconColor: _effectiveLocalOnly
                     ? scheme.primary
                     : scheme.onSurfaceVariant,
-                onPressed: _localFilterForced
-                    ? null
-                    : () {
-                        setState(() {
-                          _localOnly = !_localOnly;
-                          _selectedIndex = 0;
-                        });
-                        _scheduleTagsLoad();
-                      },
+                onPressed: () {
+                  setState(() {
+                    _localOnly = !_localOnly;
+                    _selectedIndex = 0;
+                  });
+                  _scheduleTagsLoad();
+                },
               ),
             ],
           ],
