@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stage_cue/core/database/database.dart' as db;
+import 'package:stage_cue/features/sampler/data/datasources/local_library_datasource.dart';
 import 'package:stage_cue/features/sampler/data/datasources/local_sound_datasource.dart';
 
 /// Vérifie la déduplication par identité forte Drive (`driveFileId`) lors de
@@ -100,5 +101,89 @@ void main() {
     );
 
     expect(await soundsOf(libraryId), hasLength(2));
+  });
+
+  group('modèle par-dossier (LibraryFolders)', () {
+    test('ensureFolder partage un nœud par (libraryId, driveFolderId)',
+        () async {
+      final libraryDataSource = LocalLibraryDataSource(database);
+      final libraryId = await insertLibrary();
+
+      final first = await libraryDataSource.ensureFolder(
+        libraryId: libraryId,
+        driveFolderId: 'FOLDER_YY',
+        relativePath: 'yy',
+      );
+      // Deuxième lien (ex : bibliothèque imbriquée) sur le même dossier Drive.
+      final second = await libraryDataSource.ensureFolder(
+        libraryId: libraryId,
+        driveFolderId: 'FOLDER_YY',
+        relativePath: 'yy',
+      );
+      expect(second, first, reason: 'un seul nœud pour le même dossier Drive');
+
+      final nodes = await database.select(database.libraryFolders).get();
+      expect(nodes, hasLength(1));
+    });
+
+    test('ensureFolder met à jour relativePath si le dossier est déplacé',
+        () async {
+      final libraryDataSource = LocalLibraryDataSource(database);
+      final libraryId = await insertLibrary();
+
+      final id = await libraryDataSource.ensureFolder(
+        libraryId: libraryId,
+        driveFolderId: 'FOLDER_YY',
+        relativePath: 'yy',
+      );
+      await libraryDataSource.ensureFolder(
+        libraryId: libraryId,
+        driveFolderId: 'FOLDER_YY',
+        relativePath: 'sfx/yy',
+      );
+
+      final node = await (database.select(database.libraryFolders)
+            ..where((f) => f.id.equals(id)))
+          .getSingle();
+      expect(node.relativePath, 'sfx/yy');
+    });
+
+    test('un fichier déplacé vers un autre dossier réassigne son folderId',
+        () async {
+      final libraryDataSource = LocalLibraryDataSource(database);
+      final libraryId = await insertLibrary();
+
+      final folderA = await libraryDataSource.ensureFolder(
+        libraryId: libraryId,
+        driveFolderId: 'FOLDER_A',
+        relativePath: 'a',
+      );
+      await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'a/knock.mp3',
+        localPath: '/cache/a/knock.mp3',
+        driveFileId: 'F1',
+        folderId: folderA,
+      );
+
+      final folderB = await libraryDataSource.ensureFolder(
+        libraryId: libraryId,
+        driveFolderId: 'FOLDER_B',
+        relativePath: 'b',
+      );
+      final created = await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'b/knock.mp3',
+        localPath: '/cache/b/knock.mp3',
+        driveFileId: 'F1',
+        folderId: folderB,
+      );
+
+      expect(created, isFalse, reason: 'même fichier Drive, pas de doublon');
+      final sounds = await soundsOf(libraryId);
+      expect(sounds, hasLength(1));
+      expect(sounds.first.folderId, folderB);
+      expect(sounds.first.relativePath, 'b/knock.mp3');
+    });
   });
 }

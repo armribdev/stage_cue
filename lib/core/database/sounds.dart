@@ -35,6 +35,33 @@ class Libraries extends Table {
   BoolColumn get autoDownload => boolean().withDefault(const Constant(false))();
 }
 
+/// Nœud « dossier » d'une bibliothèque Drive : chaque dossier contenant de
+/// l'audio possède ses fichiers DIRECTS et, à terme, sa propre BDD snapshot
+/// co-localisée (`.stagecue/library.db` dans CE dossier). Identité = le couple
+/// (bibliothèque racine, [driveFolderId]) : lier un parent puis un enfant pointe
+/// vers le même nœud au lieu de dupliquer les fichiers partagés.
+class LibraryFolders extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get libraryId =>
+      integer().references(Libraries, #id, onDelete: KeyAction.cascade)();
+
+  /// Identifiant du dossier Drive (immuable) — ancre de l'emplacement de la BDD.
+  TextColumn get driveFolderId => text()();
+
+  /// Chemin du dossier relatif à la racine de la bibliothèque ('' = racine).
+  TextColumn get relativePath => text().withDefault(const Constant(''))();
+
+  /// Révision de snapshot connue pour CE dossier (bookkeeping par-dossier).
+  IntColumn get lastSyncedRevision => integer().withDefault(const Constant(0))();
+  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {libraryId, driveFolderId},
+      ];
+}
+
 class Sounds extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get title => text()(); // Nom de fichier sans extension
@@ -56,6 +83,11 @@ class Sounds extends Table {
   // c'est la source de vérité de l'identité d'un son de bibliothèque Drive.
   // null pour un son local ou pas encore réconcilié avec l'index Drive.
   TextColumn get driveFileId => text().nullable()();
+  // Dossier propriétaire (ses fichiers directs) : unité d'appartenance et de
+  // snapshot par-dossier. null = son local ou antérieur au modèle par-dossier.
+  IntColumn get folderId => integer()
+      .nullable()
+      .references(LibraryFolders, #id, onDelete: KeyAction.setNull)();
   // ── Accès rapide live (refonte UX P3) ────────────────────────────────────
   /// Marqué favori par l'opérateur : accès 1-tap aux sons du spectacle.
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();

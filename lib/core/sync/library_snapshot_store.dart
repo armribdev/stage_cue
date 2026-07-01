@@ -124,6 +124,233 @@ class LibrarySnapshotStore {
     }
   }
 
+  // ── Snapshot PAR DOSSIER (modèle BDD-par-dossier) ─────────────────────────
+  //
+  // Un nœud dossier possède ses fichiers DIRECTS. Le snapshot est donc écrit en
+  // chemins « folder-relative » (= basename), portables : n'importe quel appareil
+  // le fusionne dans SON nœud (qui a son propre relativePath racine) sans
+  // dépendre de l'arborescence de l'appareil source. Les boards/pads ne sont pas
+  // ici (ils vivent au niveau bibliothèque/racine).
+
+  /// Exporte les sons (et leurs tags) du dossier [folderId] en chemins
+  /// folder-relative vers un fichier SQLite autonome.
+  Future<int> exportFolderSnapshot(int folderId, String targetPath) async {
+    final target = File(targetPath);
+    if (await target.exists()) {
+      await target.delete();
+    }
+
+    final escaped = _escapePath(targetPath);
+    await _database.customStatement("ATTACH DATABASE '$escaped' AS snap");
+    try {
+      await _database.customStatement('''
+        CREATE TABLE snap.sounds AS
+        SELECT id, title, display_name, file_path, type, color, volume,
+               created_at, library_id, relative_path, content_hash,
+               drive_file_id
+        FROM sounds WHERE folder_id = $folderId
+      ''');
+
+      // Re-base relative_path en folder-relative (basename) : le nœud possède
+      // des fichiers directs. SQLite n'a pas de fonction basename → fait en Dart.
+      final rows = await _database
+          .customSelect('SELECT id, relative_path FROM snap.sounds')
+          .get();
+      for (final row in rows) {
+        final raw = row.read<String?>('relative_path');
+        if (raw == null || raw.isEmpty) continue;
+        final name = p.posix.basename(raw);
+        if (name == raw) continue;
+        await _database.customStatement(
+          'UPDATE snap.sounds SET relative_path = ? WHERE id = ?',
+          [name, row.read<int>('id')],
+        );
+      }
+
+      await _database.customStatement('''
+        CREATE TABLE snap.tag_items AS
+        SELECT DISTINCT ti.* FROM tags ti
+        INNER JOIN sound_tags st ON st.tag_id = ti.id
+        INNER JOIN sounds s ON s.id = st.sound_id
+        WHERE s.folder_id = $folderId
+      ''');
+      await _database.customStatement('''
+        CREATE TABLE snap.tag_categories AS
+        SELECT DISTINCT tc.* FROM tag_categories tc
+        INNER JOIN snap.tag_items ti ON ti.category_id = tc.id
+      ''');
+      await _database.customStatement('''
+        CREATE TABLE snap.sound_tags AS
+        SELECT st.* FROM sound_tags st
+        INNER JOIN sounds s ON s.id = st.sound_id
+        WHERE s.folder_id = $folderId
+      ''');
+      await _database.customStatement('''
+        CREATE TABLE snap.tag_aliases AS
+        SELECT DISTINCT ta.* FROM tag_aliases ta
+        INNER JOIN snap.tag_items ti ON ti.id = ta.tag_id
+      ''');
+    } finally {
+      await _detachSnapshot();
+    }
+
+    return target.length();
+  }
+
+  /// Fusionne le snapshot d'un dossier dans le nœud [folderId] local.
+  ///
+  /// Stratégie **upsert par driveFileId** (pas purge-replace) : les sons
+  /// survivants gardent leur ligne — donc leurs liens pad→son et leurs
+  /// annotations locales (favori, récence) restent intacts. Les sons absents du
+  /// snapshot (retirés côté distant) sont supprimés.
+  Future<void> mergeFolderSnapshot(int folderId, String sourcePath) async {
+    if (!await File(sourcePath).exists()) return;
+
+    final escaped = _escapePath(sourcePath);
+    await _database.customStatement("ATTACH DATABASE '$escaped' AS snap");
+    try {
+      await _database.transaction(() async {
+        final folder = await (_database.select(_database.libraryFolders)
+              ..where((f) => f.id.equals(folderId)))
+            .getSingleOrNull();
+        if (folder == null) return;
+        if (!await _snapHasTable('sounds')) return;
+
+        final library = await (_database.select(_database.libraries)
+              ..where((l) => l.id.equals(folder.libraryId)))
+            .getSingleOrNull();
+
+        await _importFolderSounds(
+          folderId: folderId,
+          libraryId: folder.libraryId,
+          folderRelativePath: folder.relativePath,
+          localRoot: library?.localRootPath,
+        );
+
+        if (await _snapHasTable('tag_items')) {
+          await _importTags();
+        }
+        if (await _snapHasTable('sound_tags')) {
+          // Remplace les tags du dossier (le distant fait foi) avant réimport.
+          await _database.customStatement(
+            'DELETE FROM sound_tags WHERE sound_id IN '
+            '(SELECT id FROM sounds WHERE folder_id = ?)',
+            [folderId],
+          );
+          await _importSoundTags();
+        }
+      });
+    } finally {
+      await _detachSnapshot();
+    }
+  }
+
+  Future<void> _importFolderSounds({
+    required int folderId,
+    required int libraryId,
+    required String folderRelativePath,
+    required String? localRoot,
+  }) async {
+    _soundIdMap.clear();
+
+    final snapRows = await _database
+        .customSelect('SELECT * FROM snap.sounds ORDER BY id')
+        .get();
+    final seenDriveIds = <String>{};
+
+    for (final row in snapRows) {
+      final snapId = row.read<int>('id');
+      final folderRelative = row.read<String?>('relative_path');
+      final rootRelative = (folderRelative == null || folderRelative.isEmpty)
+          ? folderRelative
+          : (folderRelativePath.isEmpty
+              ? folderRelative
+              : '$folderRelativePath/$folderRelative');
+      final normalized = rootRelative != null
+          ? LibrarySoundPaths.normalizeRelativePath(rootRelative)
+          : null;
+      final filePath = normalized != null && localRoot != null
+          ? LibrarySoundPaths.localPathFor(localRoot, normalized)
+          : row.read<String>('file_path');
+      final driveFileId = row.read<String?>('drive_file_id');
+      final contentHash = row.read<String?>('content_hash');
+      final rawType = row.read<int?>('type');
+      if (driveFileId != null) seenDriveIds.add(driveFileId);
+
+      db.Sound? existing;
+      if (driveFileId != null) {
+        existing = await (_database.select(_database.sounds)
+              ..where(
+                (s) =>
+                    s.folderId.equals(folderId) &
+                    s.driveFileId.equals(driveFileId),
+              ))
+            .getSingleOrNull();
+      }
+      if (existing == null && normalized != null) {
+        existing = await (_database.select(_database.sounds)
+              ..where(
+                (s) =>
+                    s.folderId.equals(folderId) &
+                    s.relativePath.equals(normalized),
+              ))
+            .getSingleOrNull();
+      }
+
+      if (existing != null) {
+        await (_database.update(_database.sounds)
+              ..where((s) => s.id.equals(existing!.id)))
+            .write(
+          db.SoundsCompanion(
+            title: Value(row.read<String>('title')),
+            displayName: Value(row.read<String?>('display_name')),
+            filePath: Value(filePath),
+            type: Value(rawType != null ? SoundType.values[rawType] : null),
+            color: Value(row.read<int?>('color')),
+            volume: Value(row.read<double>('volume')),
+            relativePath: Value(normalized),
+            contentHash: Value(contentHash),
+            driveFileId: Value(driveFileId),
+          ),
+        );
+        _soundIdMap[snapId] = existing.id;
+      } else {
+        final newId = await _database.into(_database.sounds).insert(
+              db.SoundsCompanion.insert(
+                title: row.read<String>('title'),
+                filePath: filePath,
+                type: Value(rawType != null ? SoundType.values[rawType] : null),
+                displayName: Value(row.read<String?>('display_name')),
+                color: Value(row.read<int?>('color')),
+                volume: Value(row.read<double>('volume')),
+                createdAt: Value(row.read<DateTime>('created_at')),
+                libraryId: Value(libraryId),
+                relativePath: Value(normalized),
+                contentHash: Value(contentHash),
+                driveFileId: Value(driveFileId),
+                folderId: Value(folderId),
+              ),
+            );
+        _soundIdMap[snapId] = newId;
+      }
+    }
+
+    // Supprime les sons du dossier retirés côté distant (identité forte connue
+    // mais absente du snapshot). On épargne les sons sans driveFileId (legacy /
+    // pas encore réconciliés) pour ne pas perdre de données par erreur.
+    final localSounds = await (_database.select(_database.sounds)
+          ..where((s) => s.folderId.equals(folderId)))
+        .get();
+    for (final sound in localSounds) {
+      final fid = sound.driveFileId;
+      if (fid != null && !seenDriveIds.contains(fid)) {
+        await (_database.delete(_database.sounds)
+              ..where((s) => s.id.equals(sound.id)))
+            .go();
+      }
+    }
+  }
+
   // Clé = relativePath (identifiant stable cross-merge).
   // Peuplé par _purgeLibraryData, consommé par _restoreLocalAnnotations.
   Map<String, ({bool isFavorite, DateTime? lastPlayedAt})> _localAnnotations = {};

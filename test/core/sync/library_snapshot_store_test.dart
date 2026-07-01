@@ -148,4 +148,152 @@ void main() {
       p.join(localRoot, 'Pistolet 4.mp3'),
     );
   });
+
+  group('snapshot par-dossier', () {
+    test('round-trip : chemins folder-relative reconstruits dans le nœud cible',
+        () async {
+      // Device A : racine liée à xx/, nœud dossier yy (relativePath 'yy').
+      final libA = await database.into(database.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/A/cache'),
+          );
+      final folderA = await database.into(database.libraryFolders).insert(
+            db.LibraryFoldersCompanion.insert(
+              libraryId: libA,
+              driveFolderId: 'FOLDER_YY',
+              relativePath: const Value('yy'),
+            ),
+          );
+      await database.into(database.sounds).insert(
+            db.SoundsCompanion.insert(
+              title: 'knock',
+              filePath: '/A/cache/yy/knock.mp3',
+              libraryId: Value(libA),
+              relativePath: const Value('yy/knock.mp3'),
+              driveFileId: const Value('F1'),
+              folderId: Value(folderA),
+            ),
+          );
+
+      final snapshotPath = p.join(tempDir.path, 'folder.db');
+      await store.exportFolderSnapshot(folderA, snapshotPath);
+
+      // Device B : a lié yy/ directement → nœud avec relativePath '' et autre cache.
+      final dbB = db.AppDatabase.forTesting(NativeDatabase.memory());
+      final libB = await dbB.into(dbB.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'B', localRootPath: '/B/cache'),
+          );
+      final folderB = await dbB.into(dbB.libraryFolders).insert(
+            db.LibraryFoldersCompanion.insert(
+              libraryId: libB,
+              driveFolderId: 'FOLDER_YY',
+              relativePath: const Value(''),
+            ),
+          );
+      await LibrarySnapshotStore(dbB)
+          .mergeFolderSnapshot(folderB, snapshotPath);
+
+      final sounds = await (dbB.select(dbB.sounds)
+            ..where((s) => s.folderId.equals(folderB)))
+          .get();
+      expect(sounds, hasLength(1));
+      expect(sounds.first.relativePath, 'knock.mp3');
+      expect(sounds.first.filePath, p.join('/B/cache', 'knock.mp3'));
+      expect(sounds.first.driveFileId, 'F1');
+      await dbB.close();
+    });
+
+    test('upsert préserve l\'id du son (liens pad intacts)', () async {
+      final lib = await database.into(database.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/cache'),
+          );
+      final folder = await database.into(database.libraryFolders).insert(
+            db.LibraryFoldersCompanion.insert(
+              libraryId: lib,
+              driveFolderId: 'F',
+              relativePath: const Value(''),
+            ),
+          );
+      final soundId = await database.into(database.sounds).insert(
+            db.SoundsCompanion.insert(
+              title: 'knock',
+              filePath: '/cache/knock.mp3',
+              libraryId: Value(lib),
+              relativePath: const Value('knock.mp3'),
+              driveFileId: const Value('F1'),
+              folderId: Value(folder),
+            ),
+          );
+
+      final boardId = await database.into(database.soundBoards).insert(
+            db.SoundBoardsCompanion.insert(name: 'Board', libraryId: Value(lib)),
+          );
+      final padId = await database.into(database.pads).insert(
+            db.PadsCompanion.insert(boardId: boardId),
+          );
+      await database.into(database.padSounds).insert(
+            db.PadSoundsCompanion.insert(padId: padId, soundId: soundId),
+          );
+
+      final snapshotPath = p.join(tempDir.path, 'folder.db');
+      await store.exportFolderSnapshot(folder, snapshotPath);
+      await store.mergeFolderSnapshot(folder, snapshotPath);
+
+      final sounds = await (database.select(database.sounds)
+            ..where((s) => s.folderId.equals(folder)))
+          .get();
+      expect(sounds, hasLength(1));
+      expect(sounds.first.id, soundId, reason: 'upsert conserve la ligne');
+
+      final padSounds = await database.select(database.padSounds).get();
+      expect(padSounds, hasLength(1));
+      expect(padSounds.first.soundId, soundId);
+    });
+
+    test('supprime les sons absents du snapshot (retirés côté distant)',
+        () async {
+      final lib = await database.into(database.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/cache'),
+          );
+      final folder = await database.into(database.libraryFolders).insert(
+            db.LibraryFoldersCompanion.insert(
+              libraryId: lib,
+              driveFolderId: 'F',
+              relativePath: const Value(''),
+            ),
+          );
+      await database.into(database.sounds).insert(
+            db.SoundsCompanion.insert(
+              title: 'a',
+              filePath: '/cache/a.mp3',
+              libraryId: Value(lib),
+              relativePath: const Value('a.mp3'),
+              driveFileId: const Value('F1'),
+              folderId: Value(folder),
+            ),
+          );
+
+      final snapshotPath = p.join(tempDir.path, 'folder.db');
+      await store.exportFolderSnapshot(folder, snapshotPath);
+
+      // Ajout local APRÈS l'export : absent du snapshot distant.
+      await database.into(database.sounds).insert(
+            db.SoundsCompanion.insert(
+              title: 'b',
+              filePath: '/cache/b.mp3',
+              libraryId: Value(lib),
+              relativePath: const Value('b.mp3'),
+              driveFileId: const Value('F2'),
+              folderId: Value(folder),
+            ),
+          );
+
+      await store.mergeFolderSnapshot(folder, snapshotPath);
+
+      final sounds = await (database.select(database.sounds)
+            ..where((s) => s.folderId.equals(folder)))
+          .get();
+      expect(sounds, hasLength(1));
+      expect(sounds.first.driveFileId, 'F1');
+    });
+  });
 }

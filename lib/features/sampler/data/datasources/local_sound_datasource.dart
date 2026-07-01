@@ -490,6 +490,7 @@ class LocalSoundDataSource {
     required String relativePath,
     required String localPath,
     String? driveFileId,
+    int? folderId,
   }) async {
     // 1. Identité forte : le fichier est déjà connu par son ID Drive.
     if (driveFileId != null) {
@@ -502,13 +503,17 @@ class LocalSoundDataSource {
           .get();
       if (byFileId.isNotEmpty) {
         final row = byFileId.first;
-        if (row.relativePath != relativePath || row.filePath != localPath) {
+        // Corrige chemin ET dossier propriétaire si le fichier a bougé.
+        if (row.relativePath != relativePath ||
+            row.filePath != localPath ||
+            row.folderId != folderId) {
           await (_database.update(_database.sounds)
                 ..where((s) => s.id.equals(row.id)))
               .write(
             db.SoundsCompanion(
               relativePath: Value(relativePath),
               filePath: Value(localPath),
+              folderId: Value(folderId),
             ),
           );
         }
@@ -533,6 +538,7 @@ class LocalSoundDataSource {
           filePath: Value(localPath),
           driveFileId:
               driveFileId != null ? Value(driveFileId) : const Value.absent(),
+          folderId: Value(folderId),
         ),
       );
       return false;
@@ -551,6 +557,7 @@ class LocalSoundDataSource {
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
             driveFileId: Value(driveFileId),
+            folderId: Value(folderId),
           ),
         );
     return true;
