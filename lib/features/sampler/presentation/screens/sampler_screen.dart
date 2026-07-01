@@ -52,15 +52,17 @@ class _SamplerScreenState extends State<SamplerScreen> {
   late final db.AppDatabase _database;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _normalGridScrollController = ScrollController();
-  final ScrollController _editGridScrollController = ScrollController();
 
-  ScrollController get _activeGridScrollController =>
-      _isEditMode ? _editGridScrollController : _normalGridScrollController;
-  bool _isEditMode = false;
   bool _isPerformanceMode = false;
+
+  /// Mode classique éditable : croix de suppression + déplacement des pads.
+  /// Verrouillé en Mode Spectacle (lecture seule, aucune modif accidentelle).
+  bool get _isEditable => !_isPerformanceMode;
+
   int? _draggingPadId;
   ({int rowIndex, int position})? _dropTarget;
   Offset? _lastDragGlobalOffset;
+
   /// true après la 1re frame de drag — évite de reconstruire l'arbre pendant
   /// l'accrochage du geste (sinon le Draggable est démonté et le pad reste bloqué).
   bool _editDragUiReady = false;
@@ -77,11 +79,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
   static const _padsGridPadding = 16.0;
 
   EdgeInsets get _padsGridScrollPadding => EdgeInsets.fromLTRB(
-        _padsGridPadding,
-        _padsGridPadding,
-        _padsGridPadding,
-        _padsGridPadding + _musicRegieOccupiedHeight,
-      );
+    _padsGridPadding,
+    _padsGridPadding,
+    _padsGridPadding,
+    _padsGridPadding + _musicRegieOccupiedHeight,
+  );
 
   bool get _isDesktopPlatform =>
       !kIsWeb &&
@@ -122,17 +124,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
     if (musicError != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(musicError)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(musicError)));
       });
     }
 
-    setState(() {
-      if (_isEditMode && _notifier.state.pads.isEmpty) {
-        _isEditMode = false;
-      }
-    });
+    setState(() {});
   }
 
   /// Sélectionne un board et ferme le drawer (mobile).
@@ -381,7 +379,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
   /// Ouvre la bibliothèque sans fermer de drawer (base method).
   Future<void> _openLibrary() async {
     await SoundLibraryManageScreen.open(
-        context, notifier: _notifier, database: _database);
+      context,
+      notifier: _notifier,
+      database: _database,
+    );
     if (!mounted) return;
     await _notifier.loadSounds();
   }
@@ -431,7 +432,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   /// Ouvre la recherche-éclair (overlay) ; met en évidence le pad dédié préparé.
   Future<void> _openQuickSearch() async {
-    if (_isEditMode) return;
     final result = await QuickSearchOverlay.show(context, notifier: _notifier);
     if (!mounted) return;
     // Les pré-écoutes (bruitages/ambiances) jouent jusqu'à la fin et se libèrent
@@ -442,7 +442,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   Future<void> _handleAddPadShortcut() async {
-    if (!_isDesktopPlatform || !mounted || _isEditMode) return;
+    if (!_isDesktopPlatform || !mounted) return;
     final board = _notifier.state.selectedBoard;
     if (board == null) return;
     final pads = _notifier.state.pads;
@@ -545,8 +545,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     required int slotsPerRow,
     int? excludePadId,
   }) {
-    final box =
-        _editGridKey.currentContext?.findRenderObject() as RenderBox?;
+    final box = _editGridKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return null;
 
     final draggedId = excludePadId ?? _draggingPadId;
@@ -555,10 +554,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     for (final rowIdx in rowIndices) {
       final pads = rowMap[rowIdx] ?? [];
-      final height = _editWrapHeight(pads.length, cellHeight, slotsPerRow);
+      // +1 : chaque ligne rend un slot « + » de fin en plus des pads.
+      final height = _editWrapHeight(pads.length + 1, cellHeight, slotsPerRow);
       if (local.dy < y + height + _editRowGap / 2) {
-        final visibleCount =
-            pads.where((p) => p.pad.id != draggedId).length;
+        final visibleCount = pads.where((p) => p.pad.id != draggedId).length;
         final pos = _editIndexFromLocalRow(
           Offset(local.dx, local.dy - y),
           visibleCount,
@@ -617,7 +616,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
     var y = 0.0;
     for (var i = 0; i < rowIndices.length; i++) {
       if (i > 0) y += _editRowGap;
-      final count = rowMap[rowIndices[i]]?.length ?? 0;
+      // +1 : slot « + » de fin de ligne rendu en plus des pads.
+      final count = (rowMap[rowIndices[i]]?.length ?? 0) + 1;
       y += _editWrapHeight(count, cellHeight, slotsPerRow);
     }
     if (includeNewRowSpacer) {
@@ -658,11 +658,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     if (target == null) return;
 
-    unawaited(_notifier.movePadToPosition(
-      padId,
-      target.rowIndex,
-      target.position,
-    ));
+    unawaited(
+      _notifier.movePadToPosition(padId, target.rowIndex, target.position),
+    );
   }
 
   static const double _padScrollAlignment = 0.28;
@@ -702,7 +700,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   void _scrollPadIntoView(int padId) {
     void tryScroll() {
       if (!mounted) return;
-      final controller = _activeGridScrollController;
+      final controller = _normalGridScrollController;
       if (!controller.hasClients || controller.positions.length != 1) return;
 
       final padTop = _computePadTopOffset(padId, _lastGridWidth);
@@ -726,7 +724,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   bool _shouldShowPadOnGrid(PadItem pad) {
-    if (pad.isDraft || _isEditMode) return true;
+    if (pad.isDraft) return true;
     if (!_notifier.offlineMode) return true;
     return _notifier.isPadVisibleInOfflineMode(pad);
   }
@@ -735,12 +733,17 @@ class _SamplerScreenState extends State<SamplerScreen> {
     unawaited(_notifier.setOfflineMode(!_notifier.offlineMode));
   }
 
-  /// Entre/sort du Mode Spectacle : verrouille l'édition (long-press, grille)
-  /// et suspend les push Drive auto pour éviter tout jank pendant le live.
+  /// Entre/sort du Mode Spectacle : verrouille l'édition (croix, déplacement,
+  /// ajout) et suspend les push Drive auto pour éviter tout jank pendant le live.
   void _togglePerformanceMode() {
     setState(() {
       _isPerformanceMode = !_isPerformanceMode;
-      if (_isPerformanceMode) _isEditMode = false;
+      // Une bascule pendant un drag laisserait un état de glisser orphelin.
+      if (_isPerformanceMode) {
+        _draggingPadId = null;
+        _dropTarget = null;
+        _editDragUiReady = false;
+      }
     });
     final syncController = widget.services.syncController;
     if (_isPerformanceMode) {
@@ -748,24 +751,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
     } else {
       syncController.resumeAutoSync();
     }
-  }
-
-  void _toggleEditMode() {
-    final outgoing = _activeGridScrollController;
-    final savedOffset = outgoing.hasClients && outgoing.positions.length == 1
-        ? outgoing.offset
-        : 0.0;
-    setState(() {
-      _isEditMode = !_isEditMode;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final incoming = _activeGridScrollController;
-      if (!incoming.hasClients || incoming.positions.length != 1) return;
-      incoming.jumpTo(
-        savedOffset.clamp(0.0, incoming.position.maxScrollExtent),
-      );
-    });
   }
 
   void _emphasizePad(int padId) {
@@ -815,7 +800,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
     return _wrapMusicRegieTapTarget(card);
   }
 
-  static const Duration _addSlotTransitionDuration = Duration(milliseconds: 240);
+  static const Duration _addSlotTransitionDuration = Duration(
+    milliseconds: 240,
+  );
 
   /// Le « + » de fin de ligne se transforme en pad ; un nouveau « + » apparaît à côté.
   Widget _buildMorphingAddSlot(
@@ -847,11 +834,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
             )
           : KeyedSubtree(
               key: ValueKey<String>('add_pad_slot_$rowIndex'),
-              child: _buildAddToRowButton(
-                context,
-                board,
-                rowIndex: rowIndex,
-              ),
+              child: _buildAddToRowButton(context, board, rowIndex: rowIndex),
             ),
     );
   }
@@ -865,17 +848,19 @@ class _SamplerScreenState extends State<SamplerScreen> {
       builder: (context, value, child) {
         return Opacity(
           opacity: value,
-          child: Transform.scale(
-            scale: 0.94 + 0.06 * value,
-            child: child,
-          ),
+          child: Transform.scale(scale: 0.94 + 0.06 * value, child: child),
         );
       },
       child: child,
     );
   }
 
-  List<Widget> _buildNormalRowCells({
+  /// Cellules d'une ligne de la grille.
+  ///
+  /// - Mode classique (`editable`) : pads déplaçables (via [buildCommittedCell])
+  ///   + slot « + » de fin de ligne (qui se transforme en pad lors d'un ajout).
+  /// - Mode Spectacle (verrouillé) : pads simples, sans « + » ni croix.
+  List<Widget> _buildRowCells({
     required BuildContext context,
     required SamplerState state,
     required SoundBoard board,
@@ -883,8 +868,22 @@ class _SamplerScreenState extends State<SamplerScreen> {
     required List<PadItem> rowPads,
     required double cellWidth,
     required double cellHeight,
+    required bool editable,
+    Widget Function(PadItem pad)? buildCommittedCell,
   }) {
     final committed = rowPads.where((pad) => !pad.isDraft).toList();
+
+    Widget plainCell(PadItem pad) => SizedBox(
+      key: ValueKey<int>(pad.pad.id),
+      width: cellWidth,
+      height: cellHeight,
+      child: _buildPadWidget(context, state, pad),
+    );
+
+    if (!editable) {
+      return [for (final pad in committed) plainCell(pad)];
+    }
+
     PadItem? draft;
     for (final pad in rowPads) {
       if (pad.isDraft) {
@@ -895,12 +894,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     final cells = <Widget>[
       for (final pad in committed)
-        SizedBox(
-          key: ValueKey<int>(pad.pad.id),
-          width: cellWidth,
-          height: cellHeight,
-          child: _buildPadWidget(context, state, pad),
-        ),
+        buildCommittedCell != null ? buildCommittedCell(pad) : plainCell(pad),
       SizedBox(
         key: ValueKey<String>('row_${rowIndex}_tail_slot'),
         width: cellWidth,
@@ -922,11 +916,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
           width: cellWidth,
           height: cellHeight,
           child: _buildAddSlotEntrance(
-            child: _buildAddToRowButton(
-              context,
-              board,
-              rowIndex: rowIndex,
-            ),
+            child: _buildAddToRowButton(context, board, rowIndex: rowIndex),
           ),
         ),
       );
@@ -935,15 +925,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
     return cells;
   }
 
-
-
   Widget _buildPadsGrid(
     BuildContext context,
     SamplerState state,
     SoundBoard selectedBoard,
   ) {
     return LayoutBuilder(
-      key: ValueKey<bool>(_isEditMode),
+      key: ValueKey<bool>(_isEditable),
       builder: (context, constraints) {
         final screenWidth = constraints.maxWidth;
         _lastGridWidth = screenWidth;
@@ -966,70 +954,106 @@ class _SamplerScreenState extends State<SamplerScreen> {
         }
         final rowIndices = rowMap.keys.toList()..sort();
         final hasPads = rowMap.isNotEmpty;
+        final displayRowIndices = hasPads ? rowIndices : [0];
 
-        if (_isEditMode) {
-          if (!hasPads) return const SizedBox.shrink();
+        // Mode Spectacle : grille verrouillée, pads simples (ni croix ni « + »).
+        if (!_isEditable) {
+          return SingleChildScrollView(
+            key: const ValueKey('pads_locked_rows'),
+            controller: _normalGridScrollController,
+            padding: _padsGridScrollPadding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (int i = 0; i < displayRowIndices.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 14,
+                    children: _buildRowCells(
+                      context: context,
+                      state: state,
+                      board: selectedBoard,
+                      rowIndex: displayRowIndices[i],
+                      rowPads: rowMap[displayRowIndices[i]] ?? const [],
+                      cellWidth: cellWidth,
+                      cellHeight: cellHeight,
+                      editable: false,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
 
-          final newRowIndex = rowIndices.last + 1;
+        // Mode classique éditable : déplacement (glisser immédiat) + croix +
+        // slots « + ». Une ligne « nouvelle rangée » finale accueille un pad
+        // déposé sous la grille.
+        final newRowIndex = hasPads ? rowIndices.last + 1 : null;
 
-          final dropTarget = _dropTarget;
-          final showDragPreview =
-              _editDragUiReady && _draggingPadId != null;
-          final visualRowMap = showDragPreview && dropTarget != null
-              ? _previewRowMap(
-                  rowMap: rowMap,
-                  padId: _draggingPadId!,
-                  targetRowIndex: dropTarget.rowIndex,
-                  insertionPosition: dropTarget.position,
-                )
-              : rowMap;
-          final visualRowIndices = visualRowMap.keys.toList()..sort();
+        final dropTarget = _dropTarget;
+        final showDragPreview = _editDragUiReady && _draggingPadId != null;
+        final visualRowMap = showDragPreview && dropTarget != null
+            ? _previewRowMap(
+                rowMap: rowMap,
+                padId: _draggingPadId!,
+                targetRowIndex: dropTarget.rowIndex,
+                insertionPosition: dropTarget.position,
+              )
+            : rowMap;
 
-          final hitTestHeight = _editGridTotalHeight(
-            rowIndices: rowIndices,
-            rowMap: rowMap,
-            cellHeight: cellHeight,
-            slotsPerRow: crossAxisCount,
-            includeNewRowSpacer: true,
+        final hitTestHeight = _editGridTotalHeight(
+          rowIndices: displayRowIndices,
+          rowMap: rowMap,
+          cellHeight: cellHeight,
+          slotsPerRow: crossAxisCount,
+          includeNewRowSpacer: newRowIndex != null,
+        );
+
+        // Enveloppe un pad déplaçable.
+        //
+        // - Desktop (souris) : glisser immédiat.
+        // - Tactile (mobile) : appui long, pour ne pas confisquer le scroll de
+        //   la grille ni le tap de déclenchement.
+        Widget buildDraggablePadCell(PadItem padItem) {
+          final rowIdx = padItem.pad.rowIndex;
+          final rowPads = rowMap[rowIdx] ?? [];
+          final indexInRow = rowPads.indexWhere(
+            (p) => p.pad.id == padItem.pad.id,
           );
 
-          Widget buildEditPadCell(PadItem padItem) {
-            final rowIdx = padItem.pad.rowIndex;
-            final rowPads = rowMap[rowIdx] ?? [];
-            final indexInRow =
-                rowPads.indexWhere((p) => p.pad.id == padItem.pad.id);
+          Offset anchorStrategy(
+            Draggable<Object> draggable,
+            BuildContext context,
+            Offset position,
+          ) => Offset(cellWidth / 2, cellHeight / 2);
 
-            return SizedBox(
-              key: ValueKey('pad_${padItem.pad.id}'),
-              width: cellWidth,
-              height: cellHeight,
-              child: Draggable<int>(
-                key: ValueKey('draggable_${padItem.pad.id}'),
-                data: padItem.pad.id,
-                dragAnchorStrategy: (draggable, context, position) =>
-                    Offset(cellWidth / 2, cellHeight / 2),
-                onDragStarted: () {
-                  HapticFeedback.selectionClick();
-                  _draggingPadId = padItem.pad.id;
-                  _lastDragGlobalOffset = null;
-                  _editDragUiReady = false;
-                  _dropTarget = (
-                    rowIndex: rowIdx,
-                    position: indexInRow < 0 ? 0 : indexInRow,
-                  );
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted || _draggingPadId != padItem.pad.id) {
-                      return;
-                    }
-                    setState(() => _editDragUiReady = true);
-                  });
-                },
-                onDragUpdate: (details) {
+          void onDragStarted() {
+            HapticFeedback.selectionClick();
+            _draggingPadId = padItem.pad.id;
+            _lastDragGlobalOffset = null;
+            _editDragUiReady = false;
+            _dropTarget = (
+              rowIndex: rowIdx,
+              position: indexInRow < 0 ? 0 : indexInRow,
+            );
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted || _draggingPadId != padItem.pad.id) {
+                return;
+              }
+              setState(() => _editDragUiReady = true);
+            });
+          }
+
+          void Function(DragUpdateDetails)? onDragUpdate = newRowIndex == null
+              ? null
+              : (details) {
                   _lastDragGlobalOffset = details.globalPosition;
                   final target = _resolveEditDropTarget(
                     global: details.globalPosition,
                     rowMap: rowMap,
-                    rowIndices: rowIndices,
+                    rowIndices: displayRowIndices,
                     newRowIndex: newRowIndex,
                     cellWidth: cellWidth,
                     cellHeight: cellHeight,
@@ -1039,168 +1063,195 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   if (target != null) {
                     _updateDropTarget(target.rowIndex, target.position);
                   }
-                },
-                onDragEnd: (details) {
-                  _finishPadDrag(
-                    padItem.pad.id,
-                    _lastDragGlobalOffset ?? details.offset,
-                    rowMap: rowMap,
-                    rowIndices: rowIndices,
-                    newRowIndex: newRowIndex,
-                    cellWidth: cellWidth,
-                    cellHeight: cellHeight,
-                    slotsPerRow: crossAxisCount,
-                  );
-                },
-                feedback: Material(
-                  type: MaterialType.transparency,
-                  child: Opacity(
-                    opacity: 0.88,
-                    child: SizedBox(
-                      width: cellWidth,
-                      height: cellHeight,
-                      child: PadCard(
-                        padItem: padItem,
-                        isEditMode: false,
-                        isTapBlocked: (_) => false,
-                      ),
-                    ),
-                  ),
+                };
+
+          void onDragEnd(DraggableDetails details) {
+            _finishPadDrag(
+              padItem.pad.id,
+              _lastDragGlobalOffset ?? details.offset,
+              rowMap: rowMap,
+              rowIndices: displayRowIndices,
+              newRowIndex: newRowIndex ?? rowIdx,
+              cellWidth: cellWidth,
+              cellHeight: cellHeight,
+              slotsPerRow: crossAxisCount,
+            );
+          }
+
+          final feedback = Material(
+            type: MaterialType.transparency,
+            child: Opacity(
+              opacity: 0.88,
+              child: SizedBox(
+                width: cellWidth,
+                height: cellHeight,
+                child: PadCard(
+                  padItem: padItem,
+                  isEditable: false,
+                  isTapBlocked: (_) => false,
                 ),
-                childWhenDragging: const SizedBox.shrink(),
-                child: _buildPadWidget(context, state, padItem),
               ),
-            );
-          }
+            ),
+          );
 
-          Widget buildPreviewColumn() {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < visualRowIndices.length; i++) ...[
-                  if (i > 0) const SizedBox(height: _editRowGap),
-                  Wrap(
-                    spacing: _editRowGap,
-                    runSpacing: _editRowGap,
-                    children: [
-                      for (final pad
-                          in visualRowMap[visualRowIndices[i]] ?? [])
-                        SizedBox(
-                          key: ValueKey('pad_prev_${pad.pad.id}'),
-                          width: cellWidth,
-                          height: cellHeight,
-                          child: PadCard(
-                            padItem: pad,
-                            isEditMode: true,
-                            isTapBlocked: (_) => false,
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-                if (dropTarget?.rowIndex == newRowIndex) ...[
-                  const SizedBox(height: _editRowGap),
-                  SizedBox(height: cellHeight),
-                ],
+          final dragKey = ValueKey('draggable_${padItem.pad.id}');
+          final child = _buildPadWidget(context, state, padItem);
+
+          final Widget draggable = _isDesktopPlatform
+              ? Draggable<int>(
+                  key: dragKey,
+                  data: padItem.pad.id,
+                  dragAnchorStrategy: anchorStrategy,
+                  onDragStarted: onDragStarted,
+                  onDragUpdate: onDragUpdate,
+                  onDragEnd: onDragEnd,
+                  feedback: feedback,
+                  childWhenDragging: const SizedBox.shrink(),
+                  child: child,
+                )
+              : LongPressDraggable<int>(
+                  key: dragKey,
+                  data: padItem.pad.id,
+                  dragAnchorStrategy: anchorStrategy,
+                  onDragStarted: onDragStarted,
+                  onDragUpdate: onDragUpdate,
+                  onDragEnd: onDragEnd,
+                  feedback: feedback,
+                  childWhenDragging: const SizedBox.shrink(),
+                  child: child,
+                );
+
+          return SizedBox(
+            key: ValueKey('pad_${padItem.pad.id}'),
+            width: cellWidth,
+            height: cellHeight,
+            child: draggable,
+          );
+        }
+
+        // Mêmes rangées que la grille interactive, mais contenu reflué
+        // (visualRowMap) pour matérialiser le trou de dépôt. Les slots « + »
+        // « Ajouter un pad » restent visibles pendant le déplacement.
+        List<Widget> previewRowCells(int rowIndex) {
+          return [
+            for (final pad in visualRowMap[rowIndex] ?? [])
+              SizedBox(
+                key: ValueKey('pad_prev_${pad.pad.id}'),
+                width: cellWidth,
+                height: cellHeight,
+                child: PadCard(
+                  padItem: pad,
+                  isEditable: true,
+                  isTapBlocked: (_) => false,
+                ),
+              ),
+            SizedBox(
+              width: cellWidth,
+              height: cellHeight,
+              child: _buildAddToRowButton(
+                context,
+                selectedBoard,
+                rowIndex: rowIndex,
+              ),
+            ),
+          ];
+        }
+
+        Widget buildPreviewColumn() {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (int i = 0; i < displayRowIndices.length; i++) ...[
+                if (i > 0) const SizedBox(height: _editRowGap),
+                Wrap(
+                  spacing: _editRowGap,
+                  runSpacing: _editRowGap,
+                  children: previewRowCells(displayRowIndices[i]),
+                ),
               ],
-            );
-          }
+              if (newRowIndex != null) ...[
+                const SizedBox(height: _editRowGap),
+                Wrap(
+                  spacing: _editRowGap,
+                  runSpacing: _editRowGap,
+                  children: previewRowCells(newRowIndex),
+                ),
+              ],
+            ],
+          );
+        }
 
-          return SingleChildScrollView(
-            key: const ValueKey('pads_edit_rows'),
-            controller: _editGridScrollController,
-            padding: _padsGridScrollPadding,
-            child: Stack(
-              key: _editGridKey,
-              clipBehavior: Clip.none,
-              children: [
-                // Grille interactive (invisible pendant la prévisualisation).
-                Opacity(
+        return SingleChildScrollView(
+          key: const ValueKey('pads_editable_rows'),
+          controller: _normalGridScrollController,
+          padding: _padsGridScrollPadding,
+          child: Stack(
+            key: _editGridKey,
+            clipBehavior: Clip.none,
+            children: [
+              // Grille interactive (invisible pendant la prévisualisation).
+              // IgnorePointer pendant le drag : sinon le calque masqué continue
+              // de capter le survol souris et affiche le tooltip du slot « + ».
+              IgnorePointer(
+                ignoring: showDragPreview,
+                child: Opacity(
                   opacity: showDragPreview ? 0 : 1,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (var i = 0; i < rowIndices.length; i++) ...[
+                      for (int i = 0; i < displayRowIndices.length; i++) ...[
                         if (i > 0) const SizedBox(height: _editRowGap),
                         Wrap(
                           spacing: _editRowGap,
                           runSpacing: _editRowGap,
-                          children: [
-                            for (final pad in rowMap[rowIndices[i]] ?? [])
-                              buildEditPadCell(pad),
-                          ],
+                          children: _buildRowCells(
+                            context: context,
+                            state: state,
+                            board: selectedBoard,
+                            rowIndex: displayRowIndices[i],
+                            rowPads: rowMap[displayRowIndices[i]] ?? const [],
+                            cellWidth: cellWidth,
+                            cellHeight: cellHeight,
+                            editable: true,
+                            buildCommittedCell: buildDraggablePadCell,
+                          ),
                         ),
                       ],
-                      const SizedBox(height: _editRowGap),
-                      SizedBox(height: cellHeight),
+                      if (newRowIndex != null) ...[
+                        const SizedBox(height: _editRowGap),
+                        Wrap(
+                          spacing: _editRowGap,
+                          runSpacing: _editRowGap,
+                          children: _buildRowCells(
+                            context: context,
+                            state: state,
+                            board: selectedBoard,
+                            rowIndex: newRowIndex,
+                            rowPads: const [],
+                            cellWidth: cellWidth,
+                            cellHeight: cellHeight,
+                            editable: true,
+                            buildCommittedCell: buildDraggablePadCell,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                // Zone de hit-test stable (layout courant, pas la prévisualisation).
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: hitTestHeight,
-                  child: const IgnorePointer(
-                    child: SizedBox.expand(),
-                  ),
+              ),
+              // Zone de hit-test stable (layout courant, pas la prévisualisation).
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: hitTestHeight,
+                child: const IgnorePointer(child: SizedBox.expand()),
+              ),
+              // Prévisualisation par-dessus (les événements passent au Draggable).
+              if (showDragPreview)
+                Positioned.fill(
+                  child: IgnorePointer(child: buildPreviewColumn()),
                 ),
-                // Prévisualisation par-dessus (les événements passent au Draggable).
-                if (showDragPreview)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: buildPreviewColumn(),
-                    ),
-                  ),
-              ],
-            ),
-          );
-        }
-
-        // Mode normal : layout par lignes (rows).
-        final displayRowIndices = hasPads ? rowIndices : [0];
-        final nextRowIndex = hasPads ? rowIndices.last + 1 : null;
-
-        return SingleChildScrollView(
-          key: const ValueKey('pads_normal_rows'),
-          controller: _normalGridScrollController,
-          padding: _padsGridScrollPadding,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (int i = 0; i < displayRowIndices.length; i++) ...[
-                if (i > 0) const SizedBox(height: 14),
-                Wrap(
-                  spacing: 14,
-                  runSpacing: 14,
-                  children: _buildNormalRowCells(
-                    context: context,
-                    state: state,
-                    board: selectedBoard,
-                    rowIndex: displayRowIndices[i],
-                    rowPads: rowMap[displayRowIndices[i]] ?? [],
-                    cellWidth: cellWidth,
-                    cellHeight: cellHeight,
-                  ),
-                ),
-              ],
-              if (nextRowIndex != null) ...[
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 14,
-                  runSpacing: 14,
-                  children: _buildNormalRowCells(
-                    context: context,
-                    state: state,
-                    board: selectedBoard,
-                    rowIndex: nextRowIndex,
-                    rowPads: const [],
-                    cellWidth: cellWidth,
-                    cellHeight: cellHeight,
-                  ),
-                ),
-              ],
             ],
           ),
         );
@@ -1210,10 +1261,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   Widget _wrapMusicRegieTapTarget(Widget child) {
     if (!_isMusicRegieAdvanced) return child;
-    return TapRegion(
-      groupId: _musicRegieTapGroup,
-      child: child,
-    );
+    return TapRegion(groupId: _musicRegieTapGroup, child: child);
   }
 
   Future<void> _handlePadTap(BuildContext context, PadItem padItem) async {
@@ -1240,12 +1288,16 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     // Fichier local validé, lecteur SoLoud pas encore chargé.
     if (resolved.appearsReady) {
-      debugPrint('[TAP] pad="${resolved.pad.displayName}" → appearsReady, refreshing players');
+      debugPrint(
+        '[TAP] pad="${resolved.pad.displayName}" → appearsReady, refreshing players',
+      );
       unawaited(HapticFeedback.selectionClick());
       await _notifier.refreshPadPlayback(resolved.pad.id);
       if (!mounted) return;
       final after = _notifier.findPadItemById(resolved.pad.id) ?? resolved;
-      debugPrint('[TAP] pad="${resolved.pad.displayName}" → after refresh: isPlayable=${after.isPlayable}');
+      debugPrint(
+        '[TAP] pad="${resolved.pad.displayName}" → after refresh: isPlayable=${after.isPlayable}',
+      );
       if (after.isPlayable) {
         await _notifier.toggleSound(after);
       }
@@ -1256,7 +1308,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     if (reason == PadUnavailabilityReason.offline ||
         reason == PadUnavailabilityReason.unsupportedFormat) {
-      debugPrint('[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason');
+      debugPrint(
+        '[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason',
+      );
       unawaited(HapticFeedback.heavyImpact());
       _showBlockedPadFeedback(resolved, reason);
       return;
@@ -1264,13 +1318,17 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
     if (reason == PadUnavailabilityReason.missingFile ||
         _notifier.isPadTapBlocked(resolved)) {
-      debugPrint('[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason');
+      debugPrint(
+        '[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason',
+      );
       return;
     }
 
     if (_notifier.offlineMode) return;
 
-    debugPrint('[TAP] pad="${resolved.pad.displayName}" → EN ROUTE / preparing');
+    debugPrint(
+      '[TAP] pad="${resolved.pad.displayName}" → EN ROUTE / preparing',
+    );
     // EN ROUTE (bouton DL) : on télécharge SANS jouer. Le moment de lecture
     // doit rester maîtrisé par l'opérateur → le pad devient un bouton GO une
     // fois prêt, et un second tap le déclenche immédiatement.
@@ -1290,7 +1348,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
 
     final resolved = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
-    if (resolved.isPlayable) return; // déjà prêt : c'est désormais un bouton GO.
+    // déjà prêt : c'est désormais un bouton GO.
+    if (resolved.isPlayable) return;
 
     await _notifier.downloadAndLoadPad(resolved);
     if (!mounted) return;
@@ -1342,37 +1401,35 @@ class _SamplerScreenState extends State<SamplerScreen> {
         context: context,
         showDragHandle: true,
         isScrollControlled: true,
-        builder: (ctx) => _PadDownloadSheet(
-          padItem: padItem,
-          notifier: _notifier,
-        ),
+        builder: (ctx) =>
+            _PadDownloadSheet(padItem: padItem, notifier: _notifier),
       );
       return;
     }
 
     final (title, body) = switch (reason) {
       PadUnavailabilityReason.needsDownload => (
-          'Son non téléchargé',
-          'Ce pad n\'est pas disponible localement. Synchronisez la bibliothèque pour télécharger les fichiers audio.',
-        ),
+        'Son non téléchargé',
+        'Ce pad n\'est pas disponible localement. Synchronisez la bibliothèque pour télécharger les fichiers audio.',
+      ),
       PadUnavailabilityReason.offline => (
-          'Hors-ligne',
-          'Ce pad n\'est pas disponible sans connexion. Reconnectez-vous pour accéder aux fichiers audio.',
-        ),
+        'Hors-ligne',
+        'Ce pad n\'est pas disponible sans connexion. Reconnectez-vous pour accéder aux fichiers audio.',
+      ),
       PadUnavailabilityReason.missingFile => (
-          'Fichier introuvable',
-          _notifier.isPadRetryableFromDrive(padItem)
-              ? 'Le fichier audio n\'a pas pu être chargé. Touchez le pad pour '
+        'Fichier introuvable',
+        _notifier.isPadRetryableFromDrive(padItem)
+            ? 'Le fichier audio n\'a pas pu être chargé. Touchez le pad pour '
                   'retenter le téléchargement depuis Drive, ou resynchronisez la '
                   'bibliothèque dans les paramètres.'
-              : 'Le fichier audio n\'a pas pu être chargé. Resynchronisez la '
+            : 'Le fichier audio n\'a pas pu être chargé. Resynchronisez la '
                   'bibliothèque dans les paramètres.',
-        ),
+      ),
       PadUnavailabilityReason.unsupportedFormat => (
-          'Format non supporté',
-          'Ce format audio n\'est pas pris en charge sur cette plateforme. '
-              'Convertissez le fichier en MP3 ou WAV pour l\'utiliser.',
-        ),
+        'Format non supporté',
+        'Ce format audio n\'est pas pris en charge sur cette plateforme. '
+            'Convertissez le fichier en MP3 ou WAV pour l\'utiliser.',
+      ),
     };
 
     showModalBottomSheet<void>(
@@ -1400,36 +1457,32 @@ class _SamplerScreenState extends State<SamplerScreen> {
     SamplerState state,
     PadItem padItem,
   ) {
-    // ValueKey sur la racine : requis par ReorderableGridView (ne pas utiliser GlobalKey ici).
+    final editable = _isEditable;
+    // Croix (suppression) et crayon (détails) ne concernent que les pads
+    // confirmés en mode classique — jamais un brouillon en cours de création
+    // ni le Mode Spectacle (verrouillé).
+    final showEditAffordances = editable && !padItem.isDraft;
     return _wrapMusicRegieTapTarget(
       PadCard(
         key: ValueKey<int>(padItem.pad.id),
         padItem: padItem,
-        isEditMode: _isEditMode,
+        isEditable: editable,
         isTapBlocked: _notifier.isPadTapBlocked,
         animateOnRestore: _recentlyRestoredSoundId == padItem.pad.id,
         isHighlighted: _highlightedPadId == padItem.pad.id,
         onTap: () => unawaited(_handlePadTap(context, padItem)),
-        onLongPress: _isEditMode
-            ? null
-            : () {
+        onEdit: showEditAffordances
+            ? () {
                 final live =
                     _notifier.findPadItemById(padItem.pad.id) ?? padItem;
-                // Pad non-musique en cours : l'appui long coupe ses voix
-                // (fonctionne aussi en mode spectacle, pour un arrêt ciblé).
-                if (!live.pad.isMusicPad && live.isPlaying) {
-                  unawaited(HapticFeedback.mediumImpact());
-                  unawaited(_notifier.stopPadSounds(live));
-                  return;
-                }
-                if (_isPerformanceMode) return;
                 PadDetailsScreen.open(
                   context,
                   padItem: live,
                   notifier: _notifier,
                 );
-              },
-        onRemove: _isEditMode
+              }
+            : null,
+        onRemove: showEditAffordances
             ? () async {
                 final removed = await _notifier.removeSound(padItem);
                 if (!mounted || !removed) return;
@@ -1505,9 +1558,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
               ),
             );
           }
-          final downloadableCount =
-              state.pads.where(_notifier.isPadPreparable).length;
-          final showPrepareBanner = !state.offlineMode &&
+          final downloadableCount = state.pads
+              .where(_notifier.isPadPreparable)
+              .length;
+          final showPrepareBanner =
+              !state.offlineMode &&
               (downloadableCount > 0 || state.isBoardPreparing);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1618,7 +1673,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 child: Text(
                   '$count son${count > 1 ? 's' : ''} '
                   'non téléchargé${count > 1 ? 's' : ''}',
-                  style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
               Text(
@@ -1689,7 +1747,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
   void dispose() {
     widget.services.syncController.onLibraryMerged = null;
     _normalGridScrollController.dispose();
-    _editGridScrollController.dispose();
     _notifier.removeListener(_onStateChanged);
     _notifier.dispose();
     super.dispose();
@@ -1760,12 +1817,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     selectedBoard: selectedBoard,
                     boards: boards,
                     isBoardsLoading: isBoardsLoading,
-                    isEditMode: _isEditMode,
-                    canToggleEditMode: state.pads.isNotEmpty,
                     onSelectBoard: _selectBoardDirect,
                     onCreateBoard: _createBoard,
                     onBoardContextMenu: _showBoardContextMenu,
-                    onToggleEditMode: _toggleEditMode,
                     isPerformanceMode: _isPerformanceMode,
                     onTogglePerformanceMode: _togglePerformanceMode,
                     isOfflineMode: state.offlineMode,
@@ -1781,12 +1835,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   )
                 : _SamplerAppBar(
                     selectedBoard: selectedBoard,
-                    isEditMode: _isEditMode,
                     isPerformanceMode: _isPerformanceMode,
                     isOfflineMode: state.offlineMode,
-                    canToggleEditMode: state.pads.isNotEmpty,
                     onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                    onToggleEditMode: _toggleEditMode,
                     onTogglePerformanceMode: _togglePerformanceMode,
                     onToggleOfflineMode: _toggleOfflineMode,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
@@ -1817,9 +1868,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
             body: SafeArea(
               child: Stack(
                 children: [
-                  Positioned.fill(
-                    child: _buildSamplerContent(context, state),
-                  ),
+                  Positioned.fill(child: _buildSamplerContent(context, state)),
                   ListenableBuilder(
                     listenable: _notifier,
                     builder: (context, _) =>
@@ -1833,7 +1882,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
       ),
     );
   }
-
 }
 
 // ---------- Pastille de synchronisation (ambiante) ----------
@@ -1858,8 +1906,11 @@ class _SyncStatusPill extends StatelessWidget {
         if (status == SyncStatus.idle) return const SizedBox.shrink();
 
         final scheme = Theme.of(context).colorScheme;
-        final (color, label, icon, spinning, tooltip) =
-            _visuals(status, scheme, syncController.state);
+        final (color, label, icon, spinning, tooltip) = _visuals(
+          status,
+          scheme,
+          syncController.state,
+        );
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -1910,48 +1961,48 @@ class _SyncStatusPill extends StatelessWidget {
   ) {
     return switch (status) {
       SyncStatus.syncing => (
-          scheme.primary,
-          'Synchro…',
-          Icons.sync_rounded,
-          true,
-          'Synchronisation en cours…',
-        ),
+        scheme.primary,
+        'Synchro…',
+        Icons.sync_rounded,
+        true,
+        'Synchronisation en cours…',
+      ),
       SyncStatus.synced => (
-          scheme.primary,
-          'À jour',
-          Icons.cloud_done_outlined,
-          false,
-          'Bibliothèque synchronisée',
-        ),
+        scheme.primary,
+        'À jour',
+        Icons.cloud_done_outlined,
+        false,
+        'Bibliothèque synchronisée',
+      ),
       // Hors-ligne : neutre, jamais alarmiste — le travail local est normal.
       SyncStatus.offline => (
-          scheme.onSurfaceVariant,
-          'Hors-ligne',
-          Icons.cloud_off_outlined,
-          false,
-          'Hors-ligne — modifications gardées en local',
-        ),
+        scheme.onSurfaceVariant,
+        'Hors-ligne',
+        Icons.cloud_off_outlined,
+        false,
+        'Hors-ligne — modifications gardées en local',
+      ),
       SyncStatus.conflict => (
-          scheme.error,
-          'Conflit',
-          Icons.merge_type_rounded,
-          false,
-          'Conflit de version — appuyez pour résoudre',
-        ),
+        scheme.error,
+        'Conflit',
+        Icons.merge_type_rounded,
+        false,
+        'Conflit de version — appuyez pour résoudre',
+      ),
       SyncStatus.error => (
-          scheme.error,
-          'Erreur sync',
-          Icons.error_outline_rounded,
-          false,
-          state.message ?? 'Erreur de synchronisation',
-        ),
+        scheme.error,
+        'Erreur sync',
+        Icons.error_outline_rounded,
+        false,
+        state.message ?? 'Erreur de synchronisation',
+      ),
       SyncStatus.idle => (
-          scheme.onSurfaceVariant,
-          '',
-          Icons.cloud_outlined,
-          false,
-          '',
-        ),
+        scheme.onSurfaceVariant,
+        '',
+        Icons.cloud_outlined,
+        false,
+        '',
+      ),
     };
   }
 }
@@ -1960,12 +2011,9 @@ class _SyncStatusPill extends StatelessWidget {
 
 class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final SoundBoard? selectedBoard;
-  final bool isEditMode;
   final bool isPerformanceMode;
   final bool isOfflineMode;
-  final bool canToggleEditMode;
   final VoidCallback onOpenMenu;
-  final VoidCallback onToggleEditMode;
   final VoidCallback onTogglePerformanceMode;
   final VoidCallback onToggleOfflineMode;
   final VoidCallback onQuickSearch;
@@ -1974,12 +2022,9 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   const _SamplerAppBar({
     required this.selectedBoard,
-    required this.isEditMode,
     required this.isPerformanceMode,
     required this.isOfflineMode,
-    required this.canToggleEditMode,
     required this.onOpenMenu,
-    required this.onToggleEditMode,
     required this.onTogglePerformanceMode,
     required this.onToggleOfflineMode,
     required this.onQuickSearch,
@@ -2020,15 +2065,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
           onPressed: onQuickSearch,
         ),
         syncStatus,
-        if (!isPerformanceMode)
-          IconButton(
-            icon: Icon(
-              isEditMode ? Icons.done_rounded : Icons.grid_view_rounded,
-              color: isEditMode ? scheme.primary : null,
-            ),
-            tooltip: isEditMode ? 'Terminer l\'édition' : 'Modifier la grille',
-            onPressed: canToggleEditMode ? onToggleEditMode : null,
-          ),
       ],
     );
   }
@@ -2165,9 +2201,9 @@ class _BoardsList extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'Scènes',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -2275,13 +2311,10 @@ class _SamplerDesktopAppBar extends StatelessWidget
   final SoundBoard? selectedBoard;
   final List<SoundBoard> boards;
   final bool isBoardsLoading;
-  final bool isEditMode;
-  final bool canToggleEditMode;
   final Future<void> Function(SoundBoard board) onSelectBoard;
   final Future<void> Function() onCreateBoard;
   final Future<void> Function(SoundBoard board, Offset position)
-      onBoardContextMenu;
-  final VoidCallback onToggleEditMode;
+  onBoardContextMenu;
   final bool isPerformanceMode;
   final VoidCallback onTogglePerformanceMode;
   final bool isOfflineMode;
@@ -2296,12 +2329,9 @@ class _SamplerDesktopAppBar extends StatelessWidget
     required this.selectedBoard,
     required this.boards,
     required this.isBoardsLoading,
-    required this.isEditMode,
-    required this.canToggleEditMode,
     required this.onSelectBoard,
     required this.onCreateBoard,
     required this.onBoardContextMenu,
-    required this.onToggleEditMode,
     required this.isPerformanceMode,
     required this.onTogglePerformanceMode,
     required this.isOfflineMode,
@@ -2329,12 +2359,10 @@ class _SamplerDesktopAppBar extends StatelessWidget
       title: GestureDetector(
         onSecondaryTapDown: selectedBoard != null
             ? (details) =>
-                onBoardContextMenu(selectedBoard!, details.globalPosition)
+                  onBoardContextMenu(selectedBoard!, details.globalPosition)
             : null,
         child: Tooltip(
-          message: selectedBoard != null
-              ? 'Clic droit pour les actions…'
-              : '',
+          message: selectedBoard != null ? 'Clic droit pour les actions…' : '',
           child: _BoardTitleLabel(board: selectedBoard),
         ),
       ),
@@ -2361,15 +2389,6 @@ class _SamplerDesktopAppBar extends StatelessWidget
           onPressed: onQuickSearch,
         ),
         syncStatus,
-        if (!isPerformanceMode)
-          IconButton(
-            icon: Icon(
-              isEditMode ? Icons.done_rounded : Icons.grid_view_rounded,
-              color: isEditMode ? scheme.primary : null,
-            ),
-            tooltip: isEditMode ? 'Terminer l\'édition' : 'Modifier la grille',
-            onPressed: canToggleEditMode ? onToggleEditMode : null,
-          ),
       ],
     );
   }
@@ -2579,8 +2598,8 @@ class _PadDownloadSheetState extends State<_PadDownloadSheet> {
           Text(
             isMulti
                 ? ready > 0
-                    ? '$ready sur $total variantes disponibles localement.'
-                    : 'Ce pad contient $total variantes non encore téléchargées.'
+                      ? '$ready sur $total variantes disponibles localement.'
+                      : 'Ce pad contient $total variantes non encore téléchargées.'
                 : 'Ce pad n\'est pas encore disponible localement.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
@@ -2616,12 +2635,12 @@ class _PadDownloadSheetState extends State<_PadDownloadSheet> {
                       PadUnavailabilityReason.unsupportedFormat
                   ? 'Format audio non supporté sur cette plateforme. Convertissez le fichier en MP3 ou WAV.'
                   : padItem.unavailabilityReason ==
-                          PadUnavailabilityReason.missingFile
-                      ? 'Fichier introuvable sur Drive. Resynchronisez la bibliothèque dans les paramètres.'
-                      : padItem.unavailabilityReason ==
-                              PadUnavailabilityReason.offline
-                          ? 'Hors-ligne. Reconnectez-vous à Drive dans les paramètres.'
-                          : 'Téléchargement échoué. Vérifiez la connexion.',
+                        PadUnavailabilityReason.missingFile
+                  ? 'Fichier introuvable sur Drive. Resynchronisez la bibliothèque dans les paramètres.'
+                  : padItem.unavailabilityReason ==
+                        PadUnavailabilityReason.offline
+                  ? 'Hors-ligne. Reconnectez-vous à Drive dans les paramètres.'
+                  : 'Téléchargement échoué. Vérifiez la connexion.',
               style: TextStyle(color: scheme.error, fontSize: 13),
             ),
           ],
@@ -2657,10 +2676,10 @@ class _PadDownloadSheetState extends State<_PadDownloadSheet> {
                 padItem.isFullyReady
                     ? 'Tout est prêt'
                     : _isDownloading
-                        ? 'Téléchargement…'
-                        : isMulti
-                            ? 'Télécharger les variantes manquantes'
-                            : 'Télécharger',
+                    ? 'Téléchargement…'
+                    : isMulti
+                    ? 'Télécharger les variantes manquantes'
+                    : 'Télécharger',
               ),
             ),
           ),
@@ -2689,4 +2708,3 @@ class _BoardTileIcon extends StatelessWidget {
     );
   }
 }
-
