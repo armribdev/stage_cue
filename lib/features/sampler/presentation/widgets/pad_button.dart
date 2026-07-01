@@ -128,7 +128,9 @@ class PadButton extends StatelessWidget {
       child: _interactive(
         child: Stack(
           children: [
-            _buildPlaybackProgress(scheme, hasCustomColor: hasCustomColor),
+            padItem.pad.isMusicPad
+                ? _buildPlaybackProgress(scheme, hasCustomColor: hasCustomColor)
+                : _buildPolyphonicProgress(scheme, hasCustomColor: hasCustomColor),
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -206,6 +208,33 @@ class PadButton extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  /// Barres de progression superposées (pads non-musique, polyphonie) : une
+  /// barre translucide indépendante par voix en cours. Les zones où plusieurs
+  /// voix se chevauchent cumulent l'opacité — repère visuel de la densité.
+  Widget _buildPolyphonicProgress(
+    ColorScheme scheme, {
+    required bool hasCustomColor,
+  }) {
+    final tickets = padItem.playbackTickets;
+    if (tickets.isEmpty) return const SizedBox.shrink();
+    final barColor = (hasCustomColor ? scheme.primary : scheme.onSurfaceVariant)
+        .withValues(alpha: 0.16);
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          for (final ticket in tickets)
+            Positioned.fill(
+              child: _PolyphonicProgressBar(
+                key: ValueKey<int>(ticket.id),
+                ticket: ticket,
+                color: barColor,
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -434,6 +463,66 @@ class PadButton extends StatelessWidget {
       onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(14),
       child: child,
+    );
+  }
+}
+
+/// Barre de progression d'une voix polyphonique : anime 0→1 sur la durée du son
+/// à partir de sa position réelle (au cas où la barre apparaît après le départ),
+/// indépendamment des rebuilds du pad (chevauchements superposés).
+class _PolyphonicProgressBar extends StatefulWidget {
+  final PadPlaybackTicket ticket;
+  final Color color;
+
+  const _PolyphonicProgressBar({
+    super.key,
+    required this.ticket,
+    required this.color,
+  });
+
+  @override
+  State<_PolyphonicProgressBar> createState() => _PolyphonicProgressBarState();
+}
+
+class _PolyphonicProgressBarState extends State<_PolyphonicProgressBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    final total = widget.ticket.duration;
+    final elapsed = DateTime.now().difference(widget.ticket.startedAt);
+    final totalMs = total.inMilliseconds;
+    final startValue =
+        totalMs > 0 ? (elapsed.inMilliseconds / totalMs).clamp(0.0, 1.0) : 1.0;
+    _controller = AnimationController(
+      vsync: this,
+      duration: total > Duration.zero ? total : const Duration(milliseconds: 1),
+    );
+    _controller.value = startValue;
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) => ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: LinearProgressIndicator(
+          value: _controller.value,
+          backgroundColor: Colors.transparent,
+          valueColor: AlwaysStoppedAnimation<Color>(widget.color),
+          minHeight: double.infinity,
+        ),
+      ),
     );
   }
 }
