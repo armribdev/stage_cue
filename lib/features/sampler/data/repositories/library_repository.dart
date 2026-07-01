@@ -486,25 +486,49 @@ class LibraryRepository extends ChangeNotifier {
     int? overrideKnownRevision,
   }) async {
     final client = _activeClient;
-    final folderId = library.driveFolderId;
-    if (client == null || folderId == null) {
+    final rootFolderId = library.driveFolderId;
+    if (client == null || rootFolderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
+    final force = overrideKnownRevision != null;
     try {
-      final outcome = await _syncService.push(
+      // 1. Chaque nœud dossier pousse ses sons dans SON `.stagecue` co-localisé.
+      final folders = await _dataSource.getFoldersForLibrary(library.id);
+      for (final folder in folders) {
+        final outcome = await _syncService.pushFolder(
+          client: client,
+          folderId: folder.id,
+          folderDriveId: folder.driveFolderId,
+          knownRevision: folder.lastSyncedRevision,
+          force: force,
+        );
+        if (outcome is PushSuccess) {
+          await _dataSource.updateFolderSyncState(
+            id: folder.id,
+            lastSyncedRevision: outcome.revision,
+            lastSyncedAt: DateTime.now(),
+          );
+        } else if (outcome is PushConflict) {
+          return outcome; // conflit remonté au niveau bibliothèque
+        }
+      }
+
+      // 2. Snapshot racine (boards + pads référençant les sons par driveFileId).
+      final rootOutcome = await _syncService.push(
         client: client,
         libraryId: library.id,
-        libraryFolderId: folderId,
+        libraryFolderId: rootFolderId,
         knownRevision: overrideKnownRevision ?? library.lastSyncedRevision,
+        force: force,
       );
-      if (outcome is PushSuccess) {
+      if (rootOutcome is PushSuccess) {
         await _dataSource.updateSyncState(
           id: library.id,
-          lastSyncedRevision: outcome.revision,
+          lastSyncedRevision: rootOutcome.revision,
           lastSyncedAt: DateTime.now(),
         );
       }
-      return outcome;
+      return rootOutcome;
     } on DriveAuthException {
       await invalidateAuthSession();
       rethrow;
@@ -512,27 +536,59 @@ class LibraryRepository extends ChangeNotifier {
   }
 
   /// Télécharge et fusionne le snapshot distant de [library] s'il est plus récent.
+  ///
+  /// Ordre important : on tire d'abord les nœuds dossier (les SONS), puis le
+  /// snapshot racine (les BOARDS), qui recâble les pads sur les sons par
+  /// driveFileId — les sons doivent donc déjà exister localement.
   Future<PullOutcome> pullLibrary(Library library) async {
     final client = _activeClient;
-    final folderId = library.driveFolderId;
-    if (client == null || folderId == null) {
+    final rootFolderId = library.driveFolderId;
+    if (client == null || rootFolderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
     try {
-      final outcome = await _syncService.pull(
+      var staged = false;
+
+      // 1. Nœuds dossier (sons). Les nœuds locaux proviennent de l'indexation ;
+      //    un appareil vierge les crée via indexDriveFolder avant que ceci ne
+      //    remonte des métadonnées synchronisées.
+      final folders = await _dataSource.getFoldersForLibrary(library.id);
+      for (final folder in folders) {
+        final outcome = await _syncService.pullFolder(
+          client: client,
+          folderId: folder.id,
+          folderDriveId: folder.driveFolderId,
+          knownRevision: folder.lastSyncedRevision,
+        );
+        if (outcome is PullStaged) {
+          staged = true;
+          await _dataSource.updateFolderSyncState(
+            id: folder.id,
+            lastSyncedRevision: outcome.revision,
+            lastSyncedAt: DateTime.now(),
+          );
+        }
+      }
+
+      // 2. Snapshot racine (boards → recâblage par driveFileId).
+      final rootOutcome = await _syncService.pull(
         client: client,
         libraryId: library.id,
-        libraryFolderId: folderId,
+        libraryFolderId: rootFolderId,
         knownRevision: library.lastSyncedRevision,
       );
-      if (outcome is PullStaged) {
+      if (rootOutcome is PullStaged) {
+        staged = true;
         await _dataSource.updateSyncState(
           id: library.id,
-          lastSyncedRevision: outcome.revision,
+          lastSyncedRevision: rootOutcome.revision,
           lastSyncedAt: DateTime.now(),
         );
       }
-      return outcome;
+
+      return staged
+          ? PullStaged(library.lastSyncedRevision)
+          : const PullUpToDate();
     } on DriveAuthException {
       await invalidateAuthSession();
       rethrow;

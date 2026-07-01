@@ -71,18 +71,59 @@ class LibrarySyncService {
     required int libraryId,
     required String libraryFolderId,
     required int knownRevision,
+    bool force = false,
+  }) {
+    return _pushSnapshot(
+      client: client,
+      remoteFolderId: libraryFolderId,
+      knownRevision: knownRevision,
+      force: force,
+      exportSnapshot: (path) =>
+          _snapshotStore.exportLibrarySnapshot(libraryId, path),
+    );
+  }
+
+  /// Variante par-dossier : pousse le snapshot du nœud [folderId] dans le
+  /// `.stagecue` co-localisé au dossier Drive [folderDriveId]. Chaque dossier a
+  /// sa propre révision → emplacement de BDD déterministe et partagé.
+  Future<PushOutcome> pushFolder({
+    required DriveClient client,
+    required int folderId,
+    required String folderDriveId,
+    required int knownRevision,
+    bool force = false,
+  }) {
+    return _pushSnapshot(
+      client: client,
+      remoteFolderId: folderDriveId,
+      knownRevision: knownRevision,
+      force: force,
+      exportSnapshot: (path) =>
+          _snapshotStore.exportFolderSnapshot(folderId, path),
+    );
+  }
+
+  Future<PushOutcome> _pushSnapshot({
+    required DriveClient client,
+    required String remoteFolderId,
+    required int knownRevision,
+    required Future<int> Function(String path) exportSnapshot,
+    bool force = false,
   }) async {
-    final stageId = await _ensureStageFolder(client, libraryFolderId);
+    final stageId = await _ensureStageFolder(client, remoteFolderId);
 
     final remoteManifest = await _readManifest(client, stageId);
-    if (remoteManifest != null && remoteManifest.revision != knownRevision) {
+    // `force` (résolution de conflit « garder le local ») : on adopte la
+    // révision distante pour l'écraser au lieu de signaler un conflit.
+    if (!force &&
+        remoteManifest != null &&
+        remoteManifest.revision != knownRevision) {
       return PushConflict(remoteManifest);
     }
 
     final tempDir = await _resolveTempDir();
     final snapshotPath = p.join(tempDir.path, 'library-push.db');
-    final length =
-        await _snapshotStore.exportLibrarySnapshot(libraryId, snapshotPath);
+    final length = await exportSnapshot(snapshotPath);
 
     try {
       await _putFile(
@@ -129,8 +170,43 @@ class LibrarySyncService {
     required int libraryId,
     required String libraryFolderId,
     required int knownRevision,
+  }) {
+    return _pullSnapshot(
+      client: client,
+      remoteFolderId: libraryFolderId,
+      knownRevision: knownRevision,
+      mergeSnapshot: (path) => _snapshotStore.mergeLibrarySnapshot(
+        libraryId,
+        path,
+        driveFolderId: libraryFolderId,
+      ),
+    );
+  }
+
+  /// Variante par-dossier : tire le snapshot du `.stagecue` co-localisé au
+  /// dossier Drive [folderDriveId] et le fusionne dans le nœud [folderId].
+  Future<PullOutcome> pullFolder({
+    required DriveClient client,
+    required int folderId,
+    required String folderDriveId,
+    required int knownRevision,
+  }) {
+    return _pullSnapshot(
+      client: client,
+      remoteFolderId: folderDriveId,
+      knownRevision: knownRevision,
+      mergeSnapshot: (path) =>
+          _snapshotStore.mergeFolderSnapshot(folderId, path),
+    );
+  }
+
+  Future<PullOutcome> _pullSnapshot({
+    required DriveClient client,
+    required String remoteFolderId,
+    required int knownRevision,
+    required Future<void> Function(String path) mergeSnapshot,
   }) async {
-    final stage = await _findInFolder(client, libraryFolderId, _stageFolderName);
+    final stage = await _findInFolder(client, remoteFolderId, _stageFolderName);
     if (stage == null) return const PullUpToDate();
 
     final remoteManifest = await _readManifest(client, stage.id);
@@ -151,11 +227,7 @@ class LibrarySyncService {
         fileId: dbFile.id,
         destinationPath: downloadPath,
       );
-      await _snapshotStore.mergeLibrarySnapshot(
-        libraryId,
-        downloadPath,
-        driveFolderId: libraryFolderId,
-      );
+      await mergeSnapshot(downloadPath);
       return PullStaged(remoteManifest.revision);
     } finally {
       await _safeDelete(downloadPath);

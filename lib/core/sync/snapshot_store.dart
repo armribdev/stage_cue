@@ -15,6 +15,12 @@ abstract class SnapshotStore {
     String sourcePath, {
     String? driveFolderId,
   });
+
+  /// Exporte les sons (chemins folder-relative) du nœud dossier [folderId].
+  Future<int> exportFolderSnapshot(int folderId, String targetPath);
+
+  /// Fusionne (upsert par driveFileId) le snapshot du dossier [folderId].
+  Future<void> mergeFolderSnapshot(int folderId, String sourcePath);
 }
 
 /// Implémentation adossée à la base Drift de l'application.
@@ -45,5 +51,15 @@ class DriftSnapshotStore implements SnapshotStore {
       sourcePath,
       driveFolderId: driveFolderId,
     );
+  }
+
+  @override
+  Future<int> exportFolderSnapshot(int folderId, String targetPath) {
+    return _libraryStore.exportFolderSnapshot(folderId, targetPath);
+  }
+
+  @override
+  Future<void> mergeFolderSnapshot(int folderId, String sourcePath) {
+    return _libraryStore.mergeFolderSnapshot(folderId, sourcePath);
   }
 }
