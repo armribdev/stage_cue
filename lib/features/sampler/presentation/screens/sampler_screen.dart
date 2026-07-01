@@ -1906,7 +1906,9 @@ class _SyncStatusPill extends StatelessWidget {
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: InkWell(
+          child: Tooltip(
+            message: 'Synchronisation Drive',
+            child: InkWell(
               borderRadius: BorderRadius.circular(20),
               onTap: onTap,
               child: Padding(
@@ -1938,6 +1940,7 @@ class _SyncStatusPill extends StatelessWidget {
                 ),
               ),
             ),
+          ),
         );
       },
     );
@@ -2016,6 +2019,7 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       leading: IconButton(
         icon: const Icon(Icons.menu_rounded),
+        tooltip: 'Menu',
         onPressed: onOpenMenu,
       ),
       title: _BoardTitleLabel(board: selectedBoard),
@@ -2027,16 +2031,17 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
+        stopAllButton,
+        IconButton(
+          icon: const Icon(Icons.search_rounded),
+          tooltip: 'Recherche rapide',
+          onPressed: onQuickSearch,
+        ),
+        syncStatus,
         _PerformanceLockButton(
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
         ),
-        stopAllButton,
-        IconButton(
-          icon: const Icon(Icons.search_rounded),
-          onPressed: onQuickSearch,
-        ),
-        syncStatus,
       ],
     );
   }
@@ -2063,6 +2068,7 @@ class _StopAllButton extends StatelessWidget {
         final active = notifier.hasNonMusicSoundsPlaying;
         return IconButton(
           icon: const Icon(Icons.stop_circle_rounded),
+          tooltip: 'Tout arrêter',
           color: active ? scheme.error : null,
           onPressed: active
               ? () {
@@ -2096,6 +2102,9 @@ class _PerformanceLockButton extends StatelessWidget {
       icon: Icon(
         isPerformanceMode ? Icons.lock_rounded : Icons.lock_open_rounded,
       ),
+      tooltip: isPerformanceMode
+          ? 'Quitter le mode Spectacle'
+          : 'Mode Spectacle',
       color: isPerformanceMode ? scheme.primary : null,
       onPressed: onToggle,
     );
@@ -2298,16 +2307,17 @@ class _SamplerDesktopAppBar extends StatelessWidget
         ),
       ),
       actions: [
+        stopAllButton,
+        IconButton(
+          icon: const Icon(Icons.search_rounded),
+          tooltip: 'Recherche rapide (Ctrl+K)',
+          onPressed: onQuickSearch,
+        ),
+        syncStatus,
         _PerformanceLockButton(
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
         ),
-        stopAllButton,
-        IconButton(
-          icon: const Icon(Icons.search_rounded),
-          onPressed: onQuickSearch,
-        ),
-        syncStatus,
         IconButton(
           icon: const Icon(Icons.library_books_rounded),
           tooltip: 'Gérer la bibliothèque',
@@ -2353,7 +2363,7 @@ class _BoardSceneSelector extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: PopupMenuButton<Object>(
-        tooltip: 'Changer de scène',
+        tooltip: '',
         offset: const Offset(0, 48),
         onSelected: (value) async {
           if (value is SoundBoard) {
