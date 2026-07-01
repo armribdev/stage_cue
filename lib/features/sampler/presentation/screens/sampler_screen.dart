@@ -434,8 +434,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
     if (_isEditMode) return;
     final result = await QuickSearchOverlay.show(context, notifier: _notifier);
     if (!mounted) return;
-    await _notifier.stopPreview();
-    if (!mounted) return;
+    // Les pré-écoutes (bruitages/ambiances) jouent jusqu'à la fin et se libèrent
+    // seules ; les musiques jouent dans la régie. Rien à couper à la fermeture.
     final padId = result?.highlightPadId;
     if (padId == null) return;
     _emphasizePad(padId);

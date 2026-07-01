@@ -42,9 +42,10 @@ class SamplerNotifier extends ChangeNotifier {
   int _draftPadIdSeq = -1;
   final _random = Random();
 
-  /// Lecteur dédié à la pré-écoute (recherche-éclair) : indépendant des pads,
-  /// du master musique et de la file.
-  AudioPlayerService? _previewPlayer;
+  /// Lecteurs dédiés à la pré-écoute (recherche-éclair) : indépendants des pads,
+  /// du master musique et de la file. Plusieurs bruitages/ambiances peuvent
+  /// jouer simultanément ; chacun se libère seul à la fin de sa lecture.
+  final Set<AudioPlayerService> _previewPlayers = {};
 
   /// File de téléchargement priorisée à concurrence bornée (refonte UX P2).
   final DownloadQueue _downloadQueue = DownloadQueue(maxConcurrent: 2);
@@ -1628,8 +1629,7 @@ class SamplerNotifier extends ChangeNotifier {
   @override
   void dispose() {
     _downloadQueue.dispose();
-    _previewPlayer?.dispose();
-    _previewPlayer = null;
+    stopAllPreviews();
     for (final padItem in _state.pads) {
       padItem.dispose();
     }
@@ -1668,14 +1668,29 @@ class SamplerNotifier extends ChangeNotifier {
   Future<bool> previewSound(int soundId) async {
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
+    // Musique : lecture directe dans la régie (persiste après fermeture de la
+    // recherche, démarrage immédiat sans transition).
+    if (sound.type == SoundType.music) {
+      final padItem = await playMusicBySoundId(soundId);
+      return padItem != null;
+    }
+    // Bruitage/ambiance : pré-écoute fire-and-forget. On n'arrête pas les
+    // pré-écoutes en cours — on peut en lancer autant que voulu, elles jouent
+    // simultanément et se libèrent chacune à la fin.
     try {
       final path = await _resolvePlayablePath(
         sound,
         downloadIfNeeded: !_state.offlineMode,
       );
-      await stopPreview();
       final player = await AudioPlayerService.create(path);
-      _previewPlayer = player;
+      _previewPlayers.add(player);
+      StreamSubscription<bool>? sub;
+      sub = player.onPlayerStateChanged.listen((playing) {
+        if (playing) return;
+        sub?.cancel();
+        _previewPlayers.remove(player);
+        player.dispose();
+      });
       await player.play();
       _markPlayed(soundId);
       return true;
@@ -1685,16 +1700,14 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> stopPreview() async {
-    final player = _previewPlayer;
-    _previewPlayer = null;
-    if (player == null) return;
-    try {
-      await player.stop();
-    } catch (_) {}
-    try {
+  /// Arrête et libère toutes les pré-écoutes en cours.
+  void stopAllPreviews() {
+    if (_previewPlayers.isEmpty) return;
+    final players = _previewPlayers.toList();
+    _previewPlayers.clear();
+    for (final player in players) {
       player.dispose();
-    } catch (_) {}
+    }
   }
 
   Future<QuickSearchPrepareResult> prepareSoundFromQuickSearch(
