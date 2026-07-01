@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -171,7 +172,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Obtenir le chemin de la base de données
       final directory = await getApplicationDocumentsDirectory();
-      final dbFile = File('${directory.path}/db.sqlite');
+      final dbFile = File(p.join(directory.path, db.kDbFileName));
 
       int dbSize = 0;
       if (await dbFile.exists()) {
@@ -2062,6 +2063,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildInfoRow(String label, String value, {bool isPath = false}) {
+    final valueStyle = TextStyle(
+      color: isPath ? Colors.grey[600] : null,
+      fontSize: isPath ? 12 : null,
+    );
+
+    Widget valueWidget = Text(value, style: valueStyle);
+    if (isPath && value.isNotEmpty) {
+      valueWidget = Tooltip(
+        message: 'Copier',
+        child: InkWell(
+          onTap: () async {
+            await Clipboard.setData(ClipboardData(text: value));
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Chemin copié'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Text(value, style: valueStyle),
+        ),
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2072,15 +2099,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              color: isPath ? Colors.grey[600] : null,
-              fontSize: isPath ? 12 : null,
-            ),
-          ),
-        ),
+        Expanded(child: valueWidget),
       ],
     );
   }
