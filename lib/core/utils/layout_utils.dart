@@ -1,4 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+
+/// Poste desktop natif (Windows, macOS, Linux) — hors web.
+bool isNativeDesktopPlatform() {
+  return !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.macOS);
+}
 
 /// Seuils de largeur centralisés pour adapter la navigation et les layouts.
 ///
@@ -42,6 +51,12 @@ extension DeviceClassContext on BuildContext {
   /// pilote la structure de navigation selon la largeur disponible.
   DeviceClass get deviceClass =>
       DeviceClass.fromWidth(MediaQuery.sizeOf(this).width);
+
+  /// Navigation barre desktop, drag souris, régie musique fixe, etc.
+  ///
+  /// Vrai sur poste natif (quelle que soit la largeur) ou fenêtre ≥ [AppBreakpoints.desktop].
+  bool get prefersDesktopUi =>
+      isNativeDesktopPlatform() || deviceClass.isDesktop;
 }
 
 /// Tablette, desktop et fenêtres larges : préférer une modale à une page plein écran.

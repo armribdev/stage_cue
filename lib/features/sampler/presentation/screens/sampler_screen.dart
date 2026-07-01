@@ -85,12 +85,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
     _padsGridPadding + _musicRegieOccupiedHeight,
   );
 
-  bool get _isDesktopPlatform =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.linux ||
-          defaultTargetPlatform == TargetPlatform.macOS);
-
   @override
   void initState() {
     super.initState();
@@ -452,7 +446,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   Future<void> _handleAddPadShortcut() async {
-    if (!_isDesktopPlatform || !mounted) return;
+    if (!isNativeDesktopPlatform() || !mounted) return;
     final board = _notifier.state.selectedBoard;
     if (board == null) return;
     final pads = _notifier.state.pads;
@@ -463,7 +457,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   Future<void> _handleUndoShortcut() async {
-    if (!_isDesktopPlatform || !mounted) return;
+    if (!isNativeDesktopPlatform() || !mounted) return;
     final restoredSoundId = await _notifier.undoLastRemoval();
     if (!mounted || restoredSoundId == null) return;
     setState(() {
@@ -1100,7 +1094,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
           final dragKey = ValueKey('draggable_${padItem.pad.id}');
           final child = _buildPadWidget(context, state, padItem);
 
-          final Widget draggable = _isDesktopPlatform
+          final Widget draggable = context.prefersDesktopUi
               ? Draggable<int>(
                   key: dragKey,
                   data: padItem.pad.id,
@@ -1716,9 +1710,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
         musicVolume: _notifier.musicVolume,
         resolveMusicPad: _notifier.resolveMusicPad,
         isAdvanced: _isMusicRegieAdvanced,
-        isDesktop: _isDesktopPlatform,
+        isDesktop: context.prefersDesktopUi,
         isLocked: _isMusicRegieLocked,
-        onLockedChanged: _isDesktopPlatform
+        onLockedChanged: context.prefersDesktopUi
             ? (locked) => setState(() => _isMusicRegieLocked = locked)
             : null,
         onAdvancedChanged: (isAdvanced) => setState(() {
@@ -1763,7 +1757,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final selectedBoard = state.selectedBoard;
     final boards = state.boards;
     final isBoardsLoading = state.isBoardsLoading;
-    final isDesktop = context.deviceClass.isDesktop;
+    final prefersDesktopUi = context.prefersDesktopUi;
 
     if (!isBoardsLoading &&
         boards.isEmpty &&
@@ -1778,7 +1772,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     }
 
     return Shortcuts(
-      shortcuts: _isDesktopPlatform
+      shortcuts: isNativeDesktopPlatform()
           ? const <ShortcutActivator, Intent>{
               SingleActivator(LogicalKeyboardKey.keyN, control: true):
                   _AddPadIntent(),
@@ -1814,8 +1808,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
         child: Focus(
           autofocus: true,
           child: Scaffold(
-            key: isDesktop ? null : _scaffoldKey,
-            appBar: isDesktop
+            key: prefersDesktopUi ? null : _scaffoldKey,
+            appBar: prefersDesktopUi
                 ? _SamplerDesktopAppBar(
                     selectedBoard: selectedBoard,
                     boards: boards,
@@ -1846,7 +1840,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     ),
                     stopAllButton: _StopAllButton(notifier: _notifier),
                   ),
-            drawer: isDesktop
+            drawer: prefersDesktopUi
                 ? null
                 : _BoardsDrawer(
                     boards: boards,
@@ -2287,21 +2281,14 @@ class _SamplerDesktopAppBar extends StatelessWidget
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return AppBar(
-      leading: _BoardsMenuButton(
+      automaticallyImplyLeading: false,
+      title: _BoardSceneSelector(
         boards: boards,
         selectedBoard: selectedBoard,
         isBoardsLoading: isBoardsLoading,
         onSelectBoard: onSelectBoard,
         onCreateBoard: onCreateBoard,
-        onOpenLibrary: onOpenLibrary,
-        onOpenSettings: onOpenSettings,
-      ),
-      title: GestureDetector(
-        onSecondaryTapDown: selectedBoard != null
-            ? (details) =>
-                  onBoardContextMenu(selectedBoard!, details.globalPosition)
-            : null,
-        child: _BoardTitleLabel(board: selectedBoard),
+        onBoardContextMenu: onBoardContextMenu,
       ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
@@ -2321,6 +2308,16 @@ class _SamplerDesktopAppBar extends StatelessWidget
           onPressed: onQuickSearch,
         ),
         syncStatus,
+        IconButton(
+          icon: const Icon(Icons.library_books_rounded),
+          tooltip: 'Gérer la bibliothèque',
+          onPressed: () => unawaited(onOpenLibrary()),
+        ),
+        IconButton(
+          icon: const Icon(Icons.settings),
+          tooltip: 'Paramètres',
+          onPressed: () => unawaited(onOpenSettings()),
+        ),
       ],
     );
   }
@@ -2329,106 +2326,108 @@ class _SamplerDesktopAppBar extends StatelessWidget
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
 
-// ---------- Menu popup scènes (desktop) ----------
+// ---------- Sélecteur de scène (desktop) ----------
 
-class _BoardsMenuButton extends StatelessWidget {
+class _BoardSceneSelector extends StatelessWidget {
   final List<SoundBoard> boards;
   final SoundBoard? selectedBoard;
   final bool isBoardsLoading;
   final Future<void> Function(SoundBoard board) onSelectBoard;
   final Future<void> Function() onCreateBoard;
-  final Future<void> Function() onOpenLibrary;
-  final Future<void> Function() onOpenSettings;
+  final Future<void> Function(SoundBoard board, Offset position)
+  onBoardContextMenu;
 
-  const _BoardsMenuButton({
+  const _BoardSceneSelector({
     required this.boards,
     required this.selectedBoard,
     required this.isBoardsLoading,
     required this.onSelectBoard,
     required this.onCreateBoard,
-    required this.onOpenLibrary,
-    required this.onOpenSettings,
+    required this.onBoardContextMenu,
   });
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<Object>(
-      icon: const Icon(Icons.menu_rounded),
-      itemBuilder: (context) => [
-        if (isBoardsLoading)
-          const PopupMenuItem<Object>(
-            enabled: false,
-            child: Center(
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
+    final scheme = Theme.of(context).colorScheme;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: PopupMenuButton<Object>(
+        tooltip: 'Changer de scène',
+        offset: const Offset(0, 48),
+        onSelected: (value) async {
+          if (value is SoundBoard) {
+            await onSelectBoard(value);
+          } else if (value == 'create') {
+            await onCreateBoard();
+          }
+        },
+        itemBuilder: (context) => [
+          if (isBoardsLoading)
+            const PopupMenuItem<Object>(
+              enabled: false,
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               ),
-            ),
-          )
-        else if (boards.isEmpty)
-          const PopupMenuItem<Object>(
-            enabled: false,
-            child: Text('Aucune scène'),
-          )
-        else
-          ...boards.map(
-            (board) => PopupMenuItem<Object>(
-              value: board,
-              child: Row(
-                children: [
-                  if (board.color != null) ...[
-                    _BoardTileIcon(color: board.color!),
+            )
+          else if (boards.isEmpty)
+            const PopupMenuItem<Object>(
+              enabled: false,
+              child: Text('Aucune scène'),
+            )
+          else
+            ...boards.map(
+              (board) => PopupMenuItem<Object>(
+                value: board,
+                child: Row(
+                  children: [
+                    if (board.id == selectedBoard?.id)
+                      Icon(Icons.check_rounded, size: 18, color: scheme.primary)
+                    else
+                      const SizedBox(width: 18),
                     const SizedBox(width: AppSpacing.sm),
+                    if (board.color != null) ...[
+                      _BoardTileIcon(color: board.color!),
+                      const SizedBox(width: AppSpacing.sm),
+                    ],
+                    Expanded(child: Text(board.name)),
                   ],
-                  Text(board.name),
-                ],
+                ),
               ),
             ),
+          const PopupMenuDivider(),
+          const PopupMenuItem<Object>(
+            value: 'create',
+            child: Row(
+              children: [
+                Icon(Icons.add, size: 18),
+                SizedBox(width: AppSpacing.sm),
+                Text('Nouvelle scène'),
+              ],
+            ),
           ),
-        const PopupMenuItem<Object>(
-          value: 'create',
+        ],
+        child: GestureDetector(
+          onSecondaryTapDown: selectedBoard != null
+              ? (details) =>
+                    onBoardContextMenu(selectedBoard!, details.globalPosition)
+              : null,
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add, size: 18),
-              SizedBox(width: AppSpacing.sm),
-              Text('Nouvelle scène'),
+              _BoardTitleLabel(board: selectedBoard),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: scheme.onSurfaceVariant,
+              ),
             ],
           ),
         ),
-        const PopupMenuDivider(),
-        const PopupMenuItem<Object>(
-          value: 'library',
-          child: Row(
-            children: [
-              Icon(Icons.library_books_rounded, size: 18),
-              SizedBox(width: AppSpacing.sm),
-              Text('Gérer la bibliothèque'),
-            ],
-          ),
-        ),
-        const PopupMenuItem<Object>(
-          value: 'settings',
-          child: Row(
-            children: [
-              Icon(Icons.settings, size: 18),
-              SizedBox(width: AppSpacing.sm),
-              Text('Paramètres'),
-            ],
-          ),
-        ),
-      ],
-      onSelected: (value) async {
-        if (value is SoundBoard) {
-          await onSelectBoard(value);
-        } else if (value == 'create') {
-          await onCreateBoard();
-        } else if (value == 'library') {
-          await onOpenLibrary();
-        } else if (value == 'settings') {
-          await onOpenSettings();
-        }
-      },
+      ),
     );
   }
 }
