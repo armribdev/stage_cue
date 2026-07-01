@@ -14,7 +14,9 @@ class LibrarySnapshotStore {
 
   LibrarySnapshotStore(this._database);
 
-  /// Copie les données de [libraryId] vers un fichier SQLite autonome.
+  /// Exporte le snapshot RACINE d'une bibliothèque : ses boards + pads. Les pads
+  /// référencent leurs sons par `driveFileId` (identité forte, portable) — les
+  /// sons eux-mêmes vivent dans les snapshots PAR DOSSIER, pas ici.
   Future<int> exportLibrarySnapshot(int libraryId, String targetPath) async {
     final target = File(targetPath);
     if (await target.exists()) {
@@ -25,13 +27,6 @@ class LibrarySnapshotStore {
     await _database.customStatement("ATTACH DATABASE '$escaped' AS snap");
     try {
       await _database.customStatement('''
-        CREATE TABLE snap.sounds AS
-        SELECT id, title, display_name, file_path, type, color, volume,
-               created_at, library_id, relative_path, content_hash,
-               drive_file_id
-        FROM sounds WHERE library_id = $libraryId
-      ''');
-      await _database.customStatement('''
         CREATE TABLE snap.sound_boards AS
         SELECT * FROM sound_boards WHERE library_id = $libraryId
       ''');
@@ -41,35 +36,18 @@ class LibrarySnapshotStore {
         INNER JOIN sound_boards b ON b.id = p.board_id
         WHERE b.library_id = $libraryId
       ''');
+      // pad_sounds portent le driveFileId du son (pas son id local) : la
+      // résolution au merge se fait par identité forte, une fois les snapshots
+      // dossier fusionnés. Les pads pointant un son sans driveFileId (local /
+      // pas encore indexé) sont ignorés — non portables.
       await _database.customStatement('''
         CREATE TABLE snap.pad_sounds AS
-        SELECT ps.* FROM pad_sounds ps
+        SELECT ps.pad_id, ps.sort_order, ps.added_at, s.drive_file_id
+        FROM pad_sounds ps
         INNER JOIN pads p ON p.id = ps.pad_id
         INNER JOIN sound_boards b ON b.id = p.board_id
-        WHERE b.library_id = $libraryId
-      ''');
-      await _database.customStatement('''
-        CREATE TABLE snap.tag_items AS
-        SELECT DISTINCT ti.* FROM tags ti
-        INNER JOIN sound_tags st ON st.tag_id = ti.id
-        INNER JOIN sounds s ON s.id = st.sound_id
-        WHERE s.library_id = $libraryId
-      ''');
-      await _database.customStatement('''
-        CREATE TABLE snap.tag_categories AS
-        SELECT DISTINCT tc.* FROM tag_categories tc
-        INNER JOIN snap.tag_items ti ON ti.category_id = tc.id
-      ''');
-      await _database.customStatement('''
-        CREATE TABLE snap.sound_tags AS
-        SELECT st.* FROM sound_tags st
-        INNER JOIN sounds s ON s.id = st.sound_id
-        WHERE s.library_id = $libraryId
-      ''');
-      await _database.customStatement('''
-        CREATE TABLE snap.tag_aliases AS
-        SELECT DISTINCT ta.* FROM tag_aliases ta
-        INNER JOIN snap.tag_items ti ON ti.id = ta.tag_id
+        INNER JOIN sounds s ON s.id = ps.sound_id
+        WHERE b.library_id = $libraryId AND s.drive_file_id IS NOT NULL
       ''');
     } finally {
       await _detachSnapshot();
@@ -78,10 +56,10 @@ class LibrarySnapshotStore {
     return target.length();
   }
 
-  /// Remplace les données locales de [libraryId] par le contenu du snapshot.
-  ///
-  /// [driveFolderId] permet d'importer un ancien snapshot global (pré-v15)
-  /// en ne prenant que les lignes liées à ce dossier Drive.
+  /// Fusionne le snapshot RACINE : remplace les boards de la bibliothèque et
+  /// recâble les pads sur les sons locaux via leur `driveFileId`. Les sons ne
+  /// sont PAS touchés ici (gérés par [mergeFolderSnapshot]) — appeler les merges
+  /// de dossiers AVANT celui-ci pour que les sons référencés existent.
   Future<void> mergeLibrarySnapshot(
     int libraryId,
     String sourcePath, {
@@ -95,32 +73,88 @@ class LibrarySnapshotStore {
       // ATTACH/DETACH doivent rester hors de la transaction Drift : un DETACH
       // avant COMMIT provoque « database snap is locked » sous SQLite.
       await _database.transaction(() async {
-        await _purgeLibraryData(libraryId);
-
-        if (!await _snapHasTable('sounds')) return;
-        final legacy = await _snapHasTable('libraries');
-        await _importSounds(
-          libraryId,
-          legacy: legacy,
-          driveFolderId: driveFolderId,
-        );
-        if (await _snapHasTable('sound_boards')) {
-          await _importBoardsAndPads(
-            libraryId,
-            legacy: legacy,
-            driveFolderId: driveFolderId,
-          );
-        }
-        if (await _snapHasTable('tag_items')) {
-          await _importTags();
-        }
-        if (await _snapHasTable('sound_tags')) {
-          await _importSoundTags();
-        }
-        await _restoreLocalAnnotations(libraryId);
+        // Purge uniquement les boards (les sons sont gérés par dossier).
+        await (_database.delete(_database.soundBoards)
+              ..where((b) => b.libraryId.equals(libraryId)))
+            .go();
+        if (!await _snapHasTable('sound_boards')) return;
+        await _importBoardsByDriveFileId(libraryId);
       });
     } finally {
       await _detachSnapshot();
+    }
+  }
+
+  Future<void> _importBoardsByDriveFileId(int libraryId) async {
+    _boardIdMap.clear();
+    _padIdMap.clear();
+
+    final boardRows = await _database
+        .customSelect('SELECT * FROM snap.sound_boards ORDER BY id')
+        .get();
+    for (final row in boardRows) {
+      final snapBoardId = row.read<int>('id');
+      final newBoardId = await _database.into(_database.soundBoards).insert(
+            db.SoundBoardsCompanion.insert(
+              name: row.read<String>('name'),
+              color: Value(row.read<int?>('color')),
+              icon: Value(row.read<int?>('icon')),
+              libraryId: Value(libraryId),
+              createdAt: Value(row.read<DateTime>('created_at')),
+            ),
+          );
+      _boardIdMap[snapBoardId] = newBoardId;
+    }
+
+    if (!await _snapHasTable('pads')) return;
+
+    final padRows =
+        await _database.customSelect('SELECT * FROM snap.pads ORDER BY id').get();
+    for (final row in padRows) {
+      final localBoardId = _boardIdMap[row.read<int>('board_id')];
+      if (localBoardId == null) continue;
+      final newPadId = await _database.into(_database.pads).insert(
+            db.PadsCompanion.insert(
+              boardId: localBoardId,
+              name: Value(row.read<String?>('name')),
+              color: Value(row.read<int?>('color')),
+              sortOrder: Value(row.read<int>('sort_order')),
+              rowIndex: Value(row.read<int>('row_index')),
+              playMode: Value(PadPlayMode.values[row.read<int>('play_mode')]),
+              volume: Value(row.read<double>('volume')),
+              createdAt: Value(row.read<DateTime>('created_at')),
+            ),
+          );
+      _padIdMap[row.read<int>('id')] = newPadId;
+    }
+
+    if (!await _snapHasTable('pad_sounds')) return;
+
+    final padSoundRows =
+        await _database.customSelect('SELECT * FROM snap.pad_sounds').get();
+    for (final row in padSoundRows) {
+      final localPadId = _padIdMap[row.read<int>('pad_id')];
+      final driveFileId = row.read<String?>('drive_file_id');
+      if (localPadId == null || driveFileId == null) continue;
+
+      // Résout le son par identité forte (importé via les snapshots dossier).
+      final sound = await (_database.select(_database.sounds)
+            ..where(
+              (s) =>
+                  s.libraryId.equals(libraryId) &
+                  s.driveFileId.equals(driveFileId),
+            ))
+          .getSingleOrNull();
+      if (sound == null) continue;
+
+      await _database.into(_database.padSounds).insert(
+            db.PadSoundsCompanion.insert(
+              padId: localPadId,
+              soundId: sound.id,
+              sortOrder: Value(row.read<int>('sort_order')),
+              addedAt: Value(row.read<DateTime>('added_at')),
+            ),
+          );
     }
   }
 
@@ -351,222 +385,10 @@ class LibrarySnapshotStore {
     }
   }
 
-  // Clé = relativePath (identifiant stable cross-merge).
-  // Peuplé par _purgeLibraryData, consommé par _restoreLocalAnnotations.
-  Map<String, ({bool isFavorite, DateTime? lastPlayedAt})> _localAnnotations = {};
-
-  Future<void> _purgeLibraryData(int libraryId) async {
-    // Sauvegarder les annotations personnelles (favoris, récence) avant la
-    // purge : elles ne sont pas dans le snapshot Drive (données locales).
-    final existing = await (_database.select(_database.sounds)
-          ..where(
-            (s) =>
-                s.libraryId.equals(libraryId) & s.relativePath.isNotNull(),
-          ))
-        .get();
-    _localAnnotations = {
-      for (final s in existing)
-        if (s.relativePath != null)
-          s.relativePath!: (
-            isFavorite: s.isFavorite,
-            lastPlayedAt: s.lastPlayedAt,
-          ),
-    };
-
-    await (_database.delete(_database.soundBoards)
-          ..where((b) => b.libraryId.equals(libraryId)))
-        .go();
-    await (_database.delete(_database.sounds)
-          ..where((s) => s.libraryId.equals(libraryId)))
-        .go();
-  }
-
-  /// Ré-applique les annotations locales sur les sons fraîchement importés.
-  Future<void> _restoreLocalAnnotations(int libraryId) async {
-    if (_localAnnotations.isEmpty) return;
-
-    final imported = await (_database.select(_database.sounds)
-          ..where(
-            (s) =>
-                s.libraryId.equals(libraryId) & s.relativePath.isNotNull(),
-          ))
-        .get();
-
-    for (final sound in imported) {
-      final path = sound.relativePath;
-      if (path == null) continue;
-      final ann = _localAnnotations[path];
-      if (ann == null) continue;
-      if (!ann.isFavorite && ann.lastPlayedAt == null) continue;
-
-      await (_database.update(_database.sounds)
-            ..where((s) => s.id.equals(sound.id)))
-          .write(
-        db.SoundsCompanion(
-          isFavorite: Value(ann.isFavorite),
-          lastPlayedAt: Value(ann.lastPlayedAt),
-        ),
-      );
-    }
-    _localAnnotations = {};
-  }
-
   final Map<int, int> _soundIdMap = {};
   final Map<int, int> _boardIdMap = {};
   final Map<int, int> _padIdMap = {};
   final Map<int, int> _tagIdMap = {};
-
-  Future<void> _importSounds(
-    int libraryId, {
-    required bool legacy,
-    String? driveFolderId,
-  }) async {
-    _soundIdMap.clear();
-
-    final libraryRow = await (_database.select(_database.libraries)
-          ..where((l) => l.id.equals(libraryId)))
-        .getSingleOrNull();
-    final localRootPath = libraryRow?.localRootPath;
-
-    final rows = legacy && driveFolderId != null
-        ? await _database.customSelect(
-            '''
-            SELECT s.* FROM snap.sounds s
-            WHERE s.library_id IN (
-              SELECT l.id FROM snap.libraries l
-              WHERE l.drive_folder_id = ?
-            )
-            ORDER BY s.id
-            ''',
-            variables: [Variable<String>(driveFolderId)],
-          ).get()
-        : await _database
-            .customSelect('SELECT * FROM snap.sounds ORDER BY id')
-            .get();
-
-    // Les snapshots pré-v24 n'ont pas la colonne d'identité forte.
-    final hasDriveFileId = await _snapColumnExists('sounds', 'drive_file_id');
-
-    for (final row in rows) {
-      final snapId = row.read<int>('id');
-      final rawRelativePath = row.read<String?>('relative_path');
-      final relativePath = rawRelativePath != null
-          ? LibrarySoundPaths.normalizeRelativePath(rawRelativePath)
-          : null;
-      final contentHash = row.read<String?>('content_hash');
-      final driveFileId =
-          hasDriveFileId ? row.read<String?>('drive_file_id') : null;
-      final filePath = relativePath != null && localRootPath != null
-          ? LibrarySoundPaths.localPathFor(localRootPath, relativePath)
-          : row.read<String>('file_path');
-
-      final rawType = row.read<int?>('type');
-      final newId = await _database.into(_database.sounds).insert(
-            db.SoundsCompanion.insert(
-              title: row.read<String>('title'),
-              filePath: filePath,
-              type: Value(
-                rawType != null ? SoundType.values[rawType] : null,
-              ),
-              displayName: Value(row.read<String?>('display_name')),
-              color: Value(row.read<int?>('color')),
-              volume: Value(row.read<double>('volume')),
-              createdAt: Value(row.read<DateTime>('created_at')),
-              libraryId: Value(libraryId),
-              relativePath: Value(relativePath),
-              contentHash: Value(contentHash),
-              driveFileId: Value(driveFileId),
-            ),
-          );
-      _soundIdMap[snapId] = newId;
-    }
-  }
-
-  Future<void> _importBoardsAndPads(
-    int libraryId, {
-    required bool legacy,
-    String? driveFolderId,
-  }) async {
-    _boardIdMap.clear();
-    _padIdMap.clear();
-
-    if (legacy && !await _snapColumnExists('sound_boards', 'library_id')) {
-      return;
-    }
-
-    final boardRows = legacy && driveFolderId != null
-        ? await _database.customSelect(
-            '''
-            SELECT b.* FROM snap.sound_boards b
-            WHERE b.library_id IN (
-              SELECT l.id FROM snap.libraries l
-              WHERE l.drive_folder_id = ?
-            )
-            ORDER BY b.id
-            ''',
-            variables: [Variable<String>(driveFolderId)],
-          ).get()
-        : await _database
-            .customSelect('SELECT * FROM snap.sound_boards ORDER BY id')
-            .get();
-
-    for (final row in boardRows) {
-      final snapBoardId = row.read<int>('id');
-      final newBoardId = await _database.into(_database.soundBoards).insert(
-            db.SoundBoardsCompanion.insert(
-              name: row.read<String>('name'),
-              libraryId: Value(libraryId),
-              createdAt: Value(row.read<DateTime>('created_at')),
-            ),
-          );
-      _boardIdMap[snapBoardId] = newBoardId;
-    }
-
-    if (!await _snapHasTable('pads')) return;
-
-    final padRows =
-        await _database.customSelect('SELECT * FROM snap.pads ORDER BY id').get();
-
-    for (final row in padRows) {
-      final snapPadId = row.read<int>('id');
-      final snapBoardId = row.read<int>('board_id');
-      final localBoardId = _boardIdMap[snapBoardId];
-      if (localBoardId == null) continue;
-
-      final newPadId = await _database.into(_database.pads).insert(
-            db.PadsCompanion.insert(
-              boardId: localBoardId,
-              name: Value(row.read<String?>('name')),
-              color: Value(row.read<int?>('color')),
-              sortOrder: Value(row.read<int>('sort_order')),
-              playMode: Value(PadPlayMode.values[row.read<int>('play_mode')]),
-              volume: Value(row.read<double>('volume')),
-              createdAt: Value(row.read<DateTime>('created_at')),
-            ),
-          );
-      _padIdMap[snapPadId] = newPadId;
-    }
-
-    if (!await _snapHasTable('pad_sounds')) return;
-
-    final padSoundRows =
-        await _database.customSelect('SELECT * FROM snap.pad_sounds').get();
-
-    for (final row in padSoundRows) {
-      final localPadId = _padIdMap[row.read<int>('pad_id')];
-      final localSoundId = _soundIdMap[row.read<int>('sound_id')];
-      if (localPadId == null || localSoundId == null) continue;
-
-      await _database.into(_database.padSounds).insert(
-            db.PadSoundsCompanion.insert(
-              padId: localPadId,
-              soundId: localSoundId,
-              sortOrder: Value(row.read<int>('sort_order')),
-              addedAt: Value(row.read<DateTime>('added_at')),
-            ),
-          );
-    }
-  }
 
   Future<void> _importTags() async {
     _tagIdMap.clear();
@@ -690,11 +512,6 @@ class LibrarySnapshotStore {
             mode: InsertMode.insertOrIgnore,
           );
     }
-  }
-
-  Future<bool> _snapColumnExists(String table, String column) async {
-    final rows = await _database.customSelect('PRAGMA snap.table_info($table)').get();
-    return rows.any((row) => row.read<String>('name') == column);
   }
 
   Future<bool> _snapHasTable(String table) async {

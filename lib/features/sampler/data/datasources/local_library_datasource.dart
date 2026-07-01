@@ -118,4 +118,32 @@ class LocalLibraryDataSource {
       _database.libraries,
     )..where((l) => l.id.equals(id))).go();
   }
+
+  /// Nœuds dossier d'une bibliothèque (unités de snapshot par-dossier).
+  Future<List<db.LibraryFolder>> getFoldersForLibrary(int libraryId) {
+    return (_database.select(_database.libraryFolders)
+          ..where((f) => f.libraryId.equals(libraryId)))
+        .get();
+  }
+
+  Future<db.LibraryFolder?> getFolderById(int id) {
+    return (_database.select(_database.libraryFolders)
+          ..where((f) => f.id.equals(id)))
+        .getSingleOrNull();
+  }
+
+  /// Met à jour la révision de snapshot connue pour un nœud dossier.
+  Future<void> updateFolderSyncState({
+    required int id,
+    required int lastSyncedRevision,
+    DateTime? lastSyncedAt,
+  }) async {
+    await (_database.update(_database.libraryFolders)
+          ..where((f) => f.id.equals(id)))
+        .write(db.LibraryFoldersCompanion(
+      lastSyncedRevision: Value(lastSyncedRevision),
+      lastSyncedAt:
+          lastSyncedAt != null ? Value(lastSyncedAt) : const Value.absent(),
+    ));
+  }
 }

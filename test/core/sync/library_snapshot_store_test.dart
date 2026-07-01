@@ -5,7 +5,6 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:stage_cue/core/database/database.dart' as db;
-import 'package:stage_cue/core/database/sounds.dart' show SoundType;
 import 'package:stage_cue/core/sync/library_snapshot_store.dart';
 
 void main() {
@@ -26,127 +25,85 @@ void main() {
     }
   });
 
-  test('mergeLibrarySnapshot recalcule filePath depuis relativePath local', () async {
-    const localRoot = '/device/cache';
-    final libraryId = await database.into(database.libraries).insert(
-          db.LibrariesCompanion.insert(
-            name: 'Test Drive',
-            localRootPath: localRoot,
+  test('snapshot racine : boards recâblés sur les sons par driveFileId',
+      () async {
+    // Device A : bibliothèque + son (driveFileId DF1) + board/pad le référençant.
+    final lib = await database.into(database.libraries).insert(
+          db.LibrariesCompanion.insert(name: 'A', localRootPath: '/A'),
+        );
+    final folder = await database.into(database.libraryFolders).insert(
+          db.LibraryFoldersCompanion.insert(
+            libraryId: lib,
+            driveFolderId: 'F',
+            relativePath: const Value(''),
           ),
         );
-
-    await database.into(database.sounds).insert(
+    final soundId = await database.into(database.sounds).insert(
           db.SoundsCompanion.insert(
-            title: 'clap.wav',
-            filePath: '/other/device/cache/clap.wav',
-            type: const Value(SoundType.soundEffect),
-            libraryId: Value(libraryId),
-            relativePath: const Value('clap.wav'),
+            title: 'knock',
+            filePath: '/A/knock.mp3',
+            libraryId: Value(lib),
+            relativePath: const Value('knock.mp3'),
+            driveFileId: const Value('DF1'),
+            folderId: Value(folder),
           ),
         );
+    final boardId = await database.into(database.soundBoards).insert(
+          db.SoundBoardsCompanion.insert(name: 'Scène', libraryId: Value(lib)),
+        );
+    final padId = await database.into(database.pads).insert(
+          db.PadsCompanion.insert(boardId: boardId, name: const Value('Pad 1')),
+        );
+    await database.into(database.padSounds).insert(
+          db.PadSoundsCompanion.insert(padId: padId, soundId: soundId),
+        );
 
-    final snapshotPath = p.join(tempDir.path, 'library.db');
-    await store.exportLibrarySnapshot(libraryId, snapshotPath);
+    final snapshotPath = p.join(tempDir.path, 'root.db');
+    await store.exportLibrarySnapshot(lib, snapshotPath);
 
-    await (database.delete(database.sounds)
-          ..where((s) => s.libraryId.equals(libraryId)))
-        .go();
+    // Device B : mêmes son/biblio mais ids locaux DÉCALÉS (son bidon d'abord).
+    final dbB = db.AppDatabase.forTesting(NativeDatabase.memory());
+    final libB = await dbB.into(dbB.libraries).insert(
+          db.LibrariesCompanion.insert(name: 'A', localRootPath: '/B'),
+        );
+    final folderB = await dbB.into(dbB.libraryFolders).insert(
+          db.LibraryFoldersCompanion.insert(
+            libraryId: libB,
+            driveFolderId: 'F',
+            relativePath: const Value(''),
+          ),
+        );
+    await dbB.into(dbB.sounds).insert(
+          db.SoundsCompanion.insert(title: 'bidon', filePath: '/B/x.mp3'),
+        );
+    final soundBId = await dbB.into(dbB.sounds).insert(
+          db.SoundsCompanion.insert(
+            title: 'knock',
+            filePath: '/B/knock.mp3',
+            libraryId: Value(libB),
+            relativePath: const Value('knock.mp3'),
+            driveFileId: const Value('DF1'),
+            folderId: Value(folderB),
+          ),
+        );
+    expect(soundBId, isNot(soundId), reason: 'ids locaux différents entre appareils');
 
-    await store.mergeLibrarySnapshot(libraryId, snapshotPath);
+    await LibrarySnapshotStore(dbB).mergeLibrarySnapshot(libB, snapshotPath);
 
-    final sounds = await (database.select(database.sounds)
-          ..where((s) => s.libraryId.equals(libraryId)))
+    final boards = await (dbB.select(dbB.soundBoards)
+          ..where((b) => b.libraryId.equals(libB)))
         .get();
+    expect(boards, hasLength(1));
+    expect(boards.first.name, 'Scène');
 
-    expect(sounds, hasLength(1));
-    expect(sounds.first.title, 'clap.wav');
+    final padSounds = await dbB.select(dbB.padSounds).get();
+    expect(padSounds, hasLength(1));
     expect(
-      sounds.first.filePath,
-      p.join(localRoot, 'clap.wav'),
+      padSounds.first.soundId,
+      soundBId,
+      reason: 'le pad est recâblé sur le son local via driveFileId',
     );
-    expect(sounds.first.relativePath, 'clap.wav');
-  });
-
-  test('le round-trip snapshot préserve driveFileId (identité forte)', () async {
-    const localRoot = '/device/cache';
-    final libraryId = await database.into(database.libraries).insert(
-          db.LibrariesCompanion.insert(
-            name: 'Test Drive',
-            localRootPath: localRoot,
-          ),
-        );
-
-    await database.into(database.sounds).insert(
-          db.SoundsCompanion.insert(
-            title: 'clap.wav',
-            filePath: '/other/device/cache/clap.wav',
-            type: const Value(SoundType.soundEffect),
-            libraryId: Value(libraryId),
-            relativePath: const Value('clap.wav'),
-            driveFileId: const Value('DRIVE_ID_42'),
-          ),
-        );
-
-    final snapshotPath = p.join(tempDir.path, 'library.db');
-    await store.exportLibrarySnapshot(libraryId, snapshotPath);
-
-    await (database.delete(database.sounds)
-          ..where((s) => s.libraryId.equals(libraryId)))
-        .go();
-
-    await store.mergeLibrarySnapshot(libraryId, snapshotPath);
-
-    final sounds = await (database.select(database.sounds)
-          ..where((s) => s.libraryId.equals(libraryId)))
-        .get();
-
-    expect(sounds, hasLength(1));
-    expect(sounds.first.driveFileId, 'DRIVE_ID_42');
-  });
-
-  test('mergeLibrarySnapshot normalise relativePath legacy sounds/', () async {
-    const localRoot = '/device/cache';
-    final libraryId = await database.into(database.libraries).insert(
-          db.LibrariesCompanion.insert(
-            name: 'Test Drive',
-            localRootPath: localRoot,
-          ),
-        );
-
-    // Simule un snapshot exporté avec un chemin legacy.
-    final legacyDb = db.AppDatabase.forTesting(NativeDatabase.memory());
-    final legacyLibraryId = await legacyDb.into(legacyDb.libraries).insert(
-          db.LibrariesCompanion.insert(
-            name: 'Legacy',
-            localRootPath: '/old/cache',
-          ),
-        );
-    await legacyDb.into(legacyDb.sounds).insert(
-          db.SoundsCompanion.insert(
-            title: 'Pistolet 4',
-            filePath: '/old/cache/sounds/Pistolet 4.mp3',
-            type: const Value(SoundType.soundEffect),
-            libraryId: Value(legacyLibraryId),
-            relativePath: const Value('sounds/Pistolet 4.mp3'),
-          ),
-        );
-    final snapshotPath = p.join(tempDir.path, 'legacy-library.db');
-    await LibrarySnapshotStore(legacyDb)
-        .exportLibrarySnapshot(legacyLibraryId, snapshotPath);
-    await legacyDb.close();
-
-    await store.mergeLibrarySnapshot(libraryId, snapshotPath);
-
-    final sounds = await (database.select(database.sounds)
-          ..where((s) => s.libraryId.equals(libraryId)))
-        .get();
-
-    expect(sounds, hasLength(1));
-    expect(sounds.first.relativePath, 'Pistolet 4.mp3');
-    expect(
-      sounds.first.filePath,
-      p.join(localRoot, 'Pistolet 4.mp3'),
-    );
+    await dbB.close();
   });
 
   group('snapshot par-dossier', () {

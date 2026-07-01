@@ -77,27 +77,34 @@ class AutoSyncCoordinator {
         return;
       }
 
+      // Modèle par-dossier : l'indexation doit précéder le pull. Elle crée les
+      // nœuds dossier + les sons depuis le listing Drive ; sans eux, un appareil
+      // vierge n'aurait aucun nœud à tirer (métadonnées) et le pull racine
+      // recâblerait les boards sur des sons encore inexistants. On garde tout
+      // sous `_ignoreUpdates` : un son fraîchement indexé n'a pas de métadonnée
+      // synchronisable (chaque appareil le découvre via son propre index), donc
+      // aucun push à déclencher au lancement.
       _ignoreUpdates = true;
       try {
+        // 1. Indexe (crée nœuds + sons). Timeout : évite de bloquer le lancement
+        //    sur un dossier Drive volumineux ou une connexion lente.
+        for (final library in libraries) {
+          try {
+            await _repository
+                .indexDriveFolder(library: library)
+                .timeout(const Duration(seconds: 30));
+          } catch (_) {
+            // Continue avec les autres dossiers si l'indexation échoue/expire.
+          }
+        }
+
+        // 2. Pull par-dossier (métadonnées) puis racine (boards) — les nœuds et
+        //    les sons référencés existent désormais.
         for (final library in libraries) {
           await _syncController.pullForLaunch(library);
         }
       } finally {
         _ignoreUpdates = false;
-      }
-
-      // Indexe les fichiers ajoutés manuellement sur Drive (absents de la BDD).
-      // Timeout : évite de bloquer le lancement sur un dossier Drive volumineux
-      // ou une connexion lente. Les fichiers non indexés seront visibles au
-      // prochain lancement.
-      for (final library in libraries) {
-        try {
-          await _repository
-              .indexDriveFolder(library: library)
-              .timeout(const Duration(seconds: 30));
-        } catch (_) {
-          // Continue avec les autres dossiers si l'indexation échoue ou expire.
-        }
       }
     } catch (_) {
       // Erreur inattendue au démarrage : passer en hors-ligne plutôt que

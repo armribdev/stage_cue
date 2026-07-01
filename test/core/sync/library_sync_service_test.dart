@@ -39,6 +39,10 @@ void main() {
         driveFolderId: any(named: 'driveFolderId'),
       ),
     ).thenAnswer((_) async {});
+    when(() => store.exportFolderSnapshot(any(), any()))
+        .thenAnswer((_) async => 2048);
+    when(() => store.mergeFolderSnapshot(any(), any()))
+        .thenAnswer((_) async {});
   });
 
   tearDown(() {
@@ -246,6 +250,104 @@ void main() {
           driveFolderId: 'lib',
         ),
       ).called(1);
+    });
+  });
+
+  group('pushFolder / pullFolder (par-dossier)', () {
+    test('pushFolder sans manifest : exporte le dossier, révision 1', () async {
+      when(() => client.findInFolder(parentId: 'yy', name: '.stagecue'))
+          .thenAnswer((_) async => folder('stage', '.stagecue'));
+      when(() => client.findInFolder(parentId: 'stage', name: 'manifest.json'))
+          .thenAnswer((_) async => null);
+      when(() => client.findInFolder(parentId: 'stage', name: 'library.db'))
+          .thenAnswer((_) async => null);
+      stubUpload();
+
+      final outcome = await service.pushFolder(
+        client: client,
+        folderId: 42,
+        folderDriveId: 'yy',
+        knownRevision: 0,
+      );
+
+      expect(outcome, isA<PushSuccess>());
+      expect((outcome as PushSuccess).revision, 1);
+      verify(() => store.exportFolderSnapshot(42, any())).called(1);
+      verifyNever(() => store.exportLibrarySnapshot(any(), any()));
+      verify(() => client.uploadFile(
+            name: 'library.db',
+            parentId: 'stage',
+            data: any(named: 'data'),
+            length: 2048,
+            mimeType: any(named: 'mimeType'),
+          )).called(1);
+    });
+
+    test('pushFolder révision distante divergente : conflit, pas d\'export',
+        () async {
+      final remote = SyncManifest(
+        revision: 5,
+        deviceId: 'other',
+        updatedAt: DateTime.now().toUtc(),
+        schemaVersion: 11,
+      );
+      when(() => client.findInFolder(parentId: 'yy', name: '.stagecue'))
+          .thenAnswer((_) async => folder('stage', '.stagecue'));
+      when(() => client.findInFolder(parentId: 'stage', name: 'manifest.json'))
+          .thenAnswer((_) async => file('m', 'manifest.json'));
+      when(() => client.downloadBytes('m'))
+          .thenAnswer((_) async => utf8.encode(remote.encode()));
+
+      final outcome = await service.pushFolder(
+        client: client,
+        folderId: 42,
+        folderDriveId: 'yy',
+        knownRevision: 2,
+      );
+
+      expect(outcome, isA<PushConflict>());
+      expect((outcome as PushConflict).remote.revision, 5);
+      verifyNever(() => store.exportFolderSnapshot(any(), any()));
+    });
+
+    test('pullFolder révision plus récente : télécharge et fusionne le dossier',
+        () async {
+      final remote = SyncManifest(
+        revision: 7,
+        deviceId: 'other',
+        updatedAt: DateTime.now().toUtc(),
+        schemaVersion: 11,
+      );
+      when(() => client.findInFolder(parentId: 'yy', name: '.stagecue'))
+          .thenAnswer((_) async => folder('stage', '.stagecue'));
+      when(() => client.findInFolder(parentId: 'stage', name: 'manifest.json'))
+          .thenAnswer((_) async => file('m', 'manifest.json'));
+      when(() => client.downloadBytes('m'))
+          .thenAnswer((_) async => utf8.encode(remote.encode()));
+      when(() => client.findInFolder(parentId: 'stage', name: 'library.db'))
+          .thenAnswer((_) async => file('db', 'library.db'));
+      when(() => client.downloadToFile(
+            fileId: any(named: 'fileId'),
+            destinationPath: any(named: 'destinationPath'),
+          )).thenAnswer((_) async {});
+
+      final outcome = await service.pullFolder(
+        client: client,
+        folderId: 42,
+        folderDriveId: 'yy',
+        knownRevision: 2,
+      );
+
+      expect(outcome, isA<PullStaged>());
+      expect((outcome as PullStaged).revision, 7);
+      verify(() => store.mergeFolderSnapshot(42, any())).called(1);
+      verifyNever(
+        () => store.mergeLibrarySnapshot(
+          any(),
+          any(),
+          driveFolderId: any(named: 'driveFolderId'),
+        ),
+      );
     });
   });
 }
