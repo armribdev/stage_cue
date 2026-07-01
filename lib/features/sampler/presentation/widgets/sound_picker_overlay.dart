@@ -238,14 +238,18 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   bool get _isLibrary => widget.mode is LibraryMode;
   bool get _isManage => widget.mode is ManageMode;
 
-  /// Bibliothèque du board actif : null = board local. Les modes rattachés à un
-  /// board ne proposent que les sons de cette bibliothèque (ou les sons locaux
-  /// si board local). Le mode gestion, lui, parcourt toute la bibliothèque.
+  /// Bibliothèque du board actif : null = board local. Un board rattaché à une
+  /// bibliothèque ne propose que les sons de celle-ci. Un board local (null)
+  /// n'impose aucune restriction : depuis le modèle folder-based (v23+), tout
+  /// son a une bibliothèque, donc scoper sur `libraryId == null` donnerait
+  /// toujours un ensemble vide. Le mode gestion parcourt tout de toute façon.
   int? get _boardLibraryId => widget.notifier.state.selectedBoard?.libraryId;
 
   bool _matchesBoardScope(Sound sound) {
     if (_isManage) return true;
-    return sound.libraryId == _boardLibraryId;
+    final libraryId = _boardLibraryId;
+    if (libraryId == null) return true;
+    return sound.libraryId == libraryId;
   }
 
   PadPickerMode? get _padMode =>
