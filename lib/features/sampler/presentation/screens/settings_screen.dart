@@ -2070,9 +2070,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     Widget valueWidget = Text(value, style: valueStyle);
     if (isPath && value.isNotEmpty) {
-      valueWidget = Tooltip(
-        message: 'Copier',
-        child: InkWell(
+      valueWidget = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
           onTap: () async {
             await Clipboard.setData(ClipboardData(text: value));
             if (!mounted) return;
@@ -2083,7 +2083,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             );
           },
-          borderRadius: BorderRadius.circular(4),
           child: Text(value, style: valueStyle),
         ),
       );
