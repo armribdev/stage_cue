@@ -283,7 +283,6 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
           Row(
             children: [
               IconButton(
-                tooltip: 'Dossier parent',
                 onPressed: canGoUp ? _goUp : null,
                 icon: const Icon(Icons.arrow_upward),
               ),

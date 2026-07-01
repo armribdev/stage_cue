@@ -1270,7 +1270,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints.tightFor(width: 32, height: 32),
       visualDensity: VisualDensity.compact,
-      tooltip: 'Tout télécharger',
       onPressed: isDownloading
           ? null
           : () => unawaited(_downloadAllLibraryAudio(library)),
@@ -1825,9 +1824,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                               visualDensity: VisualDensity.compact,
                               icon: const Icon(Icons.add),
-                              tooltip: Platform.isAndroid
-                                  ? 'Ajouter un dossier'
-                                  : 'Ajouter un dossier local ou Drive',
                               onPressed: _onAddFolderPressed,
                             ),
                           ],
@@ -1986,7 +1982,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                                 );
                                               }
                                             },
-                                            tooltip: 'Retirer',
                                           ),
                                         ],
                                       ),

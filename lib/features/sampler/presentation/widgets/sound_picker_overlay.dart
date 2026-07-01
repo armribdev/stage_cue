@@ -822,7 +822,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           ),
           IconButton(
             icon: const Icon(Icons.close_rounded),
-            tooltip: 'Fermer',
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -878,7 +877,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                 icon: _favoritesOnly
                     ? Icons.star_rounded
                     : Icons.star_border_rounded,
-                tooltip: 'Favoris uniquement',
                 iconColor: _favoritesOnly
                     ? scheme.primary
                     : scheme.onSurfaceVariant,
@@ -894,9 +892,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               _roundIconButton(
                 scheme: scheme,
                 icon: Icons.offline_bolt_rounded,
-                tooltip: _localFilterForced
-                    ? 'Mode hors-ligne actif — sons locaux uniquement'
-                    : 'Local uniquement',
                 iconColor: _effectiveLocalOnly
                     ? scheme.primary
                     : scheme.onSurfaceVariant,
@@ -1111,13 +1106,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (fav) ...[
-              Tooltip(
-                message: 'Favori',
-                child: SizedBox(
-                  width: _actionButtonSize,
-                  height: _actionButtonSize,
-                  child: Icon(Icons.star_rounded, size: 18, color: scheme.primary),
-                ),
+              SizedBox(
+                width: _actionButtonSize,
+                height: _actionButtonSize,
+                child: Icon(Icons.star_rounded, size: 18, color: scheme.primary),
               ),
               const SizedBox(width: 4),
             ],
@@ -1126,7 +1118,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               icon: sound.type == SoundType.music
                   ? Icons.playlist_add_rounded
                   : Icons.layers_rounded,
-              tooltip: 'Préparer',
               iconColor: scheme.primary,
               onPressed: () => unawaited(_prepareAndClose(sound)),
             ),
@@ -1138,7 +1129,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         return _roundIconButton(
           scheme: scheme,
           icon: queued ? Icons.check_rounded : Icons.playlist_add_rounded,
-          tooltip: canEnqueue ? 'Mettre en file' : 'Déjà planifié',
           iconColor: canEnqueue ? scheme.onSurfaceVariant : scheme.primary,
           onPressed: canEnqueue ? () => unawaited(_enqueueMusic(sound)) : null,
         );
@@ -1171,7 +1161,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           icon: sound.type == SoundType.music
               ? Icons.playlist_add_rounded
               : Icons.layers_rounded,
-          tooltip: inBoard ? 'Déjà sur le plateau — surligner' : 'Ajouter au plateau',
           iconColor: inBoard ? scheme.primary : scheme.onSurfaceVariant,
           onPressed: () => unawaited(_prepareAndClose(sound)),
         );
@@ -1250,7 +1239,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   Widget _roundIconButton({
     required ColorScheme scheme,
     required IconData icon,
-    required String tooltip,
     required VoidCallback? onPressed,
     required Color iconColor,
   }) {
@@ -1258,7 +1246,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       width: _actionButtonSize,
       height: _actionButtonSize,
       child: IconButton(
-        tooltip: tooltip,
         onPressed: onPressed,
         icon: Icon(icon, size: 18),
         padding: EdgeInsets.zero,

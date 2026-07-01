@@ -794,9 +794,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
         ),
       ),
     );
-    if (_isDesktopPlatform) {
-      card = Tooltip(message: 'Ajouter un pad (Ctrl+N)', child: card);
-    }
     return _wrapMusicRegieTapTarget(card);
   }
 
@@ -1906,17 +1903,14 @@ class _SyncStatusPill extends StatelessWidget {
         if (status == SyncStatus.idle) return const SizedBox.shrink();
 
         final scheme = Theme.of(context).colorScheme;
-        final (color, label, icon, spinning, tooltip) = _visuals(
+        final (color, label, icon, spinning) = _visuals(
           status,
           scheme,
-          syncController.state,
         );
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: Tooltip(
-            message: tooltip,
-            child: InkWell(
+          child: InkWell(
               borderRadius: BorderRadius.circular(20),
               onTap: onTap,
               child: Padding(
@@ -1948,16 +1942,14 @@ class _SyncStatusPill extends StatelessWidget {
                 ),
               ),
             ),
-          ),
         );
       },
     );
   }
 
-  (Color, String, IconData, bool, String) _visuals(
+  (Color, String, IconData, bool) _visuals(
     SyncStatus status,
     ColorScheme scheme,
-    SyncState state,
   ) {
     return switch (status) {
       SyncStatus.syncing => (
@@ -1965,14 +1957,12 @@ class _SyncStatusPill extends StatelessWidget {
         'Synchro…',
         Icons.sync_rounded,
         true,
-        'Synchronisation en cours…',
       ),
       SyncStatus.synced => (
         scheme.primary,
         'À jour',
         Icons.cloud_done_outlined,
         false,
-        'Bibliothèque synchronisée',
       ),
       // Hors-ligne : neutre, jamais alarmiste — le travail local est normal.
       SyncStatus.offline => (
@@ -1980,28 +1970,24 @@ class _SyncStatusPill extends StatelessWidget {
         'Hors-ligne',
         Icons.cloud_off_outlined,
         false,
-        'Hors-ligne — modifications gardées en local',
       ),
       SyncStatus.conflict => (
         scheme.error,
         'Conflit',
         Icons.merge_type_rounded,
         false,
-        'Conflit de version — appuyez pour résoudre',
       ),
       SyncStatus.error => (
         scheme.error,
         'Erreur sync',
         Icons.error_outline_rounded,
         false,
-        state.message ?? 'Erreur de synchronisation',
       ),
       SyncStatus.idle => (
         scheme.onSurfaceVariant,
         '',
         Icons.cloud_outlined,
         false,
-        '',
       ),
     };
   }
@@ -2038,7 +2024,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       leading: IconButton(
         icon: const Icon(Icons.menu_rounded),
-        tooltip: 'Menu',
         onPressed: onOpenMenu,
       ),
       title: _BoardTitleLabel(board: selectedBoard),
@@ -2061,7 +2046,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
         stopAllButton,
         IconButton(
           icon: const Icon(Icons.search_rounded),
-          tooltip: 'Rechercher un son',
           onPressed: onQuickSearch,
         ),
         syncStatus,
@@ -2095,9 +2079,6 @@ class _OfflineModeButton extends StatelessWidget {
             : Icons.offline_bolt_outlined,
       ),
       color: isOfflineMode ? scheme.primary : null,
-      tooltip: isOfflineMode
-          ? 'Mode hors-ligne actif — sons locaux uniquement'
-          : 'Mode hors-ligne (sons locaux uniquement)',
       onPressed: onToggle,
     );
   }
@@ -2122,7 +2103,6 @@ class _StopAllButton extends StatelessWidget {
         return IconButton(
           icon: const Icon(Icons.stop_circle_rounded),
           color: active ? scheme.error : null,
-          tooltip: 'Tout arrêter (bruitages)',
           onPressed: active
               ? () {
                   unawaited(HapticFeedback.heavyImpact());
@@ -2156,9 +2136,6 @@ class _PerformanceLockButton extends StatelessWidget {
         isPerformanceMode ? Icons.lock_rounded : Icons.lock_open_rounded,
       ),
       color: isPerformanceMode ? scheme.primary : null,
-      tooltip: isPerformanceMode
-          ? 'Mode Spectacle actif — déverrouiller'
-          : 'Mode Spectacle (verrouiller l\'édition)',
       onPressed: onToggle,
     );
   }
@@ -2361,10 +2338,7 @@ class _SamplerDesktopAppBar extends StatelessWidget
             ? (details) =>
                   onBoardContextMenu(selectedBoard!, details.globalPosition)
             : null,
-        child: Tooltip(
-          message: selectedBoard != null ? 'Clic droit pour les actions…' : '',
-          child: _BoardTitleLabel(board: selectedBoard),
-        ),
+        child: _BoardTitleLabel(board: selectedBoard),
       ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
@@ -2385,7 +2359,6 @@ class _SamplerDesktopAppBar extends StatelessWidget
         stopAllButton,
         IconButton(
           icon: const Icon(Icons.search_rounded),
-          tooltip: 'Rechercher un son (Ctrl/Cmd+K)',
           onPressed: onQuickSearch,
         ),
         syncStatus,
@@ -2421,7 +2394,6 @@ class _BoardsMenuButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<Object>(
-      tooltip: 'Scènes',
       icon: const Icon(Icons.menu_rounded),
       itemBuilder: (context) => [
         if (isBoardsLoading)

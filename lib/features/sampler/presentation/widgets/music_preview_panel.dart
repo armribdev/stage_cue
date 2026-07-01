@@ -852,7 +852,6 @@ class _DrawerLockButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      tooltip: isLocked ? 'Déverrouiller la régie' : 'Verrouiller la régie',
       onPressed: onTap,
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
@@ -882,7 +881,6 @@ class _DrawerExpandButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      tooltip: isExpanded ? 'Mode réduit' : 'Mode avancé',
       onPressed: onTap,
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
@@ -1069,14 +1067,8 @@ class _GroupedPlaybackControls extends StatelessWidget {
     this.onSkipNext,
   });
 
-  String _playTooltip() {
-    if (!canControl) return 'Lancer';
-    return isPlaying ? 'Pause' : 'Reprendre';
-  }
-
   Widget _actionButton({
     required BuildContext context,
-    required String tooltip,
     required VoidCallback? onPressed,
     required IconData icon,
     required bool showTransitionFeedback,
@@ -1087,7 +1079,6 @@ class _GroupedPlaybackControls extends StatelessWidget {
       width: _actionButtonSize,
       height: _actionButtonSize,
       child: IconButton(
-        tooltip: tooltip,
         onPressed: onPressed,
         iconSize: _iconSize,
         padding: EdgeInsets.zero,
@@ -1170,7 +1161,6 @@ class _GroupedPlaybackControls extends StatelessWidget {
               padding: const EdgeInsets.only(left: 6),
               child: _actionButton(
                 context: context,
-                tooltip: _playTooltip(),
                 onPressed: transitionInProgress
                     ? null
                     : (canControl ? onTogglePlayPause : onChooseMusic),
@@ -1184,7 +1174,6 @@ class _GroupedPlaybackControls extends StatelessWidget {
             ),
             _actionButton(
               context: context,
-              tooltip: 'Suivant',
               onPressed: hasQueue && !transitionInProgress ? onSkipNext : null,
               icon: Icons.skip_next_rounded,
               showTransitionFeedback: skipFeedback,
@@ -1983,7 +1972,6 @@ class _QueueRow extends StatelessWidget {
               _RegieDownloadRing(padItem: padItem, size: 26),
               if (onRemove != null && !enableSwipeToRemove)
                 IconButton(
-                  tooltip: 'Retirer',
                   onPressed: onRemove,
                   icon: const Icon(Icons.close_rounded, size: 18),
                   visualDensity: VisualDensity.compact,

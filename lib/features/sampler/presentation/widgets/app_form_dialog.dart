@@ -60,7 +60,6 @@ class AppFormDialog extends StatelessWidget {
         children: [
           Expanded(child: Text(title)),
           IconButton(
-            tooltip: 'Fermer',
             onPressed: onClose ?? () => Navigator.of(context).pop(false),
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,

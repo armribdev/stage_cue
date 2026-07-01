@@ -206,7 +206,6 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
             right: 6,
             child: IconButton(
               icon: const Icon(Icons.close, size: 18),
-              tooltip: 'Supprimer le pad',
               onPressed: _handleRemoveTap,
               color: Colors.grey.shade600,
               splashRadius: 16,
@@ -222,7 +221,6 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
             left: 6,
             child: IconButton(
               icon: const Icon(Icons.edit_outlined, size: 16),
-              tooltip: 'Modifier le pad',
               onPressed: widget.onEdit,
               color: Colors.grey.shade600,
               splashRadius: 16,
