@@ -322,7 +322,7 @@ class LibrarySyncService {
   /// Identifiant d'appareil stable, persisté dans un fichier sous documents.
   Future<String> _resolveDeviceId() async {
     if (_deviceIdOverride != null) return _deviceIdOverride;
-    final docs = await getApplicationDocumentsDirectory();
+    final docs = await getApplicationSupportDirectory();
     final file = File(p.join(docs.path, 'device_id.txt'));
     if (await file.exists()) {
       final value = (await file.readAsString()).trim();

@@ -629,6 +629,16 @@ class AppDatabase extends _$AppDatabase {
 /// Nom du fichier de base principal.
 const String kDbFileName = 'db.sqlite';
 
+/// Résout le fichier de la base principale.
+///
+/// La base vit dans le dossier de support de l'app (masqué de l'utilisateur,
+/// hors du dossier Documents partagé/visible). Unique source de vérité pour
+/// l'emplacement de la DB — ne pas reconstruire ce chemin ailleurs.
+Future<File> resolveDatabaseFile() async {
+  final dbFolder = await getApplicationSupportDirectory();
+  return File(p.join(dbFolder.path, kDbFileName));
+}
+
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     // Initialiser les bibliothèques natives SQLite sur Android/iOS
@@ -636,9 +646,7 @@ LazyDatabase _openConnection() {
       await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
     }
 
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, kDbFileName));
-
+    final file = await resolveDatabaseFile();
     return NativeDatabase.createInBackground(file);
   });
 }

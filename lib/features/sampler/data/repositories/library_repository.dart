@@ -1398,7 +1398,7 @@ class LibraryRepository extends ChangeNotifier {
   }
 
   Future<String> _createLocalRoot() async {
-    final docs = await getApplicationDocumentsDirectory();
+    final docs = await getApplicationSupportDirectory();
     final dir = Directory(p.join(docs.path, 'libraries', const Uuid().v4()));
     await dir.create(recursive: true);
     return dir.path;
