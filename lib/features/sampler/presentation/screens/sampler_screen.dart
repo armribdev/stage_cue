@@ -725,12 +725,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   bool _shouldShowPadOnGrid(PadItem pad) {
     if (pad.isDraft) return true;
-    if (!_notifier.offlineMode) return true;
+    if (!_notifier.isLiveOfflineMode) return true;
     return _notifier.isPadVisibleInOfflineMode(pad);
-  }
-
-  void _toggleOfflineMode() {
-    unawaited(_notifier.setOfflineMode(!_notifier.offlineMode));
   }
 
   /// Entre/sort du Mode Spectacle : verrouille l'édition (croix, déplacement,
@@ -1272,7 +1268,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       'slots=${resolved.slots.length} readySlots=${resolved.slots.where((s) => s.isReady).length}',
     );
 
-    if (_notifier.offlineMode && !resolved.hasLocallyAvailableSound) {
+    if (_notifier.isLiveOfflineMode && !resolved.hasLocallyAvailableSound) {
       return;
     }
 
@@ -1321,7 +1317,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       return;
     }
 
-    if (_notifier.offlineMode) return;
+    if (!_notifier.allowsSoundDownload) return;
 
     debugPrint(
       '[TAP] pad="${resolved.pad.displayName}" → EN ROUTE / preparing',
@@ -1559,7 +1555,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
               .where(_notifier.isPadPreparable)
               .length;
           final showPrepareBanner =
-              !state.offlineMode &&
+              _notifier.allowsSoundDownload &&
               (downloadableCount > 0 || state.isBoardPreparing);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1819,8 +1815,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onBoardContextMenu: _showBoardContextMenu,
                     isPerformanceMode: _isPerformanceMode,
                     onTogglePerformanceMode: _togglePerformanceMode,
-                    isOfflineMode: state.offlineMode,
-                    onToggleOfflineMode: _toggleOfflineMode,
                     onOpenLibrary: _openLibrary,
                     onOpenSettings: _openSettings,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
@@ -1833,10 +1827,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 : _SamplerAppBar(
                     selectedBoard: selectedBoard,
                     isPerformanceMode: _isPerformanceMode,
-                    isOfflineMode: state.offlineMode,
                     onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
                     onTogglePerformanceMode: _togglePerformanceMode,
-                    onToggleOfflineMode: _toggleOfflineMode,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
                     syncStatus: _SyncStatusPill(
                       syncController: widget.services.syncController,
@@ -1998,10 +1990,8 @@ class _SyncStatusPill extends StatelessWidget {
 class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final SoundBoard? selectedBoard;
   final bool isPerformanceMode;
-  final bool isOfflineMode;
   final VoidCallback onOpenMenu;
   final VoidCallback onTogglePerformanceMode;
-  final VoidCallback onToggleOfflineMode;
   final VoidCallback onQuickSearch;
   final Widget syncStatus;
   final Widget stopAllButton;
@@ -2009,10 +1999,8 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _SamplerAppBar({
     required this.selectedBoard,
     required this.isPerformanceMode,
-    required this.isOfflineMode,
     required this.onOpenMenu,
     required this.onTogglePerformanceMode,
-    required this.onToggleOfflineMode,
     required this.onQuickSearch,
     required this.syncStatus,
     required this.stopAllButton,
@@ -2039,10 +2027,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
         ),
-        _OfflineModeButton(
-          isOfflineMode: isOfflineMode,
-          onToggle: onToggleOfflineMode,
-        ),
         stopAllButton,
         IconButton(
           icon: const Icon(Icons.search_rounded),
@@ -2055,33 +2039,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
-}
-
-// ---------- Bouton mode hors-ligne ----------
-
-/// Masque les pads sans fichier local et limite la lecture au cache.
-class _OfflineModeButton extends StatelessWidget {
-  final bool isOfflineMode;
-  final VoidCallback onToggle;
-
-  const _OfflineModeButton({
-    required this.isOfflineMode,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return IconButton(
-      icon: Icon(
-        isOfflineMode
-            ? Icons.offline_bolt_rounded
-            : Icons.offline_bolt_outlined,
-      ),
-      color: isOfflineMode ? scheme.primary : null,
-      onPressed: onToggle,
-    );
-  }
 }
 
 // ---------- Bouton « Tout arrêter » (bruitages) ----------
@@ -2294,8 +2251,6 @@ class _SamplerDesktopAppBar extends StatelessWidget
   onBoardContextMenu;
   final bool isPerformanceMode;
   final VoidCallback onTogglePerformanceMode;
-  final bool isOfflineMode;
-  final VoidCallback onToggleOfflineMode;
   final Future<void> Function() onOpenLibrary;
   final Future<void> Function() onOpenSettings;
   final VoidCallback onQuickSearch;
@@ -2311,8 +2266,6 @@ class _SamplerDesktopAppBar extends StatelessWidget
     required this.onBoardContextMenu,
     required this.isPerformanceMode,
     required this.onTogglePerformanceMode,
-    required this.isOfflineMode,
-    required this.onToggleOfflineMode,
     required this.onOpenLibrary,
     required this.onOpenSettings,
     required this.onQuickSearch,
@@ -2351,10 +2304,6 @@ class _SamplerDesktopAppBar extends StatelessWidget
         _PerformanceLockButton(
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
-        ),
-        _OfflineModeButton(
-          isOfflineMode: isOfflineMode,
-          onToggle: onToggleOfflineMode,
         ),
         stopAllButton,
         IconButton(

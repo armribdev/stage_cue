@@ -1570,6 +1570,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildConnectivitySection() {
+    return ListenableBuilder(
+      listenable: widget.appPreferences,
+      builder: (context, _) {
+        final scheme = Theme.of(context).colorScheme;
+        final selected = widget.appPreferences.connectivityMode;
+        return _buildSettingsSectionCard(
+          title: _buildSectionTitleRow(
+            icon: Icons.hub_outlined,
+            title: 'Mode réseau',
+          ),
+          child: Column(
+            children: [
+              for (final mode in ConnectivityMode.values) ...[
+                RadioListTile<ConnectivityMode>(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(mode.label),
+                  subtitle: Text(
+                    mode.description,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  value: mode,
+                  groupValue: selected,
+                  onChanged: (value) {
+                    if (value == null) return;
+                    unawaited(widget.appPreferences.setConnectivityMode(value));
+                  },
+                ),
+                if (mode != ConnectivityMode.values.last)
+                  Divider(
+                    height: 1,
+                    color: scheme.outlineVariant.withValues(alpha: 0.45),
+                  ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildDriveSection() {
     final connectedCount =
         _libraries.where((library) => library.isConnectedToDrive).length;
@@ -1782,6 +1825,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _buildConnectivitySection(),
+                      const SizedBox(height: 16),
                       _buildDriveSection(),
                       const SizedBox(height: 16),
                       _buildSettingsSectionCard(

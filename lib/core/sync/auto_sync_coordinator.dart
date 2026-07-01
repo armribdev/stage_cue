@@ -6,6 +6,7 @@ import '../../features/sampler/data/repositories/library_repository.dart';
 import '../../features/sampler/domain/entities/library.dart';
 import '../../features/sampler/presentation/providers/sync_controller.dart';
 import '../database/database.dart' as db;
+import '../settings/app_preferences.dart';
 
 /// Coordonne la synchronisation automatique (mode semi-auto) :
 /// - **pull au lancement** : reconnexion silencieuse + récupération du snapshot
@@ -19,6 +20,7 @@ class AutoSyncCoordinator {
   final db.AppDatabase _database;
   final LibraryRepository _repository;
   final SyncController _syncController;
+  final AppPreferences _appPreferences;
 
   StreamSubscription<Set<TableUpdate>>? _subscription;
 
@@ -26,16 +28,28 @@ class AutoSyncCoordinator {
   // merge en-place (le contenu vient du distant, pas d'une édition locale).
   bool _ignoreUpdates = false;
 
-  AutoSyncCoordinator(this._database, this._repository, this._syncController);
+  AutoSyncCoordinator(
+    this._database,
+    this._repository,
+    this._syncController,
+    this._appPreferences,
+  );
 
   /// Démarre l'écoute des modifications et lance un pull initial en arrière-plan.
   void start() {
+    _appPreferences.addListener(_onConnectivityModeChanged);
     _subscription = _database.tableUpdates().listen(_onTablesUpdated);
     unawaited(_initialPull());
   }
 
+  void _onConnectivityModeChanged() {
+    if (_appPreferences.allowsNetworkSync) {
+      unawaited(_initialPull());
+    }
+  }
+
   Future<void> _onTablesUpdated(Set<TableUpdate> updates) async {
-    if (_ignoreUpdates) return;
+    if (_ignoreUpdates || !_appPreferences.allowsNetworkSync) return;
     // Ignorer les écritures ne touchant QUE la table de bookkeeping `libraries`
     // (mise à jour de révision après un push) : sinon le push se relancerait en
     // boucle.
@@ -49,6 +63,7 @@ class AutoSyncCoordinator {
   }
 
   Future<void> _initialPull() async {
+    if (!_appPreferences.allowsNetworkSync) return;
     try {
       final reconnected = await _repository.reconnectSilently();
 
@@ -97,6 +112,7 @@ class AutoSyncCoordinator {
   }
 
   void dispose() {
+    _appPreferences.removeListener(_onConnectivityModeChanged);
     _subscription?.cancel();
   }
 }

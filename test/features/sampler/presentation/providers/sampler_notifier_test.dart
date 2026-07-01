@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:stage_cue/core/settings/app_preferences.dart';
 import 'package:stage_cue/features/sampler/domain/entities/pad.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound_board.dart';
 import 'package:stage_cue/features/sampler/domain/usecases/load_sounds_usecase.dart';
@@ -196,37 +197,36 @@ void main() {
     });
   });
 
-  // ── offlineMode ───────────────────────────────────────────────────────────
+  // ── connectivityMode ──────────────────────────────────────────────────────
 
-  group('setOfflineMode', () {
-    test('bascule l\'état hors-ligne', () async {
+  group('connectivityMode', () {
+    test('live hors ligne masque les pads sans son local', () async {
       final repo = MockSoundRepository();
       final useCase = MockLoadSoundsUseCase();
       when(() => repo.getSoundBoards()).thenAnswer((_) async => [_board(1)]);
       when(() => useCase.call(any())).thenAnswer((_) async => []);
 
-      final n = SamplerNotifier(repo, useCase);
-      expect(n.offlineMode, isFalse);
+      final prefs = AppPreferences();
+      prefs.debugSetConnectivityMode(ConnectivityMode.liveOffline);
 
-      await n.setOfflineMode(true);
+      final n = SamplerNotifier(repo, useCase, null, null, prefs);
+      expect(n.isLiveOfflineMode, isTrue);
       expect(n.offlineMode, isTrue);
-
-      await n.setOfflineMode(false);
-      expect(n.offlineMode, isFalse);
+      expect(n.allowsSoundDownload, isFalse);
     });
 
-    test('idempotent si déjà dans l\'état cible', () async {
+    test('connecté autorise les téléchargements', () async {
       final repo = MockSoundRepository();
       final useCase = MockLoadSoundsUseCase();
       when(() => repo.getSoundBoards()).thenAnswer((_) async => [_board(1)]);
       when(() => useCase.call(any())).thenAnswer((_) async => []);
 
-      final n = SamplerNotifier(repo, useCase);
-      var count = 0;
-      n.addListener(() => count++);
+      final prefs = AppPreferences();
+      prefs.debugSetConnectivityMode(ConnectivityMode.connected);
 
-      await n.setOfflineMode(false); // déjà false
-      expect(count, 0);
+      final n = SamplerNotifier(repo, useCase, null, null, prefs);
+      expect(n.isLiveOfflineMode, isFalse);
+      expect(n.allowsSoundDownload, isTrue);
     });
   });
 
