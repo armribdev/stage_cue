@@ -14,6 +14,41 @@ class LocalLibraryDataSource {
     return rows.map(LibraryModel.toEntity).toList();
   }
 
+  /// Renvoie (crée si besoin) le nœud dossier `(libraryId, driveFolderId)`.
+  /// Partagé entre liens imbriqués : deux bibliothèques qui couvrent le même
+  /// dossier Drive convergent vers le même nœud plutôt que de le dupliquer.
+  Future<int> ensureFolder({
+    required int libraryId,
+    required String driveFolderId,
+    required String relativePath,
+  }) async {
+    final existing = await (_database.select(_database.libraryFolders)
+          ..where(
+            (f) =>
+                f.libraryId.equals(libraryId) &
+                f.driveFolderId.equals(driveFolderId),
+          ))
+        .getSingleOrNull();
+    if (existing != null) {
+      // Dossier déplacé/renommé : garde le chemin relatif à jour.
+      if (existing.relativePath != relativePath) {
+        await (_database.update(_database.libraryFolders)
+              ..where((f) => f.id.equals(existing.id)))
+            .write(db.LibraryFoldersCompanion(
+              relativePath: Value(relativePath),
+            ));
+      }
+      return existing.id;
+    }
+    return _database.into(_database.libraryFolders).insert(
+          db.LibraryFoldersCompanion.insert(
+            libraryId: libraryId,
+            driveFolderId: driveFolderId,
+            relativePath: Value(relativePath),
+          ),
+        );
+  }
+
   Future<domain.Library?> getLibraryById(int id) async {
     final row = await (_database.select(
       _database.libraries,

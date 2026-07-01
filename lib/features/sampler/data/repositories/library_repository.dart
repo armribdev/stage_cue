@@ -1018,11 +1018,20 @@ class LibraryRepository extends ChangeNotifier {
           }
         }
 
+        // Nœud dossier propriétaire (ses fichiers directs) : c'est l'unité
+        // d'appartenance et, à terme, de snapshot par-dossier.
+        final folderId = await _dataSource.ensureFolder(
+          libraryId: library.id,
+          driveFolderId: audio.folderDriveId,
+          relativePath: audio.folderRelativePath,
+        );
+
         final created = await _soundDataSource.syncLibrarySoundFromDriveIndex(
           libraryId: library.id,
           relativePath: audio.relativePath,
           localPath: localPath,
           driveFileId: audio.driveFileId,
+          folderId: folderId,
         );
         if (created) indexedCount++;
 
@@ -1079,14 +1088,25 @@ class LibraryRepository extends ChangeNotifier {
     }
   }
 
-  Future<List<({String relativePath, String driveFileId})>>
-      _collectDriveAudioFiles(
+  Future<
+      List<
+          ({
+            String relativePath,
+            String driveFileId,
+            String folderDriveId,
+            String folderRelativePath,
+          })>> _collectDriveAudioFiles(
     DriveClient client,
     String folderId,
     String relativePrefix, {
     String? sharedDriveId,
   }) async {
-    final results = <({String relativePath, String driveFileId})>[];
+    final results = <({
+      String relativePath,
+      String driveFileId,
+      String folderDriveId,
+      String folderRelativePath,
+    })>[];
     final children = await client.listFolder(
       folderId,
       sharedDriveId: sharedDriveId,
@@ -1110,9 +1130,14 @@ class LibraryRepository extends ChangeNotifier {
         final relativePath = relativePrefix.isEmpty
             ? child.name
             : '$relativePrefix/${child.name}';
-        // On conserve l'ID Drive (immuable) : c'est l'identité forte qui
-        // remplace l'heuristique de nom/chemin pour la déduplication.
-        results.add((relativePath: relativePath, driveFileId: child.id));
+        // On conserve l'ID Drive du fichier (identité forte) ET celui de son
+        // dossier parent direct (nœud propriétaire du modèle par-dossier).
+        results.add((
+          relativePath: relativePath,
+          driveFileId: child.id,
+          folderDriveId: folderId,
+          folderRelativePath: relativePrefix,
+        ));
       }
     }
 

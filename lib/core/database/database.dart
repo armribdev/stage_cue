@@ -12,6 +12,7 @@ part 'database.g.dart';
 @DriftDatabase(
   tables: [
     Libraries,
+    LibraryFolders,
     Sounds,
     SoundBoards,
     WatchedPaths,
@@ -30,7 +31,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration {
@@ -202,6 +203,16 @@ class AppDatabase extends _$AppDatabase {
           // Backfill par un scan Drive ultérieur (indexDriveFolder) — null OK.
           await m.addColumn(sounds, sounds.driveFileId);
         }
+        if (from < 25) {
+          // Modèle « BDD par dossier » : chaque dossier Drive devient un nœud
+          // propriétaire de ses fichiers directs. Backfill NON destructif —
+          // chaque bibliothèque existante devient un nœud racine possédant
+          // (comme aujourd'hui) tous ses sons ; le découpage par sous-dossier
+          // se fait au prochain réindexage.
+          await m.createTable(libraryFolders);
+          await m.addColumn(sounds, sounds.folderId);
+          await _backfillLibraryFolders();
+        }
       },
       beforeOpen: (details) async {
         // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
@@ -320,6 +331,29 @@ class AppDatabase extends _$AppDatabase {
           relativePath: Value(relativePath),
           filePath: Value(filePath),
         ),
+      );
+    }
+  }
+
+  /// Crée un nœud dossier racine par bibliothèque Drive existante et rattache
+  /// tous ses sons — migration non destructive vers le modèle par-dossier.
+  Future<void> _backfillLibraryFolders() async {
+    final libs = await customSelect(
+      'SELECT id, drive_folder_id FROM libraries',
+    ).get();
+    for (final row in libs) {
+      final libraryId = row.read<int>('id');
+      final driveFolderId = row.read<String?>('drive_folder_id');
+      if (driveFolderId == null) continue; // bibliothèque non connectée à Drive
+      final folderId = await into(libraryFolders).insert(
+        LibraryFoldersCompanion.insert(
+          libraryId: libraryId,
+          driveFolderId: driveFolderId,
+        ),
+      );
+      await customStatement(
+        'UPDATE sounds SET folder_id = ? WHERE library_id = ?',
+        [folderId, libraryId],
       );
     }
   }
