@@ -502,26 +502,39 @@ class SamplerNotifier extends ChangeNotifier {
           '[LISTENER] pad="${padItem.pad.displayName}" slot=$idx playing=$playing '
           'currentPlayerIndex=${padItem._currentPlayerIndex} isPlaying=${padItem.isPlaying}',
         );
-        if (playing) {
-          padItem._currentPlayerIndex = idx;
-          padItem.isPlaying = true;
-          // Ne pas mettre à jour currentMusicPad pendant un fondu enchaîné :
-          // crossfadeToNextMusic démarre le prochain lecteur à volume 0, ce qui
-          // déclenche playing=true avant la fin du fondu. La mise à jour
-          // explicite en fin de fondu est la source de vérité.
-          if (padItem.pad.isMusicPad && !_music._skipMusicAutoAdvance) {
-            _state = _state.copyWith(currentMusicPad: padItem);
-          }
-        } else if (padItem._currentPlayerIndex == idx) {
-          padItem.isPlaying = false;
-          padItem._currentPlayerIndex = null;
-          if (padItem.pad.isMusicPad) {
+        if (padItem.pad.isMusicPad) {
+          // Musique : mono-voix, la variante courante est la source de vérité.
+          if (playing) {
+            padItem._currentPlayerIndex = idx;
+            padItem.isPlaying = true;
+            // Ne pas mettre à jour currentMusicPad pendant un fondu enchaîné :
+            // crossfadeToNextMusic démarre le prochain lecteur à volume 0, ce
+            // qui déclenche playing=true avant la fin du fondu. La mise à jour
+            // explicite en fin de fondu est la source de vérité.
+            if (!_music._skipMusicAutoAdvance) {
+              _state = _state.copyWith(currentMusicPad: padItem);
+            }
+          } else if (padItem._currentPlayerIndex == idx) {
+            padItem.isPlaying = false;
+            padItem._currentPlayerIndex = null;
             _music._handleMusicPlaybackEnded(padItem);
+          } else {
+            debugPrint(
+              '[LISTENER] ↩ false ignored: currentPlayerIndex=${padItem._currentPlayerIndex} != slot=$idx',
+            );
           }
         } else {
-          debugPrint(
-            '[LISTENER] ↩ false ignored: currentPlayerIndex=${padItem._currentPlayerIndex} != slot=$idx',
-          );
+          // Non-musique : polyphonie. isPlaying reflète l'ensemble des variantes
+          // encore actives (plusieurs voix peuvent se superposer sur un pad).
+          if (playing) {
+            padItem._currentPlayerIndex = idx;
+            padItem.isPlaying = true;
+          } else {
+            final anyPlaying =
+                padItem.slots.any((s) => s.player?.isPlaying ?? false);
+            padItem.isPlaying = anyPlaying;
+            if (!anyPlaying) padItem._currentPlayerIndex = null;
+          }
         }
         debugPrint(
           '[LISTENER] after: isPlaying=${padItem.isPlaying} '
@@ -914,24 +927,73 @@ class SamplerNotifier extends ChangeNotifier {
       return;
     }
 
-    if (resolved.isPlaying) {
-      debugPrint('[TOGGLE] → stopping current player (idx=${resolved._currentPlayerIndex})');
-      await resolved.currentPlayer?.stop();
-      return;
-    }
-
+    // Pads non-musique : polyphonie. Chaque tap empile un nouveau son (superposé)
+    // sans couper les précédents ; sur un multipad la variante suivante est
+    // choisie selon le mode de lecture. L'arrêt se fait via appui long (ce pad)
+    // ou le bouton « Tout arrêter » — jamais par un second tap.
     final soundIndex = _pickSoundIndex(resolved);
     final player = resolved.slots[soundIndex].player;
     debugPrint(
-      '[TOGGLE] → play soundIndex=$soundIndex '
+      '[TOGGLE] → play overlapping soundIndex=$soundIndex '
       'playerNull=${player == null} '
       '_nextSoundIndex=${resolved._nextSoundIndex}',
     );
     if (player == null) return;
-    player.setVolume(_effectiveVolume(resolved));
-    await player.play();
+    await player.playOverlapping(volume: _effectiveVolume(resolved));
+    // Ticket de progression : une barre superposée par voix, auto-supprimée à
+    // la fin du son (bump de révision pour rafraîchir le seul PadButton).
+    resolved.addPlaybackTicket(
+      player.duration,
+      onExpire: () => _notifyPad(resolved),
+    );
     _markPlayedAt(resolved, soundIndex);
+    _notifyPad(resolved);
     notifyListeners();
+  }
+
+  /// Arrête toutes les voix en cours d'un pad (toutes variantes confondues).
+  Future<void> stopPadSounds(PadItem padItem) async {
+    final resolved = _resolveBoardPadItem(padItem);
+    if (resolved.pad.isMusicPad) {
+      await resolved.currentPlayer?.stop();
+      resolved.isPlaying = false;
+      resolved._currentPlayerIndex = null;
+      notifyListeners();
+      return;
+    }
+    await _stopAllSlotPlayers(resolved);
+    notifyListeners();
+  }
+
+  /// Coupe tous les pads non-musique en cours (bouton panique « Tout arrêter »).
+  /// Laisse la musique jouer : utile en live pour tuer un bruitage sans casser
+  /// le tapis sonore.
+  Future<void> stopAllNonMusicSounds() async {
+    var changed = false;
+    for (final padItem in _state.pads) {
+      if (padItem.pad.isMusicPad) continue;
+      if (!padItem.isPlaying) continue;
+      await _stopAllSlotPlayers(padItem);
+      changed = true;
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Au moins un pad non-musique joue actuellement.
+  bool get hasNonMusicSoundsPlaying =>
+      _state.pads.any((p) => !p.pad.isMusicPad && p.isPlaying);
+
+  /// Arrête toutes les voix de chaque variante du pad (sans notifier).
+  Future<void> _stopAllSlotPlayers(PadItem padItem) async {
+    for (final slot in padItem.slots) {
+      final player = slot.player;
+      if (player != null && player.isPlaying) {
+        await player.stop();
+      }
+    }
+    padItem.clearPlaybackTickets();
+    padItem.isPlaying = false;
+    padItem._currentPlayerIndex = null;
   }
 
   void _markPlayed(int soundId) {
@@ -1429,9 +1491,7 @@ class SamplerNotifier extends ChangeNotifier {
     try {
       for (final padItem in _state.pads) {
         if (padItem.isPlaying) {
-          await padItem.currentPlayer?.stop();
-          padItem.isPlaying = false;
-          padItem._currentPlayerIndex = null;
+          await _stopAllSlotPlayers(padItem);
         }
       }
     } finally {

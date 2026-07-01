@@ -9,9 +9,22 @@ import 'soloud_file_loader.dart';
 import 'audio_load_log.dart';
 
 /// Service de gestion des lecteurs audio (basé sur flutter_soloud)
-/// Préchargement des sources pour une latence minimale au déclenchement
+/// Préchargement des sources pour une latence minimale au déclenchement.
+///
+/// Supporte deux modes de lecture sur une même source préchargée :
+/// - mono-voix (`play`, `playFromPosition`, `playAtVolume`) : arrête la voix
+///   précédente avant d'en lancer une nouvelle — utilisé par la musique
+///   (seek, pause/reprise, fondus) ;
+/// - polyphonique (`playOverlapping`) : superpose une nouvelle voix sans couper
+///   les précédentes — utilisé par les pads non-musique (bruitages).
+///
+/// [_handles] contient toutes les voix actives (insertion-ordered).
+/// [_currentHandle] est la voix la plus récente : cible des opérations
+/// mono-voix (seek, position, fondu). En mode polyphonique il reste unique par
+/// commodité mais [isPlaying] reflète l'ensemble des voix.
 class AudioPlayerService {
   final AudioSource _source;
+  final Set<SoundHandle> _handles = {};
   SoundHandle? _currentHandle;
   final _stateController = StreamController<bool>.broadcast();
   StreamSubscription? _soundEventsSubscription;
@@ -19,12 +32,16 @@ class AudioPlayerService {
   AudioPlayerService._(this._source) {
     _soundEventsSubscription = _source.soundEvents.listen((event) {
       if (event.event == SoundEventType.handleIsNoMoreValid) {
+        final removed = _handles.remove(event.handle);
+        if (event.handle == _currentHandle) {
+          _currentHandle = _handles.isNotEmpty ? _handles.last : null;
+        }
         debugPrint(
           '[AUDIO-EVT] handleIsNoMoreValid handle=${event.handle} '
-          'currentHandle=$_currentHandle match=${event.handle == _currentHandle}',
+          'removed=$removed remaining=${_handles.length}',
         );
-        if (event.handle == _currentHandle) {
-          _currentHandle = null;
+        // Émettre l'arrêt uniquement quand la dernière voix se termine.
+        if (removed && _handles.isEmpty) {
           _stateController.add(false);
         }
       }
@@ -49,50 +66,78 @@ class AudioPlayerService {
     }
   }
 
-  /// Joue le son (quasi instantané car préchargé)
+  /// Joue le son (quasi instantané car préchargé), en mode mono-voix.
   Future<void> play() async {
     await playFromPosition(Duration.zero);
   }
 
-  /// Lance la lecture à [position] (reprise après pause).
+  /// Lance la lecture à [position] (reprise après pause), en mode mono-voix :
+  /// coupe la voix précédente avant d'en lancer une nouvelle.
   Future<void> playFromPosition(Duration position) async {
-    debugPrint(
-      '[AUDIO-PLAY] playFromPosition pos=$position '
-      'prevHandle=$_currentHandle '
-      'prevValid=${_currentHandle != null ? SoLoud.instance.getIsValidVoiceHandle(_currentHandle!) : false}',
-    );
+    debugPrint('[AUDIO-PLAY] playFromPosition pos=$position handles=${_handles.length}');
     try {
-      if (_currentHandle != null &&
-          SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
-        await SoLoud.instance.stop(_currentHandle!);
-        debugPrint('[AUDIO-PLAY] stopped prev handle=$_currentHandle');
-      }
-      _currentHandle = await SoLoud.instance.play(_source);
-      debugPrint('[AUDIO-PLAY] new handle=$_currentHandle duration=${SoLoud.instance.getLength(_source)}');
+      await _stopAllHandles();
+      final handle = await SoLoud.instance.play(_source);
+      _handles.add(handle);
+      _currentHandle = handle;
       if (position > Duration.zero) {
-        SoLoud.instance.seek(_currentHandle!, position);
+        SoLoud.instance.seek(handle, position);
       }
       _stateController.add(true);
-      debugPrint('[AUDIO-PLAY] emitted true → stateController listeners=${_stateController.hasListener}');
     } catch (e) {
       debugPrint('[AUDIO-PLAY] ERROR: $e');
     }
   }
 
-  /// Arrête la lecture
-  Future<void> stop() async {
-    if (_currentHandle != null && SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
-      await SoLoud.instance.stop(_currentHandle!);
+  /// Superpose une nouvelle voix sans couper les précédentes (polyphonie).
+  /// Utilisé par les pads non-musique : chaque déclenchement empile un son.
+  Future<void> playOverlapping({double volume = 1.0}) async {
+    try {
+      final handle = await SoLoud.instance.play(_source);
+      _handles.add(handle);
+      _currentHandle = handle;
+      SoLoud.instance.setVolume(handle, volume.clamp(0.0, 1.0));
+      debugPrint('[AUDIO-PLAY] overlapping new handle=$handle total=${_handles.length}');
+      // Ne notifier le passage à « en cours » que sur la première voix : les
+      // suivantes ne changent pas l'état booléen du lecteur.
+      if (_handles.length == 1) {
+        _stateController.add(true);
+      }
+    } catch (e) {
+      debugPrint('[AUDIO-PLAY] playOverlapping ERROR: $e');
     }
-    _currentHandle = null;
+  }
+
+  /// Arrête toutes les voix en cours.
+  Future<void> stop() async {
+    await _stopAllHandles();
     _stateController.add(false);
   }
 
-  /// Définit le volume (0.0 -> 1.0)
+  /// Arrête toutes les voix actives sans émettre d'état (usage interne).
+  Future<void> _stopAllHandles() async {
+    if (_handles.isEmpty) {
+      _currentHandle = null;
+      return;
+    }
+    // Vider d'abord : le listener soundEvents ne ré-émettra pas d'arrêt.
+    final handles = List<SoundHandle>.from(_handles);
+    _handles.clear();
+    _currentHandle = null;
+    for (final handle in handles) {
+      if (SoLoud.instance.getIsValidVoiceHandle(handle)) {
+        await SoLoud.instance.stop(handle);
+      }
+    }
+  }
+
+  /// Définit le volume (0.0 -> 1.0) sur toutes les voix actives.
   void setVolume(double volume) {
     final clamped = volume.clamp(0.0, 1.0);
-    if (_hasActiveHandle) {
-      SoLoud.instance.setVolume(_currentHandle!, clamped);
+    for (final handle in _handles) {
+      if (SoLoud.instance.getIsValidVoiceHandle(handle)) {
+        SoLoud.instance.setVolume(handle, clamped);
+      }
     }
   }
 
@@ -100,14 +145,14 @@ class AudioPlayerService {
       _currentHandle != null &&
       SoLoud.instance.getIsValidVoiceHandle(_currentHandle!);
 
-  /// Lance la lecture à un volume initial donné.
+  /// Lance la lecture à un volume initial donné (mode mono-voix).
   Future<void> playAtVolume(double volume) async {
     try {
-      if (_hasActiveHandle) {
-        await SoLoud.instance.stop(_currentHandle!);
-      }
-      _currentHandle = await SoLoud.instance.play(_source);
-      SoLoud.instance.setVolume(_currentHandle!, volume.clamp(0.0, 1.0));
+      await _stopAllHandles();
+      final handle = await SoLoud.instance.play(_source);
+      _handles.add(handle);
+      _currentHandle = handle;
+      SoLoud.instance.setVolume(handle, volume.clamp(0.0, 1.0));
       _stateController.add(true);
     } catch (e) {
       debugPrint('Erreur lors de la lecture: $e');
@@ -143,25 +188,26 @@ class AudioPlayerService {
     }
   }
 
-  /// Position actuelle de lecture (0 si aucun handle actif).
+  /// Position actuelle de lecture de la voix courante (0 si aucune active).
   Duration get position {
     if (!_hasActiveHandle) return Duration.zero;
     return SoLoud.instance.getPosition(_currentHandle!);
   }
 
-  /// Indique si le son est actuellement en cours de lecture
-  bool get isPlaying =>
-      _currentHandle != null &&
-      SoLoud.instance.getIsValidVoiceHandle(_currentHandle!);
+  /// Indique si au moins une voix est en cours de lecture.
+  bool get isPlaying => _handles.isNotEmpty;
 
   /// Dispose les ressources
   void dispose() {
     _soundEventsSubscription?.cancel();
     try {
-      if (_currentHandle != null &&
-          SoLoud.instance.getIsValidVoiceHandle(_currentHandle!)) {
-        SoLoud.instance.stop(_currentHandle!);
+      for (final handle in _handles) {
+        if (SoLoud.instance.getIsValidVoiceHandle(handle)) {
+          SoLoud.instance.stop(handle);
+        }
       }
+      _handles.clear();
+      _currentHandle = null;
       SoLoud.instance.disposeSource(_source);
     } catch (e) {
       debugPrint('Erreur lors du dispose audio: $e');

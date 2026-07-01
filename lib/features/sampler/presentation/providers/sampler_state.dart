@@ -109,6 +109,21 @@ class SamplerState {
   }
 }
 
+/// Voix non-musique en cours, pour l'affichage des barres de progression
+/// superposées : chaque déclenchement empile un ticket (id unique, durée du son,
+/// instant de départ) qui pilote une barre indépendante jusqu'à sa fin.
+class PadPlaybackTicket {
+  final int id;
+  final Duration duration;
+  final DateTime startedAt;
+
+  const PadPlaybackTicket({
+    required this.id,
+    required this.duration,
+    required this.startedAt,
+  });
+}
+
 /// Item de pad — un [PadSoundSlot] par son, index aligné sur [Pad.sounds].
 class PadItem {
   Pad pad;
@@ -122,6 +137,12 @@ class PadItem {
   int? _currentPlayerIndex;
   int? pausedPlayerIndex;
   Duration? pausedPlaybackPosition;
+
+  /// Voix non-musique actuellement affichées (barres superposées). Chaque ticket
+  /// a un timer d'auto-suppression aligné sur la durée du son.
+  final List<PadPlaybackTicket> playbackTickets = [];
+  final Map<int, Timer> _ticketTimers = {};
+  int _ticketSeq = 0;
   PadUnavailabilityReason? unavailabilityReason;
   bool isDownloading = false;
   int downloadDone = 0;
@@ -266,6 +287,7 @@ class PadItem {
   /// Libère le pad définitivement (slots + notifier de révision). À appeler
   /// quand le pad disparaît de l'état (changement de plateau, suppression).
   void dispose() {
+    clearPlaybackTickets();
     disposeAllSlots();
     _revision.dispose();
   }
@@ -273,6 +295,32 @@ class PadItem {
   void clearPausedPlayback() {
     pausedPlayerIndex = null;
     pausedPlaybackPosition = null;
+  }
+
+  /// Enregistre une nouvelle voix (barre de progression) de [duration] et
+  /// programme son auto-suppression. [onExpire] est appelé à la fin du son.
+  int addPlaybackTicket(Duration duration, {required void Function() onExpire}) {
+    final id = ++_ticketSeq;
+    playbackTickets.add(
+      PadPlaybackTicket(id: id, duration: duration, startedAt: DateTime.now()),
+    );
+    if (duration > Duration.zero) {
+      _ticketTimers[id] = Timer(duration, () {
+        _ticketTimers.remove(id);
+        playbackTickets.removeWhere((t) => t.id == id);
+        onExpire();
+      });
+    }
+    return id;
+  }
+
+  /// Annule tous les tickets en cours (arrêt manuel du pad ou global).
+  void clearPlaybackTickets() {
+    for (final timer in _ticketTimers.values) {
+      timer.cancel();
+    }
+    _ticketTimers.clear();
+    playbackTickets.clear();
   }
 }
 

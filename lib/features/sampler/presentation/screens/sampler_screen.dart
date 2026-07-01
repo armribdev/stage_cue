@@ -1410,13 +1410,25 @@ class _SamplerScreenState extends State<SamplerScreen> {
         animateOnRestore: _recentlyRestoredSoundId == padItem.pad.id,
         isHighlighted: _highlightedPadId == padItem.pad.id,
         onTap: () => unawaited(_handlePadTap(context, padItem)),
-        onLongPress: _isEditMode || _isPerformanceMode
+        onLongPress: _isEditMode
             ? null
-            : () => PadDetailsScreen.open(
+            : () {
+                final live =
+                    _notifier.findPadItemById(padItem.pad.id) ?? padItem;
+                // Pad non-musique en cours : l'appui long coupe ses voix
+                // (fonctionne aussi en mode spectacle, pour un arrêt ciblé).
+                if (!live.pad.isMusicPad && live.isPlaying) {
+                  unawaited(HapticFeedback.mediumImpact());
+                  unawaited(_notifier.stopPadSounds(live));
+                  return;
+                }
+                if (_isPerformanceMode) return;
+                PadDetailsScreen.open(
                   context,
-                  padItem: padItem,
+                  padItem: live,
                   notifier: _notifier,
-                ),
+                );
+              },
         onRemove: _isEditMode
             ? () async {
                 final removed = await _notifier.removeSound(padItem);
@@ -1765,6 +1777,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                       syncController: widget.services.syncController,
                       onTap: _openDriveSettings,
                     ),
+                    stopAllButton: _StopAllButton(notifier: _notifier),
                   )
                 : _SamplerAppBar(
                     selectedBoard: selectedBoard,
@@ -1781,6 +1794,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                       syncController: widget.services.syncController,
                       onTap: _openDriveSettings,
                     ),
+                    stopAllButton: _StopAllButton(notifier: _notifier),
                   ),
             drawer: isDesktop
                 ? null
@@ -1956,6 +1970,7 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onToggleOfflineMode;
   final VoidCallback onQuickSearch;
   final Widget syncStatus;
+  final Widget stopAllButton;
 
   const _SamplerAppBar({
     required this.selectedBoard,
@@ -1969,6 +1984,7 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onToggleOfflineMode,
     required this.onQuickSearch,
     required this.syncStatus,
+    required this.stopAllButton,
   });
 
   @override
@@ -1997,6 +2013,7 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
           isOfflineMode: isOfflineMode,
           onToggle: onToggleOfflineMode,
         ),
+        stopAllButton,
         IconButton(
           icon: const Icon(Icons.search_rounded),
           tooltip: 'Rechercher un son',
@@ -2046,6 +2063,38 @@ class _OfflineModeButton extends StatelessWidget {
           ? 'Mode hors-ligne actif — sons locaux uniquement'
           : 'Mode hors-ligne (sons locaux uniquement)',
       onPressed: onToggle,
+    );
+  }
+}
+
+// ---------- Bouton « Tout arrêter » (bruitages) ----------
+
+/// Bouton panique : coupe d'un coup tous les pads non-musique en cours, sans
+/// toucher au tapis musical. Actif uniquement quand au moins un bruitage joue.
+class _StopAllButton extends StatelessWidget {
+  final SamplerNotifier notifier;
+
+  const _StopAllButton({required this.notifier});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListenableBuilder(
+      listenable: notifier,
+      builder: (context, _) {
+        final active = notifier.hasNonMusicSoundsPlaying;
+        return IconButton(
+          icon: const Icon(Icons.stop_circle_rounded),
+          color: active ? scheme.error : null,
+          tooltip: 'Tout arrêter (bruitages)',
+          onPressed: active
+              ? () {
+                  unawaited(HapticFeedback.heavyImpact());
+                  unawaited(notifier.stopAllNonMusicSounds());
+                }
+              : null,
+        );
+      },
     );
   }
 }
@@ -2241,6 +2290,7 @@ class _SamplerDesktopAppBar extends StatelessWidget
   final Future<void> Function() onOpenSettings;
   final VoidCallback onQuickSearch;
   final Widget syncStatus;
+  final Widget stopAllButton;
 
   const _SamplerDesktopAppBar({
     required this.selectedBoard,
@@ -2260,6 +2310,7 @@ class _SamplerDesktopAppBar extends StatelessWidget
     required this.onOpenSettings,
     required this.onQuickSearch,
     required this.syncStatus,
+    required this.stopAllButton,
   });
 
   @override
@@ -2303,6 +2354,7 @@ class _SamplerDesktopAppBar extends StatelessWidget
           isOfflineMode: isOfflineMode,
           onToggle: onToggleOfflineMode,
         ),
+        stopAllButton,
         IconButton(
           icon: const Icon(Icons.search_rounded),
           tooltip: 'Rechercher un son (Ctrl/Cmd+K)',
