@@ -20,6 +20,7 @@ import '../../../../core/sync/library_sound_paths.dart';
 import '../../../../core/sync/library_sync_service.dart';
 import '../../../../core/sync/snapshot_store.dart';
 import '../../../../core/utils/file_utils.dart' show isAudioFile;
+import '../../../../core/utils/path_unicode.dart';
 import '../../domain/entities/library.dart';
 import '../../domain/entities/sound.dart';
 import '../datasources/local_library_datasource.dart';
@@ -658,7 +659,9 @@ class LibraryRepository extends ChangeNotifier {
     final localPath = _cacheManager.localPathFor(library, relativePath);
     clearUnloadablePath(localPath);
     try {
-      final stale = File(localPath);
+      final stalePath =
+          await PathUnicode.canonicalizeLocalPath(localPath) ?? localPath;
+      final stale = File(stalePath);
       if (await stale.exists() && !await isPlausibleAudioFile(stale)) {
         await stale.delete();
       }
@@ -690,7 +693,9 @@ class LibraryRepository extends ChangeNotifier {
       if (client != null) {
         clearUnloadablePath(localPath);
         try {
-          final stale = File(localPath);
+          final stalePath =
+              await PathUnicode.canonicalizeLocalPath(localPath) ?? localPath;
+          final stale = File(stalePath);
           if (await stale.exists()) await stale.delete();
         } catch (_) {}
         return LocalSoundProbeResult.needsDownload;
@@ -698,7 +703,9 @@ class LibraryRepository extends ChangeNotifier {
       return LocalSoundProbeResult.missingFile;
     }
 
-    final localFile = File(localPath);
+    final cachedPath =
+        await PathUnicode.canonicalizeLocalPath(localPath) ?? localPath;
+    final localFile = File(cachedPath);
     if (await isPlausibleAudioFile(localFile)) {
       return LocalSoundProbeResult.cached;
     }
@@ -744,6 +751,7 @@ class LibraryRepository extends ChangeNotifier {
             client: client,
             library: library,
             relativePath: relativePath,
+            driveFileId: sound.driveFileId,
           )
           .timeout(const Duration(seconds: 10));
     } on DriveAuthException {
@@ -798,14 +806,17 @@ class LibraryRepository extends ChangeNotifier {
       }
 
       final localPath = _cacheManager.localPathFor(library, relativePath);
-      final localFile = File(localPath);
+      final cachedPath =
+          await PathUnicode.canonicalizeLocalPath(localPath) ?? localPath;
+      final localFile = File(cachedPath);
 
       if (await localFile.exists()) {
         if (await isPlausibleAudioFile(localFile)) {
-          await _soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath);
+          final resolvedPath = p.normalize(localFile.absolute.path);
+          await _soundDataSource.syncLibrarySoundLocalPath(sound.id, resolvedPath);
           await _materializeSoundFileMetadataIfNeeded(sound, localFile);
           clearUnloadablePath(localPath);
-          return p.normalize(localFile.absolute.path);
+          return resolvedPath;
         }
 
         final corruptSize = await localFile.length();
@@ -834,17 +845,23 @@ class LibraryRepository extends ChangeNotifier {
         throw SoundNotAvailableLocallyException(isOffline: false);
       }
 
-      final reconciledPath = await _reconcileSoundRelativePathFromDrive(
-        client: client,
-        library: library,
-        sound: sound,
-        relativePath: relativePath,
-      );
+      // Identité forte : si l'ID Drive est connu, on télécharge directement par
+      // ID (robuste aux accents/renommages) sans réconciliation par nom.
+      final driveFileId = sound.driveFileId;
+      final reconciledPath = driveFileId != null
+          ? relativePath
+          : await _reconcileSoundRelativePathFromDrive(
+              client: client,
+              library: library,
+              sound: sound,
+              relativePath: relativePath,
+            );
 
       final resolvedLocalPath = await _cacheManager.ensureCached(
         client: client,
         library: library,
         relativePath: reconciledPath,
+        driveFileId: driveFileId,
       );
       final downloaded = File(resolvedLocalPath);
       if (!await downloaded.exists() ||
@@ -874,7 +891,9 @@ class LibraryRepository extends ChangeNotifier {
       return p.normalize(downloaded.absolute.path);
     }
 
-    final legacyFile = File(sound.filePath);
+    final legacyPath =
+        await PathUnicode.canonicalizeLocalPath(sound.filePath) ?? sound.filePath;
+    final legacyFile = File(legacyPath);
     if (!await legacyFile.exists()) {
       throw SoundNotAvailableLocallyException(isOffline: false);
     }
@@ -959,16 +978,23 @@ class LibraryRepository extends ChangeNotifier {
 
       try {
         if (!await File(localPath).exists()) {
-          await _cacheManager.ensureCached(
+          final resolvedLocalPath = await _cacheManager.ensureCached(
             client: client,
             library: library,
             relativePath: relativePath,
+            driveFileId: sound.driveFileId,
           );
           unawaited(
-            _soundDataSource.syncLibrarySoundLocalPath(sound.id, localPath),
+            _soundDataSource.syncLibrarySoundLocalPath(
+              sound.id,
+              resolvedLocalPath,
+            ),
           );
           unawaited(
-            _materializeSoundFileMetadataIfNeeded(sound, File(localPath)),
+            _materializeSoundFileMetadataIfNeeded(
+              sound,
+              File(resolvedLocalPath),
+            ),
           );
           downloaded++;
         }
@@ -1064,6 +1090,7 @@ class LibraryRepository extends ChangeNotifier {
                 client: client,
                 library: library,
                 relativePath: audio.relativePath,
+                driveFileId: audio.driveFileId,
               );
             } catch (e) {
               debugPrint(
@@ -1169,11 +1196,16 @@ class LibraryRepository extends ChangeNotifier {
     );
 
     for (final child in children) {
+      // Normalise le nom en NFC dès la source : Drive peut renvoyer du NFD
+      // (fichiers créés sous macOS). On stocke toujours en NFC (titre,
+      // relative_path, dossier, chemin local restent cohérents — cf.
+      // LibrarySoundPaths).
+      final childName = PathUnicode.toNfc(child.name);
       if (child.isFolder) {
-        if (child.name == '.stagecue') continue;
+        if (childName == '.stagecue') continue;
         final subPrefix = relativePrefix.isEmpty
-            ? child.name
-            : '$relativePrefix/${child.name}';
+            ? childName
+            : '$relativePrefix/$childName';
         results.addAll(
           await _collectDriveAudioFiles(
             client,
@@ -1182,10 +1214,10 @@ class LibraryRepository extends ChangeNotifier {
             sharedDriveId: sharedDriveId,
           ),
         );
-      } else if (isAudioFile(child.name)) {
+      } else if (isAudioFile(childName)) {
         final relativePath = relativePrefix.isEmpty
-            ? child.name
-            : '$relativePrefix/${child.name}';
+            ? childName
+            : '$relativePrefix/$childName';
         // On conserve l'ID Drive du fichier (identité forte) ET celui de son
         // dossier parent direct (nœud propriétaire du modèle par-dossier).
         results.add((
@@ -1328,7 +1360,12 @@ class LibraryRepository extends ChangeNotifier {
       sharedDriveId: sharedDriveId,
     );
     for (final child in children) {
-      if (child.name.toLowerCase() == name.toLowerCase()) return child;
+      if (PathUnicode.sameName(
+        child.name.toLowerCase(),
+        name.toLowerCase(),
+      )) {
+        return child;
+      }
     }
     return null;
   }
@@ -1380,7 +1417,10 @@ class LibraryRepository extends ChangeNotifier {
           matches,
           sharedDriveId: sharedDriveId,
         );
-      } else if (child.name.toLowerCase() == basenameLower) {
+      } else if (PathUnicode.sameName(
+        child.name.toLowerCase(),
+        basenameLower,
+      )) {
         matches.add(
           relativePrefix.isEmpty ? child.name : '$relativePrefix/${child.name}',
         );

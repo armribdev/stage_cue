@@ -1,5 +1,7 @@
 import 'package:path/path.dart' as p;
 
+import '../utils/path_unicode.dart';
+
 /// Chemins des sons d'une bibliothèque portable synchronisable.
 ///
 /// **Identité portable** : `(libraryId, relativePath)` — miroir exact de la
@@ -18,11 +20,12 @@ class LibrarySoundPaths {
     return p.joinAll([localRootPath, ...relativePath.split('/')]);
   }
 
-  /// Normalise un chemin relatif (corrige le préfixe `sounds/` legacy).
+  /// Normalise un chemin relatif (préfixe `sounds/` legacy + NFC portable).
   static String normalizeRelativePath(String relativePath) {
-    if (relativePath.startsWith(_legacySoundsPrefix)) {
-      return relativePath.substring(_legacySoundsPrefix.length);
+    var path = relativePath;
+    if (path.startsWith(_legacySoundsPrefix)) {
+      path = path.substring(_legacySoundsPrefix.length);
     }
-    return relativePath;
+    return PathUnicode.toNfc(path);
   }
 }

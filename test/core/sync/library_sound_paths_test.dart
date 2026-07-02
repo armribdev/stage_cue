@@ -22,5 +22,14 @@ void main() {
         'Effets/clap.wav',
       );
     });
+
+    test('normalizeRelativePath convertit en NFC', () {
+      const nfd = 'Bruitages/De\u0301bile 1.mp3';
+      const nfc = 'Bruitages/D\u00e9bile 1.mp3';
+      expect(
+        LibrarySoundPaths.normalizeRelativePath(nfd),
+        LibrarySoundPaths.normalizeRelativePath(nfc),
+      );
+    });
   });
 }
