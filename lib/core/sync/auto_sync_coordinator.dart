@@ -87,20 +87,28 @@ class AutoSyncCoordinator {
       _ignoreUpdates = true;
       try {
         // 1. Indexe (crée nœuds + sons). Timeout : évite de bloquer le lancement
-        //    sur un dossier Drive volumineux ou une connexion lente.
+        //    sur un dossier Drive volumineux ou une connexion lente. On ne
+        //    retient que les bibliothèques ENTIÈREMENT indexées : un index
+        //    partiel (timeout, réseau lent) suivi d'un pull racine purgerait les
+        //    boards et les recâblerait sur des sons encore absents → pads perdus
+        //    pour la session. Mieux vaut garder l'état local et réessayer au
+        //    prochain lancement (l'index sera plus rapide, cache chaud).
+        final fullyIndexed = <Library>[];
         for (final library in libraries) {
           try {
             await _repository
                 .indexDriveFolder(library: library)
                 .timeout(const Duration(seconds: 30));
+            fullyIndexed.add(library);
           } catch (_) {
-            // Continue avec les autres dossiers si l'indexation échoue/expire.
+            // Index incomplet : on saute son pull cette session.
           }
         }
 
-        // 2. Pull par-dossier (métadonnées) puis racine (boards) — les nœuds et
-        //    les sons référencés existent désormais.
-        for (final library in libraries) {
+        // 2. Pull par-dossier (métadonnées) puis racine (boards) — uniquement
+        //    pour les bibliothèques entièrement indexées : les nœuds et les sons
+        //    référencés existent alors bien tous localement.
+        for (final library in fullyIndexed) {
           await _syncController.pullForLaunch(library);
         }
       } finally {
