@@ -2032,11 +2032,14 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.menu_rounded),
-        tooltip: 'Menu',
-        onPressed: onOpenMenu,
-      ),
+      automaticallyImplyLeading: false,
+      leading: isPerformanceMode
+          ? null
+          : IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              tooltip: 'Menu',
+              onPressed: onOpenMenu,
+            ),
       title: _BoardTitleLabel(board: selectedBoard),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
@@ -2052,8 +2055,8 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'Recherche rapide',
           onPressed: onQuickSearch,
         ),
-        syncStatus,
-        _PerformanceLockButton(
+        if (!isPerformanceMode) syncStatus,
+        _LiveModeButton(
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
         ),
@@ -2097,15 +2100,15 @@ class _StopAllButton extends StatelessWidget {
   }
 }
 
-// ---------- Bouton verrou Mode Spectacle ----------
+// ---------- Bouton mode live ----------
 
-/// Bascule du Mode Spectacle : verrouille l'édition et suspend la sync auto
-/// pour un live sans modif accidentelle ni jank (refonte UX P2).
-class _PerformanceLockButton extends StatelessWidget {
+/// Bascule du mode live : verrouille l'édition et suspend la sync auto
+/// pour un spectacle sans modif accidentelle ni jank (refonte UX P2).
+class _LiveModeButton extends StatelessWidget {
   final bool isPerformanceMode;
   final VoidCallback onToggle;
 
-  const _PerformanceLockButton({
+  const _LiveModeButton({
     required this.isPerformanceMode,
     required this.onToggle,
   });
@@ -2114,14 +2117,89 @@ class _PerformanceLockButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return IconButton(
-      icon: Icon(
-        isPerformanceMode ? Icons.lock_rounded : Icons.lock_open_rounded,
-      ),
       tooltip: isPerformanceMode
-          ? 'Quitter le mode Spectacle'
-          : 'Mode Spectacle',
-      color: isPerformanceMode ? scheme.primary : null,
+          ? 'Quitter le mode live'
+          : 'Mode live',
       onPressed: onToggle,
+      icon: isPerformanceMode
+          ? const _LiveModeActiveIcon()
+          : Icon(Icons.theater_comedy_outlined, color: scheme.onSurfaceVariant),
+    );
+  }
+}
+
+/// Masque théâtre + voyant rouge pulsé — même langage visuel que le badge ON AIR.
+class _LiveModeActiveIcon extends StatefulWidget {
+  const _LiveModeActiveIcon();
+
+  @override
+  State<_LiveModeActiveIcon> createState() => _LiveModeActiveIconState();
+}
+
+class _LiveModeActiveIconState extends State<_LiveModeActiveIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+    );
+    _pulse = Tween<double>(begin: 0.35, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (reduceMotion) {
+      _controller.stop();
+      _controller.value = 1.0;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Icon(Icons.theater_comedy_rounded, color: scheme.error),
+          Positioned(
+            right: -2,
+            top: -2,
+            child: FadeTransition(
+              opacity: _pulse,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: scheme.error,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: scheme.surface, width: 1.5),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2328,20 +2406,22 @@ class _SamplerDesktopAppBar extends StatelessWidget
           tooltip: 'Recherche rapide (Ctrl+K)',
           onPressed: onQuickSearch,
         ),
-        syncStatus,
-        _PerformanceLockButton(
+        if (!isPerformanceMode) ...[
+          syncStatus,
+          IconButton(
+            icon: const Icon(Icons.library_books_rounded),
+            tooltip: 'Gérer la bibliothèque',
+            onPressed: () => unawaited(onOpenLibrary()),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Paramètres',
+            onPressed: () => unawaited(onOpenSettings()),
+          ),
+        ],
+        _LiveModeButton(
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
-        ),
-        IconButton(
-          icon: const Icon(Icons.library_books_rounded),
-          tooltip: 'Gérer la bibliothèque',
-          onPressed: () => unawaited(onOpenLibrary()),
-        ),
-        IconButton(
-          icon: const Icon(Icons.settings),
-          tooltip: 'Paramètres',
-          onPressed: () => unawaited(onOpenSettings()),
         ),
       ],
     );
