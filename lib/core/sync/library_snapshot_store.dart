@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
+import 'package:uuid/uuid.dart';
 
 import '../database/database.dart' as db;
 import '../database/sounds.dart' show PadPlayMode, SoundType;
@@ -61,10 +62,11 @@ class LibrarySnapshotStore {
     return target.length();
   }
 
-  /// Fusionne le snapshot RACINE : remplace les boards de la bibliothèque et
-  /// recâble les pads sur les sons locaux via leur `driveFileId`. Les sons ne
-  /// sont PAS touchés ici (gérés par [mergeFolderSnapshot]) — appeler les merges
-  /// de dossiers AVANT celui-ci pour que les sons référencés existent.
+  /// Fusionne le snapshot RACINE de façon INTELLIGENTE (fusion board-par-board,
+  /// pas d'écrasement global) et recâble les pads sur les sons locaux via leur
+  /// `driveFileId`. Les sons ne sont PAS touchés ici (gérés par
+  /// [mergeFolderSnapshot]) — appeler les merges de dossiers AVANT celui-ci pour
+  /// que les sons référencés existent.
   Future<void> mergeLibrarySnapshot(
     int libraryId,
     String sourcePath, {
@@ -78,39 +80,91 @@ class LibrarySnapshotStore {
       // ATTACH/DETACH doivent rester hors de la transaction Drift : un DETACH
       // avant COMMIT provoque « database snap is locked » sous SQLite.
       await _database.transaction(() async {
-        // Purge uniquement les boards (les sons sont gérés par dossier).
-        await (_database.delete(_database.soundBoards)
-              ..where((b) => b.libraryId.equals(libraryId)))
-            .go();
         if (!await _snapHasTable('sound_boards')) return;
-        await _importBoardsByDriveFileId(libraryId);
+        await _mergeBoards(libraryId);
       });
     } finally {
       await _detachSnapshot();
     }
   }
 
-  Future<void> _importBoardsByDriveFileId(int libraryId) async {
+  /// Fusion INTELLIGENTE des boards, SANS purge globale :
+  /// - chaque board est identifié par sa clé portable `board_key` ;
+  /// - un board présent des deux côtés → « dernier écrivain gagne » via
+  ///   `updated_at` : on n'écrase le local que si le distant est plus récent ;
+  /// - un board présent SEULEMENT en local (autre scène éditée en parallèle) est
+  ///   CONSERVÉ — c'est tout l'intérêt : deux régisseurs sur deux scènes ne
+  ///   s'écrasent plus ;
+  /// - un board présent seulement dans le snapshot est inséré.
+  ///
+  /// Les pads d'un board (ré)importé sont remplacés puis recâblés sur les sons
+  /// locaux. Un board conservé (local plus récent) garde ses pads intacts.
+  Future<void> _mergeBoards(int libraryId) async {
     _boardIdMap.clear();
     _padIdMap.clear();
+
+    final hasKey = await _snapColumnExists('sound_boards', 'board_key');
+    final hasUpdatedAt = await _snapColumnExists('sound_boards', 'updated_at');
 
     final boardRows = await _database
         .customSelect('SELECT * FROM snap.sound_boards ORDER BY id')
         .get();
     for (final row in boardRows) {
       final snapBoardId = row.read<int>('id');
-      final newBoardId = await _database.into(_database.soundBoards).insert(
-            db.SoundBoardsCompanion.insert(
-              name: row.read<String>('name'),
-              color: Value(row.read<int?>('color')),
-              icon: Value(row.read<int?>('icon')),
-              libraryId: Value(libraryId),
-              createdAt: Value(row.read<DateTime>('created_at')),
-            ),
-          );
-      _boardIdMap[snapBoardId] = newBoardId;
+      final createdAt = row.read<DateTime>('created_at');
+      final snapKey = hasKey ? row.read<String?>('board_key') : null;
+      final snapUpdatedAt = hasUpdatedAt
+          ? (row.read<DateTime?>('updated_at') ?? createdAt)
+          : createdAt;
+      final effectiveKey = snapKey ?? const Uuid().v4();
+
+      final local = snapKey == null
+          ? null
+          : await (_database.select(_database.soundBoards)
+                ..where((b) =>
+                    b.libraryId.equals(libraryId) & b.boardKey.equals(snapKey)))
+              .getSingleOrNull();
+
+      if (local == null) {
+        // Board inconnu localement → insertion.
+        final newBoardId = await _database.into(_database.soundBoards).insert(
+              db.SoundBoardsCompanion.insert(
+                name: row.read<String>('name'),
+                color: Value(row.read<int?>('color')),
+                icon: Value(row.read<int?>('icon')),
+                libraryId: Value(libraryId),
+                createdAt: Value(createdAt),
+                boardKey: Value(effectiveKey),
+                updatedAt: Value(snapUpdatedAt),
+              ),
+            );
+        _boardIdMap[snapBoardId] = newBoardId;
+      } else if (snapUpdatedAt.isAfter(local.updatedAt)) {
+        // Le distant est plus récent → on remplace le contenu de CE board.
+        await (_database.update(_database.soundBoards)
+              ..where((b) => b.id.equals(local.id)))
+            .write(db.SoundBoardsCompanion(
+          name: Value(row.read<String>('name')),
+          color: Value(row.read<int?>('color')),
+          icon: Value(row.read<int?>('icon')),
+          updatedAt: Value(snapUpdatedAt),
+        ));
+        // Ses pads seront réimportés : on efface les anciens (cascade pad_sounds).
+        await (_database.delete(_database.pads)
+              ..where((p) => p.boardId.equals(local.id)))
+            .go();
+        _boardIdMap[snapBoardId] = local.id;
+      }
+      // else : le local est plus récent (édité en parallèle) → conservé tel quel.
+      // Board absent de _boardIdMap → ses pads du snapshot sont ignorés.
     }
 
+    await _importBoardPads(libraryId);
+  }
+
+  /// (Ré)importe les pads des boards insérés/écrasés (présents dans
+  /// [_boardIdMap]) et recâble chaque pad_sound sur le son local.
+  Future<void> _importBoardPads(int libraryId) async {
     if (!await _snapHasTable('pads')) return;
 
     final padRows =
@@ -545,6 +599,14 @@ class LibrarySnapshotStore {
       variables: [Variable<String>(table)],
     ).get();
     return rows.isNotEmpty;
+  }
+
+  /// Vrai si la colonne existe dans la table du snapshot attaché. Robustesse
+  /// face à un ancien snapshot dépourvu de `board_key`/`updated_at`.
+  Future<bool> _snapColumnExists(String table, String column) async {
+    final rows =
+        await _database.customSelect('PRAGMA snap.table_info($table)').get();
+    return rows.any((r) => r.read<String>('name') == column);
   }
 
   Future<void> _detachSnapshot() async {

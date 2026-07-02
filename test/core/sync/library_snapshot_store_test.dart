@@ -310,4 +310,153 @@ void main() {
       expect(sounds.first.driveFileId, 'F1');
     });
   });
+
+  group('fusion intelligente des boards', () {
+    // Crée un son de bibliothèque référençable par un pad (identité DF1).
+    Future<int> seedSound(db.AppDatabase d, int lib) {
+      return d.into(d.sounds).insert(
+            db.SoundsCompanion.insert(
+              title: 'knock',
+              filePath: '/knock.mp3',
+              libraryId: Value(lib),
+              relativePath: const Value('knock.mp3'),
+              driveFileId: const Value('DF1'),
+            ),
+          );
+    }
+
+    Future<int> seedBoard(
+      db.AppDatabase d,
+      int lib, {
+      required String name,
+      required String key,
+      required DateTime updatedAt,
+      required int soundId,
+      String? padName,
+    }) async {
+      final boardId = await d.into(d.soundBoards).insert(
+            db.SoundBoardsCompanion.insert(
+              name: name,
+              libraryId: Value(lib),
+              boardKey: Value(key),
+              updatedAt: Value(updatedAt),
+            ),
+          );
+      final padId = await d.into(d.pads).insert(
+            db.PadsCompanion.insert(
+              boardId: boardId,
+              name: Value(padName ?? name),
+            ),
+          );
+      await d.into(d.padSounds).insert(
+            db.PadSoundsCompanion.insert(padId: padId, soundId: soundId),
+          );
+      return boardId;
+    }
+
+    test('préserve une scène éditée en parallèle (deux régisseurs)', () async {
+      // Device A : bibliothèque avec la scène « Forêt ».
+      final libA = await database.into(database.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/A'),
+          );
+      final soundA = await seedSound(database, libA);
+      await seedBoard(database, libA,
+          name: 'Forêt', key: 'KF', updatedAt: DateTime(2026, 1, 1),
+          soundId: soundA);
+
+      final snapshotPath = p.join(tempDir.path, 'root.db');
+      await store.exportLibrarySnapshot(libA, snapshotPath);
+
+      // Device B : MÊME bibliothèque mais l'opérateur y a créé « Ville »
+      // (absente du snapshot de A).
+      final dbB = db.AppDatabase.forTesting(NativeDatabase.memory());
+      final libB = await dbB.into(dbB.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/B'),
+          );
+      final soundB = await seedSound(dbB, libB);
+      await seedBoard(dbB, libB,
+          name: 'Ville', key: 'KV', updatedAt: DateTime(2026, 1, 2),
+          soundId: soundB);
+
+      await LibrarySnapshotStore(dbB).mergeLibrarySnapshot(libB, snapshotPath);
+
+      final boards = await (dbB.select(dbB.soundBoards)
+            ..where((b) => b.libraryId.equals(libB)))
+          .get();
+      final names = boards.map((b) => b.name).toSet();
+      expect(names, {'Forêt', 'Ville'},
+          reason: 'la scène locale « Ville » n\'est pas écrasée par la fusion');
+      await dbB.close();
+    });
+
+    test('même scène : la version distante plus récente gagne', () async {
+      final libA = await database.into(database.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/A'),
+          );
+      final soundA = await seedSound(database, libA);
+      await seedBoard(database, libA,
+          name: 'Scène (A)', key: 'KS', updatedAt: DateTime(2026, 1, 3),
+          soundId: soundA, padName: 'PadA');
+
+      final snapshotPath = p.join(tempDir.path, 'root.db');
+      await store.exportLibrarySnapshot(libA, snapshotPath);
+
+      final dbB = db.AppDatabase.forTesting(NativeDatabase.memory());
+      final libB = await dbB.into(dbB.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/B'),
+          );
+      final soundB = await seedSound(dbB, libB);
+      await seedBoard(dbB, libB,
+          name: 'Scène (B)', key: 'KS', updatedAt: DateTime(2026, 1, 1),
+          soundId: soundB, padName: 'PadB');
+
+      await LibrarySnapshotStore(dbB).mergeLibrarySnapshot(libB, snapshotPath);
+
+      final boards = await (dbB.select(dbB.soundBoards)
+            ..where((b) => b.libraryId.equals(libB)))
+          .get();
+      expect(boards, hasLength(1), reason: 'pas de doublon : même board_key');
+      expect(boards.first.name, 'Scène (A)');
+      final pads = await (dbB.select(dbB.pads)
+            ..where((pd) => pd.boardId.equals(boards.first.id)))
+          .get();
+      expect(pads.single.name, 'PadA', reason: 'contenu remplacé par le distant');
+      await dbB.close();
+    });
+
+    test('même scène : le local plus récent n\'est pas écrasé', () async {
+      final libA = await database.into(database.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/A'),
+          );
+      final soundA = await seedSound(database, libA);
+      await seedBoard(database, libA,
+          name: 'Scène (A)', key: 'KS', updatedAt: DateTime(2026, 1, 1),
+          soundId: soundA, padName: 'PadA');
+
+      final snapshotPath = p.join(tempDir.path, 'root.db');
+      await store.exportLibrarySnapshot(libA, snapshotPath);
+
+      final dbB = db.AppDatabase.forTesting(NativeDatabase.memory());
+      final libB = await dbB.into(dbB.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/B'),
+          );
+      final soundB = await seedSound(dbB, libB);
+      await seedBoard(dbB, libB,
+          name: 'Scène (B)', key: 'KS', updatedAt: DateTime(2026, 1, 5),
+          soundId: soundB, padName: 'PadB');
+
+      await LibrarySnapshotStore(dbB).mergeLibrarySnapshot(libB, snapshotPath);
+
+      final boards = await (dbB.select(dbB.soundBoards)
+            ..where((b) => b.libraryId.equals(libB)))
+          .get();
+      expect(boards, hasLength(1));
+      expect(boards.first.name, 'Scène (B)', reason: 'local plus récent conservé');
+      final pads = await (dbB.select(dbB.pads)
+            ..where((pd) => pd.boardId.equals(boards.first.id)))
+          .get();
+      expect(pads.single.name, 'PadB');
+      await dbB.close();
+    });
+  });
 }

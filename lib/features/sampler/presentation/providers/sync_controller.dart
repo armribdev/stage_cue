@@ -182,7 +182,15 @@ class SyncController extends ChangeNotifier {
     _set(_state.copyWith(status: SyncStatus.syncing, clearMessage: true));
     try {
       final outcome = await _repository.pushLibrary(library);
-      _applyPushOutcome(outcome);
+      if (outcome is PushConflict) {
+        // Fusion intelligente : un autre appareil a poussé entre-temps. Plutôt
+        // que d'écraser (ou de bloquer l'utilisateur sur un dialogue), on tire
+        // et fusionne le distant (fusion board-par-board non destructive) puis
+        // on repousse l'union. Les deux jeux de modifications sont préservés.
+        await _mergeAndRepush(library);
+      } else {
+        _applyPushOutcome(outcome);
+      }
     } on DriveAuthException {
       await _onAuthError();
     } catch (e) {
@@ -190,6 +198,17 @@ class SyncController extends ChangeNotifier {
     } finally {
       _pushInFlightLibrary = null;
     }
+  }
+
+  /// Résout un conflit de push automatiquement : pull-fusion du distant puis
+  /// repush de l'union. Si un nouveau conflit surgit (course rare : un 3e push
+  /// distant pendant la fusion), on retombe sur la résolution manuelle (UI).
+  Future<void> _mergeAndRepush(Library library) async {
+    await _repository.pullLibrary(library);
+    onLibraryMerged?.call();
+    final fresh = await _repository.getLibraryById(library.id) ?? library;
+    final outcome = await _repository.pushLibrary(fresh);
+    _applyPushOutcome(outcome);
   }
 
   /// Signale l'état hors-ligne : une bibliothèque Drive est configurée mais

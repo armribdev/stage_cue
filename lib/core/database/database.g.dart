@@ -2124,6 +2124,29 @@ class $SoundBoardsTable extends SoundBoards
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _boardKeyMeta = const VerificationMeta(
+    'boardKey',
+  );
+  @override
+  late final GeneratedColumn<String> boardKey = GeneratedColumn<String>(
+    'board_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2132,6 +2155,8 @@ class $SoundBoardsTable extends SoundBoards
     icon,
     libraryId,
     createdAt,
+    boardKey,
+    updatedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2180,6 +2205,18 @@ class $SoundBoardsTable extends SoundBoards
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('board_key')) {
+      context.handle(
+        _boardKeyMeta,
+        boardKey.isAcceptableOrUnknown(data['board_key']!, _boardKeyMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
     return context;
   }
 
@@ -2213,6 +2250,14 @@ class $SoundBoardsTable extends SoundBoards
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      boardKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}board_key'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
     );
   }
 
@@ -2231,6 +2276,18 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
   /// Bibliothèque Drive propriétaire ; null = scène locale non synchronisée.
   final int? libraryId;
   final DateTime createdAt;
+
+  /// Identité stable et PORTABLE du board (UUID). Permet de reconnaître le même
+  /// board d'un appareil à l'autre lors de la fusion, indépendamment de l'`id`
+  /// local (qui diffère entre appareils). null pour les boards antérieurs à v27
+  /// pas encore réconciliés ; un backfill leur en attribue un.
+  final String? boardKey;
+
+  /// Dernière modification locale du board OU de ses pads. Arbitre la fusion
+  /// « dernier écrivain gagne » PAR BOARD : deux régisseurs qui éditent deux
+  /// scènes différentes ne s'écrasent plus (fusion), et sur une même scène la
+  /// version la plus récente l'emporte.
+  final DateTime updatedAt;
   const SoundBoard({
     required this.id,
     required this.name,
@@ -2238,6 +2295,8 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
     this.icon,
     this.libraryId,
     required this.createdAt,
+    this.boardKey,
+    required this.updatedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2254,6 +2313,10 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
       map['library_id'] = Variable<int>(libraryId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || boardKey != null) {
+      map['board_key'] = Variable<String>(boardKey);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
 
@@ -2269,6 +2332,10 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
           ? const Value.absent()
           : Value(libraryId),
       createdAt: Value(createdAt),
+      boardKey: boardKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(boardKey),
+      updatedAt: Value(updatedAt),
     );
   }
 
@@ -2284,6 +2351,8 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
       icon: serializer.fromJson<int?>(json['icon']),
       libraryId: serializer.fromJson<int?>(json['libraryId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      boardKey: serializer.fromJson<String?>(json['boardKey']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
   @override
@@ -2296,6 +2365,8 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
       'icon': serializer.toJson<int?>(icon),
       'libraryId': serializer.toJson<int?>(libraryId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'boardKey': serializer.toJson<String?>(boardKey),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
@@ -2306,6 +2377,8 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
     Value<int?> icon = const Value.absent(),
     Value<int?> libraryId = const Value.absent(),
     DateTime? createdAt,
+    Value<String?> boardKey = const Value.absent(),
+    DateTime? updatedAt,
   }) => SoundBoard(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -2313,6 +2386,8 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
     icon: icon.present ? icon.value : this.icon,
     libraryId: libraryId.present ? libraryId.value : this.libraryId,
     createdAt: createdAt ?? this.createdAt,
+    boardKey: boardKey.present ? boardKey.value : this.boardKey,
+    updatedAt: updatedAt ?? this.updatedAt,
   );
   SoundBoard copyWithCompanion(SoundBoardsCompanion data) {
     return SoundBoard(
@@ -2322,6 +2397,8 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
       icon: data.icon.present ? data.icon.value : this.icon,
       libraryId: data.libraryId.present ? data.libraryId.value : this.libraryId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      boardKey: data.boardKey.present ? data.boardKey.value : this.boardKey,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
 
@@ -2333,13 +2410,24 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
           ..write('color: $color, ')
           ..write('icon: $icon, ')
           ..write('libraryId: $libraryId, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('boardKey: $boardKey, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, color, icon, libraryId, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    color,
+    icon,
+    libraryId,
+    createdAt,
+    boardKey,
+    updatedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2349,7 +2437,9 @@ class SoundBoard extends DataClass implements Insertable<SoundBoard> {
           other.color == this.color &&
           other.icon == this.icon &&
           other.libraryId == this.libraryId &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.boardKey == this.boardKey &&
+          other.updatedAt == this.updatedAt);
 }
 
 class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
@@ -2359,6 +2449,8 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
   final Value<int?> icon;
   final Value<int?> libraryId;
   final Value<DateTime> createdAt;
+  final Value<String?> boardKey;
+  final Value<DateTime> updatedAt;
   const SoundBoardsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -2366,6 +2458,8 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
     this.icon = const Value.absent(),
     this.libraryId = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.boardKey = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   });
   SoundBoardsCompanion.insert({
     this.id = const Value.absent(),
@@ -2374,6 +2468,8 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
     this.icon = const Value.absent(),
     this.libraryId = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.boardKey = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   }) : name = Value(name);
   static Insertable<SoundBoard> custom({
     Expression<int>? id,
@@ -2382,6 +2478,8 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
     Expression<int>? icon,
     Expression<int>? libraryId,
     Expression<DateTime>? createdAt,
+    Expression<String>? boardKey,
+    Expression<DateTime>? updatedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2390,6 +2488,8 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
       if (icon != null) 'icon': icon,
       if (libraryId != null) 'library_id': libraryId,
       if (createdAt != null) 'created_at': createdAt,
+      if (boardKey != null) 'board_key': boardKey,
+      if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
 
@@ -2400,6 +2500,8 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
     Value<int?>? icon,
     Value<int?>? libraryId,
     Value<DateTime>? createdAt,
+    Value<String?>? boardKey,
+    Value<DateTime>? updatedAt,
   }) {
     return SoundBoardsCompanion(
       id: id ?? this.id,
@@ -2408,6 +2510,8 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
       icon: icon ?? this.icon,
       libraryId: libraryId ?? this.libraryId,
       createdAt: createdAt ?? this.createdAt,
+      boardKey: boardKey ?? this.boardKey,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -2432,6 +2536,12 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (boardKey.present) {
+      map['board_key'] = Variable<String>(boardKey.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
     return map;
   }
 
@@ -2443,7 +2553,9 @@ class SoundBoardsCompanion extends UpdateCompanion<SoundBoard> {
           ..write('color: $color, ')
           ..write('icon: $icon, ')
           ..write('libraryId: $libraryId, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('boardKey: $boardKey, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -7446,6 +7558,8 @@ typedef $$SoundBoardsTableCreateCompanionBuilder =
       Value<int?> icon,
       Value<int?> libraryId,
       Value<DateTime> createdAt,
+      Value<String?> boardKey,
+      Value<DateTime> updatedAt,
     });
 typedef $$SoundBoardsTableUpdateCompanionBuilder =
     SoundBoardsCompanion Function({
@@ -7455,6 +7569,8 @@ typedef $$SoundBoardsTableUpdateCompanionBuilder =
       Value<int?> icon,
       Value<int?> libraryId,
       Value<DateTime> createdAt,
+      Value<String?> boardKey,
+      Value<DateTime> updatedAt,
     });
 
 final class $$SoundBoardsTableReferences
@@ -7549,6 +7665,16 @@ class $$SoundBoardsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get boardKey => $composableBuilder(
+    column: $table.boardKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7660,6 +7786,16 @@ class $$SoundBoardsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get boardKey => $composableBuilder(
+    column: $table.boardKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LibrariesTableOrderingComposer get libraryId {
     final $$LibrariesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -7707,6 +7843,12 @@ class $$SoundBoardsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get boardKey =>
+      $composableBuilder(column: $table.boardKey, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
   $$LibrariesTableAnnotationComposer get libraryId {
     final $$LibrariesTableAnnotationComposer composer = $composerBuilder(
@@ -7820,6 +7962,8 @@ class $$SoundBoardsTableTableManager
                 Value<int?> icon = const Value.absent(),
                 Value<int?> libraryId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> boardKey = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
               }) => SoundBoardsCompanion(
                 id: id,
                 name: name,
@@ -7827,6 +7971,8 @@ class $$SoundBoardsTableTableManager
                 icon: icon,
                 libraryId: libraryId,
                 createdAt: createdAt,
+                boardKey: boardKey,
+                updatedAt: updatedAt,
               ),
           createCompanionCallback:
               ({
@@ -7836,6 +7982,8 @@ class $$SoundBoardsTableTableManager
                 Value<int?> icon = const Value.absent(),
                 Value<int?> libraryId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> boardKey = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
               }) => SoundBoardsCompanion.insert(
                 id: id,
                 name: name,
@@ -7843,6 +7991,8 @@ class $$SoundBoardsTableTableManager
                 icon: icon,
                 libraryId: libraryId,
                 createdAt: createdAt,
+                boardKey: boardKey,
+                updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(
