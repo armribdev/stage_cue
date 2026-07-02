@@ -476,10 +476,15 @@ class LocalSoundDataSource {
 
   /// Synchronise un son de bibliothèque avec l'index Drive.
   ///
-  /// Identité forte : l'`driveFileId` (immuable au renommage/déplacement) est la
-  /// clé de déduplication. Ordre de résolution :
-  /// 1. match `(libraryId, driveFileId)` → même fichier : corrige le chemin
-  ///    relatif/local s'il a bougé (aucun doublon créé) ;
+  /// Identité forte GLOBALE : l'`driveFileId` (immuable au renommage/déplacement,
+  /// unique en base toutes bibliothèques confondues) est la clé de
+  /// déduplication. Ordre de résolution :
+  /// 1. match `driveFileId` (global) → même fichier physique :
+  ///    - s'il appartient à CETTE bibliothèque : corrige le chemin relatif/local
+  ///      et le dossier s'il a bougé ;
+  ///    - s'il appartient à une AUTRE bibliothèque (dossiers imbriqués liés
+  ///      séparément) : on ne duplique pas et on ne réécrit pas son chemin (il
+  ///      est relatif à la racine du propriétaire) ;
   /// 2. sinon match `(libraryId, relativePath)` legacy → adopte l'`driveFileId`
   ///    (backfill des sons indexés avant l'identité forte) ;
   /// 3. sinon nouveau son.
@@ -492,17 +497,18 @@ class LocalSoundDataSource {
     String? driveFileId,
     int? folderId,
   }) async {
-    // 1. Identité forte : le fichier est déjà connu par son ID Drive.
+    // 1. Identité forte : le fichier est déjà connu par son ID Drive (global).
     if (driveFileId != null) {
       final byFileId = await (_database.select(_database.sounds)
-            ..where(
-              (s) =>
-                  s.libraryId.equals(libraryId) &
-                  s.driveFileId.equals(driveFileId),
-            ))
+            ..where((s) => s.driveFileId.equals(driveFileId)))
           .get();
       if (byFileId.isNotEmpty) {
         final row = byFileId.first;
+        // Fichier possédé par une autre bibliothèque (lien imbriqué) : ne pas
+        // dupliquer ni réécrire son cadre de chemins.
+        if (row.libraryId != libraryId) {
+          return false;
+        }
         // Corrige chemin ET dossier propriétaire si le fichier a bougé.
         if (row.relativePath != relativePath ||
             row.filePath != localPath ||

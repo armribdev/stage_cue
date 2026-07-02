@@ -20,9 +20,10 @@ void main() {
     await database.close();
   });
 
-  Future<int> insertLibrary() => database.into(database.libraries).insert(
-        db.LibrariesCompanion.insert(name: 'Lib', localRootPath: '/cache'),
-      );
+  Future<int> insertLibrary({String name = 'Lib', String root = '/cache'}) =>
+      database.into(database.libraries).insert(
+            db.LibrariesCompanion.insert(name: name, localRootPath: root),
+          );
 
   Future<List<db.Sound>> soundsOf(int libraryId) =>
       (database.select(database.sounds)
@@ -101,6 +102,91 @@ void main() {
     );
 
     expect(await soundsOf(libraryId), hasLength(2));
+  });
+
+  group('identité globale (dossiers imbriqués liés séparément)', () {
+    test(
+        'le même fichier Drive lié via deux bibliothèques ne crée pas de doublon',
+        () async {
+      final parentLib = await insertLibrary(name: 'Parent', root: '/parent');
+      final childLib = await insertLibrary(name: 'Child', root: '/child');
+
+      // La bibliothèque Parent indexe le fichier (vu sous Child/knock.mp3).
+      final createdInParent = await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: parentLib,
+        relativePath: 'Child/knock.mp3',
+        localPath: '/parent/Child/knock.mp3',
+        driveFileId: 'F1',
+      );
+      expect(createdInParent, isTrue);
+
+      // La bibliothèque Child (racine = le sous-dossier) indexe le MÊME fichier
+      // Drive, vu à sa racine (knock.mp3). Aucun doublon ne doit être créé.
+      final createdInChild = await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: childLib,
+        relativePath: 'knock.mp3',
+        localPath: '/child/knock.mp3',
+        driveFileId: 'F1',
+      );
+      expect(createdInChild, isFalse);
+
+      final all = await database.select(database.sounds).get();
+      expect(all, hasLength(1), reason: 'un fichier physique = une ligne');
+      // Le son reste dans le cadre de chemins de son propriétaire (Parent) —
+      // il n'est pas réécrit vers la racine de Child.
+      expect(all.first.libraryId, parentLib);
+      expect(all.first.relativePath, 'Child/knock.mp3');
+      expect(all.first.filePath, '/parent/Child/knock.mp3');
+    });
+
+    test('driveFileId est unique en base (index global)', () async {
+      final libraryId = await insertLibrary();
+      await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'a.mp3',
+        localPath: '/cache/a.mp3',
+        driveFileId: 'DUP',
+      );
+
+      // Tentative d'insertion directe d'un second son au même driveFileId.
+      expect(
+        () => database.into(database.sounds).insert(
+              db.SoundsCompanion.insert(
+                title: 'dup',
+                filePath: '/cache/b.mp3',
+                libraryId: Value(libraryId),
+                relativePath: const Value('b.mp3'),
+                driveFileId: const Value('DUP'),
+              ),
+            ),
+        throwsA(anything),
+      );
+    });
+
+    test('ensureFolder partage un nœud globalement entre bibliothèques',
+        () async {
+      final libraryDataSource = LocalLibraryDataSource(database);
+      final parentLib = await insertLibrary(name: 'Parent', root: '/parent');
+      final childLib = await insertLibrary(name: 'Child', root: '/child');
+
+      final fromParent = await libraryDataSource.ensureFolder(
+        libraryId: parentLib,
+        driveFolderId: 'FOLDER_YY',
+        relativePath: 'yy',
+      );
+      final fromChild = await libraryDataSource.ensureFolder(
+        libraryId: childLib,
+        driveFolderId: 'FOLDER_YY',
+        relativePath: '',
+      );
+      expect(fromChild, fromParent, reason: 'un seul nœud par dossier Drive');
+
+      final nodes = await database.select(database.libraryFolders).get();
+      expect(nodes, hasLength(1));
+      // Le relativePath du propriétaire (Parent) n'est pas écrasé par Child.
+      expect(nodes.first.libraryId, parentLib);
+      expect(nodes.first.relativePath, 'yy');
+    });
   });
 
   group('modèle par-dossier (LibraryFolders)', () {

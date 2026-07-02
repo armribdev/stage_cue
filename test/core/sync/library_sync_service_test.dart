@@ -74,9 +74,10 @@ void main() {
         () async {
       when(() => client.findInFolder(parentId: 'lib', name: '.stagecue'))
           .thenAnswer((_) async => folder('stage', '.stagecue'));
-      when(() => client.findInFolder(parentId: 'stage', name: 'manifest.json'))
+      when(() => client.findInFolder(
+              parentId: 'stage', name: 'boards-manifest.json'))
           .thenAnswer((_) async => null);
-      when(() => client.findInFolder(parentId: 'stage', name: 'library.db'))
+      when(() => client.findInFolder(parentId: 'stage', name: 'boards.db'))
           .thenAnswer((_) async => null);
       stubUpload();
 
@@ -90,15 +91,16 @@ void main() {
       expect(outcome, isA<PushSuccess>());
       expect((outcome as PushSuccess).revision, 1);
       verify(() => store.exportLibrarySnapshot(1, any())).called(1);
+      // Snapshot RACINE : boards.db, distinct de library.db (snapshot dossier).
       verify(() => client.uploadFile(
-            name: 'library.db',
+            name: 'boards.db',
             parentId: 'stage',
             data: any(named: 'data'),
             length: 1024,
             mimeType: any(named: 'mimeType'),
           )).called(1);
       verify(() => client.uploadFile(
-            name: 'manifest.json',
+            name: 'boards-manifest.json',
             parentId: 'stage',
             data: any(named: 'data'),
             length: any(named: 'length'),
@@ -115,12 +117,13 @@ void main() {
       );
       when(() => client.findInFolder(parentId: 'lib', name: '.stagecue'))
           .thenAnswer((_) async => folder('stage', '.stagecue'));
-      when(() => client.findInFolder(parentId: 'stage', name: 'manifest.json'))
-          .thenAnswer((_) async => file('m', 'manifest.json'));
+      when(() => client.findInFolder(
+              parentId: 'stage', name: 'boards-manifest.json'))
+          .thenAnswer((_) async => file('m', 'boards-manifest.json'));
       when(() => client.downloadBytes('m'))
           .thenAnswer((_) async => utf8.encode(remote.encode()));
-      when(() => client.findInFolder(parentId: 'stage', name: 'library.db'))
-          .thenAnswer((_) async => file('db', 'library.db'));
+      when(() => client.findInFolder(parentId: 'stage', name: 'boards.db'))
+          .thenAnswer((_) async => file('db', 'boards.db'));
       stubUpload();
 
       final outcome = await service.push(
@@ -150,8 +153,9 @@ void main() {
       );
       when(() => client.findInFolder(parentId: 'lib', name: '.stagecue'))
           .thenAnswer((_) async => folder('stage', '.stagecue'));
-      when(() => client.findInFolder(parentId: 'stage', name: 'manifest.json'))
-          .thenAnswer((_) async => file('m', 'manifest.json'));
+      when(() => client.findInFolder(
+              parentId: 'stage', name: 'boards-manifest.json'))
+          .thenAnswer((_) async => file('m', 'boards-manifest.json'));
       when(() => client.downloadBytes('m'))
           .thenAnswer((_) async => utf8.encode(remote.encode()));
 
@@ -195,8 +199,9 @@ void main() {
       );
       when(() => client.findInFolder(parentId: 'lib', name: '.stagecue'))
           .thenAnswer((_) async => folder('stage', '.stagecue'));
-      when(() => client.findInFolder(parentId: 'stage', name: 'manifest.json'))
-          .thenAnswer((_) async => file('m', 'manifest.json'));
+      when(() => client.findInFolder(
+              parentId: 'stage', name: 'boards-manifest.json'))
+          .thenAnswer((_) async => file('m', 'boards-manifest.json'));
       when(() => client.downloadBytes('m'))
           .thenAnswer((_) async => utf8.encode(remote.encode()));
 
@@ -223,12 +228,13 @@ void main() {
       );
       when(() => client.findInFolder(parentId: 'lib', name: '.stagecue'))
           .thenAnswer((_) async => folder('stage', '.stagecue'));
-      when(() => client.findInFolder(parentId: 'stage', name: 'manifest.json'))
-          .thenAnswer((_) async => file('m', 'manifest.json'));
+      when(() => client.findInFolder(
+              parentId: 'stage', name: 'boards-manifest.json'))
+          .thenAnswer((_) async => file('m', 'boards-manifest.json'));
       when(() => client.downloadBytes('m'))
           .thenAnswer((_) async => utf8.encode(remote.encode()));
-      when(() => client.findInFolder(parentId: 'stage', name: 'library.db'))
-          .thenAnswer((_) async => file('db', 'library.db'));
+      when(() => client.findInFolder(parentId: 'stage', name: 'boards.db'))
+          .thenAnswer((_) async => file('db', 'boards.db'));
       when(() => client.downloadToFile(
             fileId: any(named: 'fileId'),
             destinationPath: any(named: 'destinationPath'),
