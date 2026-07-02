@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/database/sounds.dart' as db_sounds;
@@ -917,12 +918,14 @@ class LocalSoundBoardDataSource {
     return boards.map((b) => SoundBoardModel.toEntity(b)).toList();
   }
 
-  /// Crée une soundboard
+  /// Crée une soundboard. Génère une identité portable ([boardKey]) et un
+  /// horodatage : indispensables à la fusion intelligente entre appareils.
   Future<int> createBoard(
     String name, {
     int? color,
     int? libraryId,
   }) async {
+    final now = DateTime.now();
     return await _database
         .into(_database.soundBoards)
         .insert(
@@ -930,16 +933,21 @@ class LocalSoundBoardDataSource {
             name: name,
             color: Value(color),
             libraryId: Value(libraryId),
-            createdAt: Value(DateTime.now()),
+            createdAt: Value(now),
+            boardKey: Value(const Uuid().v4()),
+            updatedAt: Value(now),
           ),
         );
   }
 
-  /// Renomme une soundboard
+  /// Renomme une soundboard (met à jour l'horodatage de fusion).
   Future<void> renameBoard(int boardId, String name) async {
     await (_database.update(_database.soundBoards)
           ..where((b) => b.id.equals(boardId)))
-        .write(db.SoundBoardsCompanion(name: Value(name)));
+        .write(db.SoundBoardsCompanion(
+      name: Value(name),
+      updatedAt: Value(DateTime.now()),
+    ));
   }
 
   /// Supprime une soundboard
@@ -1047,6 +1055,23 @@ class LocalPadDataSource {
 
   LocalPadDataSource(this._database);
 
+  /// Marque le board comme modifié (horodatage de fusion intelligente). Toute
+  /// mutation de pad = édition de la scène → arbitre le « dernier écrivain
+  /// gagne » PAR BOARD à la synchro.
+  Future<void> _touchBoard(int boardId) async {
+    await (_database.update(_database.soundBoards)
+          ..where((b) => b.id.equals(boardId)))
+        .write(db.SoundBoardsCompanion(updatedAt: Value(DateTime.now())));
+  }
+
+  /// Variante quand on ne connaît que le pad : résout son board puis l'horodate.
+  Future<void> _touchBoardOfPad(int padId) async {
+    final pad = await (_database.select(_database.pads)
+          ..where((p) => p.id.equals(padId)))
+        .getSingleOrNull();
+    if (pad != null) await _touchBoard(pad.boardId);
+  }
+
   domain.Sound _rowToSound(QueryRow row) {
     final typeValue = row.read<int?>('type');
     return domain.Sound(
@@ -1132,6 +1157,7 @@ class LocalPadDataSource {
     await _database.into(_database.padSounds).insert(
       db.PadSoundsCompanion.insert(padId: padId, soundId: soundId),
     );
+    await _touchBoard(boardId);
     return padId;
   }
 
@@ -1177,11 +1203,13 @@ class LocalPadDataSource {
         ),
       );
     }
+    await _touchBoard(boardId);
     return padId;
   }
 
   /// Supprime un pad (cascade sur pad_sounds).
   Future<void> deletePad(int padId) async {
+    await _touchBoardOfPad(padId); // avant suppression : le pad existe encore
     await (_database.delete(_database.pads)
           ..where((p) => p.id.equals(padId)))
         .go();
@@ -1208,6 +1236,7 @@ class LocalPadDataSource {
         sortOrder: Value(nextOrder),
       ),
     );
+    await _touchBoardOfPad(padId);
   }
 
   /// Retire un son d'un pad.
@@ -1217,6 +1246,7 @@ class LocalPadDataSource {
             (ps) => ps.padId.equals(padId) & ps.soundId.equals(soundId),
           ))
         .go();
+    await _touchBoardOfPad(padId);
   }
 
   /// Réordonne les pads d'une board.
@@ -1231,6 +1261,7 @@ class LocalPadDataSource {
             .write(db.PadsCompanion(sortOrder: Value(i)));
       }
     });
+    await _touchBoard(boardId);
   }
 
   /// Met à jour row_index et sort_order de chaque pad en une transaction.
@@ -1252,6 +1283,7 @@ class LocalPadDataSource {
         );
       }
     });
+    await _touchBoard(boardId);
   }
 
   /// Met à jour les réglages d'un pad.
@@ -1279,12 +1311,14 @@ class LocalPadDataSource {
     await (_database.update(_database.pads)
           ..where((p) => p.id.equals(padId)))
         .write(companion);
+    await _touchBoardOfPad(padId);
   }
 
   Future<void> updatePadRowIndex(int padId, int newRowIndex) async {
     await (_database.update(_database.pads)
           ..where((p) => p.id.equals(padId)))
         .write(db.PadsCompanion(rowIndex: Value(newRowIndex)));
+    await _touchBoardOfPad(padId);
   }
 
   /// Duplique tous les pads d'une board vers une autre board.
@@ -1325,6 +1359,7 @@ class LocalPadDataSource {
         );
       }
     }
+    await _touchBoard(targetBoardId);
   }
 
   /// Retourne les IDs de tous les sons présents dans les pads d'une board.

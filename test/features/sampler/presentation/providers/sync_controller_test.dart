@@ -55,10 +55,43 @@ void main() {
       expect(controller.state.lastSyncedAt, isNotNull);
     });
 
-    test('push en conflit -> conflict + révision distante mémorisée', () async {
+    test('push en conflit -> fusion auto (pull + repush) -> synced', () async {
+      // Un autre appareil a poussé entre-temps : au lieu d'écraser, on fusionne
+      // (pull board-par-board non destructif) puis on repousse l'union.
+      var pushCount = 0;
       when(() => repo.pushLibrary(any(),
               overrideKnownRevision: any(named: 'overrideKnownRevision')))
-          .thenAnswer((_) async => PushConflict(_remote(5)));
+          .thenAnswer((_) async {
+        pushCount++;
+        return pushCount == 1 ? PushConflict(_remote(5)) : const PushSuccess(6);
+      });
+      when(() => repo.pullLibrary(any()))
+          .thenAnswer((_) async => const PullStaged(5));
+      when(() => repo.getLibraryById(any())).thenAnswer((_) async => library);
+      final controller = SyncController(repo);
+
+      await controller.syncNow(library);
+
+      expect(controller.state.status, SyncStatus.synced);
+      verify(() => repo.pullLibrary(any())).called(1);
+      verify(() => repo.pushLibrary(any(),
+          overrideKnownRevision: any(named: 'overrideKnownRevision'))).called(2);
+    });
+
+    test('conflit persistant (double course) -> conflict UI en dernier recours',
+        () async {
+      // La fusion auto repush et se re-conflit (un 3e appareil a encore poussé)
+      // → on retombe sur la résolution manuelle.
+      when(() => repo.pushLibrary(any(),
+              overrideKnownRevision: any(named: 'overrideKnownRevision')))
+          .thenAnswer((invocation) async {
+        final override =
+            invocation.namedArguments[#overrideKnownRevision] as int?;
+        return override == null ? PushConflict(_remote(5)) : const PushSuccess(6);
+      });
+      when(() => repo.pullLibrary(any()))
+          .thenAnswer((_) async => const PullStaged(5));
+      when(() => repo.getLibraryById(any())).thenAnswer((_) async => library);
       final controller = SyncController(repo);
 
       await controller.syncNow(library);
@@ -88,11 +121,15 @@ void main() {
           .thenAnswer((invocation) async {
         final override =
             invocation.namedArguments[#overrideKnownRevision] as int?;
-        // 1er appel (syncNow) : conflit. 2e appel (keepLocal) : override fourni.
+        // Pushes auto (syncNow + repush de fusion) : sans override → conflit.
+        // keepLocal fournit l'override (5) → push forcé accepté.
         return override == 5 ? const PushSuccess(6) : PushConflict(_remote(5));
       });
+      when(() => repo.pullLibrary(any()))
+          .thenAnswer((_) async => const PullStaged(5));
+      when(() => repo.getLibraryById(any())).thenAnswer((_) async => library);
       final controller = SyncController(repo);
-      await controller.syncNow(library);
+      await controller.syncNow(library); // fusion auto échoue → conflit
       expect(controller.state.status, SyncStatus.conflict);
 
       await controller.keepLocal(library);

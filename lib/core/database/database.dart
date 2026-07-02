@@ -31,7 +31,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration {
@@ -39,6 +39,7 @@ class AppDatabase extends _$AppDatabase {
       onCreate: (m) async {
         await m.createAll();
         await _createGlobalIdentityIndexes();
+        await _createBoardKeyIndex();
         await _seedDefaultTagsIfEmpty();
       },
       onUpgrade: (m, from, to) async {
@@ -233,6 +234,20 @@ class AppDatabase extends _$AppDatabase {
           await customStatement('DELETE FROM library_folders');
           await _createGlobalIdentityIndexes();
         }
+        if (from < 27) {
+          // Fusion intelligente des boards : identité portable (`board_key`) +
+          // horodatage (`updated_at`) pour une fusion « dernier écrivain gagne »
+          // PAR BOARD au lieu d'un écrasement global de toutes les scènes.
+          await m.addColumn(
+            soundBoards,
+            soundBoards.boardKey as GeneratedColumn<Object>,
+          );
+          await m.addColumn(
+            soundBoards,
+            soundBoards.updatedAt as GeneratedColumn<Object>,
+          );
+          await _createBoardKeyIndex();
+        }
       },
       beforeOpen: (details) async {
         // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
@@ -256,6 +271,16 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_library_folders_drive_folder_id '
       'ON library_folders (drive_folder_id)',
+    );
+  }
+
+  /// Index d'unicité de l'identité portable des boards (`board_key`). SQLite
+  /// traite les NULL comme distincts → les boards pas encore réconciliés (clé
+  /// NULL) ne sont pas contraints.
+  Future<void> _createBoardKeyIndex() async {
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_sound_boards_board_key '
+      'ON sound_boards (board_key)',
     );
   }
 

@@ -104,6 +104,18 @@ class SoundBoards extends Table {
   IntColumn get libraryId =>
       integer().nullable().references(Libraries, #id, onDelete: KeyAction.cascade)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Identité stable et PORTABLE du board (UUID). Permet de reconnaître le même
+  /// board d'un appareil à l'autre lors de la fusion, indépendamment de l'`id`
+  /// local (qui diffère entre appareils). null pour les boards antérieurs à v27
+  /// pas encore réconciliés ; un backfill leur en attribue un.
+  TextColumn get boardKey => text().nullable()();
+
+  /// Dernière modification locale du board OU de ses pads. Arbitre la fusion
+  /// « dernier écrivain gagne » PAR BOARD : deux régisseurs qui éditent deux
+  /// scènes différentes ne s'écrasent plus (fusion), et sur une même scène la
+  /// version la plus récente l'emporte.
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }
 
 class WatchedPaths extends Table {
