@@ -11,8 +11,15 @@ import 'snapshot_store.dart';
 import 'sync_manifest.dart';
 
 const String _stageFolderName = '.stagecue';
-const String _dbFileName = 'library.db';
-const String _manifestFileName = 'manifest.json';
+// Snapshot PAR DOSSIER (les sons directs du dossier).
+const String _folderDbFileName = 'library.db';
+const String _folderManifestFileName = 'manifest.json';
+// Snapshot RACINE (les boards/pads de la bibliothèque). Noms DISTINCTS : un même
+// dossier Drive peut être à la fois un nœud-dossier (sons) ET la racine d'une
+// bibliothèque (boards) — cf. dossiers imbriqués liés séparément. Partager le
+// nom écraserait un snapshot par l'autre.
+const String _boardsDbFileName = 'boards.db';
+const String _boardsManifestFileName = 'boards-manifest.json';
 const String _sqliteMimeType = 'application/x-sqlite3';
 const String _jsonMimeType = 'application/json';
 
@@ -76,6 +83,8 @@ class LibrarySyncService {
     return _pushSnapshot(
       client: client,
       remoteFolderId: libraryFolderId,
+      dbFileName: _boardsDbFileName,
+      manifestFileName: _boardsManifestFileName,
       knownRevision: knownRevision,
       force: force,
       exportSnapshot: (path) =>
@@ -96,6 +105,8 @@ class LibrarySyncService {
     return _pushSnapshot(
       client: client,
       remoteFolderId: folderDriveId,
+      dbFileName: _folderDbFileName,
+      manifestFileName: _folderManifestFileName,
       knownRevision: knownRevision,
       force: force,
       exportSnapshot: (path) =>
@@ -106,13 +117,15 @@ class LibrarySyncService {
   Future<PushOutcome> _pushSnapshot({
     required DriveClient client,
     required String remoteFolderId,
+    required String dbFileName,
+    required String manifestFileName,
     required int knownRevision,
     required Future<int> Function(String path) exportSnapshot,
     bool force = false,
   }) async {
     final stageId = await _ensureStageFolder(client, remoteFolderId);
 
-    final remoteManifest = await _readManifest(client, stageId);
+    final remoteManifest = await _readManifest(client, stageId, manifestFileName);
     // `force` (résolution de conflit « garder le local ») : on adopte la
     // révision distante pour l'écraser au lieu de signaler un conflit.
     if (!force &&
@@ -129,7 +142,7 @@ class LibrarySyncService {
       await _putFile(
         client: client,
         parentId: stageId,
-        name: _dbFileName,
+        name: dbFileName,
         data: File(snapshotPath).openRead(),
         length: length,
         mimeType: _sqliteMimeType,
@@ -142,25 +155,31 @@ class LibrarySyncService {
         updatedAt: DateTime.now().toUtc(),
         schemaVersion: _snapshotStore.schemaVersion,
       );
-      await _writeManifest(client, stageId, manifest);
+      await _writeManifest(client, stageId, manifestFileName, manifest);
       return PushSuccess(newRevision);
     } finally {
       await _safeDelete(snapshotPath);
     }
   }
 
-  /// Indique si un snapshot BDD (`.stagecue/library.db`) existe sur Drive.
+  /// Indique si un snapshot BDD existe déjà dans le `.stagecue` du dossier — que
+  /// ce soit un snapshot de sons (`library.db`) ou de boards (`boards.db`).
   Future<bool> hasRemoteSnapshot({
     required DriveClient client,
     required String libraryFolderId,
   }) async {
     final stage = await _findInFolder(client, libraryFolderId, _stageFolderName);
     if (stage == null) return false;
-    final dbFile = await client.findInFolder(
+    final folderDb = await client.findInFolder(
       parentId: stage.id,
-      name: _dbFileName,
+      name: _folderDbFileName,
     );
-    return dbFile != null;
+    if (folderDb != null) return true;
+    final boardsDb = await client.findInFolder(
+      parentId: stage.id,
+      name: _boardsDbFileName,
+    );
+    return boardsDb != null;
   }
 
   /// Télécharge le snapshot distant s'il est plus récent et le fusionne
@@ -174,6 +193,8 @@ class LibrarySyncService {
     return _pullSnapshot(
       client: client,
       remoteFolderId: libraryFolderId,
+      dbFileName: _boardsDbFileName,
+      manifestFileName: _boardsManifestFileName,
       knownRevision: knownRevision,
       mergeSnapshot: (path) => _snapshotStore.mergeLibrarySnapshot(
         libraryId,
@@ -194,6 +215,8 @@ class LibrarySyncService {
     return _pullSnapshot(
       client: client,
       remoteFolderId: folderDriveId,
+      dbFileName: _folderDbFileName,
+      manifestFileName: _folderManifestFileName,
       knownRevision: knownRevision,
       mergeSnapshot: (path) =>
           _snapshotStore.mergeFolderSnapshot(folderId, path),
@@ -203,20 +226,22 @@ class LibrarySyncService {
   Future<PullOutcome> _pullSnapshot({
     required DriveClient client,
     required String remoteFolderId,
+    required String dbFileName,
+    required String manifestFileName,
     required int knownRevision,
     required Future<void> Function(String path) mergeSnapshot,
   }) async {
     final stage = await _findInFolder(client, remoteFolderId, _stageFolderName);
     if (stage == null) return const PullUpToDate();
 
-    final remoteManifest = await _readManifest(client, stage.id);
+    final remoteManifest = await _readManifest(client, stage.id, manifestFileName);
     if (remoteManifest == null || remoteManifest.revision <= knownRevision) {
       return const PullUpToDate();
     }
 
     final dbFile = await client.findInFolder(
       parentId: stage.id,
-      name: _dbFileName,
+      name: dbFileName,
     );
     if (dbFile == null) return const PullUpToDate();
 
@@ -260,10 +285,14 @@ class LibrarySyncService {
   ) =>
       client.findInFolder(parentId: parentId, name: name);
 
-  Future<SyncManifest?> _readManifest(DriveClient client, String stageId) async {
+  Future<SyncManifest?> _readManifest(
+    DriveClient client,
+    String stageId,
+    String manifestFileName,
+  ) async {
     final file = await client.findInFolder(
       parentId: stageId,
-      name: _manifestFileName,
+      name: manifestFileName,
     );
     if (file == null) return null;
     final bytes = await client.downloadBytes(file.id);
@@ -273,13 +302,14 @@ class LibrarySyncService {
   Future<void> _writeManifest(
     DriveClient client,
     String stageId,
+    String manifestFileName,
     SyncManifest manifest,
   ) async {
     final bytes = utf8.encode(manifest.encode());
     await _putFile(
       client: client,
       parentId: stageId,
-      name: _manifestFileName,
+      name: manifestFileName,
       data: Stream.value(bytes),
       length: bytes.length,
       mimeType: _jsonMimeType,

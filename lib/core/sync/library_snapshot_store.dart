@@ -313,12 +313,11 @@ class LibrarySnapshotStore {
 
       db.Sound? existing;
       if (driveFileId != null) {
+        // Identité forte GLOBALE : `drive_file_id` est unique en base. On le
+        // résout sans le scoper au dossier — sinon un fichier déplacé vers CE
+        // dossier depuis un autre nœud violerait l'index d'unicité à l'insert.
         existing = await (_database.select(_database.sounds)
-              ..where(
-                (s) =>
-                    s.folderId.equals(folderId) &
-                    s.driveFileId.equals(driveFileId),
-              ))
+              ..where((s) => s.driveFileId.equals(driveFileId)))
             .getSingleOrNull();
       }
       if (existing == null && normalized != null) {
@@ -345,6 +344,10 @@ class LibrarySnapshotStore {
             relativePath: Value(normalized),
             contentHash: Value(contentHash),
             driveFileId: Value(driveFileId),
+            // Réassigne au nœud courant si le fichier vient d'un autre dossier
+            // (résolution par identité forte globale).
+            folderId: Value(folderId),
+            libraryId: Value(libraryId),
           ),
         );
         _soundIdMap[snapId] = existing.id;

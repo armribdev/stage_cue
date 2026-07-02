@@ -31,13 +31,14 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration {
     return MigrationStrategy(
       onCreate: (m) async {
         await m.createAll();
+        await _createGlobalIdentityIndexes();
         await _seedDefaultTagsIfEmpty();
       },
       onUpgrade: (m, from, to) async {
@@ -213,6 +214,25 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(sounds, sounds.folderId);
           await _backfillLibraryFolders();
         }
+        if (from < 26) {
+          // Identité GLOBALE (indépendante de la bibliothèque) : un fichier
+          // Drive = une ligne (`drive_file_id`), un dossier Drive = un nœud
+          // (`drive_folder_id`). Empêche la duplication quand des dossiers
+          // imbriqués sont liés comme bibliothèques distinctes (l'ancienne
+          // dédup était scopée `library_id`).
+          //
+          // App non publiée : on purge les données Drive (sons + nœuds),
+          // ré-indexées au prochain scan, pour repartir d'une base sans doublon
+          // AVANT de poser les index d'unicité (une base contenant déjà des
+          // doublons ferait échouer la création de l'index). Les sons locaux
+          // (`drive_file_id` NULL) sont conservés.
+          await customStatement(
+            'DELETE FROM sounds WHERE drive_file_id IS NOT NULL',
+          );
+          await customStatement('UPDATE sounds SET folder_id = NULL');
+          await customStatement('DELETE FROM library_folders');
+          await _createGlobalIdentityIndexes();
+        }
       },
       beforeOpen: (details) async {
         // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
@@ -221,6 +241,21 @@ class AppDatabase extends _$AppDatabase {
           await _ensureBoardSoundSettingsTableExists();
         }
       },
+    );
+  }
+
+  /// Index d'unicité GLOBALE de l'identité forte Drive : un fichier Drive
+  /// (`drive_file_id`) et un dossier Drive (`drive_folder_id`) n'existent qu'une
+  /// fois en base, toutes bibliothèques confondues. SQLite traite les NULL comme
+  /// distincts → les sons locaux (sans `drive_file_id`) ne sont pas contraints.
+  Future<void> _createGlobalIdentityIndexes() async {
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_sounds_drive_file_id '
+      'ON sounds (drive_file_id)',
+    );
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_library_folders_drive_folder_id '
+      'ON library_folders (drive_folder_id)',
     );
   }
 

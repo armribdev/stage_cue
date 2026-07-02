@@ -14,24 +14,25 @@ class LocalLibraryDataSource {
     return rows.map(LibraryModel.toEntity).toList();
   }
 
-  /// Renvoie (crée si besoin) le nœud dossier `(libraryId, driveFolderId)`.
-  /// Partagé entre liens imbriqués : deux bibliothèques qui couvrent le même
-  /// dossier Drive convergent vers le même nœud plutôt que de le dupliquer.
+  /// Renvoie (crée si besoin) le nœud dossier d'identité GLOBALE `driveFolderId`.
+  /// Un dossier Drive = un seul nœud, toutes bibliothèques confondues : deux
+  /// bibliothèques qui couvrent le même dossier (liens imbriqués) convergent
+  /// vers ce nœud unique au lieu de dupliquer ses fichiers.
   Future<int> ensureFolder({
     required int libraryId,
     required String driveFolderId,
     required String relativePath,
   }) async {
     final existing = await (_database.select(_database.libraryFolders)
-          ..where(
-            (f) =>
-                f.libraryId.equals(libraryId) &
-                f.driveFolderId.equals(driveFolderId),
-          ))
+          ..where((f) => f.driveFolderId.equals(driveFolderId)))
         .getSingleOrNull();
     if (existing != null) {
-      // Dossier déplacé/renommé : garde le chemin relatif à jour.
-      if (existing.relativePath != relativePath) {
+      // `relativePath` est relatif à la racine de la bibliothèque PROPRIÉTAIRE.
+      // Ne le mettre à jour (déplacement/renommage) que pour ce propriétaire :
+      // une autre bibliothèque (lien imbriqué) verrait le dossier sous un
+      // préfixe différent et corromprait le cadre de chemins du propriétaire.
+      if (existing.libraryId == libraryId &&
+          existing.relativePath != relativePath) {
         await (_database.update(_database.libraryFolders)
               ..where((f) => f.id.equals(existing.id)))
             .write(db.LibraryFoldersCompanion(
