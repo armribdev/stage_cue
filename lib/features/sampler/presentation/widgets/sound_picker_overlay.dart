@@ -222,6 +222,12 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   // ── Offline (QuickSearch uniquement) ─────────────────────────────────────
   Set<int>? _localIds;
 
+  // ── Scope d'un board Drive (VUE PARTAGÉE) ────────────────────────────────
+  // Ids des sons visibles par la bibliothèque du board actif : ses dossiers,
+  // recouvrements de liens compris. null tant que non chargé (repli sur
+  // l'appartenance directe `sound.libraryId`).
+  Set<int>? _scopeIds;
+
   // ── Navigation clavier ────────────────────────────────────────────────────
   int _selectedIndex = 0;
 
@@ -249,6 +255,11 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     if (_isManage) return true;
     final libraryId = _boardLibraryId;
     if (libraryId == null) return true;
+    // VUE PARTAGÉE : visibilité par appartenance de dossier (inclut les sons
+    // partagés d'un dossier recouvert), pas seulement `sound.libraryId`. Repli
+    // sur l'appartenance directe tant que le scope n'est pas chargé.
+    final scope = _scopeIds;
+    if (scope != null) return scope.contains(sound.id);
     return sound.libraryId == libraryId;
   }
 
@@ -334,6 +345,14 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       if (_isPadPicker) _syncPadSoundIds();
     });
     _scheduleTagsLoad();
+    // Scope d'un board Drive : sons visibles par sa bibliothèque (vue partagée).
+    final scopeLibraryId = _boardLibraryId;
+    if (scopeLibraryId != null && !_isManage) {
+      final scopeIds =
+          await widget.notifier.getSoundIdsVisibleToLibrary(scopeLibraryId);
+      if (!mounted) return;
+      setState(() => _scopeIds = scopeIds);
+    }
     if (_isQuickSearch) {
       final localIds = await widget.notifier.getLocallyAvailableSoundIds();
       if (!mounted) return;

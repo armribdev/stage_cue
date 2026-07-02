@@ -13,6 +13,7 @@ part 'database.g.dart';
   tables: [
     Libraries,
     LibraryFolders,
+    FolderMemberships,
     Sounds,
     SoundBoards,
     WatchedPaths,
@@ -31,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration {
@@ -247,6 +248,19 @@ class AppDatabase extends _$AppDatabase {
             soundBoards.updatedAt as GeneratedColumn<Object>,
           );
           await _createBoardKeyIndex();
+        }
+        if (from < 28) {
+          // Vue partagée : un dossier Drive recouvert par plusieurs bibliothèques
+          // (parent lié comme A, sous-dossier lié comme B) devient visible par
+          // TOUTES via une table de jonction, sans dupliquer fichiers ni nœuds.
+          // Backfill : chaque nœud existant est rattaché à sa bibliothèque
+          // propriétaire (comportement identique à avant, plus les recouvrements
+          // futurs). Réalimenté par l'indexation à chaque appareil de toute façon.
+          await m.createTable(folderMemberships);
+          await customStatement(
+            'INSERT OR IGNORE INTO folder_memberships (library_id, folder_id) '
+            'SELECT library_id, id FROM library_folders',
+          );
         }
       },
       beforeOpen: (details) async {

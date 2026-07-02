@@ -52,6 +52,12 @@ class SoundRepository {
     return await _soundDataSource.getSoundById(id);
   }
 
+  /// Ids des sons visibles par une bibliothèque (VUE PARTAGÉE) — pour scoper le
+  /// picker d'un board Drive aux sons de ses dossiers, recouvrements compris.
+  Future<Set<int>> getSoundIdsVisibleToLibrary(int libraryId) async {
+    return await _soundDataSource.getSoundIdsVisibleToLibrary(libraryId);
+  }
+
   Future<void> indexAudioFile(File file) async {
     await _soundDataSource.indexAudioFile(file);
   }

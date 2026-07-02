@@ -828,6 +828,23 @@ class LocalSoundDataSource {
     }).toList();
   }
 
+  /// Ids des sons VISIBLES par une bibliothèque (VUE PARTAGÉE) : ses propres
+  /// sons plus ceux des dossiers qu'elle voit via un recouvrement de liens (un
+  /// son est visible si son dossier est membre de la bibliothèque). Sert à scoper
+  /// le picker d'un board Drive sans se limiter à `sound.libraryId`.
+  Future<Set<int>> getSoundIdsVisibleToLibrary(int libraryId) async {
+    final rows = await _database.customSelect(
+      '''
+      SELECT s.id AS id
+      FROM sounds s
+      INNER JOIN folder_memberships fm ON fm.folder_id = s.folder_id
+      WHERE fm.library_id = ?
+      ''',
+      variables: [Variable<int>(libraryId)],
+    ).get();
+    return {for (final row in rows) row.read<int>('id')};
+  }
+
   /// Chemins relatifs des sons favoris d'une bibliothèque — pour épingler le
   /// cache : ces fichiers ne doivent jamais être évincés par le LRU (P3).
   Future<Set<String>> getFavoriteRelativePaths(int libraryId) async {

@@ -163,6 +163,51 @@ void main() {
       );
     });
 
+    test('vue partagée : la bibliothèque invitée voit les sons du dossier partagé',
+        () async {
+      final libraryDataSource = LocalLibraryDataSource(database);
+      final parentLib = await insertLibrary(name: 'Parent', root: '/parent');
+      final childLib = await insertLibrary(name: 'Child', root: '/child');
+
+      // Sous-dossier partagé : un nœud global unique, possédé par Parent (home).
+      final sharedFolder = await libraryDataSource.ensureFolder(
+        libraryId: parentLib,
+        driveFolderId: 'FOLDER_SUB',
+        relativePath: 'sub',
+      );
+      await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: parentLib,
+        relativePath: 'sub/knock.mp3',
+        localPath: '/parent/sub/knock.mp3',
+        driveFileId: 'F1',
+        folderId: sharedFolder,
+      );
+
+      // L'indexation de chaque bibliothèque atteignant ce dossier l'y rattache.
+      await libraryDataSource.ensureMembership(
+        libraryId: parentLib,
+        folderId: sharedFolder,
+      );
+      await libraryDataSource.ensureMembership(
+        libraryId: childLib,
+        folderId: sharedFolder,
+      );
+
+      final ownedByParent = await soundsOf(parentLib);
+      final visibleToChild =
+          await dataSource.getSoundIdsVisibleToLibrary(childLib);
+      expect(
+        visibleToChild,
+        {ownedByParent.single.id},
+        reason: 'la biblio invitée voit le son partagé (sans doublon)',
+      );
+      expect(
+        await database.select(database.sounds).get(),
+        hasLength(1),
+        reason: 'un fichier physique = une ligne, même partagé',
+      );
+    });
+
     test('ensureFolder partage un nœud globalement entre bibliothèques',
         () async {
       final libraryDataSource = LocalLibraryDataSource(database);

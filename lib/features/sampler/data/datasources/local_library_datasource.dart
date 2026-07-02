@@ -120,11 +120,39 @@ class LocalLibraryDataSource {
     )..where((l) => l.id.equals(id))).go();
   }
 
-  /// Nœuds dossier d'une bibliothèque (unités de snapshot par-dossier).
+  /// Nœuds dossier POSSÉDÉS par une bibliothèque (home). Base de la synchro :
+  /// seul le propriétaire pousse/tire le `.stagecue` d'un nœud. Un dossier
+  /// simplement VU (recouvrement) n'apparaît pas ici — cf. [getMemberFolderIds].
   Future<List<db.LibraryFolder>> getFoldersForLibrary(int libraryId) {
     return (_database.select(_database.libraryFolders)
           ..where((f) => f.libraryId.equals(libraryId)))
         .get();
+  }
+
+  /// Rattache une bibliothèque à un nœud dossier (VUE PARTAGÉE). Idempotent :
+  /// appelé à chaque indexation d'un dossier, y compris pour le propriétaire.
+  /// Une bibliothèque « invitée » (dont un lien recouvre le dossier) voit alors
+  /// ses sons sans les dupliquer ni en changer le propriétaire.
+  Future<void> ensureMembership({
+    required int libraryId,
+    required int folderId,
+  }) async {
+    await _database.into(_database.folderMemberships).insert(
+          db.FolderMembershipsCompanion.insert(
+            libraryId: libraryId,
+            folderId: folderId,
+          ),
+          mode: InsertMode.insertOrIgnore,
+        );
+  }
+
+  /// Ids des nœuds dossier VISIBLES par une bibliothèque (possédés OU vus via un
+  /// recouvrement de liens). Sert à scoper l'affichage et le recâblage des boards.
+  Future<Set<int>> getMemberFolderIds(int libraryId) async {
+    final rows = await (_database.select(_database.folderMemberships)
+          ..where((m) => m.libraryId.equals(libraryId)))
+        .get();
+    return {for (final row in rows) row.folderId};
   }
 
   Future<db.LibraryFolder?> getFolderById(int id) {
