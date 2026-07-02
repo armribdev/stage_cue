@@ -626,6 +626,10 @@ class MusicController {
         sounds: [sound],
       );
       final padItem = PadItem(pad: pad);
+      // Sonde le cache local d'abord (comme les pads du plateau) : sinon, en
+      // mode live hors-ligne, `_loadPlayersForPad` saute un slot dont
+      // `appearsReady` est faux, même si le fichier est déjà en cache.
+      await _o._probePadLocalAvailability(padItem);
       await _o._loadPlayersForPad(padItem, pad);
       _offStageMusicPads[pad.id] = padItem;
       return padItem;

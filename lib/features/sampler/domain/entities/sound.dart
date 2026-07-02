@@ -15,6 +15,11 @@ class Sound {
   /// Chemin relatif à la racine de la bibliothèque ; `null` pour les sons locaux.
   final String? relativePath;
 
+  /// Identité forte du fichier sur Drive (immuable au renommage/déplacement) ;
+  /// `null` pour les sons legacy non réconciliés. Sert à télécharger le fichier
+  /// sans dépendre d'une résolution par nom fragile aux accents.
+  final String? driveFileId;
+
   /// Empreinte de contenu pour réidentifier un fichier déplacé/renommé.
   final String? contentHash;
 
@@ -35,6 +40,7 @@ class Sound {
     required this.createdAt,
     this.libraryId,
     this.relativePath,
+    this.driveFileId,
     this.contentHash,
     this.isFavorite = false,
     this.lastPlayedAt,

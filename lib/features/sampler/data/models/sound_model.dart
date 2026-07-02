@@ -18,6 +18,7 @@ class SoundModel {
       createdAt: sound.createdAt,
       libraryId: sound.libraryId,
       relativePath: sound.relativePath,
+      driveFileId: sound.driveFileId,
       contentHash: sound.contentHash,
       isFavorite: sound.isFavorite,
       lastPlayedAt: sound.lastPlayedAt,
@@ -35,6 +36,7 @@ class SoundModel {
       volume: Value(sound.volume),
       libraryId: Value(sound.libraryId),
       relativePath: Value(sound.relativePath),
+      driveFileId: Value(sound.driveFileId),
       contentHash: Value(sound.contentHash),
     );
   }

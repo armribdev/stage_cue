@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../utils/path_unicode.dart';
 import 'library_sound_paths.dart';
 import '../../features/sampler/domain/entities/library.dart';
 import 'drive_client.dart';
@@ -53,20 +54,44 @@ class AudioCacheManager {
 
   /// Garantit la présence locale du fichier ; le télécharge depuis Drive si
   /// absent. Retourne le chemin local absolu.
+  ///
+  /// Si [driveFileId] est fourni (identité forte, immuable), le fichier est
+  /// téléchargé directement par son ID — sans re-résolution par nom, fragile
+  /// aux accents/normalisation Unicode, doublons et renommages. La résolution
+  /// par nom n'est conservée qu'en repli pour les sons legacy sans ID Drive.
   Future<String> ensureCached({
     required DriveClient client,
     required Library library,
     required String relativePath,
+    String? driveFileId,
   }) async {
     final normalizedPath =
         LibrarySoundPaths.normalizeRelativePath(relativePath);
     var cachePath = normalizedPath;
     final localPath = localPathFor(library, cachePath);
-    final localFile = File(localPath);
+    final cachedPath =
+        await PathUnicode.canonicalizeLocalPath(localPath) ?? localPath;
+    final localFile = File(cachedPath);
 
     if (await localFile.exists()) {
       await _touch(library, cachePath, await localFile.length());
-      return localPath;
+      return localFile.path;
+    }
+
+    // Chemin rapide et robuste : téléchargement par identité forte.
+    if (driveFileId != null) {
+      final downloadPath = localPathFor(library, cachePath);
+      await File(downloadPath).parent.create(recursive: true);
+      await client.downloadToFile(
+        fileId: driveFileId,
+        destinationPath: downloadPath,
+      );
+      final materialized =
+          await PathUnicode.canonicalizeLocalPath(downloadPath) ?? downloadPath;
+      final size = await File(materialized).length();
+      await _touch(library, cachePath, size);
+      await _evictIfNeeded(library, protect: cachePath);
+      return materialized;
     }
 
     var remote = await _resolveRemote(client, library, normalizedPath);
@@ -90,10 +115,12 @@ class AudioCacheManager {
     await File(downloadPath).parent.create(recursive: true);
     await client.downloadToFile(fileId: remote.id, destinationPath: downloadPath);
 
-    final size = await File(downloadPath).length();
+    final materialized =
+        await PathUnicode.canonicalizeLocalPath(downloadPath) ?? downloadPath;
+    final size = await File(materialized).length();
     await _touch(library, cachePath, size);
     await _evictIfNeeded(library, protect: cachePath);
-    return downloadPath;
+    return materialized;
   }
 
   /// Téléverse [source] dans la bibliothèque (Drive + copie cache local) sous
@@ -132,16 +159,28 @@ class AudioCacheManager {
   }
 
   /// Indique si un chemin relatif est déjà présent dans le cache local.
-  Future<bool> isCached(Library library, String relativePath) {
-    return File(localPathFor(library, relativePath)).exists();
+  Future<bool> isCached(Library library, String relativePath) async {
+    final localPath = localPathFor(library, relativePath);
+    return await PathUnicode.canonicalizeLocalPath(localPath) != null;
   }
 
   /// Vérifie si un fichier audio existe sur Drive (sans téléchargement).
+  ///
+  /// Si [driveFileId] est fourni, la présence est vérifiée par identité forte
+  /// (fiable même pour les noms accentués) ; sinon, résolution par nom (legacy).
   Future<bool> existsOnDrive({
     required DriveClient client,
     required Library library,
     required String relativePath,
+    String? driveFileId,
   }) async {
+    if (driveFileId != null) {
+      return await client.getFile(
+            driveFileId,
+            sharedDriveId: library.sharedDriveId,
+          ) !=
+          null;
+    }
     final normalizedPath =
         LibrarySoundPaths.normalizeRelativePath(relativePath);
     if (await _resolveRemote(client, library, normalizedPath) != null) {
@@ -275,7 +314,10 @@ class AudioCacheManager {
     return null;
   }
 
-  bool _namesEqual(String a, String b) => a.toLowerCase() == b.toLowerCase();
+  // Comparaison insensible à la casse ET à la normalisation Unicode (NFC/NFD) :
+  // les noms accentués peuvent différer en forme entre Drive et la base.
+  bool _namesEqual(String a, String b) =>
+      PathUnicode.sameName(a.toLowerCase(), b.toLowerCase());
 
   Future<String> _ensureRemoteFolders(
     DriveClient client,

@@ -51,6 +51,7 @@ dependencies:
   http: ^1.2.2
   google_sign_in_all_platforms: ^1.2.1
   shared_preferences: ^2.5.3
+  unorm_dart: ^0.3.2
 
 
 dev_dependencies:
