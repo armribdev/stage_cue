@@ -733,19 +733,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           await Directory(selectedDirectory).exists();
 
       if (directoryExists) {
-        String? accountEmail;
-        String? driveFileId;
-        final isGoogleDrive = safInfo?.isGoogleDrive ??
-            SafDirectoryBridge.isGoogleDriveUri(selectedDirectory);
+        // Invariant de routage : un dossier Google Drive est dirigé vers le
+        // système de bibliothèques (`_addDriveDirectoryFromSafPick` /
+        // `_addDriveDirectory`), jamais ici. `_indexWatchedDirectory` ne gère
+        // donc QUE des dossiers locaux → aucune métadonnée Drive (owner/id).
+        const String? accountEmail = null;
+        const String? driveFileId = null;
 
-        if (isSafTree && isGoogleDrive) {
-          driveFileId = safInfo?.driveFileId;
-          accountEmail =
-              await widget.libraryRepository.resolveSafFolderOwnerEmail(
-            driveFileId: driveFileId,
-            folderName: safInfo?.displayName ?? 'Dossier',
-          );
-        }
         // Vérifier si le dossier n'est pas déjà surveillé
         final existing = await (widget.database.select(
           widget.database.watchedPaths,
