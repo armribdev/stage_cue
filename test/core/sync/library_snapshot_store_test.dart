@@ -106,6 +106,63 @@ void main() {
     await dbB.close();
   });
 
+  test('snapshot racine : pad recâblé par relativePath quand driveFileId manque',
+      () async {
+    // Device A : son SANS driveFileId (ex. non encore réconcilié avec l'index
+    // Drive) mais avec un relativePath portable, référencé par un pad.
+    final lib = await database.into(database.libraries).insert(
+          db.LibrariesCompanion.insert(name: 'A', localRootPath: '/A'),
+        );
+    final soundId = await database.into(database.sounds).insert(
+          db.SoundsCompanion.insert(
+            title: 'knock',
+            filePath: '/A/knock.mp3',
+            libraryId: Value(lib),
+            relativePath: const Value('knock.mp3'),
+          ),
+        );
+    final boardId = await database.into(database.soundBoards).insert(
+          db.SoundBoardsCompanion.insert(name: 'Scène', libraryId: Value(lib)),
+        );
+    final padId = await database.into(database.pads).insert(
+          db.PadsCompanion.insert(boardId: boardId, name: const Value('Pad 1')),
+        );
+    await database.into(database.padSounds).insert(
+          db.PadSoundsCompanion.insert(padId: padId, soundId: soundId),
+        );
+
+    final snapshotPath = p.join(tempDir.path, 'root.db');
+    await store.exportLibrarySnapshot(lib, snapshotPath);
+
+    // Device B : même son (par relativePath), id local décalé, driveFileId null.
+    final dbB = db.AppDatabase.forTesting(NativeDatabase.memory());
+    final libB = await dbB.into(dbB.libraries).insert(
+          db.LibrariesCompanion.insert(name: 'A', localRootPath: '/B'),
+        );
+    await dbB.into(dbB.sounds).insert(
+          db.SoundsCompanion.insert(title: 'bidon', filePath: '/B/x.mp3'),
+        );
+    final soundBId = await dbB.into(dbB.sounds).insert(
+          db.SoundsCompanion.insert(
+            title: 'knock',
+            filePath: '/B/knock.mp3',
+            libraryId: Value(libB),
+            relativePath: const Value('knock.mp3'),
+          ),
+        );
+
+    await LibrarySnapshotStore(dbB).mergeLibrarySnapshot(libB, snapshotPath);
+
+    final padSounds = await dbB.select(dbB.padSounds).get();
+    expect(padSounds, hasLength(1), reason: 'le pad n\'est pas perdu');
+    expect(
+      padSounds.first.soundId,
+      soundBId,
+      reason: 'recâblé sur le son local via relativePath (repli)',
+    );
+    await dbB.close();
+  });
+
   group('snapshot par-dossier', () {
     test('round-trip : chemins folder-relative reconstruits dans le nœud cible',
         () async {

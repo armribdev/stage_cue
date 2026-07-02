@@ -15,7 +15,8 @@ class LibrarySnapshotStore {
   LibrarySnapshotStore(this._database);
 
   /// Exporte le snapshot RACINE d'une bibliothèque : ses boards + pads. Les pads
-  /// référencent leurs sons par `driveFileId` (identité forte, portable) — les
+  /// référencent leurs sons par `driveFileId` (identité forte, portable) avec
+  /// repli sur `relativePath` (portable lui aussi) quand l'ID Drive manque — les
   /// sons eux-mêmes vivent dans les snapshots PAR DOSSIER, pas ici.
   Future<int> exportLibrarySnapshot(int libraryId, String targetPath) async {
     final target = File(targetPath);
@@ -36,18 +37,22 @@ class LibrarySnapshotStore {
         INNER JOIN sound_boards b ON b.id = p.board_id
         WHERE b.library_id = $libraryId
       ''');
-      // pad_sounds portent le driveFileId du son (pas son id local) : la
-      // résolution au merge se fait par identité forte, une fois les snapshots
-      // dossier fusionnés. Les pads pointant un son sans driveFileId (local /
-      // pas encore indexé) sont ignorés — non portables.
+      // pad_sounds portent le driveFileId ET le relativePath du son (pas son id
+      // local) : la résolution au merge se fait par identité forte (driveFileId)
+      // puis par chemin portable (relativePath) en repli, une fois les snapshots
+      // dossier fusionnés. On ne garde QUE les pads dont le son a au moins l'une
+      // des deux clés portables ; un son purement local (les deux NULL) ne peut
+      // pas voyager (le picker interdit d'en placer dans un board Drive).
       await _database.customStatement('''
         CREATE TABLE snap.pad_sounds AS
-        SELECT ps.pad_id, ps.sort_order, ps.added_at, s.drive_file_id
+        SELECT ps.pad_id, ps.sort_order, ps.added_at,
+               s.drive_file_id, s.relative_path
         FROM pad_sounds ps
         INNER JOIN pads p ON p.id = ps.pad_id
         INNER JOIN sound_boards b ON b.id = p.board_id
         INNER JOIN sounds s ON s.id = ps.sound_id
-        WHERE b.library_id = $libraryId AND s.drive_file_id IS NOT NULL
+        WHERE b.library_id = $libraryId
+          AND (s.drive_file_id IS NOT NULL OR s.relative_path IS NOT NULL)
       ''');
     } finally {
       await _detachSnapshot();
@@ -134,17 +139,34 @@ class LibrarySnapshotStore {
         await _database.customSelect('SELECT * FROM snap.pad_sounds').get();
     for (final row in padSoundRows) {
       final localPadId = _padIdMap[row.read<int>('pad_id')];
+      if (localPadId == null) continue;
       final driveFileId = row.read<String?>('drive_file_id');
-      if (localPadId == null || driveFileId == null) continue;
+      final relativePath = row.read<String?>('relative_path');
 
-      // Résout le son par identité forte (importé via les snapshots dossier).
-      final sound = await (_database.select(_database.sounds)
-            ..where(
-              (s) =>
-                  s.libraryId.equals(libraryId) &
-                  s.driveFileId.equals(driveFileId),
-            ))
-          .getSingleOrNull();
+      // Résout le son par identité forte (driveFileId), importé via les
+      // snapshots dossier ; à défaut par chemin portable (relativePath) — ainsi
+      // un pad n'est jamais perdu si l'ID Drive du son manque encore.
+      db.Sound? sound;
+      if (driveFileId != null) {
+        sound = await (_database.select(_database.sounds)
+              ..where(
+                (s) =>
+                    s.libraryId.equals(libraryId) &
+                    s.driveFileId.equals(driveFileId),
+              ))
+            .getSingleOrNull();
+      }
+      if (sound == null && relativePath != null) {
+        final normalized =
+            LibrarySoundPaths.normalizeRelativePath(relativePath);
+        sound = await (_database.select(_database.sounds)
+              ..where(
+                (s) =>
+                    s.libraryId.equals(libraryId) &
+                    s.relativePath.equals(normalized),
+              ))
+            .getSingleOrNull();
+      }
       if (sound == null) continue;
 
       await _database.into(_database.padSounds).insert(
