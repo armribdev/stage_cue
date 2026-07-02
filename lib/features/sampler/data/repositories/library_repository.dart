@@ -1109,6 +1109,15 @@ class LibraryRepository extends ChangeNotifier {
           relativePath: audio.folderRelativePath,
         );
 
+        // VUE PARTAGÉE : rattache CETTE bibliothèque au nœud, qu'elle en soit
+        // propriétaire ou simplement « invitée » (son lien recouvre un dossier
+        // possédé par une autre bibliothèque). Elle voit alors les sons partagés
+        // sans les dupliquer.
+        await _dataSource.ensureMembership(
+          libraryId: library.id,
+          folderId: folderId,
+        );
+
         final created = await _soundDataSource.syncLibrarySoundFromDriveIndex(
           libraryId: library.id,
           relativePath: audio.relativePath,

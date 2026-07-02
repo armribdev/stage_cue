@@ -202,12 +202,12 @@ class LibrarySnapshotStore {
       // un pad n'est jamais perdu si l'ID Drive du son manque encore.
       db.Sound? sound;
       if (driveFileId != null) {
+        // Identité forte GLOBALE : `drive_file_id` est unique en base, toutes
+        // bibliothèques confondues. On ne scope PAS à `libraryId` — sinon un
+        // board d'une bibliothèque « invitée » ne pourrait pas se recâbler sur un
+        // son PARTAGÉ possédé par une autre bibliothèque (VUE PARTAGÉE).
         sound = await (_database.select(_database.sounds)
-              ..where(
-                (s) =>
-                    s.libraryId.equals(libraryId) &
-                    s.driveFileId.equals(driveFileId),
-              ))
+              ..where((s) => s.driveFileId.equals(driveFileId)))
             .getSingleOrNull();
       }
       if (sound == null && relativePath != null) {

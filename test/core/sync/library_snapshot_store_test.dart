@@ -459,4 +459,78 @@ void main() {
       await dbB.close();
     });
   });
+
+  group('vue partagée', () {
+    test('un board recâble un son partagé possédé par une AUTRE bibliothèque',
+        () async {
+      // Device A : deux bibliothèques. Le son « rain » (driveFileId DFX) est
+      // possédé par libA (home), mais un board de libB le référence — cas d'un
+      // dossier recouvert vu par les deux.
+      final libA = await database.into(database.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/A'),
+          );
+      final libB = await database.into(database.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'B', localRootPath: '/B'),
+          );
+      final sharedSound = await database.into(database.sounds).insert(
+            db.SoundsCompanion.insert(
+              title: 'rain',
+              filePath: '/A/rain.mp3',
+              libraryId: Value(libA),
+              relativePath: const Value('rain.mp3'),
+              driveFileId: const Value('DFX'),
+            ),
+          );
+      final boardId = await database.into(database.soundBoards).insert(
+            db.SoundBoardsCompanion.insert(
+              name: 'Ville',
+              libraryId: Value(libB),
+              boardKey: const Value('KV'),
+            ),
+          );
+      final padId = await database.into(database.pads).insert(
+            db.PadsCompanion.insert(boardId: boardId),
+          );
+      await database.into(database.padSounds).insert(
+            db.PadSoundsCompanion.insert(padId: padId, soundId: sharedSound),
+          );
+
+      final snapshotPath = p.join(tempDir.path, 'root.db');
+      await store.exportLibrarySnapshot(libB, snapshotPath);
+
+      // Device 2 : le son partagé appartient encore à A (ids décalés), libB tire
+      // son board racine. Le recâblage doit résoudre par driveFileId GLOBAL.
+      final dbB = db.AppDatabase.forTesting(NativeDatabase.memory());
+      final a2 = await dbB.into(dbB.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/A2'),
+          );
+      final b2 = await dbB.into(dbB.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'B', localRootPath: '/B2'),
+          );
+      await dbB.into(dbB.sounds).insert(
+            db.SoundsCompanion.insert(title: 'bidon', filePath: '/x.mp3'),
+          );
+      final shared2 = await dbB.into(dbB.sounds).insert(
+            db.SoundsCompanion.insert(
+              title: 'rain',
+              filePath: '/A2/rain.mp3',
+              libraryId: Value(a2),
+              relativePath: const Value('rain.mp3'),
+              driveFileId: const Value('DFX'),
+            ),
+          );
+
+      await LibrarySnapshotStore(dbB).mergeLibrarySnapshot(b2, snapshotPath);
+
+      final padSounds = await dbB.select(dbB.padSounds).get();
+      expect(padSounds, hasLength(1), reason: 'le pad n\'est pas perdu');
+      expect(
+        padSounds.first.soundId,
+        shared2,
+        reason: 'board de B recâblé sur le son partagé possédé par A '
+            '(driveFileId global, pas de scope libraryId)',
+      );
+      await dbB.close();
+    });
+  });
 }

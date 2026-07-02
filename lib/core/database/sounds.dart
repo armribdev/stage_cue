@@ -62,6 +62,24 @@ class LibraryFolders extends Table {
       ];
 }
 
+/// Jonction bibliothèque ↔ nœud dossier (VUE PARTAGÉE). Un nœud [LibraryFolders]
+/// a un unique propriétaire (`libraryId` = home, qui synchronise son `.stagecue`
+/// et sert de base aux chemins). Mais plusieurs bibliothèques peuvent VOIR le
+/// même dossier quand leurs liens se recouvrent (parent lié comme A, sous-dossier
+/// lié comme B) : chaque bibliothèque dont l'indexation atteint un dossier y est
+/// rattachée ici, sans dupliquer ni les fichiers ni le nœud. La visibilité des
+/// sons dans le picker et le recâblage des boards passent par cette table.
+class FolderMemberships extends Table {
+  IntColumn get libraryId =>
+      integer().references(Libraries, #id, onDelete: KeyAction.cascade)();
+  IntColumn get folderId =>
+      integer().references(LibraryFolders, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {libraryId, folderId};
+}
+
 class Sounds extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get title => text()(); // Nom de fichier sans extension

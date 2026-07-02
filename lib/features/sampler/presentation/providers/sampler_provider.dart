@@ -1728,6 +1728,12 @@ class SamplerNotifier extends ChangeNotifier {
     return _repository.findSoundIdsByTagQuery(query);
   }
 
+  /// Ids des sons visibles par une bibliothèque (VUE PARTAGÉE) — scope du picker
+  /// d'un board Drive : ses dossiers, recouvrements de liens compris.
+  Future<Set<int>> getSoundIdsVisibleToLibrary(int libraryId) {
+    return _repository.getSoundIdsVisibleToLibrary(libraryId);
+  }
+
   Future<Set<int>> getLocallyAvailableSoundIds() async {
     final sounds = await _repository.getAllSounds();
     final available = <int>{};
