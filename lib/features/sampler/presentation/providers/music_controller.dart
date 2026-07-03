@@ -37,11 +37,14 @@ class MusicController {
     return msg;
   }
 
-  /// Volume effectif : pads musique soumis au volume global, SFX en direct.
-  double _effectiveVolume(PadItem padItem) =>
-      padItem.pad.isMusicPad
-          ? padItem.pad.volume * _musicVolume
-          : padItem.pad.volume;
+  /// Volume effectif du son à [soundIndex] (défaut : le son courant du pad, ou
+  /// le premier). Base = override du pad-son ou volume par défaut du son ; les
+  /// pads musique sont en plus soumis au volume global.
+  double _effectiveVolume(PadItem padItem, {int? soundIndex}) {
+    final index = soundIndex ?? padItem.currentSoundIndex ?? 0;
+    final base = padItem.pad.effectiveVolume(index);
+    return padItem.pad.isMusicPad ? base * _musicVolume : base;
+  }
 
   // ── File d'attente ────────────────────────────────────────────────────────
 
@@ -316,7 +319,7 @@ class MusicController {
       _setMusicLoadError(next);
       return;
     }
-    final targetVolume = _effectiveVolume(next);
+    final targetVolume = _effectiveVolume(next, soundIndex: soundIndex);
 
     _musicAdvanceLockCount++;
     try {
@@ -478,7 +481,7 @@ class MusicController {
           .toList(),
     );
 
-    player.setVolume(_effectiveVolume(padItem));
+    player.setVolume(_effectiveVolume(padItem, soundIndex: index));
     if (resumePosition != null && resumePosition > Duration.zero) {
       await player.playFromPosition(resumePosition);
     } else {
@@ -680,7 +683,7 @@ class MusicController {
         _setMusicLoadError(next);
         return;
       }
-      final targetVolume = _effectiveVolume(next);
+      final targetVolume = _effectiveVolume(next, soundIndex: soundIndex);
 
       await nextPlayer.playAtVolume(0);
       next._currentPlayerIndex = soundIndex;

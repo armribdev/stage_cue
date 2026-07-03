@@ -1115,7 +1115,7 @@ class LocalPadDataSource {
   Future<List<domain_pad.Pad>> getBoardPads(int boardId) async {
     final padRows = await _database.customSelect(
       '''
-      SELECT id, board_id, name, color, sort_order, row_index, play_mode, volume, created_at
+      SELECT id, board_id, name, color, sort_order, row_index, play_mode, created_at
       FROM pads
       WHERE board_id = ?
       ORDER BY row_index, sort_order, created_at
@@ -1129,7 +1129,8 @@ class LocalPadDataSource {
         '''
         SELECT s.id, s.title, s.display_name, s.file_path, s.type,
                s.color, s.volume, s.created_at,
-               s.library_id, s.relative_path, s.content_hash
+               s.library_id, s.relative_path, s.content_hash,
+               ps.volume AS pad_sound_volume
         FROM pad_sounds ps
         INNER JOIN sounds s ON s.id = ps.sound_id
         WHERE ps.pad_id = ?
@@ -1148,9 +1149,10 @@ class LocalPadDataSource {
         playMode: padRow.read<int>('play_mode') == 0
             ? domain_pad.PadPlayMode.random
             : domain_pad.PadPlayMode.sequential,
-        volume: padRow.read<double>('volume'),
         createdAt: padRow.read<DateTime>('created_at'),
         sounds: soundRows.map(_rowToSound).toList(),
+        soundVolumes:
+            soundRows.map((r) => r.read<double?>('pad_sound_volume')).toList(),
       ));
     }
     return pads;
@@ -1184,7 +1186,7 @@ class LocalPadDataSource {
     required List<int> soundIds,
     String? name,
     int? colorValue,
-    double volume = 1.0,
+    List<double?>? soundVolumes,
     domain_pad.PadPlayMode playMode = domain_pad.PadPlayMode.random,
     int? sortOrder,
     int rowIndex = 0,
@@ -1208,15 +1210,19 @@ class LocalPadDataSource {
               ? db_sounds.PadPlayMode.random
               : db_sounds.PadPlayMode.sequential,
         ),
-        volume: Value(volume),
       ),
     );
     for (var i = 0; i < soundIds.length; i++) {
+      final override =
+          (soundVolumes != null && i < soundVolumes.length)
+              ? soundVolumes[i]
+              : null;
       await _database.into(_database.padSounds).insert(
         db.PadSoundsCompanion.insert(
           padId: padId,
           soundId: soundIds[i],
           sortOrder: Value(i),
+          volume: Value(override),
         ),
       );
     }
@@ -1310,13 +1316,11 @@ class LocalPadDataSource {
     bool updateName = false,
     int? colorValue,
     bool updateColor = false,
-    double? volume,
     domain_pad.PadPlayMode? playMode,
   }) async {
     final companion = db.PadsCompanion(
       name: updateName ? Value(name) : const Value.absent(),
       color: updateColor ? Value(colorValue) : const Value.absent(),
-      volume: volume != null ? Value(volume) : const Value.absent(),
       playMode: playMode != null
           ? Value(
               playMode == domain_pad.PadPlayMode.random
@@ -1331,6 +1335,19 @@ class LocalPadDataSource {
     await _touchBoardOfPad(padId);
   }
 
+  /// Met à jour l'override de volume d'un son DANS un pad ([volume] null =
+  /// suivre le volume par défaut du son).
+  Future<void> updatePadSoundVolume({
+    required int padId,
+    required int soundId,
+    required double? volume,
+  }) async {
+    await (_database.update(_database.padSounds)
+          ..where((ps) => ps.padId.equals(padId) & ps.soundId.equals(soundId)))
+        .write(db.PadSoundsCompanion(volume: Value(volume)));
+    await _touchBoardOfPad(padId);
+  }
+
   Future<void> updatePadRowIndex(int padId, int newRowIndex) async {
     await (_database.update(_database.pads)
           ..where((p) => p.id.equals(padId)))
@@ -1341,7 +1358,7 @@ class LocalPadDataSource {
   /// Duplique tous les pads d'une board vers une autre board.
   Future<void> duplicatePads(int sourceBoardId, int targetBoardId) async {
     final sourcePads = await _database.customSelect(
-      'SELECT id, name, color, sort_order, play_mode, volume FROM pads '
+      'SELECT id, name, color, sort_order, play_mode FROM pads '
       'WHERE board_id = ? ORDER BY sort_order',
       variables: [Variable<int>(sourceBoardId)],
     ).get();
@@ -1356,12 +1373,11 @@ class LocalPadDataSource {
           playMode: Value(
             db_sounds.PadPlayMode.values[padRow.read<int>('play_mode')],
           ),
-          volume: Value(padRow.read<double>('volume')),
         ),
       );
 
       final soundRows = await _database.customSelect(
-        'SELECT sound_id, sort_order FROM pad_sounds '
+        'SELECT sound_id, sort_order, volume FROM pad_sounds '
         'WHERE pad_id = ? ORDER BY sort_order',
         variables: [Variable<int>(padRow.read<int>('id'))],
       ).get();
@@ -1372,6 +1388,7 @@ class LocalPadDataSource {
             padId: newPadId,
             soundId: soundRow.read<int>('sound_id'),
             sortOrder: Value(soundRow.read<int>('sort_order')),
+            volume: Value(soundRow.read<double?>('volume')),
           ),
         );
       }

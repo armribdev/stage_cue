@@ -60,7 +60,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   ];
 
   late int? _selectedColorValue;
-  late double _volume;
   late PadPlayMode _playMode;
   late final TextEditingController _displayNameController;
   Timer? _displayNameDebounce;
@@ -72,7 +71,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     super.initState();
     final pad = widget.padItem.pad;
     _selectedColorValue = pad.colorValue;
-    _volume = pad.volume.clamp(0.0, 1.0);
     _playMode = pad.playMode;
     _displayNameController = TextEditingController(text: pad.name ?? '');
     _loadTagCatalog();
@@ -106,13 +104,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
       buttonColor: colorValue != null ? Color(colorValue) : null,
       updateColor: true,
     );
-  }
-
-  void _updateVolume(double value) {
-    final clamped = value.clamp(0.0, 1.0);
-    setState(() => _volume = clamped);
-    widget.notifier.updatePadItemSettings(widget.padItem, volume: clamped);
-    widget.padItem.currentPlayer?.setVolume(clamped);
   }
 
   void _updatePlayMode(PadPlayMode mode) {
@@ -228,27 +219,8 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                           _buildColorDot(context, c),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Volume',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                        Text('${(_volume * 100).round()}%'),
-                      ],
-                    ),
-                    Slider(
-                      value: _volume,
-                      min: 0.0,
-                      max: 1.0,
-                      label: '${(_volume * 100).round()}%',
-                      onChanged: _updateVolume,
-                    ),
                     if (sounds.length > 1) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 16),
                       Text(
                         'Mode de lecture',
                         style: Theme.of(context).textTheme.bodyMedium,
@@ -488,11 +460,51 @@ class _SoundRow extends StatefulWidget {
 class _SoundRowState extends State<_SoundRow> {
   Set<int> _tagIds = {};
   bool _loaded = false;
+  late double _volume;
 
   @override
   void initState() {
     super.initState();
+    _volume = _resolvedPadItem().pad.effectiveVolume(widget.slotIndex);
     _loadTags();
+  }
+
+  void _updateVolume(double value) {
+    final clamped = value.clamp(0.0, 1.0);
+    setState(() => _volume = clamped);
+    widget.notifier.updatePadSoundVolume(
+      _resolvedPadItem(),
+      widget.sound.id,
+      clamped,
+    );
+  }
+
+  Widget _buildVolumeControl(BuildContext context, ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, top: 2),
+      child: Row(
+        children: [
+          Icon(Icons.volume_up_rounded, size: 18, color: scheme.onSurfaceVariant),
+          Expanded(
+            child: Slider(
+              value: _volume.clamp(0.0, 1.0),
+              min: 0.0,
+              max: 1.0,
+              label: '${(_volume * 100).round()}%',
+              onChanged: _updateVolume,
+            ),
+          ),
+          SizedBox(
+            width: 40,
+            child: Text(
+              '${(_volume * 100).round()}%',
+              textAlign: TextAlign.end,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadTags() async {
@@ -620,8 +632,11 @@ class _SoundRowState extends State<_SoundRow> {
 
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: canDownload
-              ? Material(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (canDownload)
+                Material(
                   color: Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                   clipBehavior: Clip.antiAlias,
@@ -633,7 +648,13 @@ class _SoundRowState extends State<_SoundRow> {
                     child: soundContent,
                   ),
                 )
-              : soundContent,
+              else
+                soundContent,
+              // Volume propre à ce son dans ce pad — visible seulement quand le
+              // son est jouable localement (sinon le réglage n'a pas d'effet).
+              if (isLocal) _buildVolumeControl(context, scheme),
+            ],
+          ),
         );
       },
     );

@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration {
@@ -262,6 +262,29 @@ class AppDatabase extends _$AppDatabase {
             'SELECT library_id, id FROM library_folders',
           );
         }
+        if (from < 29) {
+          // Le volume passe du pad au couple (pad, son) : chaque son d'un pad a
+          // désormais son propre volume (override), au lieu d'un volume unique
+          // pour tout le pad. Backfill : chaque pad_sound hérite du volume actuel
+          // de son pad pour préserver le rendu audio existant ; null = suivre le
+          // volume par défaut du son. On garde-fou les deux étapes car un upgrade
+          // depuis < 10 crée déjà les tables au schéma courant (colonne présente,
+          // volume du pad absent).
+          if (!await _columnExists('pad_sounds', 'volume')) {
+            await m.addColumn(
+              padSounds,
+              padSounds.volume as GeneratedColumn<Object>,
+            );
+          }
+          if (await _columnExists('pads', 'volume')) {
+            await customStatement(
+              'UPDATE pad_sounds SET volume = '
+              '(SELECT p.volume FROM pads p WHERE p.id = pad_sounds.pad_id)',
+            );
+            // Supprime la colonne volume de pads (recréation de table SQLite).
+            await m.alterTable(TableMigration(pads));
+          }
+        }
       },
       beforeOpen: (details) async {
         // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
@@ -296,6 +319,14 @@ class AppDatabase extends _$AppDatabase {
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_sound_boards_board_key '
       'ON sound_boards (board_key)',
     );
+  }
+
+  /// Vrai si la colonne [column] existe déjà sur la table [table] (PRAGMA).
+  /// Rend les migrations idempotentes face aux upgrades multi-versions où une
+  /// table a pu être (re)créée au schéma courant par une étape antérieure.
+  Future<bool> _columnExists(String table, String column) async {
+    final rows = await customSelect('PRAGMA table_info($table)').get();
+    return rows.any((r) => r.read<String>('name') == column);
   }
 
   Future<void> _ensureBoardSoundSettingsTableExists() async {
@@ -337,13 +368,14 @@ class AppDatabase extends _$AppDatabase {
           name: Value(row.read<String?>('display_name')),
           color: Value(row.read<int?>('color')),
           sortOrder: Value(row.read<int>('sort_order')),
-          volume: Value(row.read<double?>('volume') ?? 1.0),
         ),
       );
+      // Le volume vit désormais sur le couple (pad, son) et non sur le pad.
       await into(padSounds).insert(
         PadSoundsCompanion.insert(
           padId: padId,
           soundId: row.read<int>('sound_id'),
+          volume: Value(row.read<double?>('volume')),
         ),
       );
     }
