@@ -74,6 +74,11 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  /// Hauteur réservée pour la zone statut d'un élément indexé : elle contient
+  /// soit la ligne méta (repos), soit le bloc barre + libellé (activité), sans
+  /// que le passage de l'un à l'autre ne change la hauteur de l'élément.
+  static const double _statusSlotHeight = 30;
+
   List<db.WatchedPath> _watchedPaths = [];
   List<domain.Library> _libraries = [];
   List<db.Sound> _sounds = [];
@@ -85,6 +90,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final Map<String, IndexingProgress> _indexingProgress = {};
   // Suivi de la progression de téléchargement audio par bibliothèque
   final Map<int, IndexingProgress> _downloadProgress = {};
+  // Décompte « disponible hors ligne / total » par bibliothèque Drive.
+  final Map<int, ({int available, int total})> _offlineCounts = {};
   bool _cancelDownloadAll = false;
   final Map<String, SafTreeInfo> _safFolderInfo = {};
   bool _isInitialLoad = true;
@@ -188,6 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
       _scrollToDriveSectionIfNeeded();
       unawaited(_loadSafFolderInfo());
+      unawaited(_loadOfflineCounts());
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -636,6 +644,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _reloadWatchedPaths();
   }
 
+  /// Charge en arrière-plan le décompte « hors ligne / total » de chaque
+  /// bibliothèque Drive (présence des fichiers dans le cache local).
+  Future<void> _loadOfflineCounts() async {
+    final libraries =
+        _libraries.where((library) => library.isConnectedToDrive).toList();
+    for (final library in libraries) {
+      if (library.id < 0) continue; // Bibliothèque en cours de création.
+      await _refreshOfflineCount(library);
+    }
+  }
+
+  /// Recalcule le décompte hors-ligne d'une seule bibliothèque (best-effort).
+  Future<void> _refreshOfflineCount(domain.Library library) async {
+    try {
+      final counts =
+          await widget.libraryRepository.countDownloadedSounds(library);
+      if (!mounted) return;
+      setState(() => _offlineCounts[library.id] = counts);
+    } catch (_) {
+      // Indicateur best-effort : on ignore les erreurs (dossier illisible…).
+    }
+  }
+
   Future<String?> _pickAddFolderSource() async {
     if (widget.isModal || preferModalPresentation(context)) {
       return showDialog<String>(
@@ -645,21 +676,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Ajouter un dossier',
             width: 400,
             onClose: () => Navigator.of(dialogContext).pop(),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppChoiceOption(
-                  icon: Icons.folder_outlined,
-                  label: 'Dossier local',
-                  onTap: () => Navigator.of(dialogContext).pop('local'),
-                ),
-                const SizedBox(height: 8),
-                AppChoiceOption(
-                  icon: Icons.cloud_outlined,
-                  label: 'Dossier Drive',
-                  onTap: () => Navigator.of(dialogContext).pop('drive'),
-                ),
-              ],
+            content: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: AppChoiceOption(
+                      vertical: true,
+                      icon: Icons.folder_outlined,
+                      label: 'Dossier local',
+                      onTap: () => Navigator.of(dialogContext).pop('local'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: AppChoiceOption(
+                      vertical: true,
+                      icon: Icons.cloud_outlined,
+                      label: 'Dossier Drive',
+                      onTap: () => Navigator.of(dialogContext).pop('drive'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },
@@ -678,21 +717,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(AppModalStyle.padding),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppChoiceOption(
-                  icon: Icons.folder_outlined,
-                  label: 'Dossier local',
-                  onTap: () => Navigator.of(sheetContext).pop('local'),
-                ),
-                const SizedBox(height: 8),
-                AppChoiceOption(
-                  icon: Icons.cloud_outlined,
-                  label: 'Dossier Drive',
-                  onTap: () => Navigator.of(sheetContext).pop('drive'),
-                ),
-              ],
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: AppChoiceOption(
+                      vertical: true,
+                      icon: Icons.folder_outlined,
+                      label: 'Dossier local',
+                      onTap: () => Navigator.of(sheetContext).pop('local'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: AppChoiceOption(
+                      vertical: true,
+                      icon: Icons.cloud_outlined,
+                      label: 'Dossier Drive',
+                      onTap: () => Navigator.of(sheetContext).pop('drive'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -1253,25 +1300,125 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildDownloadAllButton(domain.Library library) {
+  /// Zone d'actions d'un élément indexé. Pour un dossier Drive, toutes les
+  /// actions secondaires (tout télécharger, téléchargement auto, retirer) sont
+  /// regroupées dans un unique menu ⋮ ; un dossier local n'a que « Retirer ».
+  Widget _buildItemTrailing(_IndexedFolderItem item) {
     final scheme = Theme.of(context).colorScheme;
+    final muted = scheme.onSurfaceVariant.withValues(alpha: 0.7);
+
+    if (item.isLocal) {
+      // Même geste (menu ⋮) que pour un dossier Drive, avec ici une seule
+      // entrée, pour homogénéiser l'action « Retirer » entre les deux types.
+      return PopupMenuButton<_LibraryAction>(
+        tooltip: 'Options',
+        icon: Icon(Icons.more_vert, color: muted),
+        onSelected: (action) {
+          if (action == _LibraryAction.remove) {
+            unawaited(_confirmRemoveWatchedPath(item.watchedPath!));
+          }
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem<_LibraryAction>(
+            value: _LibraryAction.remove,
+            child: _menuRow(
+              Icons.delete_outline,
+              'Retirer',
+              iconColor: scheme.error,
+              textColor: scheme.error,
+            ),
+          ),
+        ],
+      );
+    }
+
+    final library = item.library!;
     final downloadProgress = _downloadProgress[library.id];
     final isDownloading =
         downloadProgress != null && !downloadProgress.isComplete;
+    final offline = _offlineCounts[library.id];
+    final fullyOffline =
+        offline != null && offline.total > 0 && offline.available >= offline.total;
 
-    return IconButton(
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-      visualDensity: VisualDensity.compact,
-      onPressed: isDownloading
-          ? null
-          : () => unawaited(_downloadAllLibraryAudio(library)),
-      icon: Icon(
-        Icons.download_for_offline_outlined,
-        size: 20,
-        color: scheme.onSurfaceVariant.withValues(alpha: 0.55),
-      ),
+    final String downloadLabel;
+    if (isDownloading) {
+      downloadLabel = 'Téléchargement en cours…';
+    } else if (fullyOffline) {
+      downloadLabel = 'Déjà tout téléchargé';
+    } else {
+      downloadLabel = 'Tout télécharger';
+    }
+
+    return PopupMenuButton<_LibraryAction>(
+      tooltip: 'Options',
+      icon: Icon(Icons.more_vert, color: muted),
+      onSelected: (action) {
+        switch (action) {
+          case _LibraryAction.downloadAll:
+            unawaited(_downloadAllLibraryAudio(library));
+          case _LibraryAction.toggleAutoDownload:
+            unawaited(_toggleAutoDownload(library));
+          case _LibraryAction.remove:
+            unawaited(_confirmRemoveDriveLibrary(library));
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<_LibraryAction>(
+          value: _LibraryAction.downloadAll,
+          enabled: !isDownloading && !fullyOffline,
+          child: _menuRow(
+            fullyOffline
+                ? Icons.download_done_outlined
+                : Icons.download_outlined,
+            downloadLabel,
+          ),
+        ),
+        PopupMenuItem<_LibraryAction>(
+          value: _LibraryAction.toggleAutoDownload,
+          child: _menuRow(
+            library.autoDownload
+                ? Icons.check_box_outlined
+                : Icons.check_box_outline_blank,
+            'Téléchargement auto',
+            iconColor: library.autoDownload ? scheme.primary : null,
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<_LibraryAction>(
+          value: _LibraryAction.remove,
+          child: _menuRow(
+            Icons.delete_outline,
+            'Retirer',
+            iconColor: scheme.error,
+            textColor: scheme.error,
+          ),
+        ),
+      ],
     );
+  }
+
+  /// Ligne icône + libellé pour une entrée du menu ⋮ (mise en page homogène).
+  Widget _menuRow(
+    IconData icon,
+    String label, {
+    Color? iconColor,
+    Color? textColor,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: iconColor),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(color: textColor)),
+      ],
+    );
+  }
+
+  Future<void> _toggleAutoDownload(domain.Library library) async {
+    await widget.libraryRepository.setAutoDownload(
+      library,
+      value: !library.autoDownload,
+    );
+    if (mounted) await _loadDatabaseInfo();
   }
 
   Future<void> _downloadAllLibraryAudio(domain.Library library) async {
@@ -1305,6 +1452,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           );
         });
       }
+    } finally {
+      // Rafraîchit l'indicateur hors-ligne (téléchargement complet ou annulé).
+      await _refreshOfflineCount(library);
     }
   }
 
@@ -1392,6 +1542,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(2)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+  }
+
+  /// Détail complet de l'état de la base, dont le chemin copiable — ouvert au
+  /// tap sur l'icône « i » des éléments indexés.
+  Future<void> _showDatabaseStateDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AppFormDialog(
+          title: 'État de la base de données',
+          width: 460,
+          onClose: () => Navigator.of(dialogContext).pop(),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildInfoRow('Nombre total de sons', '${_sounds.length}'),
+              const SizedBox(height: 8),
+              _buildInfoRow(
+                'Taille de la base de données',
+                _formatBytes(_dbSize),
+              ),
+              const SizedBox(height: 8),
+              _buildInfoRow(
+                'Chemin de la base de données',
+                _dbPath,
+                isPath: true,
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   String _normalizeWatchedPath(String path) {
@@ -1501,23 +1684,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  double? _indexingBarValue(IndexingProgress progress, bool isIndexing) {
-    if (isIndexing) {
-      return progress.total > 0 ? progress.progress : null;
-    }
-    return 1.0;
-  }
-
-  String _indexingStatusLabel(IndexingProgress progress, bool isIndexing) {
-    if (isIndexing) {
-      return 'Indexation de ${progress.current}/${progress.total > 0 ? progress.total : '…'} fichiers';
-    }
-
+  /// Libellé compact du nombre de fichiers indexés (état au repos).
+  String _fileCountLabel(IndexingProgress progress) {
     final count = progress.total > 0 ? progress.total : progress.current;
-    if (count == 1) {
-      return '1 fichier indexé';
-    }
-    return '$count fichiers indexés';
+    return count <= 1 ? '$count fichier' : '$count fichiers';
   }
 
   Widget _buildSettingsSectionCard({
@@ -1563,53 +1733,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildConnectivitySection() {
-    return ListenableBuilder(
-      listenable: widget.appPreferences,
-      builder: (context, _) {
-        final scheme = Theme.of(context).colorScheme;
-        final selected = widget.appPreferences.connectivityMode;
-        return _buildSettingsSectionCard(
-          title: _buildSectionTitleRow(
-            icon: Icons.hub_outlined,
-            title: 'Mode réseau',
+  /// Sélecteur du mode réseau : boutons segmentés (3 choix) + description du
+  /// mode courant. Plus léger qu'un dropdown pour un réglage à faible cardinalité.
+  Widget _buildConnectivityModeSelector() {
+    final scheme = Theme.of(context).colorScheme;
+    final selected = widget.appPreferences.connectivityMode;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Mode réseau',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: scheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
           ),
-          child: Column(
-            children: [
-              for (final mode in ConnectivityMode.values) ...[
-                RadioListTile<ConnectivityMode>(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(mode.label),
-                  subtitle: Text(
-                    mode.description,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<ConnectivityMode>(
+            // Ordre d'affichage : « Live » (mode par défaut, cas d'usage
+            // principal en scène) en premier, puis Connecté et Hors ligne.
+            segments: const [
+              ConnectivityMode.liveOffline,
+              ConnectivityMode.connected,
+              ConnectivityMode.offline,
+            ]
+                .map(
+                  (mode) => ButtonSegment<ConnectivityMode>(
+                    value: mode,
+                    label: Text(mode.label),
                   ),
-                  value: mode,
-                  groupValue: selected,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    unawaited(widget.appPreferences.setConnectivityMode(value));
-                  },
-                ),
-                if (mode != ConnectivityMode.values.last)
-                  Divider(
-                    height: 1,
-                    color: scheme.outlineVariant.withValues(alpha: 0.45),
-                  ),
-              ],
-            ],
+                )
+                .toList(),
+            selected: {selected},
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+            ),
+            onSelectionChanged: (selection) => unawaited(
+              widget.appPreferences.setConnectivityMode(selection.first),
+            ),
           ),
-        );
-      },
+        ),
+        const SizedBox(height: 8),
+        Text(
+          selected.description,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildDriveSection() {
-    final connectedCount =
-        _libraries.where((library) => library.isConnectedToDrive).length;
-
     return KeyedSubtree(
       key: _driveSectionKey,
       child: ListenableBuilder(
@@ -1625,7 +1803,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           return _buildSettingsSectionCard(
             title: _buildSectionTitleRow(
               icon: Icons.cloud_outlined,
-              title: 'Google Drive',
+              title: 'Drive',
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1634,13 +1812,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   syncState: syncState,
                   authExpired: authExpired,
                 ),
-                if (!authExpired && syncState.status != SyncStatus.idle) ...[
+                // La bannière n'affiche QUE l'activité de synchro (syncing /
+                // synced / conflit / erreur). L'état de connexion — dont
+                // « hors-ligne » — est déjà porté par l'en-tête de compte
+                // ci-dessus ; le dupliquer ici créait deux nuages
+                // contradictoires (« Connecté » + « Hors-ligne »).
+                if (syncState.status != SyncStatus.idle &&
+                    syncState.status != SyncStatus.offline) ...[
                   const SizedBox(height: 12),
                   SyncStatusBanner(state: syncState),
                 ],
                 const SizedBox(height: 12),
+                Text(
+                  'Téléchargement automatique',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
                 CompactSwitchListTile(
-                  title: const Text('Télécharger les sons ajoutés à un pad'),
+                  title: const Text('Sons ajoutés à un pad'),
                   subtitle: Text(
                     'Si connecté à Drive, les variantes sont récupérées dès l\'ajout.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1653,9 +1845,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 CompactSwitchListTile(
-                  title: const Text(
-                    'Activer le téléchargement automatique par défaut',
-                  ),
+                  title: const Text('Nouveaux dossiers Drive (tout le contenu)'),
                   subtitle: Text(
                     'À l\'ajout d\'un dossier Drive, télécharge les fichiers pour '
                     'classer correctement chaque son à l\'indexation.',
@@ -1668,6 +1858,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     widget.appPreferences.setAutoDownloadDriveByDefault(value),
                   ),
                 ),
+                const Divider(height: 24),
+                _buildConnectivityModeSelector(),
               ],
             ),
           );
@@ -1676,119 +1868,165 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAutoDownloadToggle(domain.Library library) {
+  /// Ligne d'information au repos : statut de synchro Drive + nombre de
+  /// fichiers indexés, sur une seule ligne compacte (pas de barre pleine).
+  Widget _buildItemMetaRow(_IndexedFolderItem item, IndexingProgress indexing) {
     final scheme = Theme.of(context).colorScheme;
+    final muted = scheme.onSurfaceVariant.withValues(alpha: 0.75);
+
+    Widget chip(IconData icon, String label, {Color? color}) {
+      final c = color ?? muted;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: c),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 11, color: c)),
+        ],
+      );
+    }
+
+    final fileCount = chip(Icons.audiotrack_outlined, _fileCountLabel(indexing));
+
+    if (item.isLocal) {
+      return fileCount;
+    }
+
+    // Indicateur de téléchargement : on affiche TOUJOURS « dispo/total » — le
+    // total donne le nombre de fichiers, et « 13/13 » signale aussi que tout
+    // est téléchargé.
+    final offline = _offlineCounts[item.library!.id];
+    final Widget availability;
+    if (offline == null || offline.total == 0) {
+      // Décompte pas encore calculé (ou dossier vide) : nombre de fichiers seul.
+      availability = fileCount;
+    } else {
+      final complete = offline.available >= offline.total;
+      availability = chip(
+        complete
+            ? Icons.download_done_outlined
+            : Icons.download_outlined,
+        '${offline.available}/${offline.total} téléchargés',
+        color: complete ? scheme.primary.withValues(alpha: 0.85) : null,
+      );
+    }
+
     return Row(
       children: [
-        CompactSwitch(
-          value: library.autoDownload,
-          onChanged: (value) async {
-            await widget.libraryRepository.setAutoDownload(
-              library,
-              value: value,
-            );
-            if (mounted) await _loadDatabaseInfo();
-          },
-        ),
-        const SizedBox(width: 2),
-        Text(
-          'Téléchargement automatique',
-          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-        ),
+        Flexible(child: _buildDriveSyncStatus(item.library!)),
+        const SizedBox(width: 12),
+        availability,
       ],
     );
   }
 
-  Widget? _buildDownloadProgressSection(domain.Library library) {
-    final progress = _downloadProgress[library.id];
-    if (progress == null) return null;
-    if (progress.isComplete && progress.error == null) return null;
+  /// Zone d'activité unifiée : **une seule** barre de progression à la fois.
+  /// Priorité à l'indexation, puis au téléchargement ; au repos, aucune barre
+  /// (le décompte de fichiers vit dans [_buildItemMetaRow]).
+  Widget? _buildItemActivity(
+    _IndexedFolderItem item,
+    IndexingProgress indexing,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
 
-    final isDownloading = !progress.isComplete;
-    final barColor =
-        progress.error != null ? Colors.red.shade600 : Colors.blue.shade600;
+    // 1. Indexation en cours (local ou Drive) — prioritaire.
+    if (!indexing.isComplete || indexing.error != null) {
+      final hasError = indexing.error != null;
+      return _buildActivityBlock(
+        value: hasError
+            ? 1.0
+            : (indexing.total > 0 ? indexing.progress : null),
+        color: hasError ? scheme.error : scheme.primary,
+        label: hasError
+            ? 'Erreur : ${indexing.error}'
+            : 'Indexation ${indexing.current}/'
+                '${indexing.total > 0 ? indexing.total : '…'}',
+        isError: hasError,
+      );
+    }
+
+    // 2. Téléchargement des variantes audio (Drive uniquement).
+    if (!item.isLocal) {
+      final download = _downloadProgress[item.library!.id];
+      if (download != null && !download.isComplete) {
+        return _buildActivityBlock(
+          value: download.total > 0 ? download.progress : null,
+          color: scheme.tertiary,
+          label: 'Téléchargement ${download.current}/'
+              '${download.total > 0 ? download.total : '…'}',
+          onCancel: () => setState(() => _cancelDownloadAll = true),
+        );
+      }
+      if (download?.error != null) {
+        return _buildActivityBlock(
+          value: 1.0,
+          color: scheme.error,
+          label: 'Erreur : ${download!.error}',
+          isError: true,
+        );
+      }
+    }
+
+    // 3. Au repos : rien à afficher ici.
+    return null;
+  }
+
+  /// Bloc d'activité empilé : barre de progression **puis libellé en dessous**.
+  /// Rendu dans le même emplacement de hauteur fixe ([_statusSlotHeight]) que la
+  /// ligne méta, pour que le passage repos ↔ activité ne bouge pas la hauteur.
+  /// Erreur : libellé seul (avec ellipsis).
+  Widget _buildActivityBlock({
+    required double? value,
+    required Color color,
+    required String label,
+    VoidCallback? onCancel,
+    bool isError = false,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final labelStyle = TextStyle(
+      fontSize: 11,
+      color: isError ? scheme.error : scheme.onSurfaceVariant,
+    );
+
+    if (isError) {
+      return Text(
+        label,
+        style: labelStyle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 6),
         ClipRRect(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3),
           child: LinearProgressIndicator(
-            value: isDownloading
-                ? (progress.total > 0 ? progress.progress : null)
-                : 1.0,
-            backgroundColor: Colors.grey.shade300,
-            valueColor: AlwaysStoppedAnimation<Color>(barColor),
+            value: value,
+            minHeight: 5,
+            backgroundColor: scheme.surfaceContainerHighest,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
         ),
         const SizedBox(height: 4),
         Row(
           children: [
-            Expanded(
-              child: Text(
-                progress.error != null
-                    ? 'Erreur: ${progress.error}'
-                    : isDownloading
-                    ? 'Téléchargement ${progress.current}/${progress.total > 0 ? progress.total : '…'} fichiers'
-                    : 'Téléchargement terminé',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: progress.error != null
-                      ? Colors.red.shade700
-                      : Colors.grey.shade600,
-                ),
-              ),
-            ),
-            if (isDownloading)
+            Expanded(child: Text(label, style: labelStyle)),
+            if (onCancel != null) ...[
+              const SizedBox(width: 8),
               GestureDetector(
-                onTap: () => setState(() => _cancelDownloadAll = true),
-                child: Text(
-                  'Annuler',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                onTap: onCancel,
+                behavior: HitTestBehavior.opaque,
+                child: Icon(
+                  Icons.close,
+                  size: 16,
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
+            ],
           ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildIndexingProgressSection(
-    BuildContext context,
-    IndexingProgress progress,
-    bool isIndexing,
-  ) {
-    final barColor = progress.error != null
-        ? Colors.red.shade600
-        : Colors.green.shade600;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: _indexingBarValue(progress, isIndexing),
-            backgroundColor: Colors.grey.shade300,
-            valueColor: AlwaysStoppedAnimation<Color>(barColor),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          progress.error != null
-              ? 'Erreur: ${progress.error}'
-              : _indexingStatusLabel(progress, isIndexing),
-          style: TextStyle(
-            fontSize: 11,
-            color: progress.error != null
-                ? Colors.red.shade700
-                : Colors.grey.shade600,
-          ),
         ),
       ],
     );
@@ -1818,220 +2056,187 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildConnectivitySection(),
-                      const SizedBox(height: 16),
                       _buildDriveSection(),
                       const SizedBox(height: 16),
-                      _buildSettingsSectionCard(
-                        title: _buildSectionTitleRow(
-                          icon: Icons.storage,
-                          title: 'État de la base de données',
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildInfoRow(
-                              'Nombre total de sons',
-                              '${_sounds.length}',
-                            ),
-                            const SizedBox(height: 8),
-                            _buildInfoRow(
-                              'Taille de la base de données',
-                              _formatBytes(_dbSize),
-                            ),
-                            const SizedBox(height: 8),
-                            _buildInfoRow(
-                              'Chemin de la base de données',
-                              _dbPath,
-                              isPath: true,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildSettingsSectionCard(
-                        title: _buildSectionTitleRow(
-                          icon: Icons.folder_copy,
-                          title: 'Éléments indexés',
-                          trailing: [
-                            IconButton(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints.tightFor(
-                                width: 32,
-                                height: 32,
-                              ),
-                              visualDensity: VisualDensity.compact,
-                              icon: const Icon(Icons.add),
-                              onPressed: _onAddFolderPressed,
-                            ),
-                          ],
-                        ),
-                        child: _indexedFolderItems().isEmpty
-                            ? SizedBox(
-                                width: double.infinity,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.folder_off,
-                                      size: 48,
-                                      color: Colors.grey[600],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Aucun dossier indexé',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Ajoutez un dossier local ou un dossier Drive',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[500],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : ListView.separated(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: _indexedFolderItems().length,
-                                separatorBuilder: (context, index) => Divider(
-                                  height: 17,
-                                  thickness: 1,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .outlineVariant
-                                      .withValues(alpha: 0.45),
-                                ),
-                                itemBuilder: (context, index) {
-                                  final item = _indexedFolderItems()[index];
-                                  final labels = _labelsForItem(item);
-                                  final progress = _progressForItem(item);
-                                  final isIndexing = !progress.isComplete;
-
-                                  return Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      CircleAvatar(
-                                        backgroundColor: Theme.of(
-                                          context,
-                                        ).colorScheme.primaryContainer,
-                                        child: Icon(
-                                          item.isLocal &&
-                                                  SafDirectoryBridge
-                                                      .isSafTreeUri(
-                                                    item.watchedPath!.path,
-                                                  )
-                                              ? Icons.cloud
-                                              : item.isLocal
-                                              ? Icons.folder
-                                              : Icons.cloud,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              labels.title,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            Text(
-                                              labels.subtitle,
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey[600],
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            if (!item.isLocal) ...[
-                                              const SizedBox(height: 2),
-                                              _buildDriveSyncStatus(
-                                                item.library!,
-                                              ),
-                                              const SizedBox(height: 4),
-                                              _buildAutoDownloadToggle(
-                                                item.library!,
-                                              ),
-                                            ],
-                                            _buildIndexingProgressSection(
-                                              context,
-                                              progress,
-                                              isIndexing,
-                                            ),
-                                            if (!item.isLocal)
-                                              _buildDownloadProgressSection(
-                                                item.library!,
-                                              ) ??
-                                                  const SizedBox.shrink(),
-                                          ],
-                                        ),
-                                      ),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if (!item.isLocal)
-                                            _buildDownloadAllButton(
-                                              item.library!,
-                                            ),
-                                          SizedBox(width: 8),
-                                          IconButton(
-                                            padding: EdgeInsets.zero,
-                                            constraints:
-                                                const BoxConstraints.tightFor(
-                                              width: 32,
-                                              height: 32,
-                                            ),
-                                            icon: Icon(
-                                              Icons.delete_outline,
-                                              size: 20,
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant
-                                                  .withValues(alpha: 0.55),
-                                            ),
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            onPressed: () {
-                                              if (item.isLocal) {
-                                                _confirmRemoveWatchedPath(
-                                                  item.watchedPath!,
-                                                );
-                                              } else {
-                                                _confirmRemoveDriveLibrary(
-                                                  item.library!,
-                                                );
-                                              }
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
-                      ),
+                      _buildIndexedFoldersCard(),
                     ],
                   ),
                 ),
               ),
+    );
+  }
+
+  /// Carte « Éléments indexés » : liste des dossiers locaux/Drive, plus un pied
+  /// de carte résumant l'état de la base (cliquable pour le détail complet).
+  Widget _buildIndexedFoldersCard() {
+    // Calculé une seule fois par build (au lieu de quatre appels + tris).
+    final items = _indexedFolderItems();
+
+    return _buildSettingsSectionCard(
+      title: _buildSectionTitleRow(
+        icon: Icons.folder_copy,
+        title: 'Éléments indexés',
+        trailing: [
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Ajouter un dossier',
+            icon: const Icon(Icons.add),
+            onPressed: _onAddFolderPressed,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (items.isEmpty)
+            _buildEmptyIndexedState()
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: items.length,
+              separatorBuilder: (context, index) => Divider(
+                height: 17,
+                thickness: 1,
+                color: Theme.of(context)
+                    .colorScheme
+                    .outlineVariant
+                    .withValues(alpha: 0.45),
+              ),
+              itemBuilder: (context, index) => _buildIndexedItemRow(items[index]),
+            ),
+          _buildDatabaseSummaryFooter(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyIndexedState() {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(Icons.folder_off, size: 48, color: muted),
+          const SizedBox(height: 8),
+          Text(
+            'Aucun dossier indexé',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, color: muted),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Ajoutez un dossier local ou un dossier Drive',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: muted.withValues(alpha: 0.8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIndexedItemRow(_IndexedFolderItem item) {
+    final labels = _labelsForItem(item);
+    final progress = _progressForItem(item);
+    // Même emplacement, même hauteur : activité en cours OU ligne méta au
+    // repos, jamais les deux.
+    final statusLine =
+        _buildItemActivity(item, progress) ?? _buildItemMetaRow(item, progress);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        CircleAvatar(
+          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          child: Icon(
+            item.isLocal &&
+                    SafDirectoryBridge.isSafTreeUri(item.watchedPath!.path)
+                ? Icons.cloud
+                : item.isLocal
+                ? Icons.folder
+                : Icons.cloud,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                labels.title,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(
+                labels.subtitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: _statusSlotHeight,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: statusLine,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        _buildItemTrailing(item),
+      ],
+    );
+  }
+
+  /// Pied de carte résumant l'état de la base — remplace l'ancienne icône « i »
+  /// peu découvrable : le décompte est désormais visible, et le tap ouvre le
+  /// détail complet (taille, chemin copiable).
+  Widget _buildDatabaseSummaryFooter() {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final soundLabel =
+        '${_sounds.length} son${_sounds.length > 1 ? 's' : ''}';
+    return Column(
+      children: [
+        Divider(
+          height: 24,
+          color: Theme.of(context)
+              .colorScheme
+              .outlineVariant
+              .withValues(alpha: 0.45),
+        ),
+        InkWell(
+          onTap: _showDatabaseStateDialog,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+            child: Row(
+              children: [
+                Icon(Icons.storage_outlined, size: 16, color: muted),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$soundLabel · ${_formatBytes(_dbSize)}',
+                    style: TextStyle(fontSize: 12, color: muted),
+                  ),
+                ),
+                Icon(Icons.info_outline, size: 16, color: muted),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -2056,7 +2261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildInfoRow(String label, String value, {bool isPath = false}) {
     final valueStyle = TextStyle(
-      color: isPath ? Colors.grey[600] : null,
+      color: isPath ? Theme.of(context).colorScheme.onSurfaceVariant : null,
       fontSize: isPath ? 12 : null,
     );
 
@@ -2095,6 +2300,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
+
+/// Actions du menu ⋮ d'une bibliothèque Drive indexée.
+enum _LibraryAction { downloadAll, toggleAutoDownload, remove }
 
 class _IndexedFolderItem {
   const _IndexedFolderItem.local(this.watchedPath) : library = null;
@@ -2170,46 +2378,6 @@ class _SettingsLoadingViewState extends State<_SettingsLoadingView>
     );
   }
 
-  Widget _databaseCard(Color color) {
-    return _sectionCardSkeleton(
-      title: Row(
-        children: [
-          _bar(color, width: 20, height: 20),
-          const SizedBox(width: 8),
-          _bar(color, width: 210, height: 18),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _bar(color, width: 180),
-              const SizedBox(width: 12),
-              Expanded(child: _bar(color)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _bar(color, width: 180),
-              const SizedBox(width: 12),
-              Expanded(child: _bar(color, width: 120)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _bar(color, width: 180),
-              const SizedBox(width: 12),
-              Expanded(child: _bar(color)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _indexedCard(Color color) {
     return _sectionCardSkeleton(
       title: Row(
@@ -2281,8 +2449,6 @@ class _SettingsLoadingViewState extends State<_SettingsLoadingView>
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _databaseCard(color),
-              const SizedBox(height: 16),
               _indexedCard(color),
             ],
           ),

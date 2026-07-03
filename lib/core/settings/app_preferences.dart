@@ -20,7 +20,7 @@ enum ConnectivityMode {
 extension ConnectivityModeUi on ConnectivityMode {
   String get label => switch (this) {
         ConnectivityMode.connected => 'Connecté',
-        ConnectivityMode.liveOffline => 'Live hors ligne',
+        ConnectivityMode.liveOffline => 'Live',
         ConnectivityMode.offline => 'Hors ligne',
       };
 
@@ -28,9 +28,9 @@ extension ConnectivityModeUi on ConnectivityMode {
         ConnectivityMode.connected =>
           'Synchronisation Drive et téléchargements actifs.',
         ConnectivityMode.liveOffline =>
-          'Masque les pads sans fichier local, lecture depuis le cache uniquement.',
+          'Mode scène : seuls les pads en cache local sont affichés et jouables.',
         ConnectivityMode.offline =>
-          'Pas de synchro ni téléchargement automatique, tous les pads restent visibles.',
+          'Aucune synchro ni téléchargement, mais tous les pads restent visibles.',
       };
 
   String get storageKey => switch (this) {
@@ -55,8 +55,8 @@ class AppPreferences extends ChangeNotifier {
       'auto_download_drive_by_default';
   static const _keyConnectivityMode = 'connectivity_mode';
 
-  bool _autoDownloadPadSounds = false;
-  bool _autoDownloadDriveByDefault = false;
+  bool _autoDownloadPadSounds = true;
+  bool _autoDownloadDriveByDefault = true;
   ConnectivityMode _connectivityMode = ConnectivityMode.liveOffline;
   bool _loaded = false;
 
@@ -90,9 +90,11 @@ class AppPreferences extends ChangeNotifier {
       try {
         final data =
             jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-        _autoDownloadPadSounds = data[_keyAutoDownloadPadSounds] == true;
+        // Clé absente → défaut activé (true), valeur persistée respectée sinon.
+        _autoDownloadPadSounds =
+            (data[_keyAutoDownloadPadSounds] as bool?) ?? true;
         _autoDownloadDriveByDefault =
-            data[_keyAutoDownloadDriveByDefault] == true;
+            (data[_keyAutoDownloadDriveByDefault] as bool?) ?? true;
         _connectivityMode = ConnectivityModeUi.fromStorageKey(
           data[_keyConnectivityMode] as String?,
         );
