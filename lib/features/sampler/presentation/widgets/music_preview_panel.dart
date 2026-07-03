@@ -92,10 +92,10 @@ class MusicPreviewPanel extends StatefulWidget {
 
 class _MusicPreviewPanelState extends State<MusicPreviewPanel>
     with TickerProviderStateMixin {
-  /// Durée affichée dans le sélecteur — `null` = aucune option active (0,1 s).
-  Duration? _selectedTransitionDuration = const Duration(seconds: 3);
+  /// Durée du fondu sélectionnée — `null` = coupe sèche (état de repos par
+  /// défaut : aucun fondu, on opte pour une durée à chaque fois qu'on en veut).
+  Duration? _selectedTransitionDuration;
 
-  static const _defaultSelectedTransition = Duration(seconds: 3);
   static const _instantTransition = Duration(milliseconds: 100);
   static const _transitionBlinkDuration = Duration(milliseconds: 320);
 
@@ -189,15 +189,22 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
 
   void _toggleTransitionOption(Duration option) {
     setState(() {
+      // La cellule ciseaux (sentinelle `Duration.zero`) sélectionne la coupe
+      // sèche, matérialisée par l'état `null` (aucun fondu).
+      if (option == _CompactTransitionPicker.cutSentinel) {
+        _selectedTransitionDuration = null;
+        return;
+      }
       _selectedTransitionDuration =
           _selectedTransitionDuration == option ? null : option;
     });
   }
 
+  /// Après une transition, retour à la coupe sèche (état de repos par défaut).
   void _resetTransitionDurationAfter(Duration used) {
     Future<void>.delayed(used, () {
       if (!mounted) return;
-      setState(() => _selectedTransitionDuration = _defaultSelectedTransition);
+      setState(() => _selectedTransitionDuration = null);
     });
   }
 
@@ -955,27 +962,39 @@ class _OnAirControls extends StatelessWidget {
   Widget build(BuildContext context) {
     final canControl = hasCurrent || hasQueue;
 
-    final playbackControls = _GroupedPlaybackControls(
-      isPlaying: isPlaying,
-      canControl: canControl,
-      hasQueue: hasQueue,
-      selectedTransitionDuration: selectedTransitionDuration,
-      onTransitionOptionTapped: onTransitionOptionTapped,
-      activeTransitionKind: activeTransitionKind,
-      transitionProgress: transitionProgress,
-      transitionBlinkOpacity: transitionBlinkOpacity,
-      onChooseMusic: onChooseMusic,
-      onTogglePlayPause: onTogglePlayPause,
-      onSkipNext: onSkipNext,
-    );
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
-        final fitsOnOneLine = maxWidth >=
-            _GroupedPlaybackControls.minWidth +
-                _inlineGap +
-                _volumeGroupMinWidth;
+        final comfortable = MediaQuery.sizeOf(context).width >=
+            _GroupedPlaybackControls.comfortableWidthThreshold;
+        // Coupe sèche explicite dès que le groupe complet (4 cellules) tient
+        // dans la largeur disponible — sinon repli sur les trois durées.
+        final showCut = maxWidth >=
+            _GroupedPlaybackControls.resolvedMinWidth(
+              comfortable,
+              withCut: true,
+            );
+        final groupMinWidth = _GroupedPlaybackControls.resolvedMinWidth(
+          comfortable,
+          withCut: showCut,
+        );
+        final fitsOnOneLine =
+            maxWidth >= groupMinWidth + _inlineGap + _volumeGroupMinWidth;
+
+        final playbackControls = _GroupedPlaybackControls(
+          isPlaying: isPlaying,
+          canControl: canControl,
+          hasQueue: hasQueue,
+          selectedTransitionDuration: selectedTransitionDuration,
+          onTransitionOptionTapped: onTransitionOptionTapped,
+          showCut: showCut,
+          activeTransitionKind: activeTransitionKind,
+          transitionProgress: transitionProgress,
+          transitionBlinkOpacity: transitionBlinkOpacity,
+          onChooseMusic: onChooseMusic,
+          onTogglePlayPause: onTogglePlayPause,
+          onSkipNext: onSkipNext,
+        );
 
         final Widget controls;
         if (fitsOnOneLine) {
@@ -1014,13 +1033,44 @@ class _GroupedPlaybackControls extends StatelessWidget {
   static const _actionSize = 48.0;
   static const _actionButtonSize = 40.0;
   static const _progressBadgeSize = 11.0;
-  static const _transitionPickerWidth = 3 * 18.0 + 2.0;
-  static const minWidth = 6.0 +
+
+  /// Au-delà de cette largeur d'écran on n'est plus sur un téléphone : on
+  /// agrandit les cibles du sélecteur de durée pour le confort de régie
+  /// (tablette / desktop). Sous ce seuil on garde le mode compact pour que
+  /// tout tienne sur petit écran.
+  static const comfortableWidthThreshold = 600.0;
+
+  static const _pickerCellCompact = 18.0;
+  static const _pickerCellComfortable = 36.0;
+  static const _pickerGapCompact = 1.0;
+  static const _pickerGapComfortable = 4.0;
+  static const _pickerFontCompact = 9.0;
+  static const _pickerFontComfortable = 13.0;
+
+  static double _pickerCellSize(bool comfortable) =>
+      comfortable ? _pickerCellComfortable : _pickerCellCompact;
+
+  static double _pickerGap(bool comfortable) =>
+      comfortable ? _pickerGapComfortable : _pickerGapCompact;
+
+  static double _pickerFontSize(bool comfortable) =>
+      comfortable ? _pickerFontComfortable : _pickerFontCompact;
+
+  static double _transitionPickerWidth(bool comfortable, bool withCut) {
+    final cells = withCut ? 4 : 3;
+    return cells * _pickerCellSize(comfortable) +
+        (cells - 1) * _pickerGap(comfortable);
+  }
+
+  /// Largeur minimale du groupe play / suivant / durée selon le mode
+  /// d'affichage et la présence de la cellule de coupe sèche.
+  static double resolvedMinWidth(bool comfortable, {bool withCut = false}) =>
+      6.0 +
       2 * _actionButtonSize +
       6.0 +
       1.0 +
       4.0 +
-      _transitionPickerWidth +
+      _transitionPickerWidth(comfortable, withCut) +
       8.0;
 
   final bool isPlaying;
@@ -1028,6 +1078,7 @@ class _GroupedPlaybackControls extends StatelessWidget {
   final bool hasQueue;
   final Duration? selectedTransitionDuration;
   final ValueChanged<Duration> onTransitionOptionTapped;
+  final bool showCut;
   final _MusicTransitionKind? activeTransitionKind;
   final Animation<double>? transitionProgress;
   final Animation<double>? transitionBlinkOpacity;
@@ -1041,6 +1092,7 @@ class _GroupedPlaybackControls extends StatelessWidget {
     required this.hasQueue,
     required this.selectedTransitionDuration,
     required this.onTransitionOptionTapped,
+    required this.showCut,
     this.activeTransitionKind,
     this.transitionProgress,
     this.transitionBlinkOpacity,
@@ -1123,6 +1175,8 @@ class _GroupedPlaybackControls extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final borderColor = scheme.outlineVariant.withValues(alpha: 0.55);
+    final comfortable =
+        MediaQuery.sizeOf(context).width >= comfortableWidthThreshold;
     final playFeedback =
         activeTransitionKind == _MusicTransitionKind.fadeOut;
     final skipFeedback =
@@ -1171,6 +1225,10 @@ class _GroupedPlaybackControls extends StatelessWidget {
               child: _CompactTransitionPicker(
                 selected: selectedTransitionDuration,
                 onOptionTapped: onTransitionOptionTapped,
+                showCut: showCut,
+                cellSize: _pickerCellSize(comfortable),
+                cellGap: _pickerGap(comfortable),
+                fontSize: _pickerFontSize(comfortable),
               ),
             ),
           ],
@@ -1180,7 +1238,8 @@ class _GroupedPlaybackControls extends StatelessWidget {
   }
 }
 
-/// Slider volume avec bulle au-dessus du curseur (compatible tactile).
+/// Slider volume — affiche le pourcentage via le label natif du curseur
+/// pendant le drag (position toujours exacte, gérée par Flutter).
 class _CompactVolumeSlider extends StatefulWidget {
   final double value;
   final ValueChanged<double>? onChanged;
@@ -1195,97 +1254,40 @@ class _CompactVolumeSlider extends StatefulWidget {
 }
 
 class _CompactVolumeSliderState extends State<_CompactVolumeSlider> {
-  bool _isActive = false;
   double? _localValue;
 
   double get _displayValue => _localValue ?? widget.value;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final fraction = _displayValue.clamp(0.0, 1.0);
 
     return SizedBox(
       height: 42,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.center,
-        children: [
-          if (_isActive)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 26,
-              child: Align(
-                alignment: Alignment((fraction * 2) - 1, 0),
-                child: _VolumeDragBubble(
-                  label: '${(fraction * 100).round()}%',
-                  scheme: scheme,
-                ),
-              ),
-            ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 3,
-              thumbShape: const RoundSliderThumbShape(
-                enabledThumbRadius: 8,
-                disabledThumbRadius: 8,
-              ),
-              overlayShape: SliderComponentShape.noOverlay,
-              showValueIndicator: ShowValueIndicator.never,
-            ),
-            child: Slider(
-              value: widget.value,
-              min: 0.0,
-              max: 1.0,
-              onChangeStart: widget.onChanged == null
-                  ? null
-                  : (_) => setState(() => _isActive = true),
-              onChanged: widget.onChanged == null
-                  ? null
-                  : (value) {
-                      setState(() => _localValue = value);
-                      widget.onChanged!(value);
-                    },
-              onChangeEnd: widget.onChanged == null
-                  ? null
-                  : (_) => setState(() {
-                      _isActive = false;
-                      _localValue = null;
-                    }),
-            ),
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          trackHeight: 3,
+          thumbShape: const RoundSliderThumbShape(
+            enabledThumbRadius: 8,
+            disabledThumbRadius: 8,
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _VolumeDragBubble extends StatelessWidget {
-  final String label;
-  final ColorScheme scheme;
-
-  const _VolumeDragBubble({
-    required this.label,
-    required this.scheme,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      elevation: 2,
-      color: scheme.inverseSurface,
-      borderRadius: BorderRadius.circular(4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: scheme.onInverseSurface,
-            fontWeight: FontWeight.w700,
-            fontSize: 10,
-            height: 1.1,
-          ),
+          overlayShape: SliderComponentShape.noOverlay,
+          showValueIndicator: ShowValueIndicator.onDrag,
+        ),
+        child: Slider(
+          value: widget.value,
+          min: 0.0,
+          max: 1.0,
+          label: '${(fraction * 100).round()}%',
+          onChanged: widget.onChanged == null
+              ? null
+              : (value) {
+                  setState(() => _localValue = value);
+                  widget.onChanged!(value);
+                },
+          onChangeEnd: widget.onChanged == null
+              ? null
+              : (_) => setState(() => _localValue = null),
         ),
       ),
     );
@@ -1297,22 +1299,36 @@ class _CompactTransitionPicker extends StatelessWidget {
   final Duration? selected;
   final ValueChanged<Duration> onOptionTapped;
 
+  /// Affiche une cellule de coupe sèche explicite en tête du sélecteur.
+  final bool showCut;
+  final double cellSize;
+  final double cellGap;
+  final double fontSize;
+
   static const _options = <Duration>[
     Duration(seconds: 1),
     Duration(seconds: 3),
     Duration(seconds: 5),
   ];
 
+  /// Sentinelle : `Duration.zero` signale la coupe sèche (état `null` côté
+  /// panneau — aucun fondu). Jamais une durée réelle du sélecteur.
+  static const cutSentinel = Duration.zero;
+
   const _CompactTransitionPicker({
     required this.selected,
     required this.onOptionTapped,
+    required this.showCut,
+    required this.cellSize,
+    required this.cellGap,
+    required this.fontSize,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
-      fontSize: 9,
+      fontSize: fontSize,
       fontWeight: FontWeight.w600,
       height: 1,
     );
@@ -1320,9 +1336,21 @@ class _CompactTransitionPicker extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (var i = 0; i < _options.length; i++) ...[
-          if (i > 0) const SizedBox(width: 1),
+        if (showCut) ...[
           _TransitionCell(
+            size: cellSize,
+            icon: Icons.content_cut_rounded,
+            isSelected: selected == null,
+            onTap: () => onOptionTapped(cutSentinel),
+            labelStyle: labelStyle,
+            scheme: scheme,
+          ),
+          SizedBox(width: cellGap),
+        ],
+        for (var i = 0; i < _options.length; i++) ...[
+          if (i > 0) SizedBox(width: cellGap),
+          _TransitionCell(
+            size: cellSize,
             label: '${_options[i].inSeconds}',
             isSelected: selected == _options[i],
             onTap: () => onOptionTapped(_options[i]),
@@ -1336,32 +1364,50 @@ class _CompactTransitionPicker extends StatelessWidget {
 }
 
 class _TransitionCell extends StatelessWidget {
-  static const _size = 18.0;
+  final double size;
 
-  final String label;
+  /// Libellé numérique de la durée, ou `null` si la cellule affiche [icon].
+  final String? label;
+
+  /// Icône (coupe sèche) affichée à la place du libellé.
+  final IconData? icon;
   final bool isSelected;
   final VoidCallback onTap;
   final TextStyle? labelStyle;
   final ColorScheme scheme;
 
   const _TransitionCell({
-    required this.label,
+    required this.size,
+    this.label,
+    this.icon,
     required this.isSelected,
     required this.onTap,
     required this.labelStyle,
     required this.scheme,
-  });
+  }) : assert(label != null || icon != null, 'label ou icon requis');
 
   @override
   Widget build(BuildContext context) {
+    final foreground =
+        isSelected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
+    final child = icon != null
+        ? Icon(icon, size: size * 0.55, color: foreground)
+        : Text(
+            label!,
+            style: labelStyle?.copyWith(
+              color: foreground,
+              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            ),
+          );
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
         child: Container(
-          width: _size,
-          height: _size,
+          width: size,
+          height: size,
           alignment: Alignment.center,
           decoration: isSelected
               ? BoxDecoration(
@@ -1369,15 +1415,7 @@ class _TransitionCell extends StatelessWidget {
                   color: scheme.primaryContainer.withValues(alpha: 0.65),
                 )
               : null,
-          child: Text(
-            label,
-            style: labelStyle?.copyWith(
-              color: isSelected
-                  ? scheme.onPrimaryContainer
-                  : scheme.onSurfaceVariant,
-              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-            ),
-          ),
+          child: child,
         ),
       ),
     );
