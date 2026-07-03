@@ -42,42 +42,54 @@ class GoogleDriveClient implements DriveClient {
   /// Échappe les apostrophes pour les requêtes `q` de l'API Drive.
   String _escape(String value) => value.replaceAll("'", r"\'");
 
-  /// Exécute [fn] et convertit les erreurs d'auth en [DriveAuthException].
+  /// Vrai si [error] traduit un token OAuth périmé/révoqué (à convertir en
+  /// [DriveAuthException] pour déclencher le renouvellement silencieux).
+  ///
+  /// Deux formes possibles selon la couche qui rejette : `AccessDeniedException`
+  /// (côté googleapis_auth, message « Access was denied … Bearer realm=… ») ou
+  /// `DetailedApiRequestError` 401 (côté API Drive).
+  static bool _isAuthError(Object error) {
+    if (error is AccessDeniedException) return true;
+    if (error is drive.DetailedApiRequestError) return error.status == 401;
+    return false;
+  }
+
+  /// Exécute [fn] et convertit toute erreur d'auth en [DriveAuthException].
   Future<T> _guard<T>(Future<T> Function() fn) async {
     try {
       return await fn();
-    } on AccessDeniedException {
-      throw const DriveAuthException();
-    } on drive.DetailedApiRequestError catch (e) {
-      if (e.status == 401) throw const DriveAuthException();
+    } catch (e) {
+      if (_isAuthError(e)) throw const DriveAuthException();
       rethrow;
     }
   }
 
   @override
-  Future<List<DriveSharedDrive>> listSharedDrives() async {
-    final results = <DriveSharedDrive>[];
-    String? pageToken;
-    do {
-      final driveList = await _api.drives.list(
-        pageSize: 100,
-        pageToken: pageToken,
-      );
-      for (final sharedDrive in driveList.drives ?? const <drive.Drive>[]) {
-        final id = sharedDrive.id;
-        final name = sharedDrive.name;
-        if (id == null || name == null) {
-          continue;
+  Future<List<DriveSharedDrive>> listSharedDrives() {
+    return _guard(() async {
+      final results = <DriveSharedDrive>[];
+      String? pageToken;
+      do {
+        final driveList = await _api.drives.list(
+          pageSize: 100,
+          pageToken: pageToken,
+        );
+        for (final sharedDrive in driveList.drives ?? const <drive.Drive>[]) {
+          final id = sharedDrive.id;
+          final name = sharedDrive.name;
+          if (id == null || name == null) {
+            continue;
+          }
+          results.add(DriveSharedDrive(id: id, name: name));
         }
-        results.add(DriveSharedDrive(id: id, name: name));
-      }
-      pageToken = driveList.nextPageToken;
-    } while (pageToken != null);
+        pageToken = driveList.nextPageToken;
+      } while (pageToken != null);
 
-    results.sort(
-      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-    );
-    return results;
+      results.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
+      return results;
+    });
   }
 
   @override
@@ -157,13 +169,15 @@ class GoogleDriveClient implements DriveClient {
   Future<DriveFile> createFolder({
     required String name,
     String? parentId,
-  }) async {
-    final metadata = drive.File()
-      ..name = name
-      ..mimeType = driveFolderMimeType
-      ..parents = parentId != null ? [parentId] : null;
-    final created = await _api.files.create(metadata, $fields: _fileFields);
-    return _toDriveFile(created);
+  }) {
+    return _guard(() async {
+      final metadata = drive.File()
+        ..name = name
+        ..mimeType = driveFolderMimeType
+        ..parents = parentId != null ? [parentId] : null;
+      final created = await _api.files.create(metadata, $fields: _fileFields);
+      return _toDriveFile(created);
+    });
   }
 
   @override
@@ -228,9 +242,11 @@ class GoogleDriveClient implements DriveClient {
       ) as drive.File;
       return _toDriveFile(f);
     } on drive.DetailedApiRequestError catch (e) {
-      if (e.status == 401) throw const DriveAuthException();
+      if (_isAuthError(e)) throw const DriveAuthException();
       if (e.status == 404) return null;
       rethrow;
+    } on AccessDeniedException {
+      throw const DriveAuthException();
     }
   }
 
@@ -280,8 +296,8 @@ class GoogleDriveClient implements DriveClient {
   }
 
   @override
-  Future<void> deleteFile(String fileId) async {
-    await _api.files.delete(fileId);
+  Future<void> deleteFile(String fileId) {
+    return _guard(() => _api.files.delete(fileId));
   }
 
   /// E-mail du propriétaire du dossier (y compris dossier partagé).
@@ -298,9 +314,11 @@ class GoogleDriveClient implements DriveClient {
       }
       return owners.first.emailAddress;
     } on drive.DetailedApiRequestError catch (e) {
-      if (e.status == 401) throw const DriveAuthException();
+      if (_isAuthError(e)) throw const DriveAuthException();
       if (e.status == 404 || e.status == 403) return null;
       rethrow;
+    } on AccessDeniedException {
+      throw const DriveAuthException();
     }
   }
 
@@ -323,9 +341,11 @@ class GoogleDriveClient implements DriveClient {
       }
       return owners.first.emailAddress;
     } on drive.DetailedApiRequestError catch (e) {
-      if (e.status == 401) throw const DriveAuthException();
+      if (_isAuthError(e)) throw const DriveAuthException();
       if (e.status == 404 || e.status == 403) return null;
       rethrow;
+    } on AccessDeniedException {
+      throw const DriveAuthException();
     }
   }
 
@@ -481,6 +501,11 @@ class _MobileGoogleDriveAuthenticator implements DriveAuthenticator {
     if (account == null) {
       return null;
     }
+    // google_sign_in met en cache l'access token OAuth (~1 h) et ne le
+    // renouvelle pas de lui-même : sans purge, authenticatedClient() ré-emballe
+    // le token périmé et le premier appel Drive échoue en 401 (« Access was
+    // denied »). clearAuthCache() force l'émission silencieuse d'un token frais.
+    await account.clearAuthCache();
     return _clientForCurrentUser();
   }
 

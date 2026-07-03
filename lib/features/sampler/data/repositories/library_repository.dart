@@ -182,6 +182,53 @@ class LibraryRepository extends ChangeNotifier {
     return null;
   }
 
+  /// Exécute [action] avec le client Drive actif ; sur 401 (token périmé),
+  /// renouvelle silencieusement la session une fois et réessaie.
+  ///
+  /// Couvre le cas d'une session ouverte depuis > 1 h : le client en cache
+  /// porte un token expiré, [connectSilently] (avec `clearAuthCache`) en émet
+  /// un frais. Un second 401 malgré le renouvellement = session réellement
+  /// invalide → exige un OAuth interactif.
+  Future<T> _withDriveClient<T>(
+    Future<T> Function(DriveClient client) action,
+  ) async {
+    final client = _activeClient;
+    if (client == null) {
+      throw StateError('Bibliothèque non connectée à Drive');
+    }
+    try {
+      return await action(client);
+    } on DriveAuthException {
+      final refreshed = await _remintDriveClientSilently();
+      if (refreshed != null) {
+        try {
+          return await action(refreshed);
+        } on DriveAuthException {
+          // Deuxième 401 : le token frais est lui aussi rejeté.
+        }
+      }
+      _requiresInteractiveReconnect = true;
+      _notifyDriveSessionChanged();
+      rethrow;
+    }
+  }
+
+  /// Renouvelle silencieusement le client Drive (nouveau token). Null si aucune
+  /// session ne peut être rétablie sans consentement interactif.
+  Future<DriveClient?> _remintDriveClientSilently() async {
+    if (_requiresInteractiveReconnect) {
+      return null;
+    }
+    final fresh = await _authenticator.connectSilently();
+    if (fresh == null) {
+      return null;
+    }
+    _activeClient?.dispose();
+    _activeClient = fresh;
+    _notifyDriveSessionChanged();
+    return fresh;
+  }
+
   Future<List<Library>> getLibraries() => _dataSource.getAllLibraries();
 
   /// Bibliothèque Drive unique liée, si une seule est configurée.
@@ -247,45 +294,36 @@ class LibraryRepository extends ChangeNotifier {
   }
 
   /// Drives d'équipe accessibles par l'utilisateur connecté.
-  Future<List<DriveSharedDrive>> listDriveSharedDrives() async {
-    final client = _activeClient;
-    if (client == null) {
-      throw StateError('Bibliothèque non connectée à Drive');
-    }
-    return client.listSharedDrives();
+  Future<List<DriveSharedDrive>> listDriveSharedDrives() {
+    return _withDriveClient((client) => client.listSharedDrives());
   }
 
   /// Dossiers du filtre « Partagés avec moi ».
-  Future<List<DriveFile>> listDriveSharedWithMeFolders() async {
-    final client = _activeClient;
-    if (client == null) {
-      throw StateError('Bibliothèque non connectée à Drive');
-    }
-    final folders = await client.listSharedWithMeFolders();
-    return folders
-      ..sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-      );
+  Future<List<DriveFile>> listDriveSharedWithMeFolders() {
+    return _withDriveClient((client) async {
+      final folders = await client.listSharedWithMeFolders();
+      return folders
+        ..sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+    });
   }
 
   /// Liste les sous-dossiers d'un dossier Drive (triés par nom).
   Future<List<DriveFile>> listDriveChildFolders(
     String parentId, {
     String? sharedDriveId,
-  }) async {
-    final client = _activeClient;
-    if (client == null) {
-      throw StateError('Bibliothèque non connectée à Drive');
-    }
-
-    final children = await client.listFolder(
-      parentId,
-      sharedDriveId: sharedDriveId,
-    );
-    return children.where((file) => file.isFolder).toList()
-      ..sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+  }) {
+    return _withDriveClient((client) async {
+      final children = await client.listFolder(
+        parentId,
+        sharedDriveId: sharedDriveId,
       );
+      return children.where((file) => file.isFolder).toList()
+        ..sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+    });
   }
 
   /// Lie un dossier Drive existant (sans le créer) et enregistre la bibliothèque.
@@ -297,14 +335,8 @@ class LibraryRepository extends ChangeNotifier {
     String? sharedDriveId,
     bool autoDownload = false,
   }) async {
-    final client = _activeClient;
-    if (client == null) {
-      throw StateError('Bibliothèque non connectée à Drive');
-    }
-
-    final folder = await client.getFile(
-      driveFolderId,
-      sharedDriveId: sharedDriveId,
+    final folder = await _withDriveClient(
+      (client) => client.getFile(driveFolderId, sharedDriveId: sharedDriveId),
     );
     if (folder == null || !folder.isFolder) {
       throw ArgumentError('Dossier Drive introuvable');
@@ -485,14 +517,29 @@ class LibraryRepository extends ChangeNotifier {
   Future<PushOutcome> pushLibrary(
     Library library, {
     int? overrideKnownRevision,
-  }) async {
-    final client = _activeClient;
+  }) {
     final rootFolderId = library.driveFolderId;
-    if (client == null || rootFolderId == null) {
+    if (rootFolderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
+    return _withDriveClient(
+      (client) => _pushLibrary(
+        client: client,
+        library: library,
+        rootFolderId: rootFolderId,
+        overrideKnownRevision: overrideKnownRevision,
+      ),
+    );
+  }
+
+  Future<PushOutcome> _pushLibrary({
+    required DriveClient client,
+    required Library library,
+    required String rootFolderId,
+    int? overrideKnownRevision,
+  }) async {
     final force = overrideKnownRevision != null;
-    try {
+    {
       // 1. Chaque nœud dossier pousse ses sons dans SON `.stagecue` co-localisé.
       final folders = await _dataSource.getFoldersForLibrary(library.id);
       for (final folder in folders) {
@@ -530,9 +577,6 @@ class LibraryRepository extends ChangeNotifier {
         );
       }
       return rootOutcome;
-    } on DriveAuthException {
-      await invalidateAuthSession();
-      rethrow;
     }
   }
 
@@ -541,13 +585,26 @@ class LibraryRepository extends ChangeNotifier {
   /// Ordre important : on tire d'abord les nœuds dossier (les SONS), puis le
   /// snapshot racine (les BOARDS), qui recâble les pads sur les sons par
   /// driveFileId — les sons doivent donc déjà exister localement.
-  Future<PullOutcome> pullLibrary(Library library) async {
-    final client = _activeClient;
+  Future<PullOutcome> pullLibrary(Library library) {
     final rootFolderId = library.driveFolderId;
-    if (client == null || rootFolderId == null) {
+    if (rootFolderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
-    try {
+    return _withDriveClient(
+      (client) => _pullLibrary(
+        client: client,
+        library: library,
+        rootFolderId: rootFolderId,
+      ),
+    );
+  }
+
+  Future<PullOutcome> _pullLibrary({
+    required DriveClient client,
+    required Library library,
+    required String rootFolderId,
+  }) async {
+    {
       var staged = false;
 
       // 1. Nœuds dossier (sons). Les nœuds locaux proviennent de l'indexation ;
@@ -590,30 +647,23 @@ class LibraryRepository extends ChangeNotifier {
       return staged
           ? PullStaged(library.lastSyncedRevision)
           : const PullUpToDate();
-    } on DriveAuthException {
-      await invalidateAuthSession();
-      rethrow;
     }
   }
 
   Future<Library?> getLibraryById(int id) => _dataSource.getLibraryById(id);
 
   /// Indique si le dossier Drive possède déjà un snapshot `.stagecue/library.db`.
-  Future<bool> hasRemoteSnapshot(Library library) async {
-    final client = _activeClient;
+  Future<bool> hasRemoteSnapshot(Library library) {
     final folderId = library.driveFolderId;
-    if (client == null || folderId == null) {
+    if (folderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
-    try {
-      return _syncService.hasRemoteSnapshot(
+    return _withDriveClient(
+      (client) => _syncService.hasRemoteSnapshot(
         client: client,
         libraryFolderId: folderId,
-      );
-    } on DriveAuthException {
-      await invalidateAuthSession();
-      rethrow;
-    }
+      ),
+    );
   }
 
   /// Après liaison d'un dossier Drive : pull si BDD distante, indexation des
@@ -942,6 +992,23 @@ class LibraryRepository extends ChangeNotifier {
     await _dataSource.setAutoDownload(library.id, value: value);
   }
 
+  /// Compte les sons de la bibliothèque déjà disponibles hors ligne (fichier
+  /// présent dans le cache local) sur le total. Sert d'indicateur d'état dans
+  /// les paramètres — même critère de présence que [downloadAllLibraryAudio].
+  Future<({int available, int total})> countDownloadedSounds(
+    Library library,
+  ) async {
+    final sounds = await _soundDataSource.getSoundsForLibrary(library.id);
+    var available = 0;
+    for (final sound in sounds) {
+      final relativePath = sound.relativePath;
+      if (relativePath == null) continue;
+      final localPath = _cacheManager.localPathFor(library, relativePath);
+      if (await File(localPath).exists()) available++;
+    }
+    return (available: available, total: sounds.length);
+  }
+
   /// Télécharge tous les fichiers audio non encore présents dans le cache local.
   ///
   /// Appelle [onProgress] après chaque fichier. [isCancelled] permet
@@ -1027,16 +1094,34 @@ class LibraryRepository extends ChangeNotifier {
   }
 
   /// Indexe récursivement les fichiers audio d'un dossier Drive (bibliothèque).
+  ///
+  /// Passe par [_withDriveClient] : un token périmé en cours d'indexation est
+  /// renouvelé silencieusement et l'opération réessayée (idempotente, upsert
+  /// par driveFileId), sans forcer de reconnexion interactive.
   Future<int> indexDriveFolder({
     required Library library,
     void Function(IndexingProgress)? onProgress,
-  }) async {
-    final client = _activeClient;
+  }) {
     final folderId = library.driveFolderId;
-    if (client == null || folderId == null) {
+    if (folderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
+    return _withDriveClient(
+      (client) => _indexDriveFolder(
+        client: client,
+        library: library,
+        folderId: folderId,
+        onProgress: onProgress,
+      ),
+    );
+  }
 
+  Future<int> _indexDriveFolder({
+    required DriveClient client,
+    required Library library,
+    required String folderId,
+    void Function(IndexingProgress)? onProgress,
+  }) async {
     try {
       onProgress?.call(
         IndexingProgress(
@@ -1148,19 +1233,21 @@ class LibraryRepository extends ChangeNotifier {
       );
 
       return indexedCount;
-    } on DriveAuthException {
-      await invalidateAuthSession();
-      rethrow;
     } catch (e) {
-      onProgress?.call(
-        IndexingProgress(
-          path: library.name,
-          current: 0,
-          total: 0,
-          isComplete: true,
-          error: e.toString(),
-        ),
-      );
+      // Une erreur d'auth est gérée par [_withDriveClient] (renouvellement +
+      // réessai) : ne pas afficher d'état d'erreur qui clignoterait avant le
+      // réessai réussi.
+      if (e is! DriveAuthException) {
+        onProgress?.call(
+          IndexingProgress(
+            path: library.name,
+            current: 0,
+            total: 0,
+            isComplete: true,
+            error: e.toString(),
+          ),
+        );
+      }
       rethrow;
     }
   }

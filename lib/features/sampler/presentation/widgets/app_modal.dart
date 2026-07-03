@@ -191,11 +191,16 @@ class AppChoiceOption extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.vertical = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+
+  /// Disposition « carrée » : icône au-dessus, label centré en dessous.
+  /// Pensée pour deux options côte à côte (chacune dans un [Expanded]).
+  final bool vertical;
 
   @override
   Widget build(BuildContext context) {
@@ -204,24 +209,48 @@ class AppChoiceOption extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppModalStyle.padding,
-            vertical: 14,
+        child: vertical
+            ? _buildVertical(context, scheme)
+            : _buildHorizontal(context, scheme),
+      ),
+    );
+  }
+
+  Widget _buildHorizontal(BuildContext context, ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppModalStyle.padding,
+        vertical: 14,
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: scheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
           ),
-          child: Row(
-            children: [
-              Icon(icon, color: scheme.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVertical(BuildContext context, ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 22),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: scheme.primary, size: 32),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
           ),
-        ),
+        ],
       ),
     );
   }
