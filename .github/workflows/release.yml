@@ -38,6 +38,9 @@ jobs:
           cache: true
 
       - run: flutter pub get
+      - name: Stub OAuth secrets
+        run: cp lib/core/sync/google_oauth_secrets.example.dart lib/core/sync/google_oauth_secrets.dart
+        shell: bash
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
 
@@ -71,6 +74,9 @@ jobs:
           cache: true
 
       - run: flutter pub get
+      - name: Stub OAuth secrets
+        run: cp lib/core/sync/google_oauth_secrets.example.dart lib/core/sync/google_oauth_secrets.dart
+        shell: bash
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
 
@@ -108,10 +114,19 @@ jobs:
 
       - run: flutter config --enable-macos-desktop
       - run: flutter pub get
+      - name: Stub OAuth secrets
+        run: cp lib/core/sync/google_oauth_secrets.example.dart lib/core/sync/google_oauth_secrets.dart
+        shell: bash
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
 
-      - run: flutter build macos --release
+      # Identifiants OAuth Drive injectés depuis les GitHub Secrets (le code lit
+      # --dart-define en priorité sur google_oauth_secrets.dart, resté vide ici).
+      - name: Build macOS (release)
+        run: >
+          flutter build macos --release
+          --dart-define=GOOGLE_OAUTH_CLIENT_ID=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          --dart-define=GOOGLE_OAUTH_CLIENT_SECRET=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
 
       - name: Zip .app
         run: |
@@ -150,10 +165,17 @@ jobs:
 
       - run: flutter config --enable-linux-desktop
       - run: flutter pub get
+      - name: Stub OAuth secrets
+        run: cp lib/core/sync/google_oauth_secrets.example.dart lib/core/sync/google_oauth_secrets.dart
+        shell: bash
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
 
-      - run: flutter build linux --release
+      - name: Build Linux (release)
+        run: >
+          flutter build linux --release
+          --dart-define=GOOGLE_OAUTH_CLIENT_ID=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          --dart-define=GOOGLE_OAUTH_CLIENT_SECRET=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
 
       - name: Archive bundle
         run: tar -czf stage_cue-linux-x64.tar.gz -C build/linux/x64/release/bundle .
@@ -181,10 +203,17 @@ jobs:
 
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get
+      - name: Stub OAuth secrets
+        run: cp lib/core/sync/google_oauth_secrets.example.dart lib/core/sync/google_oauth_secrets.dart
+        shell: bash
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
 
-      - run: flutter build windows --release
+      - name: Build Windows (release)
+        run: >
+          flutter build windows --release
+          --dart-define=GOOGLE_OAUTH_CLIENT_ID=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          --dart-define=GOOGLE_OAUTH_CLIENT_SECRET=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
 
       - name: Zip Release folder
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath stage_cue-windows-x64.zip
