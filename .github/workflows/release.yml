@@ -209,7 +209,12 @@ jobs:
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
 
+      # MSVC 14.51 (VS 18) du runner transforme en erreur l'usage de
+      # <experimental/coroutine> par permission_handler_windows. La macro CL
+      # (lue automatiquement par cl.exe) rétablit le comportement « warning ».
       - name: Build Windows (release)
+        env:
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
         run: >
           flutter build windows --release
           --dart-define=GOOGLE_OAUTH_CLIENT_ID=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
