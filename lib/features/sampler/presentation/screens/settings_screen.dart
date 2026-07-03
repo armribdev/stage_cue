@@ -1860,6 +1860,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const Divider(height: 24),
                 _buildConnectivityModeSelector(),
+                const Divider(height: 24),
+                // Pull + ré-indexation de toutes les bibliothèques Drive
+                // connectées, en un tap. Désactivé pendant une synchro en cours
+                // (_isSyncBusy) ou si la session Drive a expiré (le pull
+                // échouerait). La méthode gère elle-même le cas « aucun dossier ».
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: (_isSyncBusy || authExpired)
+                        ? null
+                        : () => unawaited(_refreshAllFromDrive()),
+                    icon: _isSyncBusy
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.sync),
+                    label: Text(
+                      _isSyncBusy
+                          ? 'Actualisation…'
+                          : 'Tout actualiser depuis Drive',
+                    ),
+                  ),
+                ),
               ],
             ),
           );
