@@ -26,6 +26,12 @@ jobs:
 
       - run: flutter pub get
 
+      # google_oauth_secrets.dart est gitignoré (secrets locaux, absents du CI).
+      # Stub vide pour que l'analyse/compilation passe.
+      - name: Stub OAuth secrets
+        run: cp lib/core/sync/google_oauth_secrets.example.dart lib/core/sync/google_oauth_secrets.dart
+        shell: bash
+
       # Codegen Drift requis avant analyse/tests (les *.g.dart ne sont pas versionnés).
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
