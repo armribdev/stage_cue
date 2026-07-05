@@ -1091,34 +1091,8 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<void> updateSoundType(int soundId, SoundType type) async {
-    for (final padItem in _state.pads) {
-      final sounds = padItem.pad.sounds;
-      final idx = sounds.indexWhere((s) => s.id == soundId);
-      if (idx >= 0) {
-        final s = sounds[idx];
-        final updated = List<Sound>.from(sounds);
-        updated[idx] = Sound(
-          id: s.id,
-          title: s.title,
-          displayName: s.displayName,
-          filePath: s.filePath,
-          type: type,
-          colorValue: s.colorValue,
-          volume: s.volume,
-          createdAt: s.createdAt,
-          libraryId: s.libraryId,
-          relativePath: s.relativePath,
-          contentHash: s.contentHash,
-          isFavorite: s.isFavorite,
-          lastPlayedAt: s.lastPlayedAt,
-        );
-        padItem.pad = padItem.pad.copyWith(sounds: updated);
-        _notifyPad(padItem);
-      }
-    }
-    notifyListeners();
     await _repository.updateSoundType(soundId, type);
-    await loadSounds();
+    await _music.refreshSoundMetadata(soundId);
   }
 
   Future<bool> toggleSoundFavorite(int soundId) async {

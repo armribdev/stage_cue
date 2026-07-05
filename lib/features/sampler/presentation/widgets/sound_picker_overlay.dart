@@ -909,9 +909,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                 children: [
                   // "Tous" uniquement pour QuickSearch, Library et Manage
                   if (_isQuickSearch || _isLibrary || _isManage) chip('Tous', null),
-                  chip('SFX', SoundType.soundEffect),
-                  chip('Musique', SoundType.music),
-                  chip('Ambiance', SoundType.ambiance),
+                  chip(SoundType.soundEffect.label, SoundType.soundEffect),
+                  chip(SoundType.music.label, SoundType.music),
+                  chip(SoundType.ambiance.label, SoundType.ambiance),
                 ],
               ),
             ),
@@ -1325,17 +1325,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     );
   }
 
-  IconData _typeIcon(SoundType? type) => switch (type) {
-    SoundType.soundEffect => Icons.graphic_eq_rounded,
-    SoundType.music => Icons.music_note_rounded,
-    SoundType.ambiance => Icons.waves_rounded,
-    null => Icons.help_outline_rounded,
-  };
+  IconData _typeIcon(SoundType? type) =>
+      type?.icon ?? Icons.help_outline_rounded;
 
-  String _typeLabel(SoundType? type) => switch (type) {
-    SoundType.soundEffect => 'Effet',
-    SoundType.music => 'Musique',
-    SoundType.ambiance => 'Ambiance',
-    null => 'Non classé',
-  };
+  String _typeLabel(SoundType? type) => type?.label ?? 'Non classé';
 }
