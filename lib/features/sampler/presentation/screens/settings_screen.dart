@@ -9,6 +9,7 @@ import '../../../../core/database/database.dart' as db;
 import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/platform/saf_directory_bridge.dart';
 import '../../../../core/sync/drive_account_profile.dart';
+import '../../../../core/sync/drive_profile_cache.dart';
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
 import '../../../../core/sync/drive_client.dart';
@@ -100,6 +101,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _shouldScrollToDriveSection = false;
   final GlobalKey _driveSectionKey = GlobalKey();
 
+  /// Cache disque de la photo de profil Google (affichage hors-ligne + pas de
+  /// re-téléchargement à chaque ouverture des réglages).
+  final DriveAvatarCache _avatarCache = DriveAvatarCache();
+
+  /// Futures d'avatar mémorisés par URL : évite de relancer un `resolve` (et de
+  /// faire clignoter l'avatar) à chaque reconstruction du header.
+  final Map<String, Future<File?>> _avatarFutures = {};
+
+  Future<File?> _resolveAvatar(String url) =>
+      _avatarFutures.putIfAbsent(url, () => _avatarCache.resolve(url));
+
   @override
   void initState() {
     super.initState();
@@ -122,6 +134,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _initializeRepository() {
     _repository = SoundRepository.fromDatabase(widget.database);
+  }
+
+  @override
+  void dispose() {
+    _avatarCache.dispose();
+    super.dispose();
   }
 
   void _scrollToDriveSectionIfNeeded() {
@@ -243,6 +261,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Renouvelle la session Drive. Tente d'abord une reconnexion silencieuse
+  /// (refresh token) pour éviter un aller-retour navigateur/Google ; ne bascule
+  /// sur l'OAuth interactif que si le silencieux échoue réellement.
+  Future<void> _renewDriveSession() async {
+    if (!await ensureGoogleOAuthConfigured(context)) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _isDriveAuthBusy = true);
+    var reconnected = false;
+    try {
+      reconnected = await widget.libraryRepository.reconnectSilently();
+      if (reconnected && mounted) {
+        widget.syncController.clearAuthOfflineState();
+        await widget.libraryRepository.refreshConnectedAccountProfile();
+        await _loadDatabaseInfo();
+      }
+    } catch (_) {
+      // Le silencieux a échoué : on retombe sur l'interactif ci-dessous.
+      reconnected = false;
+    } finally {
+      if (mounted) setState(() => _isDriveAuthBusy = false);
+    }
+
+    if (!reconnected && mounted) {
+      await _connectDriveAccount();
+    }
+  }
+
   Future<void> _disconnectDriveAccount() async {
     final account = widget.libraryRepository.connectedAccountProfile;
     if (account == null) {
@@ -318,27 +368,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return initialsAvatar();
     }
 
-    return ClipOval(
-      child: Image.network(
-        photoUrl,
-        key: ValueKey(photoUrl),
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => initialsAvatar(),
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) {
-            return child;
-          }
-          return SizedBox(
+    // La photo est servie depuis un cache disque : affichage immédiat aux
+    // lancements suivants et hors-ligne. En attente (1er téléchargement) ou en
+    // cas d'échec réseau, on retombe sur les initiales — jamais de spinner
+    // clignotant ni de trou visuel.
+    return FutureBuilder<File?>(
+      future: _resolveAvatar(photoUrl),
+      builder: (context, snapshot) {
+        final file = snapshot.data;
+        if (file == null) {
+          return initialsAvatar();
+        }
+        return ClipOval(
+          child: Image.file(
+            file,
+            key: ValueKey(file.path),
             width: size,
             height: size,
-            child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          );
-        },
-      ),
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => initialsAvatar(),
+          ),
+        );
+      },
     );
   }
 
@@ -486,7 +537,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 if (!sessionActive)
                   TextButton(
-                    onPressed: _connectDriveAccount,
+                    onPressed: _renewDriveSession,
                     child: const Text('Renouveler'),
                   )
                 else
