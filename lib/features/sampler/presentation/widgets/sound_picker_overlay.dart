@@ -300,7 +300,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     QuickSearchMode() =>
       '↑↓ sélectionner    ↵ jouer    ⌘/Ctrl+↵ préparer    tap audition',
     MusicPickerMode() =>
-      '↑↓ sélectionner    ↵/tap jouer',
+      '↑↓ sélectionner    ↵/tap ajouter à la file',
     PadPickerMode() =>
       '↑↓ sélectionner    ↵ ajouter/retirer',
     LibraryMode() =>
@@ -616,7 +616,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         await widget.notifier.previewSound(sound.id);
         if (mounted) Navigator.of(context).pop();
       case MusicPickerMode():
-        await _playMusicNow(sound);
+        await _enqueueMusic(sound);
       case PadPickerMode():
         await _togglePadSound(sound);
       case LibraryMode():
@@ -650,12 +650,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   }
 
   // Music picker
-  Future<void> _playMusicNow(Sound sound) async {
-    final padItem = await widget.notifier.playMusicBySoundId(sound.id);
-    if (!mounted || padItem == null) return;
-    Navigator.of(context).pop();
-  }
-
   Future<void> _enqueueMusic(Sound sound) async {
     await widget.notifier.enqueueMusicBySoundId(sound.id);
   }
@@ -1022,7 +1016,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
             case QuickSearchMode():
               unawaited(_previewSound(sound));
             case MusicPickerMode():
-              unawaited(_playMusicNow(sound));
+              unawaited(_enqueueMusic(sound));
             case PadPickerMode():
               unawaited(_togglePadSound(sound));
             case LibraryMode():
@@ -1085,7 +1079,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           ? 'En file de passage'
           : onBoard
           ? 'Pad sur la scène'
-          : 'Lecture directe en régie';
+          : null;
+      if (label == null) return const SizedBox.shrink();
       return Text(
         label,
         style: TextStyle(
@@ -1158,13 +1153,18 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         );
 
       case MusicPickerMode():
-        final canEnqueue = !onAir && !queued;
-        return _roundIconButton(
-          scheme: scheme,
-          icon: queued ? Icons.check_rounded : Icons.playlist_add_rounded,
-          iconColor: canEnqueue ? scheme.onSurfaceVariant : scheme.primary,
-          onPressed: canEnqueue ? () => unawaited(_enqueueMusic(sound)) : null,
-        );
+        if (onAir || queued) {
+          return SizedBox(
+            width: _actionButtonSize,
+            height: _actionButtonSize,
+            child: Icon(
+              onAir ? Icons.sensors_rounded : Icons.check_rounded,
+              size: 18,
+              color: scheme.primary,
+            ),
+          );
+        }
+        return const SizedBox.shrink();
 
       case PadPickerMode():
         final isAdding = _addingSoundIds.contains(sound.id);
