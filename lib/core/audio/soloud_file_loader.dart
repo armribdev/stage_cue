@@ -37,12 +37,19 @@ const Set<String> supportedAudioExtensions = {
 /// Windows (chemins Unicode, accents, etc.) tout en conservant [LoadMode.memory].
 /// Ne propage jamais d'exception SoLoud brute — uniquement [StateError] ou
 /// [UnsupportedAudioFormatException] pour les formats non décodables.
-Future<AudioSource> loadAudioSourceFromFile(File file) async {
+///
+/// [memKeySuffix] permet d'isoler la source (ex. éditeur de point d'entrée) :
+/// sans suffixe, la clé est le chemin absolu — partagée avec les pads préchargés.
+Future<AudioSource> loadAudioSourceFromFile(
+  File file, {
+  String? memKeySuffix,
+}) async {
   if (!await file.exists()) {
     throw StateError('Fichier audio introuvable : ${file.path}');
   }
 
   final path = p.normalize(file.absolute.path);
+  final memKey = memKeySuffix != null ? '$path$memKeySuffix' : path;
   final ext = p.extension(path).toLowerCase();
   if (!supportedAudioExtensions.contains(ext)) {
     throw UnsupportedAudioFormatException(ext, path);
@@ -79,7 +86,7 @@ Future<AudioSource> loadAudioSourceFromFile(File file) async {
         throw StateError('Moteur audio non initialisé : $path');
       }
       return await SoLoud.instance.loadMem(
-        path,
+        memKey,
         bytes,
         mode: LoadMode.memory,
       );

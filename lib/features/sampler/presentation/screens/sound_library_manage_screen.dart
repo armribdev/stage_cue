@@ -26,7 +26,7 @@ class SoundLibraryManageScreen {
       context,
       notifier: notifier,
       onTap: (ctx, sound, tagCatalog) =>
-          _openSoundEdit(ctx, sound, tagCatalog, repository),
+          _openSoundEdit(ctx, sound, tagCatalog, repository, notifier),
     );
   }
 
@@ -37,12 +37,13 @@ class SoundLibraryManageScreen {
     Sound sound,
     List<TagCategoryWithTags> tagCatalog,
     SoundRepository repository,
+    SamplerNotifier notifier,
   ) async {
     final width = MediaQuery.sizeOf(context).width;
     if (width < 600) {
-      await _openEditPage(context, sound, tagCatalog, repository);
+      await _openEditPage(context, sound, tagCatalog, repository, notifier);
     } else {
-      await _openEditDialog(context, sound, tagCatalog, repository);
+      await _openEditDialog(context, sound, tagCatalog, repository, notifier);
     }
   }
 
@@ -53,6 +54,7 @@ class SoundLibraryManageScreen {
     Sound sound,
     List<TagCategoryWithTags> tagCatalog,
     SoundRepository repository,
+    SamplerNotifier notifier,
   ) async {
     final initialTags = await repository.getTagsForSound(sound.id);
     if (!context.mounted) return;
@@ -63,6 +65,7 @@ class SoundLibraryManageScreen {
           tagCatalog: tagCatalog,
           initialTags: initialTags,
           repository: repository,
+          notifier: notifier,
         ),
       ),
     );
@@ -75,6 +78,7 @@ class SoundLibraryManageScreen {
     Sound sound,
     List<TagCategoryWithTags> tagCatalog,
     SoundRepository repository,
+    SamplerNotifier notifier,
   ) async {
     final initialTags = await repository.getTagsForSound(sound.id);
     if (!context.mounted) return;
@@ -227,6 +231,7 @@ class SoundLibraryManageScreen {
                     );
                     await repository.setTagsForSound(
                         sound.id, selectedTagIds.toList());
+                    await notifier.refreshSoundMetadata(sound.id);
                     if (!dialogContext.mounted) return;
                     Navigator.of(dialogContext).pop(true);
                   },

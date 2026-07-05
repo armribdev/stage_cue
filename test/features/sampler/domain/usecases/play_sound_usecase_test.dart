@@ -25,8 +25,9 @@ class FakeAudioPlayerService implements AudioPlayerService {
   }
 
   @override
-  Future<void> playFromPosition(Duration position) async {
+  Future<bool> playFromPosition(Duration position) async {
     played = true;
+    return true;
   }
 
   @override

@@ -4,6 +4,7 @@ import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
+import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
 import '../widgets/start_offset_editor.dart';
 import '../widgets/tag_chips_editor.dart';
@@ -14,6 +15,7 @@ class SoundDetailsScreen extends StatefulWidget {
   final List<TagCategoryWithTags> tagCatalog;
   final List<TagItem> initialTags;
   final SoundRepository repository;
+  final SamplerNotifier? notifier;
 
   const SoundDetailsScreen({
     super.key,
@@ -21,6 +23,7 @@ class SoundDetailsScreen extends StatefulWidget {
     required this.tagCatalog,
     required this.initialTags,
     required this.repository,
+    this.notifier,
   });
 
   @override
@@ -78,6 +81,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
         widget.sound.id,
         _selectedTagIds.toList(),
       );
+      await widget.notifier?.refreshSoundMetadata(widget.sound.id);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {

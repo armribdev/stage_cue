@@ -66,6 +66,29 @@ class AudioPlayerService {
     }
   }
 
+  /// Lecteur éphémère (aperçu UI) : source SoLoud isolée du cache des pads.
+  /// À utiliser pour l'éditeur de point d'entrée — évite qu'un [dispose] ne
+  /// invalide les sources partagées par clé de chemin avec les pads préchargés.
+  static Future<AudioPlayerService> createEphemeral(String filePath) async {
+    final file = File(filePath);
+    try {
+      final source = await loadAudioSourceFromFile(
+        file,
+        memKeySuffix: '#ephemeral',
+      );
+      return AudioPlayerService._(source);
+    } on UnsupportedAudioFormatException {
+      rethrow;
+    } catch (e) {
+      if (e is! StateError) {
+        AudioLoadLog.loadMemFailed(path: file.absolute.path, error: e);
+      }
+      throw StateError(
+        'Impossible de charger le fichier audio : ${file.absolute.path} ($e)',
+      );
+    }
+  }
+
   /// Joue le son (quasi instantané car préchargé), en mode mono-voix.
   Future<void> play() async {
     await playFromPosition(Duration.zero);
@@ -73,13 +96,11 @@ class AudioPlayerService {
 
   /// Lance la lecture à [position] (reprise après pause), en mode mono-voix :
   /// coupe la voix précédente avant d'en lancer une nouvelle.
-  Future<void> playFromPosition(Duration position) async {
+  /// Retourne false si la voix n'a pas pu démarrer.
+  Future<bool> playFromPosition(Duration position) async {
     debugPrint('[AUDIO-PLAY] playFromPosition pos=$position handles=${_handles.length}');
     try {
       await _stopAllHandles();
-      // Démarrer en pause quand on repart d'un offset : on positionne la voix
-      // AVANT qu'elle soit audible, ce qui évite le micro-blip d'un seek
-      // effectué après le lancement.
       final seekFirst = position > Duration.zero;
       final handle = await SoLoud.instance.play(_source, paused: seekFirst);
       _handles.add(handle);
@@ -88,9 +109,16 @@ class AudioPlayerService {
         SoLoud.instance.seek(handle, position);
         SoLoud.instance.setPause(handle, false);
       }
+      if (!SoLoud.instance.getIsValidVoiceHandle(handle)) {
+        _handles.remove(handle);
+        _currentHandle = null;
+        return false;
+      }
       _stateController.add(true);
+      return true;
     } catch (e) {
       debugPrint('[AUDIO-PLAY] ERROR: $e');
+      return false;
     }
   }
 

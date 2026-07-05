@@ -1003,13 +1003,21 @@ class SamplerNotifier extends ChangeNotifier {
       '_nextSoundIndex=${resolved._nextSoundIndex}',
     );
     if (player == null) return;
+    await _syncPadSoundMetadata(resolved, soundIndex);
     // Point d'entrée : le déclenchement démarre à cet offset au lieu du sample 0.
-    final startOffset =
-        Duration(milliseconds: resolved.pad.sounds[soundIndex].startOffsetMs);
-    await player.playOverlapping(
-      volume: _effectiveVolume(resolved),
-      startOffset: startOffset,
-    );
+    var startOffsetMs = resolved.pad.sounds[soundIndex].startOffsetMs;
+    final duration = player.duration;
+    if (duration > Duration.zero) {
+      final maxMs = duration.inMilliseconds;
+      if (startOffsetMs >= maxMs) {
+        startOffsetMs = (maxMs - 1).clamp(0, maxMs);
+      }
+    }
+    final startOffset = Duration(milliseconds: startOffsetMs);
+      await player.playOverlapping(
+        volume: _effectiveVolume(resolved),
+        startOffset: startOffset,
+      );
     // Ticket de progression : une barre superposée par voix, auto-supprimée à
     // la fin du son (bump de révision pour rafraîchir le seul PadButton). La
     // durée restante tient compte du point d'entrée sauté en tête.
@@ -1414,6 +1422,8 @@ class SamplerNotifier extends ChangeNotifier {
       _music.crossfadeToNextMusic(d);
   PadItem? findMusicPadForSound(int id) => _music.findMusicPadForSound(id);
   PadItem? resolveMusicPad(int id) => _music.resolveMusicPad(id);
+  Future<void> refreshSoundMetadata(int soundId) =>
+      _music.refreshSoundMetadata(soundId);
   Future<void> setMusicVolume(double v, {bool smooth = false}) =>
       _music.setMusicVolume(v, smooth: smooth);
   Future<void> toggleMusicMute() => _music.toggleMusicMute();
@@ -1832,7 +1842,15 @@ class SamplerNotifier extends ChangeNotifier {
         _previewPlayers.remove(player);
         player.dispose();
       });
-      await player.play();
+      var startOffsetMs = sound.startOffsetMs;
+      final duration = player.duration;
+      if (duration > Duration.zero) {
+        final maxMs = duration.inMilliseconds;
+        if (startOffsetMs >= maxMs) {
+          startOffsetMs = (maxMs - 1).clamp(0, maxMs);
+        }
+      }
+      await player.playFromPosition(Duration(milliseconds: startOffsetMs));
       _markPlayed(soundId);
       return true;
     } catch (e) {
