@@ -39,10 +39,24 @@ class MusicController {
 
   /// Point d'entrée configuré sur le son du slot [index] d'un pad — position de
   /// départ d'une lecture fraîche (0 si l'index est hors limites).
-  Duration _startOffsetOf(PadItem padItem, int index) {
+  /// [player] sert à borner l'offset à la durée du fichier (évite un seek hors
+  /// fin qui termine la voix immédiatement sans son audible).
+  Duration _startOffsetOf(
+    PadItem padItem,
+    int index,
+    AudioPlayerService player,
+  ) {
     final sounds = padItem.pad.sounds;
     if (index < 0 || index >= sounds.length) return Duration.zero;
-    return Duration(milliseconds: sounds[index].startOffsetMs);
+    var ms = sounds[index].startOffsetMs;
+    final duration = player.duration;
+    if (duration > Duration.zero) {
+      final maxMs = duration.inMilliseconds;
+      if (ms >= maxMs) {
+        ms = (maxMs - 1).clamp(0, maxMs);
+      }
+    }
+    return Duration(milliseconds: ms);
   }
 
   /// Volume effectif : pads musique soumis au volume global, SFX en direct.
@@ -190,7 +204,21 @@ class MusicController {
     final padId = padItem.pad.id;
     final current = _o._state.currentMusicPad;
 
-    if (current?.pad.id == padId && (current?.isPlaying ?? false)) {
+    if (current?.pad.id == padId) {
+      if (current?.isPlaying ?? false) {
+        return padItem;
+      }
+      // Même pad à l'antenne mais arrêté ou en pause : relancer (point d'entrée
+      // frais) au lieu d'un no-op silencieux via enqueueMusicPad.
+      final ready = await _prepareMusicPadForPlayback(
+        padItem,
+        downloadIfNeeded: true,
+      );
+      if (!ready) {
+        _setMusicLoadError(padItem);
+        return null;
+      }
+      await playMusicNow(padItem);
       return padItem;
     }
     if (_o._state.musicQueuePadIds.contains(padId)) {
@@ -352,7 +380,7 @@ class MusicController {
 
       await nextPlayer.playAtVolume(
         0,
-        startOffset: _startOffsetOf(next, soundIndex),
+        startOffset: _startOffsetOf(next, soundIndex, nextPlayer),
       );
       next._currentPlayerIndex = soundIndex;
       next.isPlaying = true;
@@ -429,6 +457,29 @@ class MusicController {
   /// Pad musique correspondant à un son, sur la scène ou hors-scène.
   PadItem? findMusicPadForSound(int soundId) => _findPadItemForSound(soundId);
 
+  /// Réinjecte en mémoire les métadonnées à jour d'un son (point d'entrée,
+  /// volume, etc.) sur tous les pads qui le référencent, sans toucher aux
+  /// lecteurs audio en cours — le nouveau point d'entrée s'applique à la
+  /// prochaine lecture seulement.
+  Future<void> refreshSoundMetadata(int soundId) async {
+    await _syncSoundMetadataInPads(_o._state.pads, soundId);
+    await _syncSoundMetadataInPads(_offStageMusicPads.values, soundId);
+    _o._notify();
+  }
+
+  Future<void> _syncSoundMetadataInPads(
+    Iterable<PadItem> padItems,
+    int soundId,
+  ) async {
+    for (final padItem in padItems) {
+      for (var i = 0; i < padItem.pad.sounds.length; i++) {
+        if (padItem.pad.sounds[i].id == soundId) {
+          await _o._syncPadSoundMetadata(padItem, i);
+        }
+      }
+    }
+  }
+
   // ── Synchronisation état ──────────────────────────────────────────────────
 
   void _syncMusicStateWithPads() {
@@ -498,21 +549,45 @@ class MusicController {
       return false;
     }
 
+    // Métadonnées à jour (point d'entrée édité en bibliothèque, etc.).
+    await _o._syncPadSoundMetadata(padItem, index);
+
     padItem.clearPausedPlayback();
+
+    player.setVolume(_effectiveVolume(padItem));
+    final startPos = resumePosition != null && resumePosition > Duration.zero
+        ? resumePosition
+        : _startOffsetOf(padItem, index, player);
+
+    var started = await player.playFromPosition(startPos);
+    if (!started) {
+      // Source SoLoud peut avoir été invalidée (ex. éditeur de point d'entrée).
+      await _o._loadSlotAtIndex(
+        padItem,
+        index,
+        downloadIfNeeded: true,
+      );
+      _o._attachPlayerListeners(padItem);
+      final reloaded = padItem.slots[index].player;
+      if (reloaded == null) {
+        _setMusicLoadError(padItem);
+        return false;
+      }
+      reloaded.setVolume(_effectiveVolume(padItem));
+      started = await reloaded.playFromPosition(startPos);
+    }
+
+    if (!started) {
+      _setMusicLoadError(padItem);
+      return false;
+    }
+
     _o._state = _o._state.copyWith(
       currentMusicPad: padItem,
       musicQueuePadIds: _o._state.musicQueuePadIds
           .where((id) => id != padItem.pad.id)
           .toList(),
     );
-
-    player.setVolume(_effectiveVolume(padItem));
-    if (resumePosition != null && resumePosition > Duration.zero) {
-      await player.playFromPosition(resumePosition);
-    } else {
-      // Démarrage frais : on repart du point d'entrée configuré sur le son.
-      await player.playFromPosition(_startOffsetOf(padItem, index));
-    }
     _o._markPlayedAt(padItem, index);
     _o._notify();
     return true;
@@ -597,7 +672,12 @@ class MusicController {
       if (padIdBySound.containsKey(soundId)) {
         await _o.loadSounds(boardId: boardId);
         existing = _findPadItemForSound(soundId);
-        if (existing != null) return existing;
+        if (existing != null) {
+          for (var i = 0; i < existing.pad.sounds.length; i++) {
+            await _o._syncPadSoundMetadata(existing, i);
+          }
+          return existing;
+        }
       }
     }
 
@@ -713,7 +793,7 @@ class MusicController {
 
       await nextPlayer.playAtVolume(
         0,
-        startOffset: _startOffsetOf(next, soundIndex),
+        startOffset: _startOffsetOf(next, soundIndex, nextPlayer),
       );
       next._currentPlayerIndex = soundIndex;
       next.isPlaying = true;

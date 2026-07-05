@@ -63,7 +63,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
 
   Future<void> _load() async {
     try {
-      final player = await AudioPlayerService.create(widget.filePath);
+      final player = await AudioPlayerService.createEphemeral(widget.filePath);
       if (!mounted) {
         player.dispose();
         return;
