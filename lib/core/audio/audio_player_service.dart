@@ -26,6 +26,7 @@ class AudioPlayerService {
   final AudioSource _source;
   final Set<SoundHandle> _handles = {};
   SoundHandle? _currentHandle;
+  bool _paused = false;
   final _stateController = StreamController<bool>.broadcast();
   StreamSubscription? _soundEventsSubscription;
 
@@ -42,6 +43,7 @@ class AudioPlayerService {
         );
         // Émettre l'arrêt uniquement quand la dernière voix se termine.
         if (removed && _handles.isEmpty) {
+          _paused = false;
           _stateController.add(false);
         }
       }
@@ -112,8 +114,10 @@ class AudioPlayerService {
       if (!SoLoud.instance.getIsValidVoiceHandle(handle)) {
         _handles.remove(handle);
         _currentHandle = null;
+        _paused = false;
         return false;
       }
+      _paused = false;
       _stateController.add(true);
       return true;
     } catch (e) {
@@ -151,9 +155,26 @@ class AudioPlayerService {
     }
   }
 
+  /// Met en pause la voix courante (mono-voix).
+  Future<void> pause() async {
+    if (!_hasActiveHandle || _paused) return;
+    SoLoud.instance.setPause(_currentHandle!, true);
+    _paused = true;
+    _stateController.add(false);
+  }
+
+  /// Reprend la voix courante après [pause].
+  Future<void> resume() async {
+    if (!_hasActiveHandle || !_paused) return;
+    SoLoud.instance.setPause(_currentHandle!, false);
+    _paused = false;
+    _stateController.add(true);
+  }
+
   /// Arrête toutes les voix en cours.
   Future<void> stop() async {
     await _stopAllHandles();
+    _paused = false;
     _stateController.add(false);
   }
 
@@ -167,6 +188,7 @@ class AudioPlayerService {
     final handles = List<SoundHandle>.from(_handles);
     _handles.clear();
     _currentHandle = null;
+    _paused = false;
     for (final handle in handles) {
       if (SoLoud.instance.getIsValidVoiceHandle(handle)) {
         await SoLoud.instance.stop(handle);
@@ -203,6 +225,7 @@ class AudioPlayerService {
         SoLoud.instance.seek(handle, startOffset);
         SoLoud.instance.setPause(handle, false);
       }
+      _paused = false;
       _stateController.add(true);
     } catch (e) {
       debugPrint('Erreur lors de la lecture: $e');
@@ -244,8 +267,11 @@ class AudioPlayerService {
     return SoLoud.instance.getPosition(_currentHandle!);
   }
 
-  /// Indique si au moins une voix est en cours de lecture.
-  bool get isPlaying => _handles.isNotEmpty;
+  /// Indique si au moins une voix est audible (hors pause).
+  bool get isPlaying => _handles.isNotEmpty && !_paused;
+
+  /// Indique si la voix courante est en pause.
+  bool get isPaused => _paused && _hasActiveHandle;
 
   /// Dispose les ressources
   void dispose() {
@@ -258,6 +284,7 @@ class AudioPlayerService {
       }
       _handles.clear();
       _currentHandle = null;
+      _paused = false;
       SoLoud.instance.disposeSource(_source);
     } catch (e) {
       debugPrint('Erreur lors du dispose audio: $e');
