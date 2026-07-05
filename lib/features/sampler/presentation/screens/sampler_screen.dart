@@ -4,7 +4,6 @@ import 'dart:math' show max;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../providers/sampler_provider.dart';
-import '../providers/sync_controller.dart';
 import '../widgets/pad_button.dart' show padSoundAvailabilityIcon;
 import '../models/pad_sound_slot.dart';
 import '../widgets/pad_item.dart' show PadCard;
@@ -19,7 +18,6 @@ import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
-import '../widgets/drive_sync_ui.dart';
 import 'settings_screen.dart';
 import 'pad_details_screen.dart';
 import 'sound_library_manage_screen.dart';
@@ -403,35 +401,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
     if (!mounted) return;
     await _notifier.loadSounds();
-  }
-
-  /// Ouvre Paramètres (section Drive) depuis la pastille ambiante, ou résout
-  /// un conflit directement si la pastille signale un état conflictuel.
-  Future<void> _openDriveSettings() async {
-    final syncController = widget.services.syncController;
-    if (syncController.state.status == SyncStatus.conflict) {
-      await resolveSyncConflictFromPill(
-        context: context,
-        syncController: syncController,
-        libraryRepository: widget.services.libraryRepository,
-        onResolved: () async {
-          if (!mounted) return;
-          await _notifier.loadBoards();
-        },
-      );
-      return;
-    }
-
-    await SettingsScreen.open(
-      context,
-      database: _database,
-      libraryRepository: widget.services.libraryRepository,
-      syncController: syncController,
-      appPreferences: widget.services.appPreferences,
-      scrollToDriveSection: true,
-    );
-    if (!mounted) return;
-    await _notifier.loadBoards();
   }
 
   /// Ouvre la recherche-éclair (overlay) ; met en évidence le pad dédié préparé.
@@ -1832,10 +1801,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onOpenLibrary: _openLibrary,
                     onOpenSettings: _openSettings,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
-                    syncStatus: _SyncStatusPill(
-                      syncController: widget.services.syncController,
-                      onTap: _openDriveSettings,
-                    ),
                     stopAllButton: _StopAllButton(notifier: _notifier),
                   )
                 : _SamplerAppBar(
@@ -1844,10 +1809,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
                     onTogglePerformanceMode: _togglePerformanceMode,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
-                    syncStatus: _SyncStatusPill(
-                      syncController: widget.services.syncController,
-                      onTap: _openDriveSettings,
-                    ),
                     stopAllButton: _StopAllButton(notifier: _notifier),
                   ),
             drawer: prefersDesktopUi
@@ -1893,121 +1854,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 }
 
-// ---------- Pastille de synchronisation (ambiante) ----------
-
-/// Indicateur de synchro Drive permanent et non bloquant dans l'AppBar.
-///
-/// Caché tant que la synchro est `idle` (aucun bruit pour un usage 100 % local) ;
-/// dès qu'une bibliothèque Drive est en jeu, il rend l'état d'un coup d'œil
-/// (couleur + libellé court) et ouvre Paramètres (section Drive) au tap.
-class _SyncStatusPill extends StatelessWidget {
-  final SyncController syncController;
-  final VoidCallback onTap;
-
-  const _SyncStatusPill({required this.syncController, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: syncController,
-      builder: (context, _) {
-        final status = syncController.state.status;
-        if (status == SyncStatus.idle) return const SizedBox.shrink();
-
-        final scheme = Theme.of(context).colorScheme;
-        final (color, label, icon, spinning) = _visuals(
-          status,
-          scheme,
-        );
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: Tooltip(
-            message: 'Synchronisation Drive',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: onTap,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (spinning)
-                      SizedBox(
-                        width: 13,
-                        height: 13,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: color,
-                        ),
-                      )
-                    else
-                      Icon(icon, size: 15, color: color),
-                    const SizedBox(width: 6),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: color,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  (Color, String, IconData, bool) _visuals(
-    SyncStatus status,
-    ColorScheme scheme,
-  ) {
-    return switch (status) {
-      SyncStatus.syncing => (
-        scheme.primary,
-        'Synchro…',
-        Icons.sync_rounded,
-        true,
-      ),
-      SyncStatus.synced => (
-        scheme.primary,
-        'À jour',
-        Icons.cloud_done_outlined,
-        false,
-      ),
-      // Hors-ligne : neutre, jamais alarmiste — le travail local est normal.
-      SyncStatus.offline => (
-        scheme.onSurfaceVariant,
-        'Hors-ligne',
-        Icons.cloud_off_outlined,
-        false,
-      ),
-      SyncStatus.conflict => (
-        scheme.error,
-        'Conflit',
-        Icons.merge_type_rounded,
-        false,
-      ),
-      SyncStatus.error => (
-        scheme.error,
-        'Erreur sync',
-        Icons.error_outline_rounded,
-        false,
-      ),
-      SyncStatus.idle => (
-        scheme.onSurfaceVariant,
-        '',
-        Icons.cloud_outlined,
-        false,
-      ),
-    };
-  }
-}
-
 // ---------- AppBar (mobile/tablette) ----------
 
 class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -2016,7 +1862,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenMenu;
   final VoidCallback onTogglePerformanceMode;
   final VoidCallback onQuickSearch;
-  final Widget syncStatus;
   final Widget stopAllButton;
 
   const _SamplerAppBar({
@@ -2025,7 +1870,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onOpenMenu,
     required this.onTogglePerformanceMode,
     required this.onQuickSearch,
-    required this.syncStatus,
     required this.stopAllButton,
   });
 
@@ -2056,7 +1900,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'Recherche rapide',
           onPressed: onQuickSearch,
         ),
-        if (!isPerformanceMode) syncStatus,
         _LiveModeButton(
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
@@ -2361,7 +2204,6 @@ class _SamplerDesktopAppBar extends StatelessWidget
   final Future<void> Function() onOpenLibrary;
   final Future<void> Function() onOpenSettings;
   final VoidCallback onQuickSearch;
-  final Widget syncStatus;
   final Widget stopAllButton;
 
   const _SamplerDesktopAppBar({
@@ -2376,7 +2218,6 @@ class _SamplerDesktopAppBar extends StatelessWidget
     required this.onOpenLibrary,
     required this.onOpenSettings,
     required this.onQuickSearch,
-    required this.syncStatus,
     required this.stopAllButton,
   });
 
@@ -2408,7 +2249,6 @@ class _SamplerDesktopAppBar extends StatelessWidget
           onPressed: onQuickSearch,
         ),
         if (!isPerformanceMode) ...[
-          syncStatus,
           IconButton(
             icon: const Icon(Icons.library_books_rounded),
             tooltip: 'Gérer la bibliothèque',
