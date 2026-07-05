@@ -77,11 +77,16 @@ class AudioPlayerService {
     debugPrint('[AUDIO-PLAY] playFromPosition pos=$position handles=${_handles.length}');
     try {
       await _stopAllHandles();
-      final handle = await SoLoud.instance.play(_source);
+      // Démarrer en pause quand on repart d'un offset : on positionne la voix
+      // AVANT qu'elle soit audible, ce qui évite le micro-blip d'un seek
+      // effectué après le lancement.
+      final seekFirst = position > Duration.zero;
+      final handle = await SoLoud.instance.play(_source, paused: seekFirst);
       _handles.add(handle);
       _currentHandle = handle;
-      if (position > Duration.zero) {
+      if (seekFirst) {
         SoLoud.instance.seek(handle, position);
+        SoLoud.instance.setPause(handle, false);
       }
       _stateController.add(true);
     } catch (e) {
@@ -91,12 +96,22 @@ class AudioPlayerService {
 
   /// Superpose une nouvelle voix sans couper les précédentes (polyphonie).
   /// Utilisé par les pads non-musique : chaque déclenchement empile un son.
-  Future<void> playOverlapping({double volume = 1.0}) async {
+  /// [startOffset] démarre la voix à ce point d'entrée (via pause → seek →
+  /// reprise, pour un départ net sans blip audible).
+  Future<void> playOverlapping({
+    double volume = 1.0,
+    Duration startOffset = Duration.zero,
+  }) async {
     try {
-      final handle = await SoLoud.instance.play(_source);
+      final seekFirst = startOffset > Duration.zero;
+      final handle = await SoLoud.instance.play(_source, paused: seekFirst);
       _handles.add(handle);
       _currentHandle = handle;
       SoLoud.instance.setVolume(handle, volume.clamp(0.0, 1.0));
+      if (seekFirst) {
+        SoLoud.instance.seek(handle, startOffset);
+        SoLoud.instance.setPause(handle, false);
+      }
       debugPrint('[AUDIO-PLAY] overlapping new handle=$handle total=${_handles.length}');
       // Ne notifier le passage à « en cours » que sur la première voix : les
       // suivantes ne changent pas l'état booléen du lecteur.
@@ -146,13 +161,20 @@ class AudioPlayerService {
       SoLoud.instance.getIsValidVoiceHandle(_currentHandle!);
 
   /// Lance la lecture à un volume initial donné (mode mono-voix).
-  Future<void> playAtVolume(double volume) async {
+  /// [startOffset] positionne la voix à ce point d'entrée avant de la rendre
+  /// audible (départ net) — utilisé par les fondus enchaînés de la régie.
+  Future<void> playAtVolume(double volume, {Duration startOffset = Duration.zero}) async {
     try {
       await _stopAllHandles();
-      final handle = await SoLoud.instance.play(_source);
+      final seekFirst = startOffset > Duration.zero;
+      final handle = await SoLoud.instance.play(_source, paused: seekFirst);
       _handles.add(handle);
       _currentHandle = handle;
       SoLoud.instance.setVolume(handle, volume.clamp(0.0, 1.0));
+      if (seekFirst) {
+        SoLoud.instance.seek(handle, startOffset);
+        SoLoud.instance.setPause(handle, false);
+      }
       _stateController.add(true);
     } catch (e) {
       debugPrint('Erreur lors de la lecture: $e');

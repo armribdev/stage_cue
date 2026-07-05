@@ -7,6 +7,7 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
 import '../widgets/app_form_dialog.dart';
 import '../widgets/sound_picker_overlay.dart';
+import '../widgets/start_offset_editor.dart';
 import '../widgets/tag_chips_editor.dart';
 import 'sound_details_screen.dart';
 
@@ -82,6 +83,7 @@ class SoundLibraryManageScreen {
     var selectedColorValue = sound.colorValue;
     var selectedVolume = sound.volume.clamp(0.0, 1.0);
     var displayNameValue = sound.displayName ?? '';
+    var startOffsetMs = sound.startOffsetMs;
     final selectedTagIds = initialTags.map((t) => t.id).toSet();
 
     String? normalizedOrNull(String value) {
@@ -168,6 +170,27 @@ class SoundLibraryManageScreen {
                         onChanged: (v) => setDialogState(
                             () => selectedVolume = v.clamp(0.0, 1.0)),
                       ),
+                      const SizedBox(height: sectionSpacing),
+                      Text(
+                        'Point d\'entrée',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'La lecture démarre à ce point au lieu du début du fichier.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      StartOffsetEditor(
+                        filePath: sound.filePath,
+                        waveform: sound.waveform,
+                        initialOffsetMs: startOffsetMs,
+                        onChanged: (ms) => startOffsetMs = ms,
+                      ),
                       const SizedBox(height: 8),
                       Text(
                         'Tags',
@@ -200,6 +223,7 @@ class SoundLibraryManageScreen {
                       displayName: normalizedOrNull(displayNameValue),
                       updateDisplayName: true,
                       volume: selectedVolume,
+                      startOffsetMs: startOffsetMs,
                     );
                     await repository.setTagsForSound(
                         sound.id, selectedTagIds.toList());
