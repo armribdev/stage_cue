@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 /// Entité métier représentant un son
 class Sound {
   final int id;
@@ -29,6 +31,10 @@ class Sound {
   /// Dernière lecture (pré-écoute / déclenchement) — tri par récence.
   final DateTime? lastPlayedAt;
 
+  /// Enveloppe RMS pré-calculée (1 octet 0–255 par barre) pour la waveform de
+  /// régie musique ; `null` tant que non calculée.
+  final Uint8List? waveform;
+
   Sound({
     required this.id,
     required this.title,
@@ -44,6 +50,7 @@ class Sound {
     this.contentHash,
     this.isFavorite = false,
     this.lastPlayedAt,
+    this.waveform,
   });
 }
 

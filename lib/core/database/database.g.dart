@@ -1625,6 +1625,17 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _waveformMeta = const VerificationMeta(
+    'waveform',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> waveform = GeneratedColumn<Uint8List>(
+    'waveform',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1642,6 +1653,7 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     folderId,
     isFavorite,
     lastPlayedAt,
+    waveform,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1755,6 +1767,12 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         ),
       );
     }
+    if (data.containsKey('waveform')) {
+      context.handle(
+        _waveformMeta,
+        waveform.isAcceptableOrUnknown(data['waveform']!, _waveformMeta),
+      );
+    }
     return context;
   }
 
@@ -1826,6 +1844,10 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_played_at'],
       ),
+      waveform: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}waveform'],
+      ),
     );
   }
 
@@ -1860,6 +1882,12 @@ class Sound extends DataClass implements Insertable<Sound> {
 
   /// Dernière lecture (pré-écoute ou déclenchement) — tri par récence.
   final DateTime? lastPlayedAt;
+
+  /// Enveloppe RMS pré-calculée (1 octet 0–255 par barre) pour dessiner la
+  /// waveform en régie musique — clé implicite = contenu (immuable). null tant
+  /// que non calculée (son non-musique, fichier absent, ou probe échoué) ;
+  /// remplie paresseusement au premier chargement du son musique.
+  final Uint8List? waveform;
   const Sound({
     required this.id,
     required this.title,
@@ -1876,6 +1904,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     this.folderId,
     required this.isFavorite,
     this.lastPlayedAt,
+    this.waveform,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1913,6 +1942,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     if (!nullToAbsent || lastPlayedAt != null) {
       map['last_played_at'] = Variable<DateTime>(lastPlayedAt);
     }
+    if (!nullToAbsent || waveform != null) {
+      map['waveform'] = Variable<Uint8List>(waveform);
+    }
     return map;
   }
 
@@ -1949,6 +1981,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       lastPlayedAt: lastPlayedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastPlayedAt),
+      waveform: waveform == null && nullToAbsent
+          ? const Value.absent()
+          : Value(waveform),
     );
   }
 
@@ -1975,6 +2010,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       folderId: serializer.fromJson<int?>(json['folderId']),
       isFavorite: serializer.fromJson<bool>(json['isFavorite']),
       lastPlayedAt: serializer.fromJson<DateTime?>(json['lastPlayedAt']),
+      waveform: serializer.fromJson<Uint8List?>(json['waveform']),
     );
   }
   @override
@@ -1998,6 +2034,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       'folderId': serializer.toJson<int?>(folderId),
       'isFavorite': serializer.toJson<bool>(isFavorite),
       'lastPlayedAt': serializer.toJson<DateTime?>(lastPlayedAt),
+      'waveform': serializer.toJson<Uint8List?>(waveform),
     };
   }
 
@@ -2017,6 +2054,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     Value<int?> folderId = const Value.absent(),
     bool? isFavorite,
     Value<DateTime?> lastPlayedAt = const Value.absent(),
+    Value<Uint8List?> waveform = const Value.absent(),
   }) => Sound(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -2033,6 +2071,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     folderId: folderId.present ? folderId.value : this.folderId,
     isFavorite: isFavorite ?? this.isFavorite,
     lastPlayedAt: lastPlayedAt.present ? lastPlayedAt.value : this.lastPlayedAt,
+    waveform: waveform.present ? waveform.value : this.waveform,
   );
   Sound copyWithCompanion(SoundsCompanion data) {
     return Sound(
@@ -2063,6 +2102,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       lastPlayedAt: data.lastPlayedAt.present
           ? data.lastPlayedAt.value
           : this.lastPlayedAt,
+      waveform: data.waveform.present ? data.waveform.value : this.waveform,
     );
   }
 
@@ -2083,7 +2123,8 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('driveFileId: $driveFileId, ')
           ..write('folderId: $folderId, ')
           ..write('isFavorite: $isFavorite, ')
-          ..write('lastPlayedAt: $lastPlayedAt')
+          ..write('lastPlayedAt: $lastPlayedAt, ')
+          ..write('waveform: $waveform')
           ..write(')'))
         .toString();
   }
@@ -2105,6 +2146,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     folderId,
     isFavorite,
     lastPlayedAt,
+    $driftBlobEquality.hash(waveform),
   );
   @override
   bool operator ==(Object other) =>
@@ -2124,7 +2166,8 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.driveFileId == this.driveFileId &&
           other.folderId == this.folderId &&
           other.isFavorite == this.isFavorite &&
-          other.lastPlayedAt == this.lastPlayedAt);
+          other.lastPlayedAt == this.lastPlayedAt &&
+          $driftBlobEquality.equals(other.waveform, this.waveform));
 }
 
 class SoundsCompanion extends UpdateCompanion<Sound> {
@@ -2143,6 +2186,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<int?> folderId;
   final Value<bool> isFavorite;
   final Value<DateTime?> lastPlayedAt;
+  final Value<Uint8List?> waveform;
   const SoundsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -2159,6 +2203,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.folderId = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
+    this.waveform = const Value.absent(),
   });
   SoundsCompanion.insert({
     this.id = const Value.absent(),
@@ -2176,6 +2221,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.folderId = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
+    this.waveform = const Value.absent(),
   }) : title = Value(title),
        filePath = Value(filePath);
   static Insertable<Sound> custom({
@@ -2194,6 +2240,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<int>? folderId,
     Expression<bool>? isFavorite,
     Expression<DateTime>? lastPlayedAt,
+    Expression<Uint8List>? waveform,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2211,6 +2258,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (folderId != null) 'folder_id': folderId,
       if (isFavorite != null) 'is_favorite': isFavorite,
       if (lastPlayedAt != null) 'last_played_at': lastPlayedAt,
+      if (waveform != null) 'waveform': waveform,
     });
   }
 
@@ -2230,6 +2278,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<int?>? folderId,
     Value<bool>? isFavorite,
     Value<DateTime?>? lastPlayedAt,
+    Value<Uint8List?>? waveform,
   }) {
     return SoundsCompanion(
       id: id ?? this.id,
@@ -2247,6 +2296,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       folderId: folderId ?? this.folderId,
       isFavorite: isFavorite ?? this.isFavorite,
       lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
+      waveform: waveform ?? this.waveform,
     );
   }
 
@@ -2300,6 +2350,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     if (lastPlayedAt.present) {
       map['last_played_at'] = Variable<DateTime>(lastPlayedAt.value);
     }
+    if (waveform.present) {
+      map['waveform'] = Variable<Uint8List>(waveform.value);
+    }
     return map;
   }
 
@@ -2320,7 +2373,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('driveFileId: $driveFileId, ')
           ..write('folderId: $folderId, ')
           ..write('isFavorite: $isFavorite, ')
-          ..write('lastPlayedAt: $lastPlayedAt')
+          ..write('lastPlayedAt: $lastPlayedAt, ')
+          ..write('waveform: $waveform')
           ..write(')'))
         .toString();
   }
@@ -7572,6 +7626,7 @@ typedef $$SoundsTableCreateCompanionBuilder =
       Value<int?> folderId,
       Value<bool> isFavorite,
       Value<DateTime?> lastPlayedAt,
+      Value<Uint8List?> waveform,
     });
 typedef $$SoundsTableUpdateCompanionBuilder =
     SoundsCompanion Function({
@@ -7590,6 +7645,7 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<int?> folderId,
       Value<bool> isFavorite,
       Value<DateTime?> lastPlayedAt,
+      Value<Uint8List?> waveform,
     });
 
 final class $$SoundsTableReferences
@@ -7759,6 +7815,11 @@ class $$SoundsTableFilterComposer
 
   ColumnFilters<DateTime> get lastPlayedAt => $composableBuilder(
     column: $table.lastPlayedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get waveform => $composableBuilder(
+    column: $table.waveform,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7958,6 +8019,11 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<Uint8List> get waveform => $composableBuilder(
+    column: $table.waveform,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LibrariesTableOrderingComposer get libraryId {
     final $$LibrariesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -8064,6 +8130,9 @@ class $$SoundsTableAnnotationComposer
     column: $table.lastPlayedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<Uint8List> get waveform =>
+      $composableBuilder(column: $table.waveform, builder: (column) => column);
 
   $$LibrariesTableAnnotationComposer get libraryId {
     final $$LibrariesTableAnnotationComposer composer = $composerBuilder(
@@ -8236,6 +8305,7 @@ class $$SoundsTableTableManager
                 Value<int?> folderId = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
+                Value<Uint8List?> waveform = const Value.absent(),
               }) => SoundsCompanion(
                 id: id,
                 title: title,
@@ -8252,6 +8322,7 @@ class $$SoundsTableTableManager
                 folderId: folderId,
                 isFavorite: isFavorite,
                 lastPlayedAt: lastPlayedAt,
+                waveform: waveform,
               ),
           createCompanionCallback:
               ({
@@ -8270,6 +8341,7 @@ class $$SoundsTableTableManager
                 Value<int?> folderId = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
+                Value<Uint8List?> waveform = const Value.absent(),
               }) => SoundsCompanion.insert(
                 id: id,
                 title: title,
@@ -8286,6 +8358,7 @@ class $$SoundsTableTableManager
                 folderId: folderId,
                 isFavorite: isFavorite,
                 lastPlayedAt: lastPlayedAt,
+                waveform: waveform,
               ),
           withReferenceMapper: (p0) => p0
               .map(

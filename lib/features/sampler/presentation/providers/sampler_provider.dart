@@ -8,6 +8,7 @@ import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/audio/audio_file_validation.dart';
 import '../../../../core/audio/local_sound_probe.dart';
+import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/sync/download_queue.dart';
 import '../../data/repositories/library_repository.dart'
     show LibraryRepository, SoundNotAvailableLocallyException;
@@ -362,6 +363,46 @@ class SamplerNotifier extends ChangeNotifier {
     padItem.pad = padItem.pad.copyWith(sounds: sounds);
   }
 
+  /// Calcule et persiste l'enveloppe waveform d'un son musique dont le fichier
+  /// vient d'être chargé, si elle manque encore. Réinjecte ensuite le son (avec
+  /// sa waveform) dans le pad en mémoire et notifie — la régie l'affiche dès
+  /// qu'elle est prête, sans bloquer le démarrage de la lecture.
+  Future<void> _ensureWaveformForSound(
+    PadItem padItem,
+    int index,
+    String filePath,
+  ) async {
+    if (index < 0 || index >= padItem.pad.sounds.length) return;
+    final sound = padItem.pad.sounds[index];
+    if (sound.type != SoundType.music || sound.waveform != null) return;
+
+    // Le board peut changer pendant le décodage (tâche de fond) : on capture son
+    // identité pour ne pas muter/notifier un plateau devenu obsolète après l'await.
+    final boardId = padItem.pad.boardId;
+
+    final bytes = await extractWaveform(filePath);
+    if (bytes == null || _activeBoardId != boardId) return;
+
+    try {
+      await _repository.updateSoundWaveform(sound.id, bytes);
+    } catch (e) {
+      debugPrint('Persistance waveform échouée (${sound.title}): $e');
+      return;
+    }
+    if (_activeBoardId != boardId) return;
+
+    // Le pad a pu changer depuis (re-tri, suppression) : relocaliser par id.
+    final freshIndex =
+        padItem.pad.sounds.indexWhere((s) => s.id == sound.id);
+    if (freshIndex < 0) return;
+    final updated = await _repository.getSoundById(sound.id);
+    if (updated == null || _activeBoardId != boardId) return;
+    final sounds = List<Sound>.from(padItem.pad.sounds);
+    sounds[freshIndex] = updated;
+    padItem.pad = padItem.pad.copyWith(sounds: sounds);
+    notifyListeners();
+  }
+
   Future<void> _loadSlotAtIndex(
     PadItem padItem,
     int index, {
@@ -395,6 +436,9 @@ class SamplerNotifier extends ChangeNotifier {
         player: await AudioPlayerService.create(resolvedPath),
       );
       await _syncPadSoundMetadata(padItem, index);
+      // Calcul paresseux de la waveform (régie musique) — en tâche de fond pour
+      // ne pas retarder le démarrage de la lecture.
+      unawaited(_ensureWaveformForSound(padItem, index, resolvedPath));
     } on SoundNotAvailableLocallyException catch (e) {
       padItem.slots[index] = PadSoundSlot(
         availability: _availabilityFromException(e),
@@ -1352,6 +1396,8 @@ class SamplerNotifier extends ChangeNotifier {
   Future<void> toggleCurrentMusicPlayback() =>
       _music.toggleCurrentMusicPlayback();
   Future<void> restartCurrentMusic() => _music.restartCurrentMusic();
+  Future<void> seekPausedMusic(Duration position) =>
+      _music.seekPausedMusic(position);
   Future<void> skipToNextMusic() => _music.skipToNextMusic();
   Future<void> stopCurrentMusic() => _music.stopCurrentMusic();
   Future<void> fadeOutCurrentMusic(Duration d) =>

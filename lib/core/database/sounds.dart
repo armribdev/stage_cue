@@ -111,6 +111,11 @@ class Sounds extends Table {
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
   /// Dernière lecture (pré-écoute ou déclenchement) — tri par récence.
   DateTimeColumn get lastPlayedAt => dateTime().nullable()();
+  /// Enveloppe RMS pré-calculée (1 octet 0–255 par barre) pour dessiner la
+  /// waveform en régie musique — clé implicite = contenu (immuable). null tant
+  /// que non calculée (son non-musique, fichier absent, ou probe échoué) ;
+  /// remplie paresseusement au premier chargement du son musique.
+  BlobColumn get waveform => blob().nullable()();
 }
 
 class SoundBoards extends Table {

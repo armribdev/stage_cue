@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration {
@@ -261,6 +261,12 @@ class AppDatabase extends _$AppDatabase {
             'INSERT OR IGNORE INTO folder_memberships (library_id, folder_id) '
             'SELECT library_id, id FROM library_folders',
           );
+        }
+        if (from < 29) {
+          // Waveform pré-calculée pour la régie musique (enveloppe RMS par
+          // barre). Colonne nullable — les sons existants restent à null et
+          // sont calculés paresseusement au premier chargement en régie.
+          await m.addColumn(sounds, sounds.waveform);
         }
       },
       beforeOpen: (details) async {

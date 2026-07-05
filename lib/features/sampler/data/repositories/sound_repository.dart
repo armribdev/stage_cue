@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
@@ -83,6 +84,11 @@ class SoundRepository {
   /// Change le type d'un son (corrige l'auto-détection par durée).
   Future<void> updateSoundType(int id, SoundType type) async {
     await _soundDataSource.updateSoundType(id, type);
+  }
+
+  /// Persiste l'enveloppe waveform pré-calculée d'un son (régie musique).
+  Future<void> updateSoundWaveform(int id, Uint8List waveform) async {
+    await _soundDataSource.updateSoundWaveform(id, waveform);
   }
 
   /// Marque ou démarque un son comme favori.

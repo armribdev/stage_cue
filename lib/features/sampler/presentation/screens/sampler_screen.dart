@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' show max;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../providers/sampler_provider.dart';
@@ -1733,6 +1732,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
             unawaited(_notifier.fadeOutCurrentMusic(duration)),
         onTransitionToNext: (duration) =>
             unawaited(_notifier.crossfadeToNextMusic(duration)),
+        onSeekMusic: (position) =>
+            unawaited(_notifier.seekPausedMusic(position)),
         onOccupiedHeightChanged: context.prefersDesktopUi
             ? null
             : (height) {
