@@ -37,6 +37,14 @@ class MusicController {
     return msg;
   }
 
+  /// Point d'entrée configuré sur le son du slot [index] d'un pad — position de
+  /// départ d'une lecture fraîche (0 si l'index est hors limites).
+  Duration _startOffsetOf(PadItem padItem, int index) {
+    final sounds = padItem.pad.sounds;
+    if (index < 0 || index >= sounds.length) return Duration.zero;
+    return Duration(milliseconds: sounds[index].startOffsetMs);
+  }
+
   /// Volume effectif : pads musique soumis au volume global, SFX en direct.
   double _effectiveVolume(PadItem padItem) =>
       padItem.pad.isMusicPad
@@ -342,7 +350,10 @@ class MusicController {
       );
       _o._notify();
 
-      await nextPlayer.playAtVolume(0);
+      await nextPlayer.playAtVolume(
+        0,
+        startOffset: _startOffsetOf(next, soundIndex),
+      );
       next._currentPlayerIndex = soundIndex;
       next.isPlaying = true;
 
@@ -499,7 +510,8 @@ class MusicController {
     if (resumePosition != null && resumePosition > Duration.zero) {
       await player.playFromPosition(resumePosition);
     } else {
-      await player.play();
+      // Démarrage frais : on repart du point d'entrée configuré sur le son.
+      await player.playFromPosition(_startOffsetOf(padItem, index));
     }
     _o._markPlayedAt(padItem, index);
     _o._notify();
@@ -699,7 +711,10 @@ class MusicController {
       }
       final targetVolume = _effectiveVolume(next);
 
-      await nextPlayer.playAtVolume(0);
+      await nextPlayer.playAtVolume(
+        0,
+        startOffset: _startOffsetOf(next, soundIndex),
+      );
       next._currentPlayerIndex = soundIndex;
       next.isPlaying = true;
       nextPlayer.fadeVolumeTo(targetVolume, duration);

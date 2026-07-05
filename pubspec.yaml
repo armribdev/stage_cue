@@ -52,6 +52,7 @@ dependencies:
   google_sign_in_all_platforms: ^1.2.1
   shared_preferences: ^2.5.3
   unorm_dart: ^0.3.2
+  custom_mouse_cursor: ^1.1.3
 
 
 dev_dependencies:

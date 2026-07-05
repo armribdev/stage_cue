@@ -109,6 +109,7 @@ class SoundRepository {
     String? displayName,
     bool updateDisplayName = false,
     double? volume,
+    int? startOffsetMs,
   }) async {
     await _soundDataSource.updateSoundSettings(
       id: id,
@@ -117,6 +118,7 @@ class SoundRepository {
       displayName: displayName,
       updateDisplayName: updateDisplayName,
       volume: volume,
+      startOffsetMs: startOffsetMs,
     );
   }
 

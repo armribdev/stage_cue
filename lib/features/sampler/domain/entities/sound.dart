@@ -35,6 +35,10 @@ class Sound {
   /// régie musique ; `null` tant que non calculée.
   final Uint8List? waveform;
 
+  /// Point d'entrée de lecture en millisecondes : tout déclenchement démarre
+  /// ici au lieu du sample 0. 0 = début du fichier.
+  final int startOffsetMs;
+
   Sound({
     required this.id,
     required this.title,
@@ -51,6 +55,7 @@ class Sound {
     this.isFavorite = false,
     this.lastPlayedAt,
     this.waveform,
+    this.startOffsetMs = 0,
   });
 }
 

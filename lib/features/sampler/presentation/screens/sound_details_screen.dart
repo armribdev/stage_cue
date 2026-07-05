@@ -5,6 +5,7 @@ import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../utils/sound_type_ui.dart';
+import '../widgets/start_offset_editor.dart';
 import '../widgets/tag_chips_editor.dart';
 
 /// Écran d'édition d'un son dans la bibliothèque.
@@ -30,6 +31,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
   late String _displayNameValue;
   late int? _selectedColorValue;
   late double _selectedVolume;
+  late int _startOffsetMs;
   late Set<int> _selectedTagIds;
   bool _isSaving = false;
 
@@ -50,6 +52,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
     _displayNameValue = widget.sound.displayName ?? '';
     _selectedColorValue = widget.sound.colorValue;
     _selectedVolume = widget.sound.volume.clamp(0.0, 1.0);
+    _startOffsetMs = widget.sound.startOffsetMs;
     _selectedTagIds = widget.initialTags.map((t) => t.id).toSet();
   }
 
@@ -69,6 +72,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
         displayName: _normalizedDisplayNameOrNull(_displayNameValue),
         updateDisplayName: true,
         volume: _selectedVolume,
+        startOffsetMs: _startOffsetMs,
       );
       await widget.repository.setTagsForSound(
         widget.sound.id,
@@ -172,6 +176,25 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
                   setState(() => _selectedVolume = value.clamp(0.0, 1.0)),
             ),
             const SizedBox(height: 8),
+            Text(
+              'Point d\'entrée',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'La lecture démarre à ce point au lieu du début du fichier.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            StartOffsetEditor(
+              filePath: widget.sound.filePath,
+              waveform: widget.sound.waveform,
+              initialOffsetMs: _startOffsetMs,
+              onChanged: (ms) => setState(() => _startOffsetMs = ms),
+            ),
+            const SizedBox(height: 16),
             Text('Tags', style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 8),
             TagChipsEditor(

@@ -1003,11 +1003,19 @@ class SamplerNotifier extends ChangeNotifier {
       '_nextSoundIndex=${resolved._nextSoundIndex}',
     );
     if (player == null) return;
-    await player.playOverlapping(volume: _effectiveVolume(resolved));
+    // Point d'entrée : le déclenchement démarre à cet offset au lieu du sample 0.
+    final startOffset =
+        Duration(milliseconds: resolved.pad.sounds[soundIndex].startOffsetMs);
+    await player.playOverlapping(
+      volume: _effectiveVolume(resolved),
+      startOffset: startOffset,
+    );
     // Ticket de progression : une barre superposée par voix, auto-supprimée à
-    // la fin du son (bump de révision pour rafraîchir le seul PadButton).
+    // la fin du son (bump de révision pour rafraîchir le seul PadButton). La
+    // durée restante tient compte du point d'entrée sauté en tête.
+    final remaining = player.duration - startOffset;
     resolved.addPlaybackTicket(
-      player.duration,
+      remaining > Duration.zero ? remaining : player.duration,
       onExpire: () => _notifyPad(resolved),
     );
     _markPlayedAt(resolved, soundIndex);

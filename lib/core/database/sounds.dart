@@ -116,6 +116,10 @@ class Sounds extends Table {
   /// que non calculée (son non-musique, fichier absent, ou probe échoué) ;
   /// remplie paresseusement au premier chargement du son musique.
   BlobColumn get waveform => blob().nullable()();
+  /// Point d'entrée de lecture, en millisecondes depuis le début du fichier :
+  /// tout déclenchement (bruitage ou régie musique) démarre ici au lieu du
+  /// sample 0. 0 = début du fichier. Propriété de contenu comme [waveform].
+  IntColumn get startOffsetMs => integer().withDefault(const Constant(0))();
 }
 
 class SoundBoards extends Table {

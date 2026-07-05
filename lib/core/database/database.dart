@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 30;
 
   @override
   MigrationStrategy get migration {
@@ -267,6 +267,11 @@ class AppDatabase extends _$AppDatabase {
           // barre). Colonne nullable — les sons existants restent à null et
           // sont calculés paresseusement au premier chargement en régie.
           await m.addColumn(sounds, sounds.waveform);
+        }
+        if (from < 30) {
+          // Point d'entrée par son : la lecture démarre à cet offset au lieu
+          // du sample 0. Défaut 0 → comportement inchangé pour l'existant.
+          await m.addColumn(sounds, sounds.startOffsetMs);
         }
       },
       beforeOpen: (details) async {
