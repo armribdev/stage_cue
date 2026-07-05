@@ -41,12 +41,19 @@ class SyncState {
 
   final String? message;
 
+  /// Session Google expirée/révoquée : un OAuth interactif est requis. Flag
+  /// dédié plutôt qu'une détection fragile sur le texte de [message]. Il n'est
+  /// pas propagé par [copyWith] : toute nouvelle transition d'état le remet à
+  /// false, seul [SyncController._onAuthError] le lève.
+  final bool authExpired;
+
   const SyncState({
     this.status = SyncStatus.idle,
     this.lastSyncedAt,
     this.conflictRemoteRevision,
     this.conflictLibraryId,
     this.message,
+    this.authExpired = false,
   });
 
   SyncState copyWith({
@@ -57,6 +64,7 @@ class SyncState {
     bool clearConflict = false,
     String? message,
     bool clearMessage = false,
+    bool? authExpired,
   }) {
     return SyncState(
       status: status ?? this.status,
@@ -68,6 +76,7 @@ class SyncState {
           ? null
           : (conflictLibraryId ?? this.conflictLibraryId),
       message: clearMessage ? null : (message ?? this.message),
+      authExpired: authExpired ?? false,
     );
   }
 }
@@ -327,7 +336,7 @@ class SyncController extends ChangeNotifier {
 
   /// Efface l'état hors-ligne après une reconnexion OAuth réussie.
   void clearAuthOfflineState() {
-    if (_state.status != SyncStatus.offline || _state.message == null) {
+    if (_state.status != SyncStatus.offline && !_state.authExpired) {
       return;
     }
     _set(_state.copyWith(status: SyncStatus.idle, clearMessage: true));
@@ -340,6 +349,7 @@ class SyncController extends ChangeNotifier {
       status: SyncStatus.offline,
       clearConflict: true,
       message: 'Session Google expirée — reconnectez-vous dans les réglages.',
+      authExpired: true,
     ));
   }
 
