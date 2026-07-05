@@ -377,7 +377,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   @override
   void dispose() {
     if (_isManage) {
-      widget.notifier.stopLibraryPreview();
+      // Pas de notify : évite setState sur SamplerScreen pendant le pop.
+      widget.notifier.stopLibraryPreview(notify: false);
     }
     widget.notifier.removeListener(_onNotifierChanged);
     _tagDebounce?.cancel();
