@@ -2,6 +2,7 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/utils/sound_color_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
@@ -56,6 +57,9 @@ class MusicPreviewPanel extends StatefulWidget {
   final ValueChanged<double>? onMusicVolumeChanged;
   final ValueChanged<Duration>? onFadeOut;
   final ValueChanged<Duration>? onTransitionToNext;
+
+  /// Repositionne la lecture quand la régie est en pause (scrub sur la waveform).
+  final ValueChanged<Duration>? onSeekMusic;
   final bool isAdvanced;
   final ValueChanged<bool> onAdvancedChanged;
   final bool isDesktop;
@@ -80,6 +84,7 @@ class MusicPreviewPanel extends StatefulWidget {
     this.onMusicVolumeChanged,
     this.onFadeOut,
     this.onTransitionToNext,
+    this.onSeekMusic,
     this.isDesktop = false,
     this.isLocked = false,
     this.onLockedChanged,
@@ -309,6 +314,7 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
       onRemoveFromQueue: widget.onRemoveFromQueue,
       onReorderMusicQueue: widget.onReorderMusicQueue,
       onMusicVolumeChanged: widget.onMusicVolumeChanged,
+      onSeekMusic: widget.onSeekMusic,
       selectedTransitionDuration: _selectedTransitionDuration,
       onTransitionOptionTapped: _toggleTransitionOption,
       activeTransitionKind: _activeTransitionKind,
@@ -484,6 +490,7 @@ class _MusicRegieDrawer extends StatefulWidget {
   final ValueChanged<int>? onRemoveFromQueue;
   final void Function(int oldIndex, int newIndex)? onReorderMusicQueue;
   final ValueChanged<double>? onMusicVolumeChanged;
+  final ValueChanged<Duration>? onSeekMusic;
   final Duration? selectedTransitionDuration;
   final ValueChanged<Duration> onTransitionOptionTapped;
   final _MusicTransitionKind? activeTransitionKind;
@@ -510,6 +517,7 @@ class _MusicRegieDrawer extends StatefulWidget {
     this.onRemoveFromQueue,
     this.onReorderMusicQueue,
     this.onMusicVolumeChanged,
+    this.onSeekMusic,
     required this.selectedTransitionDuration,
     required this.onTransitionOptionTapped,
     this.activeTransitionKind,
@@ -599,6 +607,8 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
                   padItem: current,
                   isPlaying: isPlaying,
                   height: 4,
+                  waveformHeight: 26,
+                  onSeek: widget.onSeekMusic,
                 ),
               ],
               const SizedBox(height: 12),
@@ -621,6 +631,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
           padItem: current,
           isPlaying: isPlaying,
           controls: onAirControls,
+          onSeek: widget.onSeekMusic,
         );
         final queueSection = _PassageQueueSection(
           queue: queue,
@@ -1626,11 +1637,13 @@ class _OnAirCard extends StatelessWidget {
   final PadItem? padItem;
   final bool isPlaying;
   final Widget controls;
+  final ValueChanged<Duration>? onSeek;
 
   const _OnAirCard({
     required this.padItem,
     required this.isPlaying,
     required this.controls,
+    this.onSeek,
   });
 
   @override
@@ -1720,6 +1733,7 @@ class _OnAirCard extends StatelessWidget {
                 padItem: padItem,
                 isPlaying: isPlaying,
                 showTimes: true,
+                onSeek: onSeek,
               ),
             const SizedBox(height: 12),
             controls,
@@ -1736,11 +1750,21 @@ class _RegieProgressBar extends StatefulWidget {
   final bool showTimes;
   final double height;
 
+  /// Hauteur de la waveform quand le son courant en possède une ; à défaut on
+  /// retombe sur la barre linéaire d'épaisseur [height].
+  final double waveformHeight;
+
+  /// Repositionne la lecture (scrub) — actif uniquement quand le pad est en
+  /// pause et qu'une waveform est affichée. `null` = pas de seek.
+  final ValueChanged<Duration>? onSeek;
+
   const _RegieProgressBar({
     required this.padItem,
     this.isPlaying = false,
     this.showTimes = false,
     this.height = 4,
+    this.waveformHeight = 34,
+    this.onSeek,
   });
 
   @override
@@ -1810,22 +1834,80 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
     return (position: position, duration: duration, value: value);
   }
 
+  /// Son actuellement à l'antenne (ou en pause), pour résoudre sa waveform.
+  Sound? get _currentSound {
+    final padItem = widget.padItem;
+    if (padItem == null || padItem.pad.sounds.isEmpty) return null;
+    final idx = padItem.currentSoundIndex ?? padItem.pausedPlayerIndex ?? 0;
+    if (idx < 0 || idx >= padItem.pad.sounds.length) {
+      return padItem.pad.sounds.first;
+    }
+    return padItem.pad.sounds[idx];
+  }
+
+  /// Traduit une abscisse tactile [dx] (sur une largeur [width]) en position de
+  /// lecture et la transmet via [widget.onSeek].
+  void _handleSeek(double dx, double width, Duration duration) {
+    if (width <= 0 || duration <= Duration.zero) return;
+    final fraction = (dx / width).clamp(0.0, 1.0);
+    widget.onSeek?.call(duration * fraction);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final playback = _playbackState();
+    final bars = _hasTrack
+        ? decodeWaveformBars(_currentSound?.waveform)
+        : const <double>[];
+
+    final Widget progressWidget;
+    if (bars.isNotEmpty) {
+      final Widget waveform = _WaveformProgress(
+        bars: bars,
+        progress: _hasTrack ? playback.value : 0,
+        height: widget.waveformHeight,
+        playedColor: scheme.primary,
+        remainingColor: scheme.outlineVariant.withValues(alpha: 0.55),
+      );
+
+      // Scrub tactile — uniquement quand la régie est en pause : on repère une
+      // nouvelle position de reprise sans relancer la lecture.
+      final canSeek =
+          widget.onSeek != null && (widget.padItem?.isPaused ?? false);
+      if (canSeek && playback.duration > Duration.zero) {
+        progressWidget = LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            void seekTo(double dx) =>
+                _handleSeek(dx, width, playback.duration);
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (d) => seekTo(d.localPosition.dx),
+              onHorizontalDragStart: (d) => seekTo(d.localPosition.dx),
+              onHorizontalDragUpdate: (d) => seekTo(d.localPosition.dx),
+              child: waveform,
+            );
+          },
+        );
+      } else {
+        progressWidget = waveform;
+      }
+    } else {
+      progressWidget = ClipRRect(
+        borderRadius: BorderRadius.circular(widget.height),
+        child: LinearProgressIndicator(
+          value: _hasTrack ? playback.value : 0,
+          minHeight: widget.height,
+          backgroundColor: scheme.outlineVariant.withValues(alpha: 0.35),
+          valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+        ),
+      );
+    }
 
     return Column(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(widget.height),
-          child: LinearProgressIndicator(
-            value: _hasTrack ? playback.value : 0,
-            minHeight: widget.height,
-            backgroundColor: scheme.outlineVariant.withValues(alpha: 0.35),
-            valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
-          ),
-        ),
+        progressWidget,
         if (widget.showTimes) ...[
           const SizedBox(height: 6),
           Row(
@@ -1858,6 +1940,146 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
     final seconds = totalSeconds % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
+}
+
+/// Waveform de régie : barres de largeur FIXE (indépendante de la taille du
+/// widget et de la durée du morceau). Le nombre de barres découle de la largeur
+/// disponible ; l'enveloppe stockée est rééchantillonnée par PIC (max) pour ne
+/// pas écraser les crêtes. La portion jouée (gauche) est colorée [playedColor].
+class _WaveformProgress extends StatelessWidget {
+  final List<double> bars;
+  final double progress;
+  final double height;
+  final Color playedColor;
+  final Color remainingColor;
+
+  /// Largeur et espacement d'une barre, en pixels logiques (entiers → tracé net).
+  static const double _barWidth = 2.0;
+  static const double _barGap = 2.0;
+  static const double _slot = _barWidth + _barGap;
+
+  const _WaveformProgress({
+    required this.bars,
+    required this.progress,
+    required this.height,
+    required this.playedColor,
+    required this.remainingColor,
+  });
+
+  /// Rééchantillonne [src] (0..1) vers [target] barres en prenant le pic (max)
+  /// de chaque groupe — préserve les crêtes quelle que soit la densité.
+  static List<double> _resamplePeaks(List<double> src, int target) {
+    if (src.isEmpty || target <= 0) return const [];
+    if (target >= src.length) {
+      // Plus de barres que d'échantillons : on répète le plus proche.
+      return [
+        for (var i = 0; i < target; i++)
+          src[((i * src.length) ~/ target).clamp(0, src.length - 1)],
+      ];
+    }
+    final out = List<double>.filled(target, 0);
+    for (var t = 0; t < target; t++) {
+      final start = (t * src.length) ~/ target;
+      var end = ((t + 1) * src.length) ~/ target;
+      if (end <= start) end = start + 1;
+      if (end > src.length) end = src.length;
+      var peak = 0.0;
+      for (var j = start; j < end; j++) {
+        if (src[j] > peak) peak = src[j];
+      }
+      out[t] = peak;
+    }
+    return out;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final count = (width / _slot).floor();
+          if (count <= 0 || bars.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          final peaks = _resamplePeaks(bars, count);
+          // Centre le bloc de barres : reste réparti en marge gauche/droite.
+          final offset = (width - count * _slot) / 2;
+          return CustomPaint(
+            size: Size(width, height),
+            painter: _WaveformPainter(
+              peaks: peaks,
+              barWidth: _barWidth,
+              slot: _slot,
+              offset: offset,
+              progress: progress.clamp(0.0, 1.0),
+              playedColor: playedColor,
+              remainingColor: remainingColor,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _WaveformPainter extends CustomPainter {
+  final List<double> peaks;
+  final double barWidth;
+  final double slot;
+  final double offset;
+  final double progress;
+  final Color playedColor;
+  final Color remainingColor;
+
+  _WaveformPainter({
+    required this.peaks,
+    required this.barWidth,
+    required this.slot,
+    required this.offset,
+    required this.progress,
+    required this.playedColor,
+    required this.remainingColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (peaks.isEmpty || size.width <= 0) return;
+
+    final centerY = size.height / 2;
+    final maxHalf = size.height / 2;
+    final radius = Radius.circular(barWidth / 2);
+    final playedX = size.width * progress;
+
+    final playedPaint = Paint()..color = playedColor;
+    final remainingPaint = Paint()..color = remainingColor;
+
+    for (var i = 0; i < peaks.length; i++) {
+      // Position arrondie au pixel entier → toutes les barres ont la même
+      // largeur visuelle (pas d'écrasement sous-pixel par l'anti-aliasing).
+      final x = (offset + i * slot).roundToDouble();
+      // Plancher visuel : même un silence reste une fine ligne médiane.
+      final half = (peaks[i] * maxHalf).clamp(1.0, maxHalf);
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTRB(x, centerY - half, x + barWidth, centerY + half),
+        radius,
+      );
+      canvas.drawRRect(
+        rect,
+        x + barWidth / 2 <= playedX ? playedPaint : remainingPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WaveformPainter old) =>
+      old.progress != progress ||
+      old.peaks != peaks ||
+      old.offset != offset ||
+      old.playedColor != playedColor ||
+      old.remainingColor != remainingColor;
 }
 
 class _PassageQueueSection extends StatelessWidget {

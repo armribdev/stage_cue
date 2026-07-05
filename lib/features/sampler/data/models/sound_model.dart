@@ -22,6 +22,7 @@ class SoundModel {
       contentHash: sound.contentHash,
       isFavorite: sound.isFavorite,
       lastPlayedAt: sound.lastPlayedAt,
+      waveform: sound.waveform,
     );
   }
 

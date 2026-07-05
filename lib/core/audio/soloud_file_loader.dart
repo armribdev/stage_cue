@@ -20,6 +20,12 @@ Future<T> _enqueueLoadMemTask<T>(Future<T> Function() task) {
   return run;
 }
 
+/// Sérialise une tâche SoLoud qui décode un fichier (ex. extraction de waveform)
+/// sur la MÊME file que [loadMem] : deux accès natifs concurrents au moteur
+/// (surtout depuis un isolate `compute`) plantent flutter_soloud sous Windows.
+Future<T> enqueueSoLoudFileTask<T>(Future<T> Function() task) =>
+    _enqueueLoadMemTask(task);
+
 /// Formats natifs de miniaudio (SoLoud) — AAC/M4A exclus.
 const Set<String> supportedAudioExtensions = {
   '.mp3', '.wav', '.ogg', '.opus', '.flac',

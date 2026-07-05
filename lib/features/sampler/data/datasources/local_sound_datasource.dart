@@ -14,6 +14,7 @@ import '../../../../core/utils/file_utils.dart'
 import '../../../../core/audio/soloud_file_loader.dart';
 import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/audio_file_validation.dart';
+import '../../../../core/audio/waveform_extractor.dart';
 import '../models/sound_model.dart';
 import '../models/sound_board_model.dart';
 import '../models/watched_path_model.dart';
@@ -32,15 +33,19 @@ class LocalSoundDataSource {
 
   /// Résout les métadonnées d'un fichier audio local.
   /// Retourne `type: null` si le fichier est absent ou si le probe de durée échoue.
-  Future<({db_sounds.SoundType? type, String? contentHash})>
+  /// La waveform n'est calculée que pour les musiques (seul type affiché en régie).
+  Future<({db_sounds.SoundType? type, String? contentHash, Uint8List? waveform})>
       _resolveMetadataForFile(File file) async {
     if (!await file.exists() || await file.length() <= 0) {
-      return (type: null, contentHash: null);
+      return (type: null, contentHash: null, waveform: null);
     }
     final probeType = await _probeSoundTypeFromDuration(file);
     final contentHash =
         probeType != null ? await computeQuickHash(file) : null;
-    return (type: probeType, contentHash: contentHash);
+    final waveform = probeType == db_sounds.SoundType.music
+        ? await extractWaveform(file.path)
+        : null;
+    return (type: probeType, contentHash: contentHash, waveform: waveform);
   }
 
   /// Probe de type par durée SoLoud. Retourne null si le fichier est invalide
@@ -261,6 +266,12 @@ class LocalSoundDataSource {
         .write(db.SoundsCompanion(type: Value(dbType)));
   }
 
+  /// Persiste l'enveloppe waveform pré-calculée d'un son (régie musique).
+  Future<void> updateSoundWaveform(int id, Uint8List waveform) async {
+    await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
+        .write(db.SoundsCompanion(waveform: Value(waveform)));
+  }
+
   /// Marque ou démarque un son comme favori (accès rapide en recherche).
   Future<void> setFavorite(int id, bool isFavorite) async {
     await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
@@ -353,6 +364,7 @@ class LocalSoundDataSource {
               filePath: file.path,
               type: Value(metadata.type),
               contentHash: Value(metadata.contentHash),
+              waveform: Value(metadata.waveform),
             ),
           );
     } catch (e) {
@@ -392,6 +404,7 @@ class LocalSoundDataSource {
             libraryId: Value(libraryId),
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
+            waveform: Value(metadata.waveform),
           ),
         );
     return true;
@@ -414,22 +427,39 @@ class LocalSoundDataSource {
       final contentHash = probeType != null
           ? await computeQuickHash(file)
           : existing.contentHash;
+      final waveform = probeType == db_sounds.SoundType.music
+          ? await extractWaveform(file.path)
+          : null;
       await (_database.update(_database.sounds)
             ..where((s) => s.id.equals(soundId)))
           .write(
         db.SoundsCompanion(
           type: Value(probeType),
           contentHash: Value(contentHash),
+          waveform: Value(waveform),
         ),
       );
       return;
     }
 
-    if (existing.contentHash != null) return;
-    final contentHash = await computeQuickHash(file);
+    // Type déjà connu : compléter le hash et/ou la waveform s'ils manquent.
+    final needsHash = existing.contentHash == null;
+    final needsWaveform =
+        existing.type == db_sounds.SoundType.music && existing.waveform == null;
+    if (!needsHash && !needsWaveform) return;
+
     await (_database.update(_database.sounds)
           ..where((s) => s.id.equals(soundId)))
-        .write(db.SoundsCompanion(contentHash: Value(contentHash)));
+        .write(
+      db.SoundsCompanion(
+        contentHash: needsHash
+            ? Value(await computeQuickHash(file))
+            : const Value.absent(),
+        waveform: needsWaveform
+            ? Value(await extractWaveform(file.path))
+            : const Value.absent(),
+      ),
+    );
   }
 
   /// true si un son `(libraryId, relativePath)` existe déjà en base.
@@ -563,6 +593,7 @@ class LocalSoundDataSource {
             libraryId: Value(libraryId),
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
+            waveform: Value(metadata.waveform),
             driveFileId: Value(driveFileId),
             folderId: Value(folderId),
           ),
@@ -649,6 +680,7 @@ class LocalSoundDataSource {
                   filePath: file.path,
                   type: Value(metadata.type),
                   contentHash: Value(metadata.contentHash),
+                  waveform: Value(metadata.waveform),
                 ),
               );
           indexedCount++;
@@ -824,6 +856,7 @@ class LocalSoundDataSource {
         libraryId: row.libraryId,
         relativePath: row.relativePath,
         contentHash: row.contentHash,
+        waveform: row.waveform,
       );
     }).toList();
   }
@@ -1108,6 +1141,7 @@ class LocalPadDataSource {
       libraryId: row.read<int?>('library_id'),
       relativePath: row.read<String?>('relative_path'),
       contentHash: row.read<String?>('content_hash'),
+      waveform: row.read<Uint8List?>('waveform'),
     );
   }
 
@@ -1129,7 +1163,7 @@ class LocalPadDataSource {
         '''
         SELECT s.id, s.title, s.display_name, s.file_path, s.type,
                s.color, s.volume, s.created_at,
-               s.library_id, s.relative_path, s.content_hash
+               s.library_id, s.relative_path, s.content_hash, s.waveform
         FROM pad_sounds ps
         INNER JOIN sounds s ON s.id = ps.sound_id
         WHERE ps.pad_id = ?

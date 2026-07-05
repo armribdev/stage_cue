@@ -241,6 +241,23 @@ class MusicController {
     );
   }
 
+  /// Repositionne la lecture du pad musique courant EN PAUSE (scrub sur la
+  /// waveform de régie) : met à jour la position mémorisée, d'où la reprise
+  /// repartira. Sans effet si aucun pad n'est en pause. La lecture n'est jamais
+  /// relancée ici — c'est un simple repérage.
+  Future<void> seekPausedMusic(Duration position) async {
+    final current = _o._state.currentMusicPad;
+    if (current == null || !current.isPaused) return;
+
+    final duration = current.progressPlayer?.duration ?? Duration.zero;
+    var target = position;
+    if (target < Duration.zero) target = Duration.zero;
+    if (duration > Duration.zero && target > duration) target = duration;
+
+    current.pausedPlaybackPosition = target;
+    _o._notify();
+  }
+
   Future<void> restartCurrentMusic() async {
     final current = _o._state.currentMusicPad;
     if (current == null || !current.isPlayable) return;
