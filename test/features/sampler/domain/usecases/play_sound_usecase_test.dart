@@ -14,6 +14,9 @@ class FakeAudioPlayerService implements AudioPlayerService {
   bool get isPlaying => played;
 
   @override
+  bool get isPaused => false;
+
+  @override
   Stream<bool> get onPlayerStateChanged => const Stream<bool>.empty();
 
   @override
@@ -39,6 +42,16 @@ class FakeAudioPlayerService implements AudioPlayerService {
   @override
   Future<void> stop() async {
     played = false;
+  }
+
+  @override
+  Future<void> pause() async {
+    played = false;
+  }
+
+  @override
+  Future<void> resume() async {
+    played = true;
   }
 
   @override

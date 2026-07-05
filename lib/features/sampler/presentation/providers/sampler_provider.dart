@@ -49,6 +49,11 @@ class SamplerNotifier extends ChangeNotifier {
   /// jouer simultanément ; chacun se libère seul à la fin de sa lecture.
   final Set<AudioPlayerService> _previewPlayers = {};
 
+  /// Lecteur unique pour l'aperçu bibliothèque (play/pause, un son à la fois).
+  AudioPlayerService? _libraryPreviewPlayer;
+  int? _libraryPreviewSoundId;
+  StreamSubscription<bool>? _libraryPreviewSub;
+
   /// File de téléchargement priorisée à concurrence bornée (refonte UX P2).
   final DownloadQueue _downloadQueue = DownloadQueue(maxConcurrent: 2);
 
@@ -1816,18 +1821,94 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
+  /// Pré-écoute d'un son (recherche-éclair).
+  ///
+  /// La musique passe par la régie live ; bruitages/ambiances en fire-and-forget
+  /// depuis le [Sound.startOffsetMs].
   Future<bool> previewSound(int soundId) async {
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
-    // Musique : lecture directe dans la régie (persiste après fermeture de la
-    // recherche, démarrage immédiat sans transition).
     if (sound.type == SoundType.music) {
       final padItem = await playMusicBySoundId(soundId);
       return padItem != null;
     }
-    // Bruitage/ambiance : pré-écoute fire-and-forget. On n'arrête pas les
-    // pré-écoutes en cours — on peut en lancer autant que voulu, elles jouent
-    // simultanément et se libèrent chacune à la fin.
+    return _playEphemeralPreview(sound);
+  }
+
+  /// Son en cours d'aperçu dans la bibliothèque, ou `null`.
+  int? get libraryPreviewSoundId => _libraryPreviewSoundId;
+
+  /// Indique si l'aperçu bibliothèque de [soundId] est audible.
+  bool libraryPreviewIsPlaying(int soundId) =>
+      _libraryPreviewSoundId == soundId &&
+      (_libraryPreviewPlayer?.isPlaying ?? false);
+
+  /// Bascule play/pause pour l'aperçu bibliothèque (lecteur unique).
+  Future<bool> toggleLibraryPreview(int soundId) async {
+    final player = _libraryPreviewPlayer;
+    if (_libraryPreviewSoundId == soundId && player != null) {
+      if (player.isPlaying) {
+        await player.pause();
+        _notify();
+        return true;
+      }
+      if (player.isPaused) {
+        await player.resume();
+        _notify();
+        return true;
+      }
+    }
+
+    stopLibraryPreview(notify: false);
+    final sound = await _repository.getSoundById(soundId);
+    if (sound == null) return false;
+    return _startLibraryPreview(sound);
+  }
+
+  /// Arrête et libère l'aperçu bibliothèque.
+  void stopLibraryPreview({bool notify = true}) {
+    _libraryPreviewSub?.cancel();
+    _libraryPreviewSub = null;
+    _libraryPreviewPlayer?.dispose();
+    _libraryPreviewPlayer = null;
+    _libraryPreviewSoundId = null;
+    if (notify) _notify();
+  }
+
+  Future<bool> _startLibraryPreview(Sound sound) async {
+    try {
+      final path = await _resolvePlayablePath(
+        sound,
+        downloadIfNeeded: allowsSoundDownload,
+      );
+      final player = await AudioPlayerService.create(path);
+      _libraryPreviewPlayer = player;
+      _libraryPreviewSoundId = sound.id;
+      _libraryPreviewSub = player.onPlayerStateChanged.listen((playing) {
+        if (playing) return;
+        stopLibraryPreview();
+      });
+      var startOffsetMs = sound.startOffsetMs;
+      final duration = player.duration;
+      if (duration > Duration.zero) {
+        final maxMs = duration.inMilliseconds;
+        if (startOffsetMs >= maxMs) {
+          startOffsetMs = (maxMs - 1).clamp(0, maxMs);
+        }
+      }
+      await player.playFromPosition(Duration(milliseconds: startOffsetMs));
+      _markPlayed(sound.id);
+      _notify();
+      return true;
+    } catch (e) {
+      debugPrint('Aperçu bibliothèque échoué pour ${sound.title}: $e');
+      stopLibraryPreview(notify: false);
+      return false;
+    }
+  }
+
+  /// Pré-écoute fire-and-forget depuis le point d'entrée du son.
+  Future<bool> _playEphemeralPreview(Sound sound) async {
     try {
       final path = await _resolvePlayablePath(
         sound,
@@ -1851,7 +1932,7 @@ class SamplerNotifier extends ChangeNotifier {
         }
       }
       await player.playFromPosition(Duration(milliseconds: startOffsetMs));
-      _markPlayed(soundId);
+      _markPlayed(sound.id);
       return true;
     } catch (e) {
       debugPrint('Pré-écoute échouée pour ${sound.title}: $e');
@@ -1861,6 +1942,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   /// Arrête et libère toutes les pré-écoutes en cours.
   void stopAllPreviews() {
+    stopLibraryPreview(notify: false);
     if (_previewPlayers.isEmpty) return;
     final players = _previewPlayers.toList();
     _previewPlayers.clear();

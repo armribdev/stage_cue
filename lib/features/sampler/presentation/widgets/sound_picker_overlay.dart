@@ -306,7 +306,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     LibraryMode() =>
       '↑↓ sélectionner    ↵/tap éditer',
     ManageMode() =>
-      '↑↓ sélectionner    ↵/tap éditer',
+      '↑↓ sélectionner    ↵/tap éditer    ▶ aperçu depuis le point d\'entrée',
   };
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -376,6 +376,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   @override
   void dispose() {
+    if (_isManage) {
+      widget.notifier.stopLibraryPreview();
+    }
     widget.notifier.removeListener(_onNotifierChanged);
     _tagDebounce?.cancel();
     _tagsLoadDebounce?.cancel();
@@ -629,6 +632,17 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   // QuickSearch
   Future<void> _previewSound(Sound sound) async {
     final ok = await widget.notifier.previewSound(sound.id);
+    if (!mounted || ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Son indisponible — vérifiez la connexion'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _toggleLibraryPreview(Sound sound) async {
+    final ok = await widget.notifier.toggleLibraryPreview(sound.id);
     if (!mounted || ok) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -1199,7 +1213,18 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         );
 
       case ManageMode():
-        return const SizedBox.shrink();
+        final isPlaying = widget.notifier.libraryPreviewIsPlaying(sound.id);
+        return Tooltip(
+          message: isPlaying
+              ? 'Pause'
+              : 'Aperçu depuis le point d\'entrée',
+          child: _roundIconButton(
+            scheme: scheme,
+            icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            iconColor: scheme.primary,
+            onPressed: () => unawaited(_toggleLibraryPreview(sound)),
+          ),
+        );
     }
   }
 
