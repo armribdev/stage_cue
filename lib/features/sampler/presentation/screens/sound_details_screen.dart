@@ -6,6 +6,7 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
+import '../widgets/sound_type_picker.dart';
 import '../widgets/start_offset_editor.dart';
 import '../widgets/tag_chips_editor.dart';
 
@@ -36,6 +37,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
   late double _selectedVolume;
   late int _startOffsetMs;
   late Set<int> _selectedTagIds;
+  late SoundType? _selectedType;
   bool _isSaving = false;
 
   static const List<Color> _defaultColorChoices = <Color>[
@@ -57,6 +59,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
     _selectedVolume = widget.sound.volume.clamp(0.0, 1.0);
     _startOffsetMs = widget.sound.startOffsetMs;
     _selectedTagIds = widget.initialTags.map((t) => t.id).toSet();
+    _selectedType = widget.sound.type;
   }
 
   String? _normalizedDisplayNameOrNull(String value) {
@@ -81,6 +84,12 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
         widget.sound.id,
         _selectedTagIds.toList(),
       );
+      if (_selectedType != null && _selectedType != widget.sound.type) {
+        await widget.repository.updateSoundType(
+          widget.sound.id,
+          _selectedType!,
+        );
+      }
       await widget.notifier?.refreshSoundMetadata(widget.sound.id);
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -131,6 +140,16 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Type de son',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            SoundTypePicker(
+              selected: _selectedType,
+              onChanged: (type) => setState(() => _selectedType = type),
             ),
             const SizedBox(height: 16),
             Text(
@@ -262,28 +281,15 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
       color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
 
   Widget _buildSoundTypeHeader(BuildContext context) {
-    final type = widget.sound.type;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SoundTypeAvatar(type: type, radius: 32, iconSize: 32),
+        SoundTypeAvatar(type: _selectedType, radius: 32, iconSize: 32),
         const SizedBox(width: 16),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.sound.title,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                widget.sound.typeDisplayLabel,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-              ),
-            ],
+          child: Text(
+            widget.sound.title,
+            style: Theme.of(context).textTheme.titleLarge,
           ),
         ),
       ],

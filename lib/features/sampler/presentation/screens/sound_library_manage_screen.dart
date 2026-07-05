@@ -7,6 +7,7 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
 import '../widgets/app_form_dialog.dart';
 import '../widgets/sound_picker_overlay.dart';
+import '../widgets/sound_type_picker.dart';
 import '../widgets/start_offset_editor.dart';
 import '../widgets/tag_chips_editor.dart';
 import 'sound_details_screen.dart';
@@ -88,6 +89,7 @@ class SoundLibraryManageScreen {
     var selectedVolume = sound.volume.clamp(0.0, 1.0);
     var displayNameValue = sound.displayName ?? '';
     var startOffsetMs = sound.startOffsetMs;
+    var selectedType = sound.type;
     final selectedTagIds = initialTags.map((t) => t.id).toSet();
 
     String? normalizedOrNull(String value) {
@@ -117,6 +119,11 @@ class SoundLibraryManageScreen {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Text(
+                        'Nom affiché',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
                       TextFormField(
                         initialValue: displayNameValue,
                         onChanged: (v) => displayNameValue = v,
@@ -127,6 +134,17 @@ class SoundLibraryManageScreen {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Type de son',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      SoundTypePicker(
+                        selected: selectedType,
+                        onChanged: (type) =>
+                            setDialogState(() => selectedType = type),
                       ),
                       const SizedBox(height: sectionSpacing),
                       Text(
@@ -231,6 +249,9 @@ class SoundLibraryManageScreen {
                     );
                     await repository.setTagsForSound(
                         sound.id, selectedTagIds.toList());
+                    if (selectedType != null && selectedType != sound.type) {
+                      await repository.updateSoundType(sound.id, selectedType!);
+                    }
                     await notifier.refreshSoundMetadata(sound.id);
                     if (!dialogContext.mounted) return;
                     Navigator.of(dialogContext).pop(true);
