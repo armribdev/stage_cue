@@ -317,4 +317,100 @@ void main() {
       expect(sounds.first.relativePath, 'b/knock.mp3');
     });
   });
+
+  group('élagage des sons supprimés directement sur Drive', () {
+    test('supprime le son dont le fichier a disparu du scan', () async {
+      final libraryId = await insertLibrary();
+      await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'a.mp3',
+        localPath: '/cache/a.mp3',
+        driveFileId: 'F1',
+      );
+      await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'b.mp3',
+        localPath: '/cache/b.mp3',
+        driveFileId: 'F2',
+      );
+
+      // F2 a été supprimé directement sur Drive : le scan ne remonte plus que F1.
+      final pruned = await dataSource.pruneLibrarySoundsAbsentFromDrive(
+        libraryId: libraryId,
+        keptDriveFileIds: {'F1'},
+      );
+
+      expect(pruned, 1);
+      final sounds = await soundsOf(libraryId);
+      expect(sounds, hasLength(1));
+      expect(sounds.first.driveFileId, 'F1');
+    });
+
+    test('épargne les sons legacy sans driveFileId', () async {
+      final libraryId = await insertLibrary();
+      await database.into(database.sounds).insert(
+            db.SoundsCompanion.insert(
+              title: 'legacy',
+              filePath: '/cache/legacy.mp3',
+              libraryId: Value(libraryId),
+              relativePath: const Value('legacy.mp3'),
+            ),
+          );
+
+      // Aucun survivant à identité forte, mais le legacy ne doit pas être élagué.
+      final pruned = await dataSource.pruneLibrarySoundsAbsentFromDrive(
+        libraryId: libraryId,
+        keptDriveFileIds: const {},
+      );
+
+      expect(pruned, 0);
+      expect(await soundsOf(libraryId), hasLength(1));
+    });
+
+    test('scan vide supprime tous les sons à identité de la bibliothèque',
+        () async {
+      final libraryId = await insertLibrary();
+      await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'a.mp3',
+        localPath: '/cache/a.mp3',
+        driveFileId: 'F1',
+      );
+
+      final pruned = await dataSource.pruneLibrarySoundsAbsentFromDrive(
+        libraryId: libraryId,
+        keptDriveFileIds: const {},
+      );
+
+      expect(pruned, 1);
+      expect(await soundsOf(libraryId), isEmpty);
+    });
+
+    test('n\'élague pas les sons d\'une autre bibliothèque', () async {
+      final libA = await insertLibrary(name: 'A', root: '/a');
+      final libB = await insertLibrary(name: 'B', root: '/b');
+      await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libA,
+        relativePath: 'a.mp3',
+        localPath: '/a/a.mp3',
+        driveFileId: 'FA',
+      );
+      await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libB,
+        relativePath: 'b.mp3',
+        localPath: '/b/b.mp3',
+        driveFileId: 'FB',
+      );
+
+      // Scan de A qui ne remonte plus rien : B ne doit pas être touchée.
+      final pruned = await dataSource.pruneLibrarySoundsAbsentFromDrive(
+        libraryId: libA,
+        keptDriveFileIds: const {},
+      );
+
+      expect(pruned, 1);
+      expect(await soundsOf(libA), isEmpty);
+      expect(await soundsOf(libB), hasLength(1));
+    });
+  });
 }

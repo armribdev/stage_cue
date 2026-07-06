@@ -1222,6 +1222,17 @@ class LibraryRepository extends ChangeNotifier {
         );
       }
 
+      // Élagage symétrique de l'ajout : le scan ci-dessus est complet (listFolder
+      // pagine intégralement) et n'a pu être atteint qu'après un parcours sans
+      // erreur — sûr donc pour supprimer les sons dont le fichier a été retiré
+      // directement sur Drive (identité forte absente du scan). Les sons legacy
+      // sans driveFileId sont épargnés (réalignés par chemin, jamais élagués).
+      final seenDriveIds = audioFiles.map((e) => e.driveFileId).toSet();
+      await _soundDataSource.pruneLibrarySoundsAbsentFromDrive(
+        libraryId: library.id,
+        keptDriveFileIds: seenDriveIds,
+      );
+
       onProgress?.call(
         IndexingProgress(
           path: library.name,
