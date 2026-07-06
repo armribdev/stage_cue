@@ -53,6 +53,23 @@ class DriveFolderLinkInitResult {
   bool get shouldUpload => !hadRemoteSnapshot || indexedNewFiles > 0;
 }
 
+/// Résultat d'un scan complet d'un dossier Drive.
+class DriveIndexResult {
+  /// Nombre de nouveaux fichiers indexés (lignes `sounds` créées).
+  final int newFileCount;
+
+  /// IDs Drive de TOUS les fichiers audio vus lors de ce scan complet. Source
+  /// de vérité pour l'existence : sert à élaguer les sons disparus, y compris
+  /// après un pull de snapshot périmé qui aurait pu en réinsérer un (cf.
+  /// [LibraryRepository.pruneSoundsAbsentFromDrive]).
+  final Set<String> presentDriveFileIds;
+
+  const DriveIndexResult({
+    required this.newFileCount,
+    required this.presentDriveFileIds,
+  });
+}
+
 /// Orchestration des bibliothèques portables : relie l'authentification Drive
 /// (infra `core/sync`) à la persistance locale (table Libraries).
 ///
@@ -688,7 +705,7 @@ class LibraryRepository extends ChangeNotifier {
 
     return DriveFolderLinkInitResult(
       hadRemoteSnapshot: hasRemote,
-      indexedNewFiles: indexed,
+      indexedNewFiles: indexed.newFileCount,
     );
   }
 
@@ -1098,7 +1115,7 @@ class LibraryRepository extends ChangeNotifier {
   /// Passe par [_withDriveClient] : un token périmé en cours d'indexation est
   /// renouvelé silencieusement et l'opération réessayée (idempotente, upsert
   /// par driveFileId), sans forcer de reconnexion interactive.
-  Future<int> indexDriveFolder({
+  Future<DriveIndexResult> indexDriveFolder({
     required Library library,
     void Function(IndexingProgress)? onProgress,
   }) {
@@ -1116,7 +1133,27 @@ class LibraryRepository extends ChangeNotifier {
     );
   }
 
-  Future<int> _indexDriveFolder({
+  /// Élague les sons dont le fichier a disparu de Drive, d'après l'ensemble
+  /// [presentDriveFileIds] d'un scan RÉUSSI, et évince leur fichier du cache
+  /// local. Sert à redonner le dernier mot au scan live après un pull de
+  /// snapshot : un snapshot distant périmé (poussé par un appareil qui n'a pas
+  /// encore rescanné) peut réinsérer un son pointant vers un fichier déjà
+  /// supprimé — cet appel le retire à nouveau.
+  Future<void> pruneSoundsAbsentFromDrive({
+    required Library library,
+    required Set<String> presentDriveFileIds,
+  }) async {
+    final prunedPaths = await _soundDataSource.pruneLibrarySoundsAbsentFromDrive(
+      libraryId: library.id,
+      keptDriveFileIds: presentDriveFileIds,
+    );
+    // La ligne en base disparaît : le fichier téléchargé ne doit pas subsister.
+    for (final relativePath in prunedPaths) {
+      await _cacheManager.evictCachedFile(library, relativePath);
+    }
+  }
+
+  Future<DriveIndexResult> _indexDriveFolder({
     required DriveClient client,
     required Library library,
     required String folderId,
@@ -1253,16 +1290,10 @@ class LibraryRepository extends ChangeNotifier {
       // directement sur Drive (identité forte absente du scan). Les sons legacy
       // sans driveFileId sont épargnés (réalignés par chemin, jamais élagués).
       final seenDriveIds = audioFiles.map((e) => e.driveFileId).toSet();
-      final prunedPaths =
-          await _soundDataSource.pruneLibrarySoundsAbsentFromDrive(
-        libraryId: library.id,
-        keptDriveFileIds: seenDriveIds,
+      await pruneSoundsAbsentFromDrive(
+        library: library,
+        presentDriveFileIds: seenDriveIds,
       );
-      // Évince aussi le fichier cache local + son entrée LRU des sons élagués :
-      // la ligne en base disparaît, le fichier téléchargé ne doit pas subsister.
-      for (final relativePath in prunedPaths) {
-        await _cacheManager.evictCachedFile(library, relativePath);
-      }
 
       onProgress?.call(
         IndexingProgress(
@@ -1274,7 +1305,10 @@ class LibraryRepository extends ChangeNotifier {
         ),
       );
 
-      return indexedCount;
+      return DriveIndexResult(
+        newFileCount: indexedCount,
+        presentDriveFileIds: seenDriveIds,
+      );
     } catch (e) {
       // Une erreur d'auth est gérée par [_withDriveClient] (renouvellement +
       // réessai) : ne pas afficher d'état d'erreur qui clignoterait avant le
