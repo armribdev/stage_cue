@@ -1000,7 +1000,34 @@ class SamplerNotifier extends ChangeNotifier {
     // sans couper les précédents ; sur un multipad la variante suivante est
     // choisie selon le mode de lecture. L'arrêt se fait via appui long (ce pad)
     // ou le bouton « Tout arrêter » — jamais par un second tap.
-    final soundIndex = _pickSoundIndex(resolved);
+    await _playOverlappingSoundAtIndex(resolved, _pickSoundIndex(resolved));
+  }
+
+  /// Joue une variante précise d'un (multi)pad, en dehors du choix automatique
+  /// (`_pickSoundIndex`) — ex. sélection explicite depuis la liste des sons
+  /// d'un multipad. Pour un pad musique, court-circuite la file/reprise et
+  /// joue directement ce son (comme un tap normal sur un pad simple).
+  Future<void> playPadSoundAtIndex(PadItem padItem, int soundIndex) async {
+    final resolved = _resolveBoardPadItem(padItem);
+    if (!resolved.isPlayable) return;
+    if (soundIndex < 0 || soundIndex >= resolved.slots.length) return;
+    if (!_slotEligibleForPlayback(resolved, soundIndex)) return;
+
+    if (resolved.pad.isMusicPad) {
+      // Même mécanisme que « suivant » dans la file (`playNextInQueueNow`) :
+      // `playMusicNow` coupe ce qui joue puis démarre cette variante — un seul
+      // point d'entrée pour changer de musique, quel que soit le déclencheur.
+      await _music.playMusicNow(resolved, soundIndex: soundIndex);
+      return;
+    }
+
+    await _playOverlappingSoundAtIndex(resolved, soundIndex);
+  }
+
+  Future<void> _playOverlappingSoundAtIndex(
+    PadItem resolved,
+    int soundIndex,
+  ) async {
     final player = resolved.slots[soundIndex].player;
     debugPrint(
       '[TOGGLE] → play overlapping soundIndex=$soundIndex '
@@ -1019,10 +1046,10 @@ class SamplerNotifier extends ChangeNotifier {
       }
     }
     final startOffset = Duration(milliseconds: startOffsetMs);
-      await player.playOverlapping(
-        volume: _effectiveVolume(resolved),
-        startOffset: startOffset,
-      );
+    await player.playOverlapping(
+      volume: _effectiveVolume(resolved),
+      startOffset: startOffset,
+    );
     // Ticket de progression : une barre superposée par voix, auto-supprimée à
     // la fin du son (bump de révision pour rafraîchir le seul PadButton). La
     // durée restante tient compte du point d'entrée sauté en tête.
