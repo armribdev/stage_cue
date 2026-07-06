@@ -94,12 +94,16 @@ class AutoSyncCoordinator {
         //    pour la session. Mieux vaut garder l'état local et réessayer au
         //    prochain lancement (l'index sera plus rapide, cache chaud).
         final fullyIndexed = <Library>[];
+        // Ensemble « présent sur Drive » de chaque scan complet : source de
+        // vérité pour l'existence, réutilisée en 3. après le pull.
+        final presentByLibrary = <int, Set<String>>{};
         for (final library in libraries) {
           try {
-            await _repository
+            final result = await _repository
                 .indexDriveFolder(library: library)
                 .timeout(const Duration(seconds: 30));
             fullyIndexed.add(library);
+            presentByLibrary[library.id] = result.presentDriveFileIds;
           } catch (_) {
             // Index incomplet : on saute son pull cette session.
           }
@@ -110,6 +114,19 @@ class AutoSyncCoordinator {
         //    référencés existent alors bien tous localement.
         for (final library in fullyIndexed) {
           await _syncController.pullForLaunch(library);
+
+          // 3. Dernier mot au scan live : le merge de snapshot ci-dessus a pu
+          //    réinsérer un son pointant vers un fichier déjà supprimé sur Drive
+          //    (snapshot distant périmé, poussé par un appareil pas encore
+          //    rescanné). On ré-élague donc d'après l'ensemble réellement présent
+          //    lors de l'indexation. Sans effet si le pull n'a rien ressuscité.
+          final present = presentByLibrary[library.id];
+          if (present != null) {
+            await _repository.pruneSoundsAbsentFromDrive(
+              library: library,
+              presentDriveFileIds: present,
+            );
+          }
         }
       } finally {
         _ignoreUpdates = false;
