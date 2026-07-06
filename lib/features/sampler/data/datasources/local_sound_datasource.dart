@@ -905,6 +905,32 @@ class LocalSoundDataSource {
     )..where((s) => s.libraryId.equals(libraryId))).go();
   }
 
+  /// Élague les sons d'une bibliothèque dont le fichier a disparu de Drive :
+  /// identité forte (`driveFileId`) connue mais absente du dernier scan complet.
+  ///
+  /// Symétrique de l'ajout côté `syncLibrarySoundFromDriveIndex`, et aligné sur
+  /// l'élagage par snapshot (`LibrarySnapshotStore`). On épargne les sons sans
+  /// `driveFileId` (legacy / pas encore réconciliés) pour ne pas perdre de
+  /// données par erreur — ils sont réalignés par chemin, pas élagués.
+  ///
+  /// À n'appeler qu'après un scan Drive RÉUSSI et COMPLET : sur une liste
+  /// partielle (timeout, réseau), cet élagage supprimerait des sons encore
+  /// présents. Retourne le nombre de sons supprimés.
+  Future<int> pruneLibrarySoundsAbsentFromDrive({
+    required int libraryId,
+    required Set<String> keptDriveFileIds,
+  }) async {
+    final query = _database.delete(_database.sounds)
+      ..where((s) => s.libraryId.equals(libraryId) & s.driveFileId.isNotNull());
+    if (keptDriveFileIds.isNotEmpty) {
+      // `isNotIn([])` génère un SQL fragile selon les versions de Drift : on
+      // n'ajoute la clause que si la liste des survivants est non vide (sinon
+      // tous les fichiers ont disparu → on supprime tous les sons à identité).
+      query.where((s) => s.driveFileId.isNotIn(keptDriveFileIds.toList()));
+    }
+    return query.go();
+  }
+
   /// Supprime les sons associés à un chemin surveillé.
   Future<void> deleteSoundsForWatchedPath({
     required String path,
