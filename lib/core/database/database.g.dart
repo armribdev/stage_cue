@@ -1585,6 +1585,17 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _driveMd5Meta = const VerificationMeta(
+    'driveMd5',
+  );
+  @override
+  late final GeneratedColumn<String> driveMd5 = GeneratedColumn<String>(
+    'drive_md5',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _folderIdMeta = const VerificationMeta(
     'folderId',
   );
@@ -1662,6 +1673,7 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     relativePath,
     contentHash,
     driveFileId,
+    driveMd5,
     folderId,
     isFavorite,
     lastPlayedAt,
@@ -1759,6 +1771,12 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         ),
       );
     }
+    if (data.containsKey('drive_md5')) {
+      context.handle(
+        _driveMd5Meta,
+        driveMd5.isAcceptableOrUnknown(data['drive_md5']!, _driveMd5Meta),
+      );
+    }
     if (data.containsKey('folder_id')) {
       context.handle(
         _folderIdMeta,
@@ -1854,6 +1872,10 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.string,
         data['${effectivePrefix}drive_file_id'],
       ),
+      driveMd5: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}drive_md5'],
+      ),
       folderId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}folder_id'],
@@ -1901,6 +1923,7 @@ class Sound extends DataClass implements Insertable<Sound> {
   final String? relativePath;
   final String? contentHash;
   final String? driveFileId;
+  final String? driveMd5;
   final int? folderId;
 
   /// Marqué favori par l'opérateur : accès 1-tap aux sons du spectacle.
@@ -1932,6 +1955,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     this.relativePath,
     this.contentHash,
     this.driveFileId,
+    this.driveMd5,
     this.folderId,
     required this.isFavorite,
     this.lastPlayedAt,
@@ -1966,6 +1990,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     }
     if (!nullToAbsent || driveFileId != null) {
       map['drive_file_id'] = Variable<String>(driveFileId);
+    }
+    if (!nullToAbsent || driveMd5 != null) {
+      map['drive_md5'] = Variable<String>(driveMd5);
     }
     if (!nullToAbsent || folderId != null) {
       map['folder_id'] = Variable<int>(folderId);
@@ -2007,6 +2034,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       driveFileId: driveFileId == null && nullToAbsent
           ? const Value.absent()
           : Value(driveFileId),
+      driveMd5: driveMd5 == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driveMd5),
       folderId: folderId == null && nullToAbsent
           ? const Value.absent()
           : Value(folderId),
@@ -2041,6 +2071,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       relativePath: serializer.fromJson<String?>(json['relativePath']),
       contentHash: serializer.fromJson<String?>(json['contentHash']),
       driveFileId: serializer.fromJson<String?>(json['driveFileId']),
+      driveMd5: serializer.fromJson<String?>(json['driveMd5']),
       folderId: serializer.fromJson<int?>(json['folderId']),
       isFavorite: serializer.fromJson<bool>(json['isFavorite']),
       lastPlayedAt: serializer.fromJson<DateTime?>(json['lastPlayedAt']),
@@ -2066,6 +2097,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       'relativePath': serializer.toJson<String?>(relativePath),
       'contentHash': serializer.toJson<String?>(contentHash),
       'driveFileId': serializer.toJson<String?>(driveFileId),
+      'driveMd5': serializer.toJson<String?>(driveMd5),
       'folderId': serializer.toJson<int?>(folderId),
       'isFavorite': serializer.toJson<bool>(isFavorite),
       'lastPlayedAt': serializer.toJson<DateTime?>(lastPlayedAt),
@@ -2087,6 +2119,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     Value<String?> relativePath = const Value.absent(),
     Value<String?> contentHash = const Value.absent(),
     Value<String?> driveFileId = const Value.absent(),
+    Value<String?> driveMd5 = const Value.absent(),
     Value<int?> folderId = const Value.absent(),
     bool? isFavorite,
     Value<DateTime?> lastPlayedAt = const Value.absent(),
@@ -2105,6 +2138,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     relativePath: relativePath.present ? relativePath.value : this.relativePath,
     contentHash: contentHash.present ? contentHash.value : this.contentHash,
     driveFileId: driveFileId.present ? driveFileId.value : this.driveFileId,
+    driveMd5: driveMd5.present ? driveMd5.value : this.driveMd5,
     folderId: folderId.present ? folderId.value : this.folderId,
     isFavorite: isFavorite ?? this.isFavorite,
     lastPlayedAt: lastPlayedAt.present ? lastPlayedAt.value : this.lastPlayedAt,
@@ -2133,6 +2167,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       driveFileId: data.driveFileId.present
           ? data.driveFileId.value
           : this.driveFileId,
+      driveMd5: data.driveMd5.present ? data.driveMd5.value : this.driveMd5,
       folderId: data.folderId.present ? data.folderId.value : this.folderId,
       isFavorite: data.isFavorite.present
           ? data.isFavorite.value
@@ -2162,6 +2197,7 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('relativePath: $relativePath, ')
           ..write('contentHash: $contentHash, ')
           ..write('driveFileId: $driveFileId, ')
+          ..write('driveMd5: $driveMd5, ')
           ..write('folderId: $folderId, ')
           ..write('isFavorite: $isFavorite, ')
           ..write('lastPlayedAt: $lastPlayedAt, ')
@@ -2185,6 +2221,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     relativePath,
     contentHash,
     driveFileId,
+    driveMd5,
     folderId,
     isFavorite,
     lastPlayedAt,
@@ -2207,6 +2244,7 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.relativePath == this.relativePath &&
           other.contentHash == this.contentHash &&
           other.driveFileId == this.driveFileId &&
+          other.driveMd5 == this.driveMd5 &&
           other.folderId == this.folderId &&
           other.isFavorite == this.isFavorite &&
           other.lastPlayedAt == this.lastPlayedAt &&
@@ -2227,6 +2265,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<String?> relativePath;
   final Value<String?> contentHash;
   final Value<String?> driveFileId;
+  final Value<String?> driveMd5;
   final Value<int?> folderId;
   final Value<bool> isFavorite;
   final Value<DateTime?> lastPlayedAt;
@@ -2245,6 +2284,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.relativePath = const Value.absent(),
     this.contentHash = const Value.absent(),
     this.driveFileId = const Value.absent(),
+    this.driveMd5 = const Value.absent(),
     this.folderId = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
@@ -2264,6 +2304,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.relativePath = const Value.absent(),
     this.contentHash = const Value.absent(),
     this.driveFileId = const Value.absent(),
+    this.driveMd5 = const Value.absent(),
     this.folderId = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
@@ -2284,6 +2325,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<String>? relativePath,
     Expression<String>? contentHash,
     Expression<String>? driveFileId,
+    Expression<String>? driveMd5,
     Expression<int>? folderId,
     Expression<bool>? isFavorite,
     Expression<DateTime>? lastPlayedAt,
@@ -2303,6 +2345,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (relativePath != null) 'relative_path': relativePath,
       if (contentHash != null) 'content_hash': contentHash,
       if (driveFileId != null) 'drive_file_id': driveFileId,
+      if (driveMd5 != null) 'drive_md5': driveMd5,
       if (folderId != null) 'folder_id': folderId,
       if (isFavorite != null) 'is_favorite': isFavorite,
       if (lastPlayedAt != null) 'last_played_at': lastPlayedAt,
@@ -2324,6 +2367,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<String?>? relativePath,
     Value<String?>? contentHash,
     Value<String?>? driveFileId,
+    Value<String?>? driveMd5,
     Value<int?>? folderId,
     Value<bool>? isFavorite,
     Value<DateTime?>? lastPlayedAt,
@@ -2343,6 +2387,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       relativePath: relativePath ?? this.relativePath,
       contentHash: contentHash ?? this.contentHash,
       driveFileId: driveFileId ?? this.driveFileId,
+      driveMd5: driveMd5 ?? this.driveMd5,
       folderId: folderId ?? this.folderId,
       isFavorite: isFavorite ?? this.isFavorite,
       lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
@@ -2392,6 +2437,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     if (driveFileId.present) {
       map['drive_file_id'] = Variable<String>(driveFileId.value);
     }
+    if (driveMd5.present) {
+      map['drive_md5'] = Variable<String>(driveMd5.value);
+    }
     if (folderId.present) {
       map['folder_id'] = Variable<int>(folderId.value);
     }
@@ -2425,6 +2473,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('relativePath: $relativePath, ')
           ..write('contentHash: $contentHash, ')
           ..write('driveFileId: $driveFileId, ')
+          ..write('driveMd5: $driveMd5, ')
           ..write('folderId: $folderId, ')
           ..write('isFavorite: $isFavorite, ')
           ..write('lastPlayedAt: $lastPlayedAt, ')
@@ -7678,6 +7727,7 @@ typedef $$SoundsTableCreateCompanionBuilder =
       Value<String?> relativePath,
       Value<String?> contentHash,
       Value<String?> driveFileId,
+      Value<String?> driveMd5,
       Value<int?> folderId,
       Value<bool> isFavorite,
       Value<DateTime?> lastPlayedAt,
@@ -7698,6 +7748,7 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<String?> relativePath,
       Value<String?> contentHash,
       Value<String?> driveFileId,
+      Value<String?> driveMd5,
       Value<int?> folderId,
       Value<bool> isFavorite,
       Value<DateTime?> lastPlayedAt,
@@ -7862,6 +7913,11 @@ class $$SoundsTableFilterComposer
 
   ColumnFilters<String> get driveFileId => $composableBuilder(
     column: $table.driveFileId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get driveMd5 => $composableBuilder(
+    column: $table.driveMd5,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8071,6 +8127,11 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get driveMd5 => $composableBuilder(
+    column: $table.driveMd5,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isFavorite => $composableBuilder(
     column: $table.isFavorite,
     builder: (column) => ColumnOrderings(column),
@@ -8187,6 +8248,9 @@ class $$SoundsTableAnnotationComposer
     column: $table.driveFileId,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get driveMd5 =>
+      $composableBuilder(column: $table.driveMd5, builder: (column) => column);
 
   GeneratedColumn<bool> get isFavorite => $composableBuilder(
     column: $table.isFavorite,
@@ -8374,6 +8438,7 @@ class $$SoundsTableTableManager
                 Value<String?> relativePath = const Value.absent(),
                 Value<String?> contentHash = const Value.absent(),
                 Value<String?> driveFileId = const Value.absent(),
+                Value<String?> driveMd5 = const Value.absent(),
                 Value<int?> folderId = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
@@ -8392,6 +8457,7 @@ class $$SoundsTableTableManager
                 relativePath: relativePath,
                 contentHash: contentHash,
                 driveFileId: driveFileId,
+                driveMd5: driveMd5,
                 folderId: folderId,
                 isFavorite: isFavorite,
                 lastPlayedAt: lastPlayedAt,
@@ -8412,6 +8478,7 @@ class $$SoundsTableTableManager
                 Value<String?> relativePath = const Value.absent(),
                 Value<String?> contentHash = const Value.absent(),
                 Value<String?> driveFileId = const Value.absent(),
+                Value<String?> driveMd5 = const Value.absent(),
                 Value<int?> folderId = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
@@ -8430,6 +8497,7 @@ class $$SoundsTableTableManager
                 relativePath: relativePath,
                 contentHash: contentHash,
                 driveFileId: driveFileId,
+                driveMd5: driveMd5,
                 folderId: folderId,
                 isFavorite: isFavorite,
                 lastPlayedAt: lastPlayedAt,

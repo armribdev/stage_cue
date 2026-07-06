@@ -1,7 +1,10 @@
-import 'package:drift/drift.dart';
+// `isNull`/`isNotNull` de drift entrent en collision avec les matchers de test :
+// on masque les noms top-level (les méthodes `.isNotNull()` sur colonnes restent).
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stage_cue/core/database/database.dart' as db;
+import 'package:stage_cue/core/database/sounds.dart' show SoundType;
 import 'package:stage_cue/features/sampler/data/datasources/local_library_datasource.dart';
 import 'package:stage_cue/features/sampler/data/datasources/local_sound_datasource.dart';
 
@@ -40,7 +43,7 @@ void main() {
       localPath: '/cache/Portes/knock.mp3',
       driveFileId: 'F1',
     );
-    expect(created1, isTrue);
+    expect(created1.created, isTrue);
 
     // Déplacement + renommage côté Drive, même ID de fichier.
     final created2 = await dataSource.syncLibrarySoundFromDriveIndex(
@@ -49,7 +52,7 @@ void main() {
       localPath: '/cache/SFX/knock-2.mp3',
       driveFileId: 'F1',
     );
-    expect(created2, isFalse);
+    expect(created2.created, isFalse);
 
     final sounds = await soundsOf(libraryId);
     expect(sounds, hasLength(1));
@@ -78,7 +81,7 @@ void main() {
       localPath: '/cache/knock.mp3',
       driveFileId: 'F1',
     );
-    expect(created, isFalse);
+    expect(created.created, isFalse);
 
     final sounds = await soundsOf(libraryId);
     expect(sounds, hasLength(1));
@@ -118,7 +121,7 @@ void main() {
         localPath: '/parent/Child/knock.mp3',
         driveFileId: 'F1',
       );
-      expect(createdInParent, isTrue);
+      expect(createdInParent.created, isTrue);
 
       // La bibliothèque Child (racine = le sous-dossier) indexe le MÊME fichier
       // Drive, vu à sa racine (knock.mp3). Aucun doublon ne doit être créé.
@@ -128,7 +131,7 @@ void main() {
         localPath: '/child/knock.mp3',
         driveFileId: 'F1',
       );
-      expect(createdInChild, isFalse);
+      expect(createdInChild.created, isFalse);
 
       final all = await database.select(database.sounds).get();
       expect(all, hasLength(1), reason: 'un fichier physique = une ligne');
@@ -310,7 +313,7 @@ void main() {
         folderId: folderB,
       );
 
-      expect(created, isFalse, reason: 'même fichier Drive, pas de doublon');
+      expect(created.created, isFalse, reason: 'même fichier Drive, pas de doublon');
       final sounds = await soundsOf(libraryId);
       expect(sounds, hasLength(1));
       expect(sounds.first.folderId, folderB);
@@ -412,6 +415,101 @@ void main() {
       expect(pruned, ['a.mp3']);
       expect(await soundsOf(libA), isEmpty);
       expect(await soundsOf(libB), hasLength(1));
+    });
+  });
+
+  group('édition « en place » sur Drive (md5 changé, ID constant)', () {
+    // Insère directement un son Drive déjà « mûr » (type/hash/waveform peuplés)
+    // — l'insertion via sync ne peut pas les remplir sans fichier local réel.
+    Future<int> insertMatureDriveSound({
+      required int libraryId,
+      required String driveFileId,
+      String? driveMd5,
+    }) =>
+        database.into(database.sounds).insert(
+              db.SoundsCompanion.insert(
+                title: 'loop',
+                filePath: '/cache/loop.mp3',
+                libraryId: Value(libraryId),
+                relativePath: const Value('loop.mp3'),
+                driveFileId: Value(driveFileId),
+                driveMd5: Value(driveMd5),
+                type: const Value(SoundType.music),
+                contentHash: const Value('hash-a'),
+                waveform: Value(Uint8List.fromList([1, 2, 3])),
+              ),
+            );
+
+    test('marque différente → contentChanged, waveform/hash purgés, type gardé',
+        () async {
+      final libraryId = await insertLibrary();
+      await insertMatureDriveSound(
+        libraryId: libraryId,
+        driveFileId: 'F1',
+        driveMd5: 'md5-a',
+      );
+
+      final result = await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'loop.mp3',
+        localPath: '/cache/loop.mp3',
+        driveFileId: 'F1',
+        driveMd5: 'md5-b', // contenu écrasé sur Drive
+      );
+
+      expect(result.contentChanged, isTrue);
+      final sound = (await soundsOf(libraryId)).single;
+      expect(sound.driveMd5, 'md5-b', reason: 'marque actualisée');
+      expect(sound.waveform, isNull, reason: 'dérivé de contenu invalidé');
+      expect(sound.contentHash, isNull, reason: 'dérivé de contenu invalidé');
+      expect(sound.type, SoundType.music,
+          reason: 'le type ne change jamais ici (cf. audio.md)');
+    });
+
+    test('backfill (marque stockée nulle) n\'est pas un changement de contenu',
+        () async {
+      final libraryId = await insertLibrary();
+      await insertMatureDriveSound(
+        libraryId: libraryId,
+        driveFileId: 'F1',
+        driveMd5: null, // son indexé avant l'introduction de la marque
+      );
+
+      final result = await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'loop.mp3',
+        localPath: '/cache/loop.mp3',
+        driveFileId: 'F1',
+        driveMd5: 'md5-a',
+      );
+
+      expect(result.contentChanged, isFalse);
+      final sound = (await soundsOf(libraryId)).single;
+      expect(sound.driveMd5, 'md5-a', reason: 'marque backfillée');
+      expect(sound.waveform, isNotNull, reason: 'aucune invalidation au backfill');
+      expect(sound.contentHash, 'hash-a');
+    });
+
+    test('marque identique → aucun changement, dérivés conservés', () async {
+      final libraryId = await insertLibrary();
+      await insertMatureDriveSound(
+        libraryId: libraryId,
+        driveFileId: 'F1',
+        driveMd5: 'md5-a',
+      );
+
+      final result = await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'loop.mp3',
+        localPath: '/cache/loop.mp3',
+        driveFileId: 'F1',
+        driveMd5: 'md5-a',
+      );
+
+      expect(result.contentChanged, isFalse);
+      final sound = (await soundsOf(libraryId)).single;
+      expect(sound.waveform, isNotNull);
+      expect(sound.contentHash, 'hash-a');
     });
   });
 }

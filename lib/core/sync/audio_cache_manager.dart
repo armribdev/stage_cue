@@ -341,12 +341,14 @@ class AudioCacheManager {
   // ── Éviction LRU ─────────────────────────────────────────────────────────
 
   /// Évince explicitement un fichier du cache (suppression fichier + entrée
-  /// LRU), suite au retrait de son son côté Drive (élagage d'indexation).
+  /// LRU). Deux usages à l'indexation :
+  /// - retrait du son côté Drive (élagage) — évite de laisser un fichier orphelin
+  ///   sur disque et une entrée LRU fantôme (`total` surévalué → évictions
+  ///   prématurées d'autres sons) ;
+  /// - édition « en place » (contenu écrasé à ID constant) — force le
+  ///   re-téléchargement du contenu à jour au prochain accès.
   ///
-  /// Sans cela, l'élagage supprimerait la ligne en base mais laisserait le
-  /// fichier sur disque ET son entrée dans l'index LRU — fuite d'espace et
-  /// `total` LRU surévalué (évictions prématurées d'autres sons). Best-effort :
-  /// un échec de suppression ne doit pas interrompre l'indexation.
+  /// Best-effort : un échec de suppression ne doit pas interrompre l'indexation.
   Future<void> evictCachedFile(Library library, String relativePath) async {
     final normalized = LibrarySoundPaths.normalizeRelativePath(relativePath);
     final localPath = localPathFor(library, normalized);

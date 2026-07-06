@@ -523,12 +523,18 @@ class LocalSoundDataSource {
   ///    (backfill des sons indexés avant l'identité forte) ;
   /// 3. sinon nouveau son.
   ///
-  /// Retourne `true` si un nouveau son a été créé.
-  Future<bool> syncLibrarySoundFromDriveIndex({
+  /// Retourne `created` (un nouveau son a été inséré) et `contentChanged` (le
+  /// fichier a été écrasé « en place » sur Drive — même `driveFileId`, marque de
+  /// révision [driveMd5] différente). Sur `contentChanged`, la waveform et le
+  /// contentHash sont réinitialisés ici (recalcul paresseux) ; l'appelant doit
+  /// évincer le fichier de cache local devenu périmé. Le `type` reste inchangé
+  /// (cf. audio.md : jamais recalculé hors `updateSoundType`).
+  Future<({bool created, bool contentChanged})> syncLibrarySoundFromDriveIndex({
     required int libraryId,
     required String relativePath,
     required String localPath,
     String? driveFileId,
+    String? driveMd5,
     int? folderId,
   }) async {
     // 1. Identité forte : le fichier est déjà connu par son ID Drive (global).
@@ -541,12 +547,23 @@ class LocalSoundDataSource {
         // Fichier possédé par une autre bibliothèque (lien imbriqué) : ne pas
         // dupliquer ni réécrire son cadre de chemins.
         if (row.libraryId != libraryId) {
-          return false;
+          return (created: false, contentChanged: false);
         }
-        // Corrige chemin ET dossier propriétaire si le fichier a bougé.
-        if (row.relativePath != relativePath ||
+
+        // Édition en place : contenu écrasé à ID constant. On l'affirme seulement
+        // si une marque était déjà connue (sinon c'est un simple backfill, pas un
+        // changement) ET qu'elle diffère de la marque distante courante.
+        final contentChanged = driveMd5 != null &&
+            row.driveMd5 != null &&
+            row.driveMd5 != driveMd5;
+
+        // Corrige chemin/dossier si le fichier a bougé, backfille/actualise la
+        // marque de révision, et invalide les dérivés de contenu si changement.
+        final needsWrite = row.relativePath != relativePath ||
             row.filePath != localPath ||
-            row.folderId != folderId) {
+            row.folderId != folderId ||
+            row.driveMd5 != driveMd5;
+        if (needsWrite) {
           await (_database.update(_database.sounds)
                 ..where((s) => s.id.equals(row.id)))
               .write(
@@ -554,10 +571,16 @@ class LocalSoundDataSource {
               relativePath: Value(relativePath),
               filePath: Value(localPath),
               folderId: Value(folderId),
+              // Ne jamais effacer une marque connue si Drive ne la renvoie pas.
+              driveMd5:
+                  driveMd5 != null ? Value(driveMd5) : const Value.absent(),
+              waveform: contentChanged ? const Value(null) : const Value.absent(),
+              contentHash:
+                  contentChanged ? const Value(null) : const Value.absent(),
             ),
           );
         }
-        return false;
+        return (created: false, contentChanged: contentChanged);
       }
     }
 
@@ -578,10 +601,11 @@ class LocalSoundDataSource {
           filePath: Value(localPath),
           driveFileId:
               driveFileId != null ? Value(driveFileId) : const Value.absent(),
+          driveMd5: driveMd5 != null ? Value(driveMd5) : const Value.absent(),
           folderId: Value(folderId),
         ),
       );
-      return false;
+      return (created: false, contentChanged: false);
     }
 
     // 3. Nouveau son.
@@ -598,10 +622,11 @@ class LocalSoundDataSource {
             contentHash: Value(metadata.contentHash),
             waveform: Value(metadata.waveform),
             driveFileId: Value(driveFileId),
+            driveMd5: Value(driveMd5),
             folderId: Value(folderId),
           ),
         );
-    return true;
+    return (created: true, contentChanged: false);
   }
 
   /// Indexe tous les fichiers audio d'un dossier

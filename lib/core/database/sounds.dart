@@ -101,6 +101,12 @@ class Sounds extends Table {
   // c'est la source de vérité de l'identité d'un son de bibliothèque Drive.
   // null pour un son local ou pas encore réconcilié avec l'index Drive.
   TextColumn get driveFileId => text().nullable()();
+  // Marque de révision DISTANTE du fichier Drive (`md5Checksum`). Change quand le
+  // contenu est écrasé « en place » sur Drive à ID constant : sert à détecter une
+  // édition (le cache local, la waveform et le contentHash deviennent périmés et
+  // doivent être invalidés). Le `type`, lui, ne change jamais ici (cf. audio.md).
+  // null = son local, legacy, ou pas encore réconcilié avec l'index Drive.
+  TextColumn get driveMd5 => text().nullable()();
   // Dossier propriétaire (ses fichiers directs) : unité d'appartenance et de
   // snapshot par-dossier. null = son local ou antérieur au modèle par-dossier.
   IntColumn get folderId => integer()
