@@ -785,7 +785,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               children: [
                 _buildSearchField(scheme),
                 _buildTypeFilters(scheme),
-                const Divider(height: 1),
+                _buildFilterDivider(scheme),
                 Expanded(child: _buildResults(scheme, shown, selectedIndex)),
                 _buildHints(scheme, shown.isNotEmpty),
               ],
@@ -821,7 +821,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                 children: [
                   _buildSearchField(scheme),
                   _buildTypeFilters(scheme),
-                  const Divider(height: 1),
+                  _buildFilterDivider(scheme),
                   Flexible(child: _buildResults(scheme, shown, selectedIndex)),
                   _buildHints(scheme, shown.isNotEmpty),
                 ],
@@ -878,30 +878,49 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     // Musique : type verrouillé → pas de barre de filtres.
     if (_lockedTypeFilter != null) return const SizedBox.shrink();
 
-    Widget chip(String label, SoundType? type) {
+    Widget chip(String label, SoundType? type, IconData icon) {
       final selected = _effectiveTypeFilter == type;
+      final colors = type?.avatarColors(scheme) ??
+          (background: scheme.primaryContainer, foreground: scheme.onPrimaryContainer);
       return Padding(
         padding: const EdgeInsets.only(right: 6),
         child: FilterChip(
+          avatar: Icon(
+            icon,
+            size: 16,
+            color: selected ? colors.foreground : scheme.onSurfaceVariant,
+          ),
           label: Text(label),
           selected: selected,
           showCheckmark: false,
           visualDensity: VisualDensity.compact,
+          backgroundColor: scheme.surface,
+          selectedColor: colors.background,
+          side: BorderSide(
+            color: selected
+                ? Colors.transparent
+                : scheme.outlineVariant.withValues(alpha: 0.6),
+          ),
+          shape: const StadiumBorder(),
+          labelStyle: TextStyle(
+            color: selected ? colors.foreground : scheme.onSurfaceVariant,
+          ),
           onSelected: (_) {
             setState(() {
               _typeFilter = type;
               _selectedIndex = 0;
             });
             _scheduleTagsLoad();
+            _focusNode.requestFocus();
           },
         ),
       );
     }
 
     return SizedBox(
-      height: 40,
+      height: 44,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+        padding: const EdgeInsets.fromLTRB(12, 2, 8, 2),
         child: Row(
           children: [
             Expanded(
@@ -909,14 +928,23 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                 scrollDirection: Axis.horizontal,
                 children: [
                   // "Tous" uniquement pour QuickSearch, Library et Manage
-                  if (_isQuickSearch || _isLibrary || _isManage) chip('Tous', null),
-                  chip(SoundType.soundEffect.label, SoundType.soundEffect),
-                  chip(SoundType.music.label, SoundType.music),
-                  chip(SoundType.ambiance.label, SoundType.ambiance),
+                  if (_isQuickSearch || _isLibrary || _isManage)
+                    chip('Tous', null, Icons.apps_rounded),
+                  chip(SoundType.soundEffect.label, SoundType.soundEffect,
+                      SoundType.soundEffect.icon),
+                  chip(SoundType.music.label, SoundType.music, SoundType.music.icon),
+                  chip(SoundType.ambiance.label, SoundType.ambiance,
+                      SoundType.ambiance.icon),
                 ],
               ),
             ),
             if (_isQuickSearch) ...[
+              Container(
+                width: 1,
+                height: 22,
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                color: scheme.outlineVariant.withValues(alpha: 0.6),
+              ),
               _roundIconButton(
                 scheme: scheme,
                 icon: _favoritesOnly
@@ -925,12 +953,14 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                 iconColor: _favoritesOnly
                     ? scheme.primary
                     : scheme.onSurfaceVariant,
+                active: _favoritesOnly,
                 onPressed: () {
                   setState(() {
                     _favoritesOnly = !_favoritesOnly;
                     _selectedIndex = 0;
                   });
                   _scheduleTagsLoad();
+                  _focusNode.requestFocus();
                 },
               ),
               const SizedBox(width: 4),
@@ -940,18 +970,30 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                 iconColor: _effectiveLocalOnly
                     ? scheme.primary
                     : scheme.onSurfaceVariant,
+                active: _effectiveLocalOnly,
                 onPressed: () {
                   setState(() {
                     _localOnly = !_localOnly;
                     _selectedIndex = 0;
                   });
                   _scheduleTagsLoad();
+                  _focusNode.requestFocus();
                 },
               ),
             ],
           ],
         ),
       ),
+    );
+  }
+
+  /// Ligne de séparation fine et atténuée sous la barre de filtres — un
+  /// `Divider` plein-largeur par défaut tranche trop avec les chips arrondis.
+  Widget _buildFilterDivider(ColorScheme scheme) {
+    return Container(
+      height: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      color: scheme.outlineVariant.withValues(alpha: 0.4),
     );
   }
 
@@ -1342,6 +1384,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     required IconData icon,
     required VoidCallback? onPressed,
     required Color iconColor,
+    bool active = false,
   }) {
     return SizedBox(
       width: _actionButtonSize,
@@ -1354,7 +1397,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         style: IconButton.styleFrom(
           shape: const CircleBorder(),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          backgroundColor: Colors.transparent,
+          backgroundColor: active
+              ? scheme.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
           disabledBackgroundColor: Colors.transparent,
           hoverColor: scheme.onSurface.withValues(alpha: 0.08),
           foregroundColor: iconColor,
