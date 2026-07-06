@@ -1,11 +1,21 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import 'audio_file_validation.dart' show normalizeAudioPath;
 import 'soloud_file_loader.dart';
 
 /// Nombre de barres de l'enveloppe waveform stockée par son (~1 octet/barre).
 /// 480 offre un rendu fin même sur écran large, pour ~480 octets en base.
 const int kWaveformBars = 480;
+
+/// Fichiers dont `readSamplesFromFile` a déjà échoué cette session — l'API
+/// waveform (expérimentale) peut échouer sur des MP3 par ailleurs valides et
+/// lisibles normalement (VBR/Xing...) sans que ce soit lié au fichier lui-même.
+/// `waveform` reste `null` en base après un échec, donc sans ce cache chaque
+/// résolution de chemin (ex. sonde de disponibilité locale sur toute la
+/// bibliothèque lors d'une recherche) retenterait indéfiniment le même appel
+/// natif bloquant.
+final Set<String> _knownWaveformFailures = {};
 
 /// Décode [filePath] hors du thread UI (SoLoud le fait via un isolate interne)
 /// et renvoie une enveloppe RMS quantifiée : [kWaveformBars] octets, chacun
@@ -18,6 +28,8 @@ Future<Uint8List?> extractWaveform(
   int bars = kWaveformBars,
 }) async {
   if (!SoLoud.instance.isInitialized) return null;
+  final normalizedPath = normalizeAudioPath(filePath);
+  if (_knownWaveformFailures.contains(normalizedPath)) return null;
 
   try {
     // `average: true` → chaque valeur retournée est la RMS des échantillons de
@@ -48,6 +60,7 @@ Future<Uint8List?> extractWaveform(
     return out;
   } catch (e) {
     debugPrint('extractWaveform échoué ($filePath): $e');
+    _knownWaveformFailures.add(normalizedPath);
     return null;
   }
 }
