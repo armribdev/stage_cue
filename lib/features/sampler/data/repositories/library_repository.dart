@@ -1203,14 +1203,39 @@ class LibraryRepository extends ChangeNotifier {
           folderId: folderId,
         );
 
-        final created = await _soundDataSource.syncLibrarySoundFromDriveIndex(
+        final result = await _soundDataSource.syncLibrarySoundFromDriveIndex(
           libraryId: library.id,
           relativePath: audio.relativePath,
           localPath: localPath,
           driveFileId: audio.driveFileId,
+          driveMd5: audio.driveMd5,
           folderId: folderId,
         );
-        if (created) indexedCount++;
+        if (result.created) indexedCount++;
+
+        // Édition « en place » sur Drive (contenu écrasé à ID constant) : le
+        // fichier de cache local est périmé. La waveform et le contentHash ont
+        // déjà été réinitialisés en base ; on évince le fichier pour forcer un
+        // re-téléchargement, et on le re-matérialise aussitôt si la bibliothèque
+        // est en téléchargement auto (cache chaud pour le live).
+        if (result.contentChanged) {
+          await _cacheManager.evictCachedFile(library, audio.relativePath);
+          if (library.autoDownload) {
+            try {
+              localPath = await _cacheManager.ensureCached(
+                client: client,
+                library: library,
+                relativePath: audio.relativePath,
+                driveFileId: audio.driveFileId,
+              );
+            } catch (e) {
+              debugPrint(
+                'Index Drive : re-téléchargement post-édition échoué pour '
+                '${audio.relativePath}: $e',
+              );
+            }
+          }
+        }
 
         onProgress?.call(
           IndexingProgress(
@@ -1289,6 +1314,7 @@ class LibraryRepository extends ChangeNotifier {
           ({
             String relativePath,
             String driveFileId,
+            String? driveMd5,
             String folderDriveId,
             String folderRelativePath,
           })>> _collectDriveAudioFiles(
@@ -1300,6 +1326,7 @@ class LibraryRepository extends ChangeNotifier {
     final results = <({
       String relativePath,
       String driveFileId,
+      String? driveMd5,
       String folderDriveId,
       String folderRelativePath,
     })>[];
@@ -1336,6 +1363,7 @@ class LibraryRepository extends ChangeNotifier {
         results.add((
           relativePath: relativePath,
           driveFileId: child.id,
+          driveMd5: child.md5Checksum,
           folderDriveId: folderId,
           folderRelativePath: relativePrefix,
         ));

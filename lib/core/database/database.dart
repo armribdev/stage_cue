@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 31;
 
   @override
   MigrationStrategy get migration {
@@ -272,6 +272,13 @@ class AppDatabase extends _$AppDatabase {
           // Point d'entrée par son : la lecture démarre à cet offset au lieu
           // du sample 0. Défaut 0 → comportement inchangé pour l'existant.
           await m.addColumn(sounds, sounds.startOffsetMs);
+        }
+        if (from < 31) {
+          // Marque de révision Drive (`md5Checksum`) par son : détecte une
+          // édition « en place » (contenu écrasé à ID de fichier constant) pour
+          // invalider cache local + waveform + contentHash. Backfill au prochain
+          // scan Drive (null → aucune invalidation tant que la marque est absente).
+          await m.addColumn(sounds, sounds.driveMd5);
         }
       },
       beforeOpen: (details) async {
