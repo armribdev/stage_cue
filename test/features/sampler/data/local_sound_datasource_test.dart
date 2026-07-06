@@ -340,7 +340,8 @@ void main() {
         keptDriveFileIds: {'F1'},
       );
 
-      expect(pruned, 1);
+      expect(pruned, ['b.mp3'],
+          reason: 'retourne le relativePath du son élagué');
       final sounds = await soundsOf(libraryId);
       expect(sounds, hasLength(1));
       expect(sounds.first.driveFileId, 'F1');
@@ -363,7 +364,7 @@ void main() {
         keptDriveFileIds: const {},
       );
 
-      expect(pruned, 0);
+      expect(pruned, isEmpty);
       expect(await soundsOf(libraryId), hasLength(1));
     });
 
@@ -382,7 +383,7 @@ void main() {
         keptDriveFileIds: const {},
       );
 
-      expect(pruned, 1);
+      expect(pruned, ['a.mp3']);
       expect(await soundsOf(libraryId), isEmpty);
     });
 
@@ -408,7 +409,7 @@ void main() {
         keptDriveFileIds: const {},
       );
 
-      expect(pruned, 1);
+      expect(pruned, ['a.mp3']);
       expect(await soundsOf(libA), isEmpty);
       expect(await soundsOf(libB), hasLength(1));
     });

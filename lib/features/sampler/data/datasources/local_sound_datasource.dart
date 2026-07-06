@@ -915,20 +915,36 @@ class LocalSoundDataSource {
   ///
   /// À n'appeler qu'après un scan Drive RÉUSSI et COMPLET : sur une liste
   /// partielle (timeout, réseau), cet élagage supprimerait des sons encore
-  /// présents. Retourne le nombre de sons supprimés.
-  Future<int> pruneLibrarySoundsAbsentFromDrive({
+  /// présents. Retourne les `relativePath` des sons supprimés (non nuls) — pour
+  /// que l'appelant évince aussi leurs fichiers du cache local.
+  Future<List<String>> pruneLibrarySoundsAbsentFromDrive({
     required int libraryId,
     required Set<String> keptDriveFileIds,
   }) async {
-    final query = _database.delete(_database.sounds)
-      ..where((s) => s.libraryId.equals(libraryId) & s.driveFileId.isNotNull());
-    if (keptDriveFileIds.isNotEmpty) {
-      // `isNotIn([])` génère un SQL fragile selon les versions de Drift : on
-      // n'ajoute la clause que si la liste des survivants est non vide (sinon
-      // tous les fichiers ont disparu → on supprime tous les sons à identité).
-      query.where((s) => s.driveFileId.isNotIn(keptDriveFileIds.toList()));
-    }
-    return query.go();
+    return _database.transaction(() async {
+      final selectQuery = _database.select(_database.sounds)
+        ..where(
+          (s) => s.libraryId.equals(libraryId) & s.driveFileId.isNotNull(),
+        );
+      if (keptDriveFileIds.isNotEmpty) {
+        // `isNotIn([])` génère un SQL fragile selon les versions de Drift : on
+        // n'ajoute la clause que si la liste des survivants est non vide (sinon
+        // tous les fichiers ont disparu → on supprime tous les sons à identité).
+        selectQuery.where((s) => s.driveFileId.isNotIn(keptDriveFileIds.toList()));
+      }
+
+      final toPrune = await selectQuery.get();
+      if (toPrune.isEmpty) return const <String>[];
+
+      final ids = toPrune.map((s) => s.id).toList();
+      await (_database.delete(_database.sounds)..where((s) => s.id.isIn(ids)))
+          .go();
+
+      return [
+        for (final s in toPrune)
+          if (s.relativePath != null) s.relativePath!,
+      ];
+    });
   }
 
   /// Supprime les sons associés à un chemin surveillé.

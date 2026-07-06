@@ -1228,10 +1228,16 @@ class LibraryRepository extends ChangeNotifier {
       // directement sur Drive (identité forte absente du scan). Les sons legacy
       // sans driveFileId sont épargnés (réalignés par chemin, jamais élagués).
       final seenDriveIds = audioFiles.map((e) => e.driveFileId).toSet();
-      await _soundDataSource.pruneLibrarySoundsAbsentFromDrive(
+      final prunedPaths =
+          await _soundDataSource.pruneLibrarySoundsAbsentFromDrive(
         libraryId: library.id,
         keptDriveFileIds: seenDriveIds,
       );
+      // Évince aussi le fichier cache local + son entrée LRU des sons élagués :
+      // la ligne en base disparaît, le fichier téléchargé ne doit pas subsister.
+      for (final relativePath in prunedPaths) {
+        await _cacheManager.evictCachedFile(library, relativePath);
+      }
 
       onProgress?.call(
         IndexingProgress(

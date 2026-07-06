@@ -307,4 +307,36 @@ void main() {
     expect(await File(manager.localPathFor(library, 'b.wav')).exists(), isFalse);
     expect(await File(manager.localPathFor(library, 'c.wav')).exists(), isTrue);
   });
+
+  test('evictCachedFile : supprime le fichier et libère le budget LRU',
+      () async {
+    final manager = AudioCacheManager(maxCacheBytes: 100, clock: () => 1);
+    when(() => client.findInFolder(
+          parentId: any(named: 'parentId'),
+          name: any(named: 'name'),
+        )).thenAnswer((_) async => file('remote', 'x'));
+    stubDownloadWriting(80);
+
+    await manager.ensureCached(
+        client: client, library: library, relativePath: 'gone.wav');
+    expect(
+        await File(manager.localPathFor(library, 'gone.wav')).exists(), isTrue);
+
+    await manager.evictCachedFile(library, 'gone.wav');
+
+    // Fichier supprimé.
+    expect(await File(manager.localPathFor(library, 'gone.wav')).exists(),
+        isFalse);
+    // Budget LRU libéré : un nouveau fichier de 80 octets tient sans évincer.
+    stubDownloadWriting(80);
+    await manager.ensureCached(
+        client: client, library: library, relativePath: 'fresh.wav');
+    expect(await File(manager.localPathFor(library, 'fresh.wav')).exists(),
+        isTrue);
+  });
+
+  test('evictCachedFile : sans fichier ni entrée LRU, ne lève pas', () async {
+    final manager = AudioCacheManager();
+    await manager.evictCachedFile(library, 'jamais_mis_en_cache.wav');
+  });
 }
