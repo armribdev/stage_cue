@@ -247,6 +247,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  DateTime? _lastLiveSummaryRefresh;
+
+  /// Rafraîchit uniquement le décompte de sons et la taille de la base
+  /// (résumé affiché en pied de section), sans recharger dossiers surveillés,
+  /// bibliothèques ou infos SAF — pour rester léger quand appelé en rafale
+  /// pendant une indexation.
+  Future<void> _refreshDatabaseSummary() async {
+    final sounds = await widget.database.select(widget.database.sounds).get();
+    final dbFile = await db.resolveDatabaseFile();
+
+    int dbSize = 0;
+    if (await dbFile.exists()) {
+      dbSize = await dbFile.length();
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _sounds = sounds;
+      _dbSize = dbSize;
+    });
+  }
+
+  /// Déclenche [_refreshDatabaseSummary] pendant une indexation en cours, en
+  /// limitant la fréquence des requêtes DB (au plus une toutes les 400 ms),
+  /// mais toujours à la fin (`isComplete`) pour garantir un état final exact.
+  void _maybeRefreshDatabaseSummaryLive(IndexingProgress progress) {
+    final now = DateTime.now();
+    final last = _lastLiveSummaryRefresh;
+    final shouldRefresh =
+        progress.isComplete ||
+        last == null ||
+        now.difference(last) > const Duration(milliseconds: 400);
+    if (!shouldRefresh) return;
+    _lastLiveSummaryRefresh = now;
+    unawaited(_refreshDatabaseSummary());
+  }
+
   Future<void> _connectDriveAccount() async {
     if (!await ensureGoogleOAuthConfigured(context)) {
       return;
@@ -928,6 +965,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _indexingProgress[_normalizeWatchedPath(progress.path)] =
                     progress;
               });
+              _maybeRefreshDatabaseSummaryLive(progress);
             }
           },
         );
@@ -1123,6 +1161,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             setState(() {
               _indexingProgress[progressKey] = progress;
             });
+            _maybeRefreshDatabaseSummaryLive(progress);
           }
         },
       );
@@ -1282,6 +1321,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               setState(() {
                 _indexingProgress[progressKey] = progress;
               });
+              _maybeRefreshDatabaseSummaryLive(progress);
             }
           },
         );
