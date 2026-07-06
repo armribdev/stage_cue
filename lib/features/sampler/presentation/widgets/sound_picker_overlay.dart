@@ -11,6 +11,7 @@ import '../../domain/entities/tag_item.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/quick_search_prepare.dart';
 import '../utils/sound_type_ui.dart';
+import 'scrolling_text.dart';
 
 // ── Modes ─────────────────────────────────────────────────────────────────────
 
@@ -231,6 +232,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   // ── Navigation clavier ────────────────────────────────────────────────────
   int _selectedIndex = 0;
+  int? _hoveredIndex;
 
   // ── État du sélecteur de pad ──────────────────────────────────────────────
   Set<int> _padSoundIds = const {};
@@ -550,6 +552,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   static const _itemExtent = 72.0;
   static const _actionButtonSize = 30.0;
+  static const _overlayMaxWidth = 720.0;
   static const _maxVisibleTags = 3;
 
   void _moveSelection(int delta) {
@@ -808,7 +811,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: 560,
+              maxWidth: (mq.size.width - 24).clamp(320.0, _overlayMaxWidth),
               maxHeight: mq.size.height * 0.7,
             ),
             child: Material(
@@ -1132,25 +1135,32 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               Icon(_typeIcon(sound.type), color: scheme.onSurfaceVariant),
               const SizedBox(width: 16),
               Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text.rich(
-                      buildHighlightedSpan(
-                        sound.displayName ?? sound.title,
-                        _highlightTokens,
+                child: MouseRegion(
+                  onEnter: (_) => setState(() => _hoveredIndex = index),
+                  onExit: (_) {
+                    if (_hoveredIndex == index) {
+                      setState(() => _hoveredIndex = null);
+                    }
+                  },
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ScrollingTextSpan(
+                        animate: isSelected || _hoveredIndex == index,
+                        span: buildHighlightedSpan(
+                          sound.displayName ?? sound.title,
+                          _highlightTokens,
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    _buildSubtitle(sound, scheme,
-                        onAir: onAir, queued: queued, inBoard: inBoard),
-                    if (tags.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      _buildTagRow(scheme, tags),
+                      _buildSubtitle(sound, scheme,
+                          onAir: onAir, queued: queued, inBoard: inBoard),
+                      if (tags.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        _buildTagRow(scheme, tags),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
