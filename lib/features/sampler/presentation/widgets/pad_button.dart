@@ -162,11 +162,10 @@ class PadButton extends StatelessWidget {
                 ),
               ),
             ),
-            // Badges informatifs : le corps du pad porte l'action.
+            // Badges informatifs : le corps du pad porte l'action. La pause
+            // musique est signalée uniquement dans la régie, pas sur le pad.
             if (padItem.isDownloading)
               _buildDownloadCorner(scheme.tertiary),
-            if (padItem.isPaused && !padItem.isDownloading)
-              _buildPauseCorner(scheme),
           ],
         ),
       ),
@@ -415,15 +414,6 @@ class PadButton extends StatelessWidget {
   }
 
   // ── Communs ───────────────────────────────────────────────────────────────
-
-  Widget _buildPauseCorner(ColorScheme scheme) {
-    final color = scheme.primary.withValues(alpha: 0.6);
-    return Positioned(
-      top: 6,
-      right: 6,
-      child: Icon(Icons.pause_rounded, size: 14, color: color),
-    );
-  }
 
   /// Pastille de progression de téléchargement (informative).
   Widget _buildDownloadCorner(Color color) {
