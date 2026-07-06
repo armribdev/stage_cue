@@ -23,6 +23,11 @@ class PadCard extends StatefulWidget {
   /// Ouvre les détails du pad (bouton crayon en mode classique éditable).
   final VoidCallback? onEdit;
 
+  /// Affiche la liste des sons du multipad (choix d'une variante précise à
+  /// déclencher). Visible dès que le pad a plusieurs sons, y compris en Mode
+  /// Spectacle — indépendant de [isEditable].
+  final VoidCallback? onShowSounds;
+
   const PadCard({
     super.key,
     required this.padItem,
@@ -34,6 +39,7 @@ class PadCard extends StatefulWidget {
     this.onLongPress,
     this.onRemove,
     this.onEdit,
+    this.onShowSounds,
   });
 
   @override
@@ -230,6 +236,22 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
           )
         : null;
 
+    final showSoundsButton =
+        widget.padItem.totalSoundCount > 1 && widget.onShowSounds != null
+        ? Positioned(
+            bottom: 6,
+            right: 6,
+            child: IconButton(
+              icon: const Icon(Icons.queue_music_rounded, size: 18),
+              onPressed: widget.onShowSounds,
+              color: Colors.grey.shade600,
+              splashRadius: 16,
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+          )
+        : null;
+
     final scheme = Theme.of(context).colorScheme;
 
     return AnimatedBuilder(
@@ -298,6 +320,7 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
                   ),
                 ?editButton,
                 ?deleteButton,
+                ?showSoundsButton,
               ],
             ),
           ),

@@ -1455,7 +1455,22 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 if (!mounted || !removed) return;
               }
             : null,
+        onShowSounds: padItem.totalSoundCount > 1
+            ? () => _showPadSoundPicker(context, padItem)
+            : null,
       ),
+    );
+  }
+
+  /// Bottom sheet listant les sons d'un multipad — permet de déclencher une
+  /// variante précise plutôt que de laisser le pad piocher automatiquement.
+  void _showPadSoundPicker(BuildContext context, PadItem padItem) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) =>
+          _PadSoundPickerSheet(padItem: padItem, notifier: _notifier),
     );
   }
 
@@ -2562,6 +2577,73 @@ class _PadDownloadSheetState extends State<_PadDownloadSheet> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom sheet listant les sons d'un multipad — tap = lecture immédiate de
+/// cette variante précise (`playPadSoundAtIndex`), sans passer par le choix
+/// aléatoire/séquentiel habituel.
+class _PadSoundPickerSheet extends StatelessWidget {
+  final PadItem padItem;
+  final SamplerNotifier notifier;
+
+  const _PadSoundPickerSheet({required this.padItem, required this.notifier});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final total = padItem.totalSoundCount;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text(
+              padItem.displayName,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: total,
+              itemBuilder: (context, index) {
+                final sound = padItem.pad.sounds[index];
+                final availability = index < padItem.slots.length
+                    ? padItem.slots[index].availability
+                    : PadSoundAvailability.needsDownload;
+                final isCurrent =
+                    padItem.isPlaying && padItem.currentSoundIndex == index;
+                return ListTile(
+                  leading: padSoundAvailabilityIcon(availability, scheme),
+                  title: Text(
+                    sound.displayName ?? sound.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: isCurrent ? FontWeight.w700 : null,
+                      color: isCurrent ? scheme.primary : null,
+                    ),
+                  ),
+                  trailing: isCurrent
+                      ? Icon(Icons.graphic_eq_rounded, color: scheme.primary)
+                      : null,
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    unawaited(notifier.playPadSoundAtIndex(padItem, index));
+                  },
+                );
+              },
+            ),
+          ),
+          SizedBox(height: 8 + MediaQuery.viewPaddingOf(context).bottom),
         ],
       ),
     );
