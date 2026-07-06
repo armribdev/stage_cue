@@ -1772,9 +1772,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   _AddPadIntent(),
               SingleActivator(LogicalKeyboardKey.keyZ, control: true):
                   _UndoPadIntent(),
-              SingleActivator(LogicalKeyboardKey.keyK, control: true):
+              SingleActivator(LogicalKeyboardKey.keyF, control: true):
                   _QuickSearchIntent(),
-              SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+              SingleActivator(LogicalKeyboardKey.keyF, meta: true):
                   _QuickSearchIntent(),
             }
           : const <ShortcutActivator, Intent>{},
@@ -2257,7 +2257,7 @@ class _SamplerDesktopAppBar extends StatelessWidget
         stopAllButton,
         IconButton(
           icon: const Icon(Icons.search_rounded),
-          tooltip: 'Recherche rapide (Ctrl+K)',
+          tooltip: 'Recherche rapide (Ctrl+F)',
           onPressed: onQuickSearch,
         ),
         if (!isPerformanceMode) ...[

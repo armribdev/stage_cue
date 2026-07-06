@@ -18,7 +18,7 @@ sealed class SoundPickerMode {
   const SoundPickerMode();
 }
 
-/// Recherche-éclair (Ctrl+K) : preview + préparer un bruitage/ambiance.
+/// Recherche-éclair (Ctrl+F) : preview + préparer un bruitage/ambiance.
 final class QuickSearchMode extends SoundPickerMode {
   const QuickSearchMode();
 }
@@ -68,7 +68,7 @@ final class ManageMode extends SoundPickerMode {
 
 /// Overlay flottant unifié pour chercher et sélectionner un son.
 ///
-/// Remplace [QuickSearchMode] (Ctrl+K), [MusicPickerMode] (sélecteur musique),
+/// Remplace [QuickSearchMode] (Ctrl+F), [MusicPickerMode] (sélecteur musique),
 /// [PadPickerMode] (ajout/retrait sons d'un pad) et [LibraryMode] (ajout au plateau).
 ///
 /// Même UX partout : fuzzy search normalisé, filtres par type, navigation clavier.
@@ -86,7 +86,7 @@ class SoundPickerOverlay extends StatefulWidget {
   static bool _isMobile(BuildContext context) =>
       MediaQuery.sizeOf(context).width < 600;
 
-  /// Recherche-éclair (Ctrl+K) — renvoie le pad à surligner pour les bruitages.
+  /// Recherche-éclair (Ctrl+F) — renvoie le pad à surligner pour les bruitages.
   static Future<QuickSearchPrepareResult?> show(
     BuildContext context, {
     required SamplerNotifier notifier,
