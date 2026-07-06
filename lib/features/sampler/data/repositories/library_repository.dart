@@ -882,7 +882,11 @@ class LibraryRepository extends ChangeNotifier {
         if (await isPlausibleAudioFile(localFile)) {
           final resolvedPath = p.normalize(localFile.absolute.path);
           await _soundDataSource.syncLibrarySoundLocalPath(sound.id, resolvedPath);
-          await _materializeSoundFileMetadataIfNeeded(sound, localFile);
+          // Fire-and-forget : le backfill (hash/waveform) est un best-effort qui
+          // ne doit jamais bloquer la résolution du chemin — une simple sonde de
+          // disponibilité (recherche) ne doit pas attendre un décodage natif lent
+          // ou en échec sur potentiellement des centaines de sons.
+          unawaited(_materializeSoundFileMetadataIfNeeded(sound, localFile));
           clearUnloadablePath(localPath);
           return resolvedPath;
         }
