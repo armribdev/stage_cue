@@ -10,6 +10,7 @@ extension TagCategoryUi on TagCategory {
   String get displayLabel => switch (name) {
         'ACTION' => 'Actions',
         'OBJET' => 'Objets',
+        'MUSIQUE' => 'Musique',
         _ => _toSentenceCase(name),
       };
 }
