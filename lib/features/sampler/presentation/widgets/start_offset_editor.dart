@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/audio/waveform_extractor.dart';
+import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/layout_utils.dart';
 
 /// Zone cliquable autour de la poignée sur desktop (souris).
@@ -172,15 +173,9 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
     final textTheme = Theme.of(context).textTheme;
 
     if (_loading) {
-      return const SizedBox(
-        height: _waveHeight,
-        child: Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
+      // Placeholder à la forme de la waveform pendant l'extraction.
+      return const Skeleton(
+        child: SkeletonBox(height: _waveHeight, intensity: 0.85),
       );
     }
 

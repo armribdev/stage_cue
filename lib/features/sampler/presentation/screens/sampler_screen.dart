@@ -17,6 +17,7 @@ import '../../../../core/app/app_services.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/layout_utils.dart';
 import 'settings_screen.dart';
 import 'pad_details_screen.dart';
@@ -1490,14 +1491,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
         ),
         builder: (context) {
           if (selectedBoard == null) {
-            return Center(
-              child: isBoardsLoading
-                  ? const CircularProgressIndicator()
-                  : const Text('Aucune scène disponible'),
-            );
+            if (isBoardsLoading) {
+              return const _PadsGridSkeleton();
+            }
+            return const Center(child: Text('Aucune scène disponible'));
           }
           if (state.isLoading && state.pads.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+            return const _PadsGridSkeleton();
           }
           if (state.error != null && state.pads.isEmpty) {
             return Center(
@@ -2097,10 +2097,7 @@ class _BoardsList extends StatelessWidget {
             padding: EdgeInsets.zero,
             children: [
               if (isBoardsLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: CircularProgressIndicator()),
-                )
+                const _BoardsListSkeleton()
               else if (boards.isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -2312,11 +2309,17 @@ class _BoardSceneSelector extends StatelessWidget {
           if (isBoardsLoading)
             const PopupMenuItem<Object>(
               enabled: false,
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+              child: Skeleton(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SkeletonLine(widthFactor: 0.7),
+                    SizedBox(height: 14),
+                    SkeletonLine(widthFactor: 0.5),
+                    SizedBox(height: 14),
+                    SkeletonLine(widthFactor: 0.6),
+                  ],
                 ),
               ),
             )
@@ -2580,6 +2583,99 @@ class _BoardTileIcon extends StatelessWidget {
       decoration: BoxDecoration(
         color: Color(color),
         borderRadius: BorderRadius.circular(AppRadius.xs),
+      ),
+    );
+  }
+}
+
+// ---------- Placeholders de chargement ----------
+
+/// Grille de pads factices (pulsation d'alpha) affichée pendant que la scène
+/// et ses sons se chargent — évite le saut visuel du spinner centré.
+class _PadsGridSkeleton extends StatelessWidget {
+  const _PadsGridSkeleton();
+
+  static const double _itemWidth = 180;
+  static const double _gap = 14;
+  static const double _padding = 16;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
+        final crossAxisCount = max(2, (screenWidth / _itemWidth).floor());
+        final availWidth = screenWidth - 2 * _padding;
+        final cellWidth =
+            (availWidth - (crossAxisCount - 1) * _gap) / crossAxisCount;
+        final cellHeight = cellWidth / 1.4;
+
+        // Assez de rangées pour remplir la hauteur visible (défaut si non bornée).
+        final rowCount = constraints.maxHeight.isFinite
+            ? max(2, ((constraints.maxHeight - _padding) / (cellHeight + _gap)).ceil())
+            : 4;
+
+        return Skeleton(
+          child: Padding(
+            padding: const EdgeInsets.all(_padding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (int r = 0; r < rowCount; r++) ...[
+                  if (r > 0) const SizedBox(height: _gap),
+                  Row(
+                    children: [
+                      for (int c = 0; c < crossAxisCount; c++) ...[
+                        if (c > 0) const SizedBox(width: _gap),
+                        SkeletonBox(
+                          width: cellWidth,
+                          height: cellHeight,
+                          borderRadius: AppRadius.radiusMd,
+                          intensity: 0.85,
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Liste de scènes factices pour le tiroir latéral pendant le chargement.
+class _BoardsListSkeleton extends StatelessWidget {
+  const _BoardsListSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Skeleton(
+      child: Column(
+        children: [
+          for (int i = 0; i < 5; i++)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              child: Row(
+                children: [
+                  const SkeletonBox(
+                    width: 18,
+                    height: 18,
+                    borderRadius: AppRadius.radiusXs,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: SkeletonLine(widthFactor: i.isEven ? 0.6 : 0.45),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

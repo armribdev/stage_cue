@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -956,10 +957,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   Widget _buildResults(ColorScheme scheme, List<Sound> shown, int selectedIndex) {
     if (_loading || _awaitingLocalIds) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return _buildLoadingSkeleton();
     }
 
     if (shown.isEmpty) {
@@ -1004,6 +1002,50 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Placeholders animés qui épousent la forme des items de résultat
+  /// (icône + titre + sous-titre + bouton d'action) le temps du chargement.
+  Widget _buildLoadingSkeleton() {
+    return Skeleton(
+      child: ListView.builder(
+        itemExtent: _itemExtent,
+        padding: EdgeInsets.zero,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 7,
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              const SkeletonBox(width: 24, height: 24),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SkeletonLine(widthFactor: index.isEven ? 0.7 : 0.5),
+                    const SizedBox(height: 7),
+                    SkeletonLine(
+                      widthFactor: index.isEven ? 0.3 : 0.4,
+                      height: 10,
+                      intensity: 0.75,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const SkeletonBox(
+                width: _actionButtonSize,
+                height: _actionButtonSize,
+                shape: BoxShape.circle,
+                intensity: 0.8,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
