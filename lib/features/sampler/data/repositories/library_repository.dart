@@ -18,6 +18,7 @@ import '../../../../core/sync/google_drive_client.dart';
 import '../../../../core/sync/saf_drive_owner_resolver.dart';
 import '../../../../core/sync/library_sound_paths.dart';
 import '../../../../core/sync/library_sync_service.dart';
+import '../../../../core/sync/reconcile_path_matcher.dart';
 import '../../../../core/sync/snapshot_store.dart';
 import '../../../../core/utils/file_utils.dart' show isAudioFile;
 import '../../../../core/utils/path_unicode.dart';
@@ -1433,7 +1434,8 @@ class LibraryRepository extends ChangeNotifier {
       final candidates = byBasename[p.basename(current).toLowerCase()];
       if (candidates == null || candidates.isEmpty) continue;
 
-      final corrected = _pickBestReconcileCandidate(current, candidates);
+      final corrected =
+          ReconcilePathMatcher.pickBestCandidate(current, candidates);
       if (corrected == null) continue;
       await _soundDataSource.updateSoundRelativePath(
         soundId: sound.id,
@@ -1441,20 +1443,6 @@ class LibraryRepository extends ChangeNotifier {
         localPath: _cacheManager.localPathFor(library, corrected),
       );
     }
-  }
-
-  String? _pickBestReconcileCandidate(
-    String currentPath,
-    List<String> candidates,
-  ) {
-    if (candidates.length == 1) return candidates.single;
-
-    final currentLower = currentPath.toLowerCase();
-    final exact = candidates
-        .where((path) => path.toLowerCase() == currentLower)
-        .toList();
-    if (exact.length == 1) return exact.single;
-    return null;
   }
 
   /// Réaligne le chemin relatif d'un son sur Drive avant téléchargement.
@@ -1479,7 +1467,8 @@ class LibraryRepository extends ChangeNotifier {
     );
     if (matches.isEmpty) return relativePath;
 
-    final corrected = _pickBestReconcileCandidate(relativePath, matches);
+    final corrected =
+        ReconcilePathMatcher.pickBestCandidate(relativePath, matches);
     if (corrected == null || corrected == relativePath) return relativePath;
 
     await _soundDataSource.updateSoundRelativePath(
