@@ -256,6 +256,80 @@ void main() {
     });
   });
 
+  // ── Résolution pad musique par son ───────────────────────────────────────
+
+  group('findMusicPadForSound / enqueueMusicBySoundId — multipad', () {
+    Future<SamplerNotifier> notifierWithBoard(
+      List<Pad> pads, {
+      Map<int, Sound> soundsById = const {},
+    }) async {
+      final repo = MockSoundRepository();
+      final useCase = MockLoadSoundsUseCase();
+      when(() => repo.getSoundById(any())).thenAnswer(
+        (invocation) async => soundsById[invocation.positionalArguments[0]],
+      );
+      when(() => repo.getSoundIdToFirstPadIdInBoard(any()))
+          .thenAnswer((_) async => {});
+      when(() => useCase.call(any())).thenAnswer((_) async => pads);
+      final n = SamplerNotifier(repo, useCase);
+      await n.selectBoard(SoundBoard(id: 1, name: 'A', createdAt: DateTime(2026)));
+      return n;
+    }
+
+    test(
+        'ne résout pas un multipad pour un de ses sons — seuls les pads '
+        'simples (un son) sont liés', () async {
+      final multi = Pad(
+        id: 10,
+        boardId: 1,
+        sortOrder: 0,
+        createdAt: DateTime(2026),
+        sounds: [_sound(1), _sound(2)],
+      );
+      final simple = Pad(
+        id: 11,
+        boardId: 1,
+        sortOrder: 1,
+        createdAt: DateTime(2026),
+        sounds: [_sound(3)],
+      );
+      final n = await notifierWithBoard([multi, simple]);
+
+      // Son appartenant au multipad → aucun lien avec le multipad.
+      expect(n.findMusicPadForSound(1), isNull);
+      expect(n.findMusicPadForSound(2), isNull);
+
+      // Son appartenant au pad simple → lien direct vers ce pad.
+      final resolved = n.findMusicPadForSound(3);
+      expect(resolved?.pad.id, 11);
+    });
+
+    test(
+        'jouer une musique de multipad depuis la recherche crée un pad '
+        'hors-scène pour ce son précis, sans toucher au multipad', () async {
+      final multi = Pad(
+        id: 20,
+        boardId: 1,
+        sortOrder: 0,
+        createdAt: DateTime(2026),
+        sounds: [_sound(1), _sound(2)],
+      );
+      final n = await notifierWithBoard([multi], soundsById: {1: _sound(1)});
+
+      await n.enqueueMusicBySoundId(1);
+
+      // Le multipad n'est jamais devenu le pad courant ni mis en file.
+      expect(n.state.currentMusicPad?.pad.id, isNot(20));
+      expect(n.state.musicQueuePadIds, isNot(contains(20)));
+
+      // Un pad hors-scène dédié au son précis a été créé à la place.
+      final offStage = n.resolveMusicPad(-1);
+      expect(offStage, isNotNull);
+      expect(offStage!.pad.sounds, hasLength(1));
+      expect(offStage.pad.sounds.first.id, 1);
+    });
+  });
+
   // ── cleanupOffStagePads ───────────────────────────────────────────────────
 
   group('cleanupOffStagePads', () {
