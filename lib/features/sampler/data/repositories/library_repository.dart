@@ -1062,10 +1062,13 @@ class LibraryRepository extends ChangeNotifier {
       if (isCancelled?.call() == true) break;
 
       final sound = sounds[i];
-      final relativePath = sound.relativePath!;
-      final localPath = _cacheManager.localPathFor(library, relativePath);
+      final relativePath = sound.relativePath;
 
       try {
+        if (relativePath == null) {
+          throw StateError('Aucun chemin Drive associé');
+        }
+        final localPath = _cacheManager.localPathFor(library, relativePath);
         if (!await File(localPath).exists()) {
           final resolvedLocalPath = await _cacheManager.ensureCached(
             client: client,
