@@ -39,6 +39,9 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Scripts locaux (build, outillage perso)
+/scripts/
+
 # Claude Code local overrides (personal preferences, not shared)
 .claude/settings.local.json
 
