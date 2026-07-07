@@ -53,8 +53,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   bool _isPerformanceMode = false;
 
-  /// Mode classique éditable : croix de suppression + déplacement des pads.
-  /// Verrouillé en Mode Spectacle (lecture seule, aucune modif accidentelle).
+  /// Mode classique éditable : croix de suppression, crayon et slots « + ».
+  /// Verrouillé en Mode Spectacle pour éviter toute modif accidentelle — le
+  /// déplacement des pads reste toutefois permis dans les deux modes.
   bool get _isEditable => !_isPerformanceMode;
 
   int? _draggingPadId;
@@ -703,8 +704,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
     return _notifier.isPadVisibleInOfflineMode(pad);
   }
 
-  /// Entre/sort du Mode Spectacle : verrouille l'édition (croix, déplacement,
-  /// ajout) et suspend les push Drive auto pour éviter tout jank pendant le live.
+  /// Entre/sort du Mode Spectacle : verrouille l'édition (croix, ajout) mais
+  /// laisse le déplacement des pads possible, et suspend les push Drive auto
+  /// pour éviter tout jank pendant le live.
   void _togglePerformanceMode() {
     setState(() {
       _isPerformanceMode = !_isPerformanceMode;
@@ -754,6 +756,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
     SoundBoard board, {
     required int rowIndex,
   }) {
+    // Mode Spectacle : le slot « + » occupe toujours sa place dans la grille
+    // (géométrie de drag inchangée) mais reste invisible et inerte — seul le
+    // déplacement des pads existants reste permis.
+    if (!_isEditable) return const SizedBox.shrink();
+
     final scheme = Theme.of(context).colorScheme;
     Widget card = DashedSlotFrame(
       onTap: () => _openAddPadFlow(board, rowIndex: rowIndex),
@@ -899,7 +906,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
     SoundBoard selectedBoard,
   ) {
     return LayoutBuilder(
-      key: ValueKey<bool>(_isEditable),
       builder: (context, constraints) {
         final screenWidth = constraints.maxWidth;
         _lastGridWidth = screenWidth;
@@ -924,40 +930,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
         final hasPads = rowMap.isNotEmpty;
         final displayRowIndices = hasPads ? rowIndices : [0];
 
-        // Mode Spectacle : grille verrouillée, pads simples (ni croix ni « + »).
-        if (!_isEditable) {
-          return SingleChildScrollView(
-            key: const ValueKey('pads_locked_rows'),
-            controller: _normalGridScrollController,
-            padding: _padsGridScrollPadding(context),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (int i = 0; i < displayRowIndices.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 14,
-                    runSpacing: 14,
-                    children: _buildRowCells(
-                      context: context,
-                      state: state,
-                      board: selectedBoard,
-                      rowIndex: displayRowIndices[i],
-                      rowPads: rowMap[displayRowIndices[i]] ?? const [],
-                      cellWidth: cellWidth,
-                      cellHeight: cellHeight,
-                      editable: false,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          );
-        }
-
-        // Mode classique éditable : déplacement (glisser immédiat) + croix +
-        // slots « + ». Une ligne « nouvelle rangée » finale accueille un pad
-        // déposé sous la grille.
+        // Grille interactive, déplacement (glisser immédiat) toujours permis —
+        // y compris en Mode Spectacle. Croix de suppression, crayon et slots
+        // « + » restent gérés par `_isEditable` (voir `_buildPadWidget` et
+        // `_buildAddToRowButton`) et disparaissent hors du mode classique.
+        // Une ligne « nouvelle rangée » finale accueille un pad déposé sous la
+        // grille.
         final newRowIndex = hasPads ? rowIndices.last + 1 : null;
 
         final dropTarget = _dropTarget;
