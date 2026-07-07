@@ -330,6 +330,31 @@ void main() {
     });
   });
 
+  // ── File d'attente de pistes hors-scène ──────────────────────────────────
+
+  group('enqueueMusicBySoundId — plusieurs pistes hors-scène', () {
+    test(
+        'ajouter une 2e piste ne fait pas disparaître la 1re de la file '
+        '(régression cleanupOffStagePads)', () async {
+      final repo = MockSoundRepository();
+      final useCase = MockLoadSoundsUseCase();
+      when(() => repo.getSoundById(1)).thenAnswer((_) async => _sound(1));
+      when(() => repo.getSoundById(2)).thenAnswer((_) async => _sound(2));
+      when(() => useCase.call(any())).thenAnswer((_) async => []);
+      final n = SamplerNotifier(repo, useCase);
+
+      await n.enqueueMusicBySoundId(1);
+      await n.enqueueMusicBySoundId(2);
+
+      // Le pad hors-scène du 1er son ne doit pas être disposé/oublié quand on
+      // crée celui du 2e — sinon il devient introuvable (`resolveMusicPad`
+      // retourne null) alors qu'il est toujours censé faire partie de la
+      // liste de lecture.
+      expect(n.resolveMusicPad(-1), isNotNull);
+      expect(n.resolveMusicPad(-2), isNotNull);
+    });
+  });
+
   // ── cleanupOffStagePads ───────────────────────────────────────────────────
 
   group('cleanupOffStagePads', () {
