@@ -65,6 +65,15 @@ final class ManageMode extends SoundPickerMode {
   ManageMode({required this.onTap});
 }
 
+/// Sélecteur de variante d'un multipad : choisir précisément quel son parmi
+/// ceux déjà assignés au pad va être joué. Liste courte et déjà connue → pas
+/// de recherche ni de filtres, contrairement aux autres modes.
+final class PadVariantMode extends SoundPickerMode {
+  final PadItem padItem;
+
+  const PadVariantMode({required this.padItem});
+}
+
 // ── Widget principal ──────────────────────────────────────────────────────────
 
 /// Overlay flottant unifié pour chercher et sélectionner un son.
@@ -163,6 +172,22 @@ class SoundPickerOverlay extends StatefulWidget {
     return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
   }
 
+  /// Variante d'un multipad — liste ses sons déjà assignés, sans recherche
+  /// ni filtres, pour en déclencher un précisément.
+  static Future<void> showForPadVariant(
+    BuildContext context, {
+    required SamplerNotifier notifier,
+    required PadItem padItem,
+  }) {
+    final mobile = _isMobile(context);
+    final w = SoundPickerOverlay._(
+      notifier: notifier,
+      mode: PadVariantMode(padItem: padItem),
+      isFullPage: mobile,
+    );
+    return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
+  }
+
   static Future<T?> _showPage<T>(BuildContext context, SoundPickerOverlay child) =>
       Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => child));
 
@@ -249,6 +274,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   bool get _isPadPicker => widget.mode is PadPickerMode;
   bool get _isLibrary => widget.mode is LibraryMode;
   bool get _isManage => widget.mode is ManageMode;
+  bool get _isPadVariant => widget.mode is PadVariantMode;
 
   /// Bibliothèque du board actif : null = board local. Un board rattaché à une
   /// bibliothèque ne propose que les sons de celle-ci. Un board local (null)
@@ -275,6 +301,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   ManageMode? get _manageMode =>
       widget.mode is ManageMode ? widget.mode as ManageMode : null;
 
+  PadVariantMode? get _padVariantMode =>
+      widget.mode is PadVariantMode ? widget.mode as PadVariantMode : null;
+
   /// Type verrouillé pour le sélecteur de musique.
   SoundType? get _lockedTypeFilter => _isMusicPicker ? SoundType.music : null;
   SoundType? get _effectiveTypeFilter => _lockedTypeFilter ?? _typeFilter;
@@ -292,6 +321,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     QuickSearchMode() => 'Chercher un son…',
     MusicPickerMode() => 'Chercher une musique…',
     PadPickerMode() || LibraryMode() || ManageMode() => 'Chercher un son…',
+    PadVariantMode() => '',
   };
 
   String get _emptyMessage {
@@ -313,6 +343,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       '↑↓ sélectionner    ↵/tap éditer',
     ManageMode() =>
       '↑↓ sélectionner    ↵/tap éditer    ▶ aperçu depuis le point d\'entrée',
+    PadVariantMode() => '↑↓ sélectionner    ↵/tap jouer',
   };
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -334,11 +365,25 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     setState(() {
       if (_isQuickSearch) _selectedIndex = 0;
       if (_isPadPicker) _syncPadSoundIds();
+      if (_padVariantMode case final mode?) _all = mode.padItem.pad.sounds;
     });
     _scheduleTagsLoad();
   }
 
   Future<void> _load() async {
+    // Variante d'un multipad : liste déjà connue (sons du pad), pas besoin
+    // de charger toute la bibliothèque ni le scope d'un board.
+    if (_padVariantMode case final mode?) {
+      final tagCatalog = await widget.notifier.loadTagCatalog();
+      if (!mounted) return;
+      setState(() {
+        _all = mode.padItem.pad.sounds;
+        _tagCatalog = tagCatalog;
+        _loading = false;
+      });
+      _scheduleTagsLoad();
+      return;
+    }
     final results = await Future.wait([
       widget.notifier.getAllSounds(),
       widget.notifier.loadTagCatalog(),
@@ -489,6 +534,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   DateTime _recencyKey(Sound s) => s.lastPlayedAt ?? s.createdAt;
 
   List<Sound> get _results {
+    // Variante d'un multipad : ordre figé sur les slots du pad (l'index doit
+    // rester aligné avec `pad.sounds` pour `playPadSoundAtIndex`) — jamais
+    // retrié par score/favori/récence.
+    if (_isPadVariant) return _all;
     final q = normalizeForSearch(_query);
     final tokens = _normalizedTokens;
     final scored = <(Sound, int)>[];
@@ -617,6 +666,11 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       _moveSelection(-1);
       return KeyEventResult.handled;
     }
+    // Pas de champ de recherche pour intercepter Entrée dans ce mode.
+    if (_isPadVariant && event.logicalKey == LogicalKeyboardKey.enter) {
+      unawaited(_onSubmit());
+      return KeyEventResult.handled;
+    }
     return KeyEventResult.ignored;
   }
 
@@ -625,7 +679,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   Future<void> _onSubmit() async {
     final shown = _shownResults(_results);
     if (shown.isEmpty) return;
-    final sound = shown[_clampSelectedIndex(shown.length)];
+    final index = _clampSelectedIndex(shown.length);
+    final sound = shown[index];
     switch (widget.mode) {
       case QuickSearchMode():
         await widget.notifier.previewSound(sound.id);
@@ -638,6 +693,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         await _prepareAndClose(sound);
       case ManageMode():
         await _handleManageTap(sound);
+      case PadVariantMode(padItem: final padItem):
+        _playPadVariant(padItem, index);
     }
   }
 
@@ -750,6 +807,12 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     mode.onPadUpdated?.call();
   }
 
+  // Pad variant picker
+  void _playPadVariant(PadItem padItem, int index) {
+    Navigator.of(context).pop();
+    unawaited(widget.notifier.playPadSoundAtIndex(padItem, index));
+  }
+
   // Manage
   Future<void> _handleManageTap(Sound sound) async {
     await _manageMode!.onTap(context, sound, _tagCatalog);
@@ -786,6 +849,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       },
     };
 
+    final results = _buildResultsFocusable(scheme, shown, selectedIndex);
+
     if (widget._isFullPage) {
       return CallbackShortcuts(
         bindings: shortcuts,
@@ -793,10 +858,12 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           body: SafeArea(
             child: Column(
               children: [
-                _buildSearchField(scheme),
-                _buildTypeFilters(scheme),
-                _buildFilterDivider(scheme),
-                Expanded(child: _buildResults(scheme, shown, selectedIndex)),
+                if (!_isPadVariant) ...[
+                  _buildSearchField(scheme),
+                  _buildTypeFilters(scheme),
+                  _buildFilterDivider(scheme),
+                ],
+                Expanded(child: results),
                 _buildHints(scheme, shown.isNotEmpty),
               ],
             ),
@@ -829,10 +896,12 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildSearchField(scheme),
-                  _buildTypeFilters(scheme),
-                  _buildFilterDivider(scheme),
-                  Flexible(child: _buildResults(scheme, shown, selectedIndex)),
+                  if (!_isPadVariant) ...[
+                    _buildSearchField(scheme),
+                    _buildTypeFilters(scheme),
+                    _buildFilterDivider(scheme),
+                  ],
+                  Flexible(child: results),
                   _buildHints(scheme, shown.isNotEmpty),
                 ],
               ),
@@ -841,6 +910,18 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         ),
       ),
     );
+  }
+
+  /// Sans champ de recherche (variante de pad), on rattache [_focusNode] ici
+  /// pour garder la navigation clavier (↑↓, Entrée).
+  Widget _buildResultsFocusable(
+    ColorScheme scheme,
+    List<Sound> shown,
+    int selectedIndex,
+  ) {
+    final results = _buildResults(scheme, shown, selectedIndex);
+    if (!_isPadVariant) return results;
+    return Focus(focusNode: _focusNode, autofocus: true, child: results);
   }
 
   Widget _buildSearchField(ColorScheme scheme) {
@@ -1106,10 +1187,17 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     final queued = _isMusicPicker && _isMusicQueued(sound);
     final onPad = _isPadPicker && _padSoundIds.contains(sound.id);
     final inBoard = _isLibrary && _isMusicOnBoard(sound);
+    final variantMode = _padVariantMode;
+    // Polyphonie : plusieurs variantes du pad peuvent jouer en même temps, donc
+    // on regarde l'état du lecteur de CE slot plutôt que le seul index le plus
+    // récemment déclenché (`currentSoundIndex`, qui ne reflète que le dernier).
+    final isCurrentVariant = variantMode != null &&
+        index < variantMode.padItem.slots.length &&
+        (variantMode.padItem.slots[index].player?.isPlaying ?? false);
     final tags = _soundTags[sound.id] ?? const <TagItem>[];
 
     Color? bgColor;
-    if (onAir || queued) {
+    if (onAir || queued || isCurrentVariant) {
       bgColor = scheme.primaryContainer.withValues(alpha: isSelected ? 0.55 : 0.35);
     } else if (isSelected) {
       bgColor = scheme.primary.withValues(alpha: 0.10);
@@ -1132,6 +1220,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               unawaited(_prepareAndClose(sound));
             case ManageMode():
               unawaited(_handleManageTap(sound));
+            case PadVariantMode(padItem: final padItem):
+              _playPadVariant(padItem, index);
           }
         },
         child: Padding(
@@ -1161,7 +1251,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                         ),
                       ),
                       _buildSubtitle(sound, scheme,
-                          onAir: onAir, queued: queued, inBoard: inBoard),
+                          onAir: onAir,
+                          queued: queued,
+                          inBoard: inBoard,
+                          isCurrentVariant: isCurrentVariant),
                       if (tags.isNotEmpty) ...[
                         const SizedBox(height: 3),
                         _buildTagRow(scheme, tags),
@@ -1172,7 +1265,12 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               ),
               const SizedBox(width: 8),
               _buildTrailing(sound, scheme,
-                  onAir: onAir, queued: queued, onPad: onPad, inBoard: inBoard),
+                  onAir: onAir,
+                  queued: queued,
+                  onPad: onPad,
+                  inBoard: inBoard,
+                  isCurrentVariant: isCurrentVariant,
+                  index: index),
             ],
           ),
         ),
@@ -1186,6 +1284,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     required bool onAir,
     required bool queued,
     required bool inBoard,
+    required bool isCurrentVariant,
   }) {
     if (_isMusicPicker) {
       final onBoard = _isMusicOnBoard(sound);
@@ -1203,6 +1302,17 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           fontSize: 12,
           color: onAir || queued ? scheme.primary : scheme.onSurfaceVariant,
           fontWeight: onAir || queued ? FontWeight.w600 : FontWeight.normal,
+        ),
+      );
+    }
+
+    if (isCurrentVariant) {
+      return Text(
+        'En cours de lecture',
+        style: TextStyle(
+          fontSize: 12,
+          color: scheme.primary,
+          fontWeight: FontWeight.w600,
         ),
       );
     }
@@ -1242,6 +1352,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     required bool queued,
     required bool onPad,
     required bool inBoard,
+    required bool isCurrentVariant,
+    required int index,
   }) {
     switch (widget.mode) {
       case QuickSearchMode():
@@ -1326,6 +1438,14 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
             iconColor: scheme.primary,
             onPressed: () => unawaited(_toggleLibraryPreview(sound)),
           ),
+        );
+
+      case PadVariantMode():
+        if (!isCurrentVariant) return const SizedBox.shrink();
+        return SizedBox(
+          width: _actionButtonSize,
+          height: _actionButtonSize,
+          child: Icon(Icons.graphic_eq_rounded, color: scheme.primary),
         );
     }
   }
