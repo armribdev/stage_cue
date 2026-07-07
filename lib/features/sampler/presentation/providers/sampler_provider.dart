@@ -41,6 +41,11 @@ class SamplerNotifier extends ChangeNotifier {
 
   int? _activeBoardId;
   _RemovedPadSnapshot? _lastRemovedPad;
+
+  /// Réinitialisé à chaque entrée en mode live (Mode Spectacle) : force le
+  /// tout premier pad ajouté via la recherche-éclair sur une nouvelle ligne
+  /// plutôt qu'à la suite de la dernière ligne déjà en place sur scène.
+  bool _forceNewRowOnNextQuickAdd = false;
   int _draftPadIdSeq = -1;
   final _random = Random();
 
@@ -1952,6 +1957,13 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
+  /// À appeler à l'entrée en mode live (Mode Spectacle) : le prochain pad
+  /// ajouté via la recherche-éclair démarre une nouvelle ligne plutôt que de
+  /// s'ajouter à la suite de la dernière ligne déjà en place.
+  void markPerformanceModeEntered() {
+    _forceNewRowOnNextQuickAdd = true;
+  }
+
   Future<QuickSearchPrepareResult> prepareSoundFromQuickSearch(
     int soundId,
   ) async {
@@ -1976,15 +1988,21 @@ class SamplerNotifier extends ChangeNotifier {
     final boardId = _activeBoardId;
     if (boardId == null) return const QuickSearchPrepareResult.none();
 
+    final forceNewRow = _forceNewRowOnNextQuickAdd;
+
     final result = await prepareSfxOnBoard(
       soundId: soundId,
       padsOnBoard: _padsOnBoardRefs(),
-      createPad: (placement) => _repository.createPadWithSettings(
-        boardId: boardId,
-        soundIds: [soundId],
-        rowIndex: placement.rowIndex,
-        sortOrder: placement.globalSortOrder,
-      ),
+      forceNewRow: forceNewRow,
+      createPad: (placement) {
+        _forceNewRowOnNextQuickAdd = false;
+        return _repository.createPadWithSettings(
+          boardId: boardId,
+          soundIds: [soundId],
+          rowIndex: placement.rowIndex,
+          sortOrder: placement.globalSortOrder,
+        );
+      },
       reloadPads: () async {
         await loadSounds(boardId: boardId, silent: true);
         return _padsOnBoardRefs();

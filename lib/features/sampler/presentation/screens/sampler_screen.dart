@@ -718,6 +718,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final syncController = widget.services.syncController;
     if (_isPerformanceMode) {
       syncController.pauseAutoSync();
+      _notifier.markPerformanceModeEntered();
     } else {
       syncController.resumeAutoSync();
     }
