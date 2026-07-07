@@ -64,6 +64,17 @@ int? fuzzyMatchScore(String normalizedText, String normalizedQuery) {
   return 260 - approx.distance * 60; // sous les sous-chaînes, au-dessus des sous-séquences
 }
 
+/// Teste si [normalizedQuery] correspond quelque part dans [normalizedText]
+/// à une faute de frappe près (substitution, insertion, suppression,
+/// transposition de deux lettres adjacentes), sans passer par la sous-séquence
+/// dispersée (trop permissive pour un test booléen hors classement). Utilisé
+/// par la recherche de tags, où le nombre d'entrées à tester reste petit.
+bool matchesWithTypo(String normalizedText, String normalizedQuery) {
+  final maxTypo = _maxTypoDistance(normalizedQuery.length);
+  if (maxTypo == 0) return false;
+  return _approximateMatch(normalizedText, normalizedQuery, maxTypo) != null;
+}
+
 /// Distance d'édition maximale tolérée pour une faute de frappe, selon la
 /// longueur du mot recherché. Les mots courts (≤ 3 lettres) sont exclus pour
 /// éviter les faux positifs (trop de mots courts se ressemblent).
