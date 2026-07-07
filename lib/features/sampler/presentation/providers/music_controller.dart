@@ -781,7 +781,6 @@ class MusicController {
   }
 
   Future<PadItem?> _createOffStageMusicPad(int soundId) async {
-    cleanupOffStagePads();
     try {
       final sound = await _o._repository.getSoundById(soundId);
       if (sound == null) {
