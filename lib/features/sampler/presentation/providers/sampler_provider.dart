@@ -1093,12 +1093,19 @@ class SamplerNotifier extends ChangeNotifier {
       await _stopAllSlotPlayers(padItem);
       changed = true;
     }
+    if (_libraryPreviewSoundId != null || _previewPlayers.isNotEmpty) {
+      changed = true;
+    }
+    stopAllPreviews();
     if (changed) notifyListeners();
   }
 
-  /// Au moins un pad non-musique joue actuellement.
+  /// Au moins un pad non-musique joue actuellement, ou une pré-écoute
+  /// (recherche rapide / bibliothèque) est en cours.
   bool get hasNonMusicSoundsPlaying =>
-      _state.pads.any((p) => !p.pad.isMusicPad && p.isPlaying);
+      _state.pads.any((p) => !p.pad.isMusicPad && p.isPlaying) ||
+      _libraryPreviewSoundId != null ||
+      _previewPlayers.isNotEmpty;
 
   /// Arrête toutes les voix de chaque variante du pad (sans notifier).
   Future<void> _stopAllSlotPlayers(PadItem padItem) async {
@@ -1928,6 +1935,7 @@ class SamplerNotifier extends ChangeNotifier {
         sub?.cancel();
         _previewPlayers.remove(player);
         player.dispose();
+        notifyListeners();
       });
       var startOffsetMs = sound.startOffsetMs;
       final duration = player.duration;
@@ -1939,6 +1947,7 @@ class SamplerNotifier extends ChangeNotifier {
       }
       await player.playFromPosition(Duration(milliseconds: startOffsetMs));
       _markPlayed(sound.id);
+      notifyListeners();
       return true;
     } catch (e) {
       debugPrint('Pré-écoute échouée pour ${sound.title}: $e');
