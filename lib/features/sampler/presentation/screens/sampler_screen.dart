@@ -2233,24 +2233,28 @@ class _SamplerDesktopAppBar extends StatelessWidget
         ),
       ),
       actions: [
+        if (!isPerformanceMode) ...[
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Paramètres',
+            onPressed: () => unawaited(onOpenSettings()),
+          ),
+          IconButton(
+            icon: const Icon(Icons.library_books_rounded),
+            tooltip: 'Gérer la bibliothèque',
+            onPressed: () => unawaited(onOpenLibrary()),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: VerticalDivider(width: 24),
+          ),
+        ],
         stopAllButton,
         IconButton(
           icon: const Icon(Icons.search_rounded),
           tooltip: 'Recherche rapide (Ctrl+F)',
           onPressed: onQuickSearch,
         ),
-        if (!isPerformanceMode) ...[
-          IconButton(
-            icon: const Icon(Icons.library_books_rounded),
-            tooltip: 'Gérer la bibliothèque',
-            onPressed: () => unawaited(onOpenLibrary()),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Paramètres',
-            onPressed: () => unawaited(onOpenSettings()),
-          ),
-        ],
         _LiveModeButton(
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
