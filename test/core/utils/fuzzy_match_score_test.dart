@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stage_cue/core/utils/string_utils.dart';
 
@@ -55,6 +56,47 @@ void main() {
       );
       expect(ranked.first, 'Porte qui claque');
       expect(ranked.contains('Sirène'), isFalse); // ne matche pas
+    });
+
+    test('lettres interverties -> matche quand même (tolérance de faute)', () {
+      expect(fuzzyMatchScore('explosion', 'epxlosion'), isNotNull);
+    });
+
+    test('substitution d\'une lettre -> matche quand même', () {
+      expect(fuzzyMatchScore('tonnerre', 'tonnarre'), isNotNull);
+    });
+
+    test('mot trop court -> pas de tolérance aux fautes', () {
+      // "ton" a 3 lettres : sous le seuil, pour éviter les faux positifs.
+      expect(fuzzyMatchScore('ton', 'tno'), isNull);
+    });
+
+    test('trop de fautes -> ne matche pas', () {
+      expect(fuzzyMatchScore('explosion', 'xpsloin'), isNull);
+    });
+
+    test('faute de frappe : score entre sous-chaîne et sous-séquence', () {
+      final substring = fuzzyMatchScore('grosse explosion', 'explosion')!;
+      final typo = fuzzyMatchScore('grosse explosion', 'epxlosion')!;
+      expect(substring, greaterThan(typo));
+    });
+  });
+
+  group('buildHighlightedSpan (via fuzzyMatchScore + surlignage approximatif)', () {
+    test('une faute de frappe met en évidence la fenêtre correspondante', () {
+      final span = buildHighlightedSpan('Grosse Explosion', ['epxlosion']);
+      final bold = <String>[];
+      void collect(InlineSpan s) {
+        if (s is TextSpan) {
+          if (s.style?.fontWeight == FontWeight.bold && s.text != null) {
+            bold.add(s.text!);
+          }
+          s.children?.forEach(collect);
+        }
+      }
+      collect(span);
+      expect(bold, isNotEmpty);
+      expect(bold.first.toLowerCase(), 'explosion');
     });
   });
 }
