@@ -214,7 +214,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   // Un Set<int> par token (ordre identique à _normalizedTokens).
   List<Set<int>> _tagMatchSetsPerToken = const [];
   String _tagToken = '';
-  Timer? _tagDebounce;
+  // Débounce partagé : retarde à la fois le scoring flou des titres (coûteux
+  // sur toute la bibliothèque) et la requête SQL de recherche par tag, pour
+  // ne recalculer qu'une fois l'utilisateur arrêté de taper.
+  Timer? _searchDebounce;
 
   // ── Tags des sons affichés ────────────────────────────────────────────────
   final Map<int, List<TagItem>> _soundTags = {};
@@ -384,7 +387,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       widget.notifier.stopLibraryPreview(notify: false);
     }
     widget.notifier.removeListener(_onNotifierChanged);
-    _tagDebounce?.cancel();
+    _searchDebounce?.cancel();
     _tagsLoadDebounce?.cancel();
     _focusNode.dispose();
     _scrollController.dispose();
@@ -395,15 +398,19 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   // ── Recherche ─────────────────────────────────────────────────────────────
 
   void _onQueryChanged(String value) {
-    setState(() {
-      _query = value;
-      _selectedIndex = 0;
-    });
-    _tagDebounce?.cancel();
-    _tagDebounce = Timer(const Duration(milliseconds: 120), () {
+    // Le champ de texte gère son propre affichage via _controller : retarder
+    // la mise à jour de _query ne fait pas lagger la frappe, seulement le
+    // recalcul du scoring flou (sur toute la bibliothèque) et la recherche
+    // de tags — inutile de les relancer à chaque caractère tapé.
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 120), () {
+      if (!mounted) return;
+      setState(() {
+        _query = value;
+        _selectedIndex = 0;
+      });
       unawaited(_runTagSearch(value));
     });
-    _scheduleTagsLoad();
   }
 
   /// Tokens normalisés (≥ 2 chars) extraits de [_query].
