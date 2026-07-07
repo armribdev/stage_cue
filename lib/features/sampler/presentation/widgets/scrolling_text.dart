@@ -17,6 +17,7 @@ class ScrollingTextSpan extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = this.style ?? DefaultTextStyle.of(context).style;
     final direction = Directionality.of(context);
+    final textScaler = MediaQuery.textScalerOf(context);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -25,7 +26,7 @@ class ScrollingTextSpan extends StatelessWidget {
         }
 
         final richSpan = TextSpan(style: style, children: [span]);
-        final textWidth = _measureTextWidth(richSpan, direction);
+        final textWidth = _measureTextWidth(richSpan, direction, textScaler);
         final overflow = textWidth - constraints.maxWidth;
 
         return _ScrollingTextSpanBody(
@@ -37,10 +38,15 @@ class ScrollingTextSpan extends StatelessWidget {
     );
   }
 
-  static double _measureTextWidth(TextSpan span, TextDirection direction) {
+  static double _measureTextWidth(
+    TextSpan span,
+    TextDirection direction,
+    TextScaler textScaler,
+  ) {
     final painter = TextPainter(
       text: span,
       textDirection: direction,
+      textScaler: textScaler,
       maxLines: 1,
     )..layout();
     return painter.size.width;
@@ -63,8 +69,14 @@ class _ScrollingTextSpanBody extends StatefulWidget {
 }
 
 class _ScrollingTextSpanBodyState extends State<_ScrollingTextSpanBody>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
+  // Pause une fois le texte défilé jusqu'au bout, avant de revenir au début.
+  static const _pauseAtEnd = Duration(milliseconds: 700);
+  // Pause au début, une fois revenu au début, avant de redéfiler.
+  static const _pauseAtStart = Duration(milliseconds: 900);
+
   AnimationController? _controller;
+  Duration _scrollDuration = Duration.zero;
 
   @override
   void didUpdateWidget(_ScrollingTextSpanBody oldWidget) {
@@ -85,22 +97,49 @@ class _ScrollingTextSpanBodyState extends State<_ScrollingTextSpanBody>
       return;
     }
 
-    final durationMs = (widget.overflow * 35).round().clamp(2500, 10000);
-    final duration = Duration(milliseconds: durationMs);
+    final scrollMs = (widget.overflow * 35).round().clamp(2500, 10000);
+    final scrollDuration = Duration(milliseconds: scrollMs);
+    final totalDuration = scrollDuration + _pauseAtEnd + _pauseAtStart;
+    // Position dans le cycle où commence la pause du début, pour qu'un
+    // contrôleur qui démarre (nouvelle sélection, ouverture de l'overlay...)
+    // marque toujours cette pause avant de défiler.
+    final startPauseT =
+        (scrollDuration + _pauseAtEnd).inMicroseconds / totalDuration.inMicroseconds;
 
     if (_controller == null) {
-      _controller = AnimationController(vsync: this, duration: duration)
-        ..repeat(reverse: true);
+      _scrollDuration = scrollDuration;
+      _controller = AnimationController(vsync: this, duration: totalDuration)
+        ..value = startPauseT
+        ..repeat();
       return;
     }
 
-    if (_controller!.duration != duration) {
+    if (_scrollDuration != scrollDuration) {
+      _scrollDuration = scrollDuration;
       _controller!
-        ..duration = duration
-        ..repeat(reverse: true);
+        ..duration = totalDuration
+        ..value = startPauseT
+        ..repeat();
     } else if (!_controller!.isAnimating) {
-      _controller!.repeat(reverse: true);
+      _controller!.value = startPauseT;
+      _controller!.repeat();
     }
+  }
+
+  /// Défile de 0 à 1 immédiatement, marque une pause en fin de course,
+  /// puis revient d'un coup au début et marque une pause avant de redéfiler.
+  double _progressFor(double t) {
+    final total = _scrollDuration + _pauseAtEnd + _pauseAtStart;
+    final scrollFraction = _scrollDuration.inMicroseconds / total.inMicroseconds;
+    final endPauseFraction = _pauseAtEnd.inMicroseconds / total.inMicroseconds;
+
+    if (t < scrollFraction) {
+      return t / scrollFraction;
+    }
+    if (t < scrollFraction + endPauseFraction) {
+      return 1;
+    }
+    return 0;
   }
 
   @override
@@ -124,9 +163,15 @@ class _ScrollingTextSpanBodyState extends State<_ScrollingTextSpanBody>
       child: AnimatedBuilder(
         animation: controller,
         builder: (context, _) {
+          final progress = _progressFor(controller.value);
           return Transform.translate(
-            offset: Offset(-widget.overflow * controller.value, 0),
-            child: Text.rich(widget.span, maxLines: 1, softWrap: false),
+            offset: Offset(-widget.overflow * progress, 0),
+            child: Text.rich(
+              widget.span,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.visible,
+            ),
           );
         },
       ),
