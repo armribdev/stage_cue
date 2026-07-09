@@ -2345,18 +2345,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
       syncController: widget.syncController,
       onTap: _onSyncPillTap,
     );
+    final actions = <Widget>[
+      ?_buildDriveRefreshAction(),
+      syncPill,
+    ];
 
     if (widget.isModal) {
       return AppModalShell(
         title: 'Paramètres',
-        actions: [syncPill],
+        actions: actions,
         body: body,
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Paramètres'), actions: [syncPill]),
+      appBar: AppBar(title: const Text('Paramètres'), actions: actions),
       body: body,
+    );
+  }
+
+  /// Bouton « Actualiser depuis Drive » : relit les dossiers Drive liés et
+  /// indexe les fichiers ajoutés directement sur Drive. Absent tant qu'aucune
+  /// bibliothèque Drive n'est connectée ; devient un indicateur d'activité
+  /// pendant l'actualisation.
+  Widget? _buildDriveRefreshAction() {
+    final hasDriveLibrary =
+        _libraries.any((library) => library.isConnectedToDrive);
+    if (!hasDriveLibrary) return null;
+
+    if (_isSyncBusy) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16),
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    return IconButton(
+      icon: const Icon(Icons.refresh),
+      tooltip: 'Actualiser depuis Drive',
+      onPressed: _refreshAllFromDrive,
     );
   }
 
