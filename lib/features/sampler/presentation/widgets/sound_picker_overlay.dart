@@ -21,7 +21,10 @@ sealed class SoundPickerMode {
 
 /// Recherche-éclair (Ctrl+F) : preview + préparer un bruitage/ambiance.
 final class QuickSearchMode extends SoundPickerMode {
-  const QuickSearchMode();
+  /// Filtre de type pré-appliqué (Ctrl+G/H/J) — modifiable ensuite via les chips.
+  final SoundType? initialTypeFilter;
+
+  const QuickSearchMode({this.initialTypeFilter});
 }
 
 /// Sélecteur de musique : joue ou met en file d'attente.
@@ -100,10 +103,13 @@ class SoundPickerOverlay extends StatefulWidget {
   static Future<QuickSearchPrepareResult?> show(
     BuildContext context, {
     required SamplerNotifier notifier,
+    SoundType? initialTypeFilter,
   }) {
     final mobile = _isMobile(context);
     final w = SoundPickerOverlay._(
-        notifier: notifier, mode: const QuickSearchMode(), isFullPage: mobile);
+        notifier: notifier,
+        mode: QuickSearchMode(initialTypeFilter: initialTypeFilter),
+        isFullPage: mobile);
     return mobile
         ? _showPage<QuickSearchPrepareResult?>(context, w)
         : _showDialog<QuickSearchPrepareResult?>(context, w);
@@ -354,6 +360,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     _focusNode = FocusNode(onKeyEvent: _onSearchKey);
     widget.notifier.addListener(_onNotifierChanged);
     if (_isPadPicker) _typeFilter = SoundType.soundEffect;
+    if (_isQuickSearch) {
+      _typeFilter = (widget.mode as QuickSearchMode).initialTypeFilter;
+    }
     if (_isQuickSearch && widget.notifier.isLiveOfflineMode) {
       _localOnly = true;
     }
