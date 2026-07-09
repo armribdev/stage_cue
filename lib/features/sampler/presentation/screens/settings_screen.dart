@@ -12,7 +12,6 @@ import '../../../../core/sync/drive_account_profile.dart';
 import '../../../../core/sync/drive_profile_cache.dart';
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
-import '../../../../core/sync/drive_client.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../../../core/utils/layout_utils.dart';
@@ -96,7 +95,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _cancelDownloadAll = false;
   final Map<String, SafTreeInfo> _safFolderInfo = {};
   bool _isInitialLoad = true;
-  bool _isSyncBusy = false;
   bool _isDriveAuthBusy = false;
   bool _shouldScrollToDriveSection = false;
   final GlobalKey _driveSectionKey = GlobalKey();
@@ -1294,78 +1292,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _removeWatchedPath(watchedPath);
   }
 
-  Future<void> _refreshAllFromDrive() async {
-    final connected = _libraries
-        .where((library) => library.isConnectedToDrive)
-        .toList();
-    if (connected.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Aucun dossier Drive indexé')),
-        );
-      }
-      return;
-    }
-
-    setState(() => _isSyncBusy = true);
-    try {
-      for (final library in connected) {
-        await widget.syncController.pullForLaunch(library);
-        if (!mounted) return;
-
-        final progressKey = _driveProgressKey(library.id);
-        await widget.libraryRepository.indexDriveFolder(
-          library: library,
-          onProgress: (progress) {
-            if (mounted) {
-              setState(() {
-                _indexingProgress[progressKey] = progress;
-              });
-              _maybeRefreshDatabaseSummaryLive(progress);
-            }
-          },
-        );
-      }
-
-      await _loadDatabaseInfo();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bibliothèque(s) Drive actualisée(s)'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } on DriveAuthException {
-      await widget.syncController.handleAuthFailure();
-      if (mounted) {
-        showCopyableSnackBar(
-          context,
-          'Session Google expirée — reconnectez-vous via l\'icône compte.',
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        showCopyableSnackBar(context, 'Erreur lors de l\'actualisation : $e');
-      }
-    } finally {
-      if (mounted) setState(() => _isSyncBusy = false);
-    }
-  }
-
   Future<void> _resolveSyncConflict(domain.Library library) async {
-    setState(() => _isSyncBusy = true);
-    try {
-      await showSyncConflictDialog(
-        context: context,
-        syncController: widget.syncController,
-        library: library,
-        onResolved: _loadDatabaseInfo,
-      );
-    } finally {
-      if (mounted) setState(() => _isSyncBusy = false);
-    }
+    await showSyncConflictDialog(
+      context: context,
+      syncController: widget.syncController,
+      library: library,
+      onResolved: _loadDatabaseInfo,
+    );
   }
 
   String _formatDriveSyncTimestamp(DateTime syncedAt) {
