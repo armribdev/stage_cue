@@ -104,7 +104,7 @@ class AudioPlayerService {
     try {
       await _stopAllHandles();
       final seekFirst = position > Duration.zero;
-      final handle = await SoLoud.instance.play(_source, paused: seekFirst);
+      final handle = SoLoud.instance.play(_source, paused: seekFirst);
       _handles.add(handle);
       _currentHandle = handle;
       if (seekFirst) {
@@ -136,7 +136,7 @@ class AudioPlayerService {
   }) async {
     try {
       final seekFirst = startOffset > Duration.zero;
-      final handle = await SoLoud.instance.play(_source, paused: seekFirst);
+      final handle = SoLoud.instance.play(_source, paused: seekFirst);
       _handles.add(handle);
       _currentHandle = handle;
       SoLoud.instance.setVolume(handle, volume.clamp(0.0, 1.0));
@@ -217,7 +217,7 @@ class AudioPlayerService {
     try {
       await _stopAllHandles();
       final seekFirst = startOffset > Duration.zero;
-      final handle = await SoLoud.instance.play(_source, paused: seekFirst);
+      final handle = SoLoud.instance.play(_source, paused: seekFirst);
       _handles.add(handle);
       _currentHandle = handle;
       SoLoud.instance.setVolume(handle, volume.clamp(0.0, 1.0));
