@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
 import 'audio_file_validation.dart';
+import 'preview_playback.dart';
 import 'soloud_file_loader.dart';
 import 'audio_load_log.dart';
 
@@ -22,7 +23,7 @@ import 'audio_load_log.dart';
 /// [_currentHandle] est la voix la plus récente : cible des opérations
 /// mono-voix (seek, position, fondu). En mode polyphonique il reste unique par
 /// commodité mais [isPlaying] reflète l'ensemble des voix.
-class AudioPlayerService {
+class AudioPlayerService implements PreviewPlayback {
   final AudioSource _source;
   final Set<SoundHandle> _handles = {};
   SoundHandle? _currentHandle;
@@ -118,6 +119,7 @@ class AudioPlayerService {
   /// coupe la voix précédente avant d'en lancer une nouvelle.
   /// [volume] est appliqué avant que la voix ne devienne audible.
   /// Retourne false si la voix n'a pas pu démarrer.
+  @override
   Future<bool> playFromPosition(
     Duration position, {
     double volume = 1.0,
@@ -166,6 +168,7 @@ class AudioPlayerService {
   }
 
   /// Met en pause la voix courante (mono-voix).
+  @override
   Future<void> pause() async {
     if (!_hasActiveHandle || _paused) return;
     SoLoud.instance.setPause(_currentHandle!, true);
@@ -174,6 +177,7 @@ class AudioPlayerService {
   }
 
   /// Reprend la voix courante après [pause].
+  @override
   Future<void> resume() async {
     if (!_hasActiveHandle || !_paused) return;
     SoLoud.instance.setPause(_currentHandle!, false);
@@ -182,6 +186,7 @@ class AudioPlayerService {
   }
 
   /// Arrête toutes les voix en cours.
+  @override
   Future<void> stop() async {
     await _stopAllHandles();
     _paused = false;
@@ -254,9 +259,11 @@ class AudioPlayerService {
   }
 
   /// Écoute les changements d'état du lecteur (true = en cours, false = arrêté)
+  @override
   Stream<bool> get onPlayerStateChanged => _stateController.stream;
 
   /// Obtient la durée du fichier audio
+  @override
   Duration get duration {
     try {
       return SoLoud.instance.getLength(_source);
@@ -267,18 +274,22 @@ class AudioPlayerService {
   }
 
   /// Position actuelle de lecture de la voix courante (0 si aucune active).
+  @override
   Duration get position {
     if (!_hasActiveHandle) return Duration.zero;
     return SoLoud.instance.getPosition(_currentHandle!);
   }
 
   /// Indique si au moins une voix est audible (hors pause).
+  @override
   bool get isPlaying => _handles.isNotEmpty && !_paused;
 
   /// Indique si la voix courante est en pause.
+  @override
   bool get isPaused => _paused && _hasActiveHandle;
 
   /// Dispose les ressources
+  @override
   void dispose() {
     _soundEventsSubscription?.cancel();
     try {

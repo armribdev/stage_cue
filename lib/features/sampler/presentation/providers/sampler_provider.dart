@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/audio_player_service.dart';
+import '../../../../core/audio/cue_audio_service.dart';
+import '../../../../core/audio/preview_playback.dart';
 import '../../../../core/audio/audio_file_validation.dart';
 import '../../../../core/audio/local_sound_probe.dart';
 import '../../../../core/audio/waveform_extractor.dart';
@@ -52,10 +54,10 @@ class SamplerNotifier extends ChangeNotifier {
   /// Lecteurs dédiés à la pré-écoute (recherche-éclair) : indépendants des pads,
   /// du master musique et de la file. Plusieurs bruitages/ambiances peuvent
   /// jouer simultanément ; chacun se libère seul à la fin de sa lecture.
-  final Set<AudioPlayerService> _previewPlayers = {};
+  final Set<PreviewPlayback> _previewPlayers = {};
 
   /// Lecteur unique pour l'aperçu bibliothèque (play/pause, un son à la fois).
-  AudioPlayerService? _libraryPreviewPlayer;
+  PreviewPlayback? _libraryPreviewPlayer;
   int? _libraryPreviewSoundId;
   StreamSubscription<bool>? _libraryPreviewSub;
 
@@ -1903,7 +1905,7 @@ class SamplerNotifier extends ChangeNotifier {
         sound,
         downloadIfNeeded: allowsSoundDownload,
       );
-      final player = await AudioPlayerService.create(path);
+      final player = await CueAudioService.instance.createPreviewPlayer(path);
       _libraryPreviewPlayer = player;
       _libraryPreviewSoundId = sound.id;
       _libraryPreviewSub = player.onPlayerStateChanged.listen((playing) {
@@ -1936,7 +1938,7 @@ class SamplerNotifier extends ChangeNotifier {
         sound,
         downloadIfNeeded: allowsSoundDownload,
       );
-      final player = await AudioPlayerService.create(path);
+      final player = await CueAudioService.instance.createPreviewPlayer(path);
       _previewPlayers.add(player);
       StreamSubscription<bool>? sub;
       sub = player.onPlayerStateChanged.listen((playing) {
