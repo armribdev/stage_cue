@@ -1106,6 +1106,7 @@ class LibraryRepository extends ChangeNotifier {
 
       var downloaded = 0;
       var failed = 0;
+      var authExpired = false;
 
       for (var i = 0; i < sounds.length; i++) {
         if (cancelled()) break;
@@ -1139,6 +1140,12 @@ class LibraryRepository extends ChangeNotifier {
             );
             downloaded++;
           }
+        } on DriveAuthException {
+          // Token révoqué/expiré : les fichiers suivants échoueraient de la même
+          // façon — on arrête la passe plutôt que de les marquer un par un en échec.
+          authExpired = true;
+          await invalidateAuthSession();
+          break;
         } catch (e) {
           failed++;
           debugPrint('Téléchargement échoué pour ${sound.title}: $e');
@@ -1160,7 +1167,9 @@ class LibraryRepository extends ChangeNotifier {
           current: total,
           total: total,
           isComplete: true,
-          error: failed > 0 ? '$failed fichier(s) ignoré(s)' : null,
+          error: authExpired
+              ? 'Session Google expirée — reconnectez-vous dans les réglages.'
+              : (failed > 0 ? '$failed fichier(s) ignoré(s)' : null),
         ),
       );
 
