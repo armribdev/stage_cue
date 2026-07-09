@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../domain/entities/sound.dart';
@@ -978,110 +979,147 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     // Musique : type verrouillé → pas de barre de filtres.
     if (_lockedTypeFilter != null) return const SizedBox.shrink();
 
-    Widget chip(String label, SoundType? type, IconData icon) {
+    // "Tous" uniquement pour QuickSearch, Library et Manage
+    final segments = <(String, SoundType?, IconData)>[
+      if (_isQuickSearch || _isLibrary || _isManage)
+        ('Tous', null, Icons.apps_rounded),
+      (SoundType.soundEffect.label, SoundType.soundEffect, SoundType.soundEffect.icon),
+      (SoundType.music.label, SoundType.music, SoundType.music.icon),
+      (SoundType.ambiance.label, SoundType.ambiance, SoundType.ambiance.icon),
+    ];
+
+    Widget segment(String label, SoundType? type, IconData icon, bool isLast) {
       final selected = _effectiveTypeFilter == type;
       final colors = type?.avatarColors(scheme) ??
           (background: scheme.primaryContainer, foreground: scheme.onPrimaryContainer);
-      return Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: FilterChip(
-          avatar: Icon(
-            icon,
-            size: 16,
-            color: selected ? colors.foreground : scheme.onSurfaceVariant,
+      return InkWell(
+        onTap: () {
+          setState(() {
+            _typeFilter = type;
+            _selectedIndex = 0;
+          });
+          _scheduleTagsLoad();
+          _focusNode.requestFocus();
+        },
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? colors.background : Colors.transparent,
+            border: isLast
+                ? null
+                : Border(
+                    right: BorderSide(
+                      color: scheme.outlineVariant.withValues(alpha: 0.6),
+                    ),
+                  ),
           ),
-          label: Text(label),
-          selected: selected,
-          showCheckmark: false,
-          visualDensity: VisualDensity.compact,
-          backgroundColor: scheme.surface,
-          selectedColor: colors.background,
-          side: BorderSide(
-            color: selected
-                ? Colors.transparent
-                : scheme.outlineVariant.withValues(alpha: 0.6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? colors.foreground : scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  color: selected ? colors.foreground : scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
-          shape: const StadiumBorder(),
-          labelStyle: TextStyle(
-            color: selected ? colors.foreground : scheme.onSurfaceVariant,
-          ),
-          onSelected: (_) {
+        ),
+      );
+    }
+
+    final segmentedControl = Material(
+      color: Colors.transparent,
+      child: Container(
+        height: 32,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: AppRadius.radiusMd,
+          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < segments.length; i++)
+              segment(segments[i].$1, segments[i].$2, segments[i].$3,
+                  i == segments.length - 1),
+          ],
+        ),
+      ),
+    );
+
+    final trailingActions = <Widget>[
+      if (_isQuickSearch) ...[
+        Container(
+          width: 1,
+          height: 22,
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          color: scheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+        _roundIconButton(
+          scheme: scheme,
+          icon: _favoritesOnly ? Icons.star_rounded : Icons.star_border_rounded,
+          iconColor: _favoritesOnly ? scheme.primary : scheme.onSurfaceVariant,
+          active: _favoritesOnly,
+          flat: true,
+          onPressed: () {
             setState(() {
-              _typeFilter = type;
+              _favoritesOnly = !_favoritesOnly;
               _selectedIndex = 0;
             });
             _scheduleTagsLoad();
             _focusNode.requestFocus();
           },
         ),
-      );
-    }
+        _roundIconButton(
+          scheme: scheme,
+          icon: Icons.offline_bolt_rounded,
+          iconColor: _effectiveLocalOnly ? scheme.primary : scheme.onSurfaceVariant,
+          active: _effectiveLocalOnly,
+          flat: true,
+          onPressed: () {
+            setState(() {
+              _localOnly = !_localOnly;
+              _selectedIndex = 0;
+            });
+            _scheduleTagsLoad();
+            _focusNode.requestFocus();
+          },
+        ),
+      ],
+    ];
 
     return SizedBox(
       height: 44,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 2, 8, 2),
-        child: Row(
-          children: [
-            Expanded(
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  // "Tous" uniquement pour QuickSearch, Library et Manage
-                  if (_isQuickSearch || _isLibrary || _isManage)
-                    chip('Tous', null, Icons.apps_rounded),
-                  chip(SoundType.soundEffect.label, SoundType.soundEffect,
-                      SoundType.soundEffect.icon),
-                  chip(SoundType.music.label, SoundType.music, SoundType.music.icon),
-                  chip(SoundType.ambiance.label, SoundType.ambiance,
-                      SoundType.ambiance.icon),
-                ],
+        // Groupe pilule + actions centré comme un seul bloc ; passe en scroll
+        // horizontal (démarrant à gauche) si la largeur manque. Le
+        // ConstrainedBox(minWidth) force le Row à occuper toute la largeur
+        // disponible quand le contenu est plus étroit, pour que le
+        // MainAxisAlignment.center ait un effet visible.
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [segmentedControl, ...trailingActions],
               ),
             ),
-            if (_isQuickSearch) ...[
-              Container(
-                width: 1,
-                height: 22,
-                margin: const EdgeInsets.symmetric(horizontal: 6),
-                color: scheme.outlineVariant.withValues(alpha: 0.6),
-              ),
-              _roundIconButton(
-                scheme: scheme,
-                icon: _favoritesOnly
-                    ? Icons.star_rounded
-                    : Icons.star_border_rounded,
-                iconColor: _favoritesOnly
-                    ? scheme.primary
-                    : scheme.onSurfaceVariant,
-                active: _favoritesOnly,
-                onPressed: () {
-                  setState(() {
-                    _favoritesOnly = !_favoritesOnly;
-                    _selectedIndex = 0;
-                  });
-                  _scheduleTagsLoad();
-                  _focusNode.requestFocus();
-                },
-              ),
-              const SizedBox(width: 4),
-              _roundIconButton(
-                scheme: scheme,
-                icon: Icons.offline_bolt_rounded,
-                iconColor: _effectiveLocalOnly
-                    ? scheme.primary
-                    : scheme.onSurfaceVariant,
-                active: _effectiveLocalOnly,
-                onPressed: () {
-                  setState(() {
-                    _localOnly = !_localOnly;
-                    _selectedIndex = 0;
-                  });
-                  _scheduleTagsLoad();
-                  _focusNode.requestFocus();
-                },
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -1531,6 +1569,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     required VoidCallback? onPressed,
     required Color iconColor,
     bool active = false,
+    // Désactive tout fond (actif ou survol) — seule la couleur d'icône
+    // porte l'état. Pour les toggles serrés type favoris/hors-ligne.
+    bool flat = false,
   }) {
     return SizedBox(
       width: _actionButtonSize,
@@ -1543,11 +1584,13 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         style: IconButton.styleFrom(
           shape: const CircleBorder(),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          backgroundColor: active
+          backgroundColor: !flat && active
               ? scheme.primary.withValues(alpha: 0.12)
               : Colors.transparent,
           disabledBackgroundColor: Colors.transparent,
-          hoverColor: scheme.onSurface.withValues(alpha: 0.08),
+          hoverColor: flat
+              ? Colors.transparent
+              : scheme.onSurface.withValues(alpha: 0.08),
           foregroundColor: iconColor,
         ),
         constraints: const BoxConstraints.tightFor(
