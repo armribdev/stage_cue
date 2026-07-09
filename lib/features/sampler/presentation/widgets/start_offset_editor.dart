@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
-import '../../../../core/audio/audio_player_service.dart';
+import '../../../../core/audio/cue_audio_service.dart';
+import '../../../../core/audio/preview_playback.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/layout_utils.dart';
@@ -42,7 +43,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
   static const _nudgeStep = Duration(milliseconds: 100);
   static const _waveHeight = 56.0;
 
-  AudioPlayerService? _player;
+  PreviewPlayback? _player;
   bool _loading = true;
   bool _loadFailed = false;
   Duration _duration = Duration.zero;
@@ -64,7 +65,10 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
 
   Future<void> _load() async {
     try {
-      final player = await AudioPlayerService.createEphemeral(widget.filePath);
+      final player = await CueAudioService.instance.createPreviewPlayer(
+        widget.filePath,
+        ephemeral: true,
+      );
       if (!mounted) {
         player.dispose();
         return;

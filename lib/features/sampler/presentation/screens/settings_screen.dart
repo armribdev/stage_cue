@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart' show OrderingTerm;
+import '../../../../core/audio/cue_audio_service.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/platform/saf_directory_bridge.dart';
@@ -97,6 +98,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isInitialLoad = true;
   bool _isSyncBusy = false;
   bool _isDriveAuthBusy = false;
+
+  /// Périphériques de sortie de pré-écoute (cue) — desktop uniquement.
+  List<CueDevice> _cueDevices = const [];
+  bool _isLoadingCueDevices = false;
   bool _shouldScrollToDriveSection = false;
   final GlobalKey _driveSectionKey = GlobalKey();
 
@@ -124,6 +129,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // les lectures DB pour éviter les à-coups à l'ouverture.
       unawaited(_startInitialLoad());
     });
+    if (CueAudioService.isSupported) {
+      unawaited(_loadCueDevices());
+    }
+  }
+
+  /// Énumère les périphériques de sortie de pré-écoute (cue).
+  Future<void> _loadCueDevices() async {
+    if (!CueAudioService.isSupported) return;
+    setState(() => _isLoadingCueDevices = true);
+    final devices = await CueAudioService.instance.refreshDevices();
+    if (!mounted) return;
+    setState(() {
+      _cueDevices = devices;
+      _isLoadingCueDevices = false;
+    });
+  }
+
+  /// Change le device cue : persistance + application immédiate au moteur.
+  Future<void> _setCueDevice(String? deviceId) async {
+    CueAudioService.instance.setSelectedDevice(deviceId);
+    await widget.appPreferences.setCueOutputDeviceId(deviceId);
   }
 
   Future<void> _startInitialLoad() async {
@@ -1884,6 +1910,106 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// Section « Audio » : choix du périphérique de sortie de pré-écoute (cue).
+  /// Desktop uniquement — permet d'auditionner un son sur un casque séparé
+  /// pendant que la sortie « salle » reste sur le device système.
+  Widget _buildAudioSection() {
+    final scheme = Theme.of(context).colorScheme;
+    return _buildSettingsSectionCard(
+      title: _buildSectionTitleRow(
+        icon: Icons.headphones_outlined,
+        title: 'Audio',
+        trailing: [
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Rafraîchir la liste des périphériques',
+            icon: _isLoadingCueDevices
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            onPressed: _isLoadingCueDevices ? null : () => _loadCueDevices(),
+          ),
+        ],
+      ),
+      child: ListenableBuilder(
+        listenable: widget.appPreferences,
+        builder: (context, _) {
+          final selectedId = widget.appPreferences.cueOutputDeviceId;
+          // Le device persisté peut être absent de la liste (débranché) : on
+          // l'ajoute pour que le Dropdown ait toujours une valeur valide.
+          final knownIds = _cueDevices.map((d) => d.id).toSet();
+          final missingSelected =
+              selectedId != null && !knownIds.contains(selectedId);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Sortie de pré-écoute (cue)',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: selectedId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Défaut système'),
+                    ),
+                    for (final device in _cueDevices)
+                      DropdownMenuItem<String?>(
+                        value: device.id,
+                        child: Text(
+                          device.label,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    if (missingSelected)
+                      DropdownMenuItem<String?>(
+                        value: selectedId,
+                        child: const Text(
+                          'Périphérique indisponible',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) => unawaited(_setCueDevice(value)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                selectedId == null
+                    ? 'Les pré-écoutes sortent sur le périphérique par défaut, '
+                          'comme le reste de l\'application.'
+                    : 'Les pré-écoutes sortent sur ce périphérique, tandis que '
+                          'les pads et la régie restent sur la sortie système.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildDriveSection() {
     return KeyedSubtree(
       key: _driveSectionKey,
@@ -2149,6 +2275,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     _buildDriveSection(),
                     const SizedBox(height: 16),
+                    if (CueAudioService.isSupported) ...[
+                      _buildAudioSection(),
+                      const SizedBox(height: 16),
+                    ],
                     _buildIndexedFoldersCard(),
                   ],
                 ),
