@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 32;
+  int get schemaVersion => 33;
 
   @override
   MigrationStrategy get migration {
@@ -282,6 +282,16 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 32) {
           await _ensureMusicCategoryTags();
+        }
+        if (from < 33) {
+          // État d'échec VERSIONNÉ de l'extraction waveform : mémorise la
+          // génération d'extraction lors d'un échec « format » pour ne pas
+          // re-sonder en boucle un fichier que le backend refuse, tout en le
+          // re-tentant après une montée de capacité (cf. kWaveformProbeGeneration).
+          // Backfill implicite : colonne null → les sons sans waveform seront
+          // (re)tentés à la prochaine occasion, ce qui « guérit » d'un coup les
+          // fichiers auparavant en échec après un upgrade de flutter_soloud.
+          await m.addColumn(sounds, sounds.waveformProbeGeneration);
         }
       },
       beforeOpen: (details) async {

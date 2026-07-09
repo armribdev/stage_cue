@@ -122,6 +122,13 @@ class Sounds extends Table {
   /// que non calculée (son non-musique, fichier absent, ou probe échoué) ;
   /// remplie paresseusement au premier chargement du son musique.
   BlobColumn get waveform => blob().nullable()();
+  /// Génération de la capacité d'extraction (`kWaveformProbeGeneration`) en
+  /// vigueur lors du DERNIER échec « format » de l'extraction waveform. `null` =
+  /// jamais échoué / à (re)tenter. Permet de ne PAS re-sonder en boucle un fichier
+  /// que le backend de sampling refuse, tout en re-tentant AUTOMATIQUEMENT après
+  /// une amélioration de la capacité d'extraction (ex. upgrade flutter_soloud qui
+  /// corrige la lecture d'échantillons sur les noms accentués sous Windows).
+  IntColumn get waveformProbeGeneration => integer().nullable()();
   /// Point d'entrée de lecture, en millisecondes depuis le début du fichier :
   /// tout déclenchement (bruitage ou régie musique) démarre ici au lieu du
   /// sample 0. 0 = début du fichier. Propriété de contenu comme [waveform].

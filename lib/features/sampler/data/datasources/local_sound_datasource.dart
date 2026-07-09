@@ -34,18 +34,33 @@ class LocalSoundDataSource {
   /// Résout les métadonnées d'un fichier audio local.
   /// Retourne `type: null` si le fichier est absent ou si le probe de durée échoue.
   /// La waveform n'est calculée que pour les musiques (seul type affiché en régie).
-  Future<({db_sounds.SoundType? type, String? contentHash, Uint8List? waveform})>
-      _resolveMetadataForFile(File file) async {
+  Future<
+      ({
+        db_sounds.SoundType? type,
+        String? contentHash,
+        Uint8List? waveform,
+        int? waveformProbeGeneration,
+      })> _resolveMetadataForFile(File file) async {
     if (!await file.exists() || await file.length() <= 0) {
-      return (type: null, contentHash: null, waveform: null);
+      return (
+        type: null,
+        contentHash: null,
+        waveform: null,
+        waveformProbeGeneration: null,
+      );
     }
     final probeType = await _probeSoundTypeFromDuration(file);
     final contentHash =
         probeType != null ? await computeQuickHash(file) : null;
-    final waveform = probeType == db_sounds.SoundType.music
+    final probe = probeType == db_sounds.SoundType.music
         ? await extractWaveform(file.path)
         : null;
-    return (type: probeType, contentHash: contentHash, waveform: waveform);
+    return (
+      type: probeType,
+      contentHash: contentHash,
+      waveform: probe?.waveformValue,
+      waveformProbeGeneration: probe?.generationValue,
+    );
   }
 
   /// Probe de type par durée SoLoud. Retourne null si le fichier est invalide
@@ -269,10 +284,16 @@ class LocalSoundDataSource {
         .write(db.SoundsCompanion(type: Value(dbType)));
   }
 
-  /// Persiste l'enveloppe waveform pré-calculée d'un son (régie musique).
-  Future<void> updateSoundWaveform(int id, Uint8List waveform) async {
+  /// Persiste l'issue d'une extraction waveform (régie musique) : l'enveloppe en
+  /// cas de succès, ou le marqueur de génération d'échec pour un `unsupported`.
+  /// Un échec `transient` (moteur non prêt) n'écrit rien — on retentera.
+  Future<void> persistWaveformProbe(int id, WaveformProbe probe) async {
+    if (probe.status == WaveformProbeStatus.transient) return;
     await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
-        .write(db.SoundsCompanion(waveform: Value(waveform)));
+        .write(db.SoundsCompanion(
+      waveform: Value(probe.waveformValue),
+      waveformProbeGeneration: Value(probe.generationValue),
+    ));
   }
 
   /// Marque ou démarque un son comme favori (accès rapide en recherche).
@@ -368,6 +389,7 @@ class LocalSoundDataSource {
               type: Value(metadata.type),
               contentHash: Value(metadata.contentHash),
               waveform: Value(metadata.waveform),
+              waveformProbeGeneration: Value(metadata.waveformProbeGeneration),
             ),
           );
     } catch (e) {
@@ -430,7 +452,7 @@ class LocalSoundDataSource {
       final contentHash = probeType != null
           ? await computeQuickHash(file)
           : existing.contentHash;
-      final waveform = probeType == db_sounds.SoundType.music
+      final probe = probeType == db_sounds.SoundType.music
           ? await extractWaveform(file.path)
           : null;
       await (_database.update(_database.sounds)
@@ -439,18 +461,25 @@ class LocalSoundDataSource {
         db.SoundsCompanion(
           type: Value(probeType),
           contentHash: Value(contentHash),
-          waveform: Value(waveform),
+          waveform: Value(probe?.waveformValue),
+          waveformProbeGeneration: Value(probe?.generationValue),
         ),
       );
       return;
     }
 
     // Type déjà connu : compléter le hash et/ou la waveform s'ils manquent.
+    // La waveform n'est re-sondée que si la génération d'échec est dépassée.
     final needsHash = existing.contentHash == null;
-    final needsWaveform =
-        existing.type == db_sounds.SoundType.music && existing.waveform == null;
+    final needsWaveform = existing.type == db_sounds.SoundType.music &&
+        existing.waveform == null &&
+        waveformNeedsProbe(existing.waveformProbeGeneration);
     if (!needsHash && !needsWaveform) return;
 
+    final probe = needsWaveform ? await extractWaveform(file.path) : null;
+    // Un échec transitoire (moteur non prêt) ne doit rien écrire : on retentera.
+    final persistProbe =
+        probe != null && probe.status != WaveformProbeStatus.transient;
     await (_database.update(_database.sounds)
           ..where((s) => s.id.equals(soundId)))
         .write(
@@ -458,8 +487,10 @@ class LocalSoundDataSource {
         contentHash: needsHash
             ? Value(await computeQuickHash(file))
             : const Value.absent(),
-        waveform: needsWaveform
-            ? Value(await extractWaveform(file.path))
+        waveform:
+            persistProbe ? Value(probe.waveformValue) : const Value.absent(),
+        waveformProbeGeneration: persistProbe
+            ? Value(probe.generationValue)
             : const Value.absent(),
       ),
     );
@@ -575,6 +606,10 @@ class LocalSoundDataSource {
               driveMd5:
                   driveMd5 != null ? Value(driveMd5) : const Value.absent(),
               waveform: contentChanged ? const Value(null) : const Value.absent(),
+              // Contenu écrasé : on efface aussi le marqueur d'échec waveform
+              // pour re-sonder le nouveau contenu depuis zéro.
+              waveformProbeGeneration:
+                  contentChanged ? const Value(null) : const Value.absent(),
               contentHash:
                   contentChanged ? const Value(null) : const Value.absent(),
             ),
@@ -709,6 +744,7 @@ class LocalSoundDataSource {
                   type: Value(metadata.type),
                   contentHash: Value(metadata.contentHash),
                   waveform: Value(metadata.waveform),
+              waveformProbeGeneration: Value(metadata.waveformProbeGeneration),
                 ),
               );
           indexedCount++;

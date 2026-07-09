@@ -23,6 +23,7 @@ class SoundModel {
       isFavorite: sound.isFavorite,
       lastPlayedAt: sound.lastPlayedAt,
       waveform: sound.waveform,
+      waveformProbeGeneration: sound.waveformProbeGeneration,
       startOffsetMs: sound.startOffsetMs,
     );
   }
