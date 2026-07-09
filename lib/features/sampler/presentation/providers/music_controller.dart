@@ -582,12 +582,12 @@ class MusicController {
 
     padItem.clearPausedPlayback();
 
-    player.setVolume(_effectiveVolume(padItem));
+    final volume = _effectiveVolume(padItem);
     final startPos = resumePosition != null && resumePosition > Duration.zero
         ? resumePosition
         : _startOffsetOf(padItem, index, player);
 
-    var started = await player.playFromPosition(startPos);
+    var started = await player.playFromPosition(startPos, volume: volume);
     if (!started) {
       // Source SoLoud peut avoir été invalidée (ex. éditeur de point d'entrée).
       await _o._loadSlotAtIndex(
@@ -601,8 +601,7 @@ class MusicController {
         _setMusicLoadError(padItem);
         return false;
       }
-      reloaded.setVolume(_effectiveVolume(padItem));
-      started = await reloaded.playFromPosition(startPos);
+      started = await reloaded.playFromPosition(startPos, volume: volume);
     }
 
     if (!started) {
