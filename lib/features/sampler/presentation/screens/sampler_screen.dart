@@ -12,6 +12,7 @@ import '../widgets/music_preview_panel.dart';
 import '../widgets/music_picker_sheet.dart';
 import '../widgets/quick_search_overlay.dart';
 import '../widgets/app_form_dialog.dart';
+import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
@@ -33,6 +34,16 @@ class _AddPadIntent extends Intent {
 
 class _QuickSearchIntent extends Intent {
   const _QuickSearchIntent();
+}
+
+class _StopAllIntent extends Intent {
+  const _StopAllIntent();
+}
+
+/// Recherche-éclair pré-filtrée par type de son (Ctrl+G/H/J).
+class _QuickSearchFilteredIntent extends Intent {
+  final SoundType type;
+  const _QuickSearchFilteredIntent(this.type);
 }
 
 /// Écran principal du sampler
@@ -406,8 +417,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 
   /// Ouvre la recherche-éclair (overlay) ; met en évidence le pad dédié préparé.
-  Future<void> _openQuickSearch() async {
-    final result = await QuickSearchOverlay.show(context, notifier: _notifier);
+  /// [typeFilter] pré-filtre sur un type de son (Ctrl+G/H/J).
+  Future<void> _openQuickSearch({SoundType? typeFilter}) async {
+    final result = await QuickSearchOverlay.show(
+      context,
+      notifier: _notifier,
+      initialTypeFilter: typeFilter,
+    );
     if (!mounted) return;
     // Les pré-écoutes (bruitages/ambiances) jouent jusqu'à la fin et se libèrent
     // seules ; les musiques jouent dans la régie. Rien à couper à la fermeture.
@@ -1753,6 +1769,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   _QuickSearchIntent(),
               SingleActivator(LogicalKeyboardKey.keyF, meta: true):
                   _QuickSearchIntent(),
+              SingleActivator(LogicalKeyboardKey.escape): _StopAllIntent(),
+              SingleActivator(LogicalKeyboardKey.keyG, control: true):
+                  _QuickSearchFilteredIntent(SoundType.soundEffect),
+              SingleActivator(LogicalKeyboardKey.keyH, control: true):
+                  _QuickSearchFilteredIntent(SoundType.music),
+              SingleActivator(LogicalKeyboardKey.keyJ, control: true):
+                  _QuickSearchFilteredIntent(SoundType.ambiance),
             }
           : const <ShortcutActivator, Intent>{},
       child: Actions(
@@ -1772,6 +1795,21 @@ class _SamplerScreenState extends State<SamplerScreen> {
           _QuickSearchIntent: CallbackAction<_QuickSearchIntent>(
             onInvoke: (intent) {
               unawaited(_openQuickSearch());
+              return null;
+            },
+          ),
+          _StopAllIntent: CallbackAction<_StopAllIntent>(
+            onInvoke: (intent) {
+              if (_notifier.hasNonMusicSoundsPlaying) {
+                unawaited(HapticFeedback.heavyImpact());
+                unawaited(_notifier.stopAllNonMusicSounds());
+              }
+              return null;
+            },
+          ),
+          _QuickSearchFilteredIntent: CallbackAction<_QuickSearchFilteredIntent>(
+            onInvoke: (intent) {
+              unawaited(_openQuickSearch(typeFilter: intent.type));
               return null;
             },
           ),
@@ -1922,7 +1960,9 @@ class _StopAllButton extends StatelessWidget {
         final active = notifier.hasNonMusicSoundsPlaying;
         return IconButton(
           icon: const Icon(Icons.stop_circle_rounded),
-          tooltip: 'Tout arrêter',
+          tooltip: isNativeDesktopPlatform()
+              ? 'Tout arrêter (Échap)'
+              : 'Tout arrêter',
           color: active ? scheme.error : null,
           onPressed: active
               ? () {
