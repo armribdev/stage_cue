@@ -89,6 +89,38 @@ class LibraryRepository extends ChangeNotifier {
   /// interactif réussi (sinon [connectSilently] recrée un client périmé).
   bool _requiresInteractiveReconnect = false;
 
+  /// Bibliothèques dont une passe de téléchargement est en cours : garantit
+  /// qu'une seule tourne à la fois par bibliothèque (le bouton manuel « Tout
+  /// télécharger » et le pré-téléchargement auto partagent [downloadAllLibraryAudio]).
+  final Set<int> _downloadingLibraries = {};
+
+  /// Bibliothèques dont l'utilisateur a demandé l'annulation du téléchargement.
+  /// Consommé (et vidé) par [downloadAllLibraryAudio].
+  final Set<int> _cancelledDownloads = {};
+
+  /// Progression de téléchargement PAR bibliothèque, publiée via [notifyListeners].
+  /// Vit dans le repository (durée de vie longue) et non dans l'écran Paramètres :
+  /// fermer/rouvrir l'écran ré-attache l'UI à la progression réelle en cours,
+  /// au lieu de la perdre. Absent = aucune passe connue.
+  final Map<int, IndexingProgress> _downloadProgress = {};
+
+  /// Progression de téléchargement courante d'une bibliothèque (null si aucune).
+  IndexingProgress? libraryDownloadProgress(int libraryId) =>
+      _downloadProgress[libraryId];
+
+  /// Demande l'annulation de la passe de téléchargement d'une bibliothèque.
+  /// Sans effet si aucune passe n'est en cours.
+  void cancelLibraryDownload(int libraryId) {
+    if (_downloadingLibraries.contains(libraryId)) {
+      _cancelledDownloads.add(libraryId);
+    }
+  }
+
+  void _publishDownloadProgress(int libraryId, IndexingProgress progress) {
+    _downloadProgress[libraryId] = progress;
+    notifyListeners();
+  }
+
   LibraryRepository(
     this._dataSource,
     this._authenticator,
@@ -1033,89 +1065,110 @@ class LibraryRepository extends ChangeNotifier {
 
   /// Télécharge tous les fichiers audio non encore présents dans le cache local.
   ///
-  /// Appelle [onProgress] après chaque fichier. [isCancelled] permet
-  /// d'interrompre proprement entre deux téléchargements.
+  /// La progression est publiée via [notifyListeners] ([libraryDownloadProgress])
+  /// et aussi relayée à [onProgress] si fourni. L'annulation passe par
+  /// [cancelLibraryDownload] (ou le [isCancelled] optionnel).
+  ///
+  /// Une seule passe tourne à la fois par bibliothèque : un appel concurrent (p.
+  /// ex. bouton manuel pendant un pré-téléchargement auto) est un no-op — la passe
+  /// en cours prendra les fichiers manquants.
   Future<int> downloadAllLibraryAudio({
     required Library library,
     void Function(IndexingProgress)? onProgress,
     bool Function()? isCancelled,
   }) async {
-    final client = await _ensureDriveClient();
-    if (client == null) throw StateError('Bibliothèque non connectée à Drive');
+    if (!_downloadingLibraries.add(library.id)) return 0;
+    _cancelledDownloads.remove(library.id);
 
-    final sounds = await _soundDataSource.getSoundsForLibrary(library.id);
-    final total = sounds.length;
+    void report(IndexingProgress progress) {
+      _publishDownloadProgress(library.id, progress);
+      onProgress?.call(progress);
+    }
 
-    onProgress?.call(
-      IndexingProgress(
-        path: library.name,
-        current: 0,
-        total: total,
-        isComplete: false,
-      ),
-    );
+    bool cancelled() =>
+        isCancelled?.call() == true || _cancelledDownloads.contains(library.id);
 
-    var downloaded = 0;
-    var failed = 0;
+    try {
+      final client = await _ensureDriveClient();
+      if (client == null) throw StateError('Bibliothèque non connectée à Drive');
 
-    for (var i = 0; i < sounds.length; i++) {
-      if (isCancelled?.call() == true) break;
+      final sounds = await _soundDataSource.getSoundsForLibrary(library.id);
+      final total = sounds.length;
 
-      final sound = sounds[i];
-      final relativePath = sound.relativePath;
-
-      try {
-        if (relativePath == null) {
-          throw StateError('Aucun chemin Drive associé');
-        }
-        final localPath = _cacheManager.localPathFor(library, relativePath);
-        if (!await File(localPath).exists()) {
-          final resolvedLocalPath = await _cacheManager.ensureCached(
-            client: client,
-            library: library,
-            relativePath: relativePath,
-            driveFileId: sound.driveFileId,
-          );
-          unawaited(
-            _soundDataSource.syncLibrarySoundLocalPath(
-              sound.id,
-              resolvedLocalPath,
-            ),
-          );
-          unawaited(
-            _materializeSoundFileMetadataIfNeeded(
-              sound,
-              File(resolvedLocalPath),
-            ),
-          );
-          downloaded++;
-        }
-      } catch (e) {
-        failed++;
-        debugPrint('Téléchargement échoué pour ${sound.title}: $e');
-      }
-
-      onProgress?.call(
+      report(
         IndexingProgress(
           path: library.name,
-          current: i + 1,
+          current: 0,
           total: total,
           isComplete: false,
         ),
       );
+
+      var downloaded = 0;
+      var failed = 0;
+
+      for (var i = 0; i < sounds.length; i++) {
+        if (cancelled()) break;
+
+        final sound = sounds[i];
+        final relativePath = sound.relativePath;
+
+        try {
+          if (relativePath == null) {
+            throw StateError('Aucun chemin Drive associé');
+          }
+          final localPath = _cacheManager.localPathFor(library, relativePath);
+          if (!await File(localPath).exists()) {
+            final resolvedLocalPath = await _cacheManager.ensureCached(
+              client: client,
+              library: library,
+              relativePath: relativePath,
+              driveFileId: sound.driveFileId,
+            );
+            unawaited(
+              _soundDataSource.syncLibrarySoundLocalPath(
+                sound.id,
+                resolvedLocalPath,
+              ),
+            );
+            unawaited(
+              _materializeSoundFileMetadataIfNeeded(
+                sound,
+                File(resolvedLocalPath),
+              ),
+            );
+            downloaded++;
+          }
+        } catch (e) {
+          failed++;
+          debugPrint('Téléchargement échoué pour ${sound.title}: $e');
+        }
+
+        report(
+          IndexingProgress(
+            path: library.name,
+            current: i + 1,
+            total: total,
+            isComplete: false,
+          ),
+        );
+      }
+
+      report(
+        IndexingProgress(
+          path: library.name,
+          current: total,
+          total: total,
+          isComplete: true,
+          error: failed > 0 ? '$failed fichier(s) ignoré(s)' : null,
+        ),
+      );
+
+      return downloaded;
+    } finally {
+      _downloadingLibraries.remove(library.id);
+      _cancelledDownloads.remove(library.id);
     }
-
-    onProgress?.call(
-      IndexingProgress(
-        path: library.name,
-        current: total,
-        total: total,
-        isComplete: true,
-        error: failed > 0 ? '$failed fichier(s) ignoré(s)' : null,
-      ),
-    );
-
-    return downloaded;
   }
 
   /// Indexe récursivement les fichiers audio d'un dossier Drive (bibliothèque).
@@ -1206,30 +1259,14 @@ class LibraryRepository extends ChangeNotifier {
 
       for (final audio in audioFiles) {
         processedCount++;
-        var localPath = _cacheManager.localPathFor(library, audio.relativePath);
-
-        final isNew = !await _soundDataSource.hasLibrarySound(
-          libraryId: library.id,
-          relativePath: audio.relativePath,
-        );
-        if (isNew) {
-          final localFile = File(localPath);
-          if (!await isPlausibleAudioFile(localFile) && library.autoDownload) {
-            try {
-              localPath = await _cacheManager.ensureCached(
-                client: client,
-                library: library,
-                relativePath: audio.relativePath,
-                driveFileId: audio.driveFileId,
-              );
-            } catch (e) {
-              debugPrint(
-                'Index Drive : téléchargement auto échoué pour '
-                '${audio.relativePath}: $e',
-              );
-            }
-          }
-        }
+        // Indexation = MÉTADONNÉES uniquement. On ne télécharge JAMAIS le fichier
+        // ici : sinon un gros dossier Drive (des milliers de sons) plafonne sur le
+        // timeout de lancement (cf. AutoSyncCoordinator) et seuls les premiers
+        // fichiers sont indexés. Le son est inséré avec `type = null` tant que le
+        // fichier n'est pas local ; le téléchargement (et le backfill du type via
+        // materializeSoundFileMetadata) est découplé, lancé en arrière-plan après
+        // la boucle pour les bibliothèques en téléchargement auto.
+        final localPath = _cacheManager.localPathFor(library, audio.relativePath);
 
         // Nœud dossier propriétaire (ses fichiers directs) : c'est l'unité
         // d'appartenance et, à terme, de snapshot par-dossier.
@@ -1261,25 +1298,11 @@ class LibraryRepository extends ChangeNotifier {
         // Édition « en place » sur Drive (contenu écrasé à ID constant) : le
         // fichier de cache local est périmé. La waveform et le contentHash ont
         // déjà été réinitialisés en base ; on évince le fichier pour forcer un
-        // re-téléchargement, et on le re-matérialise aussitôt si la bibliothèque
-        // est en téléchargement auto (cache chaud pour le live).
+        // re-téléchargement. Celui-ci est découplé : il aura lieu en arrière-plan
+        // (téléchargement auto ci-dessous, le fichier n'existant plus) ou à la
+        // demande — jamais inline, pour ne pas plafonner l'indexation.
         if (result.contentChanged) {
           await _cacheManager.evictCachedFile(library, audio.relativePath);
-          if (library.autoDownload) {
-            try {
-              localPath = await _cacheManager.ensureCached(
-                client: client,
-                library: library,
-                relativePath: audio.relativePath,
-                driveFileId: audio.driveFileId,
-              );
-            } catch (e) {
-              debugPrint(
-                'Index Drive : re-téléchargement post-édition échoué pour '
-                '${audio.relativePath}: $e',
-              );
-            }
-          }
         }
 
         onProgress?.call(
@@ -1313,6 +1336,15 @@ class LibraryRepository extends ChangeNotifier {
         ),
       );
 
+      // Métadonnées de TOUS les fichiers désormais en base (les sons sont visibles
+      // immédiatement). Si la bibliothèque est en téléchargement auto, on
+      // matérialise les fichiers en ARRIÈRE-PLAN — sans bloquer ni plafonner
+      // l'indexation. Le type de chaque son est renseigné à la volée par
+      // materializeSoundFileMetadata au fil des téléchargements.
+      if (library.autoDownload) {
+        unawaited(_prefetchLibraryAudioInBackground(library));
+      }
+
       return DriveIndexResult(
         newFileCount: indexedCount,
         presentDriveFileIds: seenDriveIds,
@@ -1333,6 +1365,21 @@ class LibraryRepository extends ChangeNotifier {
         );
       }
       rethrow;
+    }
+  }
+
+  /// Pré-télécharge en arrière-plan les fichiers audio manquants d'une
+  /// bibliothèque en téléchargement auto, après une indexation métadonnées-only.
+  /// Best-effort : découplé de l'indexation (jamais inline), il ne doit ni la
+  /// bloquer ni la faire échouer. Idempotent — [downloadAllLibraryAudio] saute
+  /// les fichiers déjà présents et garantit une seule passe par bibliothèque.
+  Future<void> _prefetchLibraryAudioInBackground(Library library) async {
+    try {
+      await downloadAllLibraryAudio(library: library);
+    } catch (e) {
+      debugPrint(
+        'Pré-téléchargement en arrière-plan échoué (${library.name}): $e',
+      );
     }
   }
 

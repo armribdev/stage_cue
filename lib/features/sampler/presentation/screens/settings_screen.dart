@@ -89,11 +89,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final SoundRepository _repository;
   // Suivi de la progression d'indexation par chemin (clé normalisée)
   final Map<String, IndexingProgress> _indexingProgress = {};
-  // Suivi de la progression de téléchargement audio par bibliothèque
-  final Map<int, IndexingProgress> _downloadProgress = {};
+  // La progression de téléchargement audio vit dans le repository (durée de vie
+  // longue) : fermer/rouvrir l'écran ré-attache l'UI à la passe réelle en cours.
   // Décompte « disponible hors ligne / total » par bibliothèque Drive.
   final Map<int, ({int available, int total})> _offlineCounts = {};
-  bool _cancelDownloadAll = false;
   final Map<String, SafTreeInfo> _safFolderInfo = {};
   bool _isInitialLoad = true;
   bool _isSyncBusy = false;
@@ -117,6 +116,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _shouldScrollToDriveSection = widget.scrollToDriveSection;
     _initializeRepository();
+    // Le repository publie la progression de téléchargement (durée de vie longue) :
+    // on s'y abonne pour refléter une passe en cours dès l'ouverture de l'écran.
+    widget.libraryRepository.addListener(_onLibraryRepositoryChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Laisse la transition de navigation se terminer avant de lancer
       // les lectures DB pour éviter les à-coups à l'ouverture.
@@ -138,8 +140,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    widget.libraryRepository.removeListener(_onLibraryRepositoryChanged);
     _avatarCache.dispose();
     super.dispose();
+  }
+
+  /// Le repository a notifié un changement (progression de téléchargement, session
+  /// Drive…) : on reconstruit pour refléter la passe en cours. Le téléchargement
+  /// lui-même vit dans le repository et continue indépendamment de cet écran.
+  void _onLibraryRepositoryChanged() {
+    if (mounted) setState(() {});
   }
 
   void _scrollToDriveSectionIfNeeded() {
@@ -1456,7 +1466,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     final library = item.library!;
-    final downloadProgress = _downloadProgress[library.id];
+    final downloadProgress =
+        widget.libraryRepository.libraryDownloadProgress(library.id);
     final isDownloading =
         downloadProgress != null && !downloadProgress.isComplete;
     final offline = _offlineCounts[library.id];
@@ -1547,36 +1558,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _downloadAllLibraryAudio(domain.Library library) async {
-    _cancelDownloadAll = false;
-    setState(() {
-      _downloadProgress[library.id] = IndexingProgress(
-        path: library.name,
-        current: 0,
-        total: 0,
-        isComplete: false,
-      );
-    });
-
+    // La progression et l'annulation vivent dans le repository : l'écran ne fait
+    // que déclencher la passe et se rafraîchit via [_onLibraryRepositoryChanged].
+    // Le téléchargement continue même si l'écran est fermé entre-temps.
     try {
-      await widget.libraryRepository.downloadAllLibraryAudio(
-        library: library,
-        isCancelled: () => _cancelDownloadAll,
-        onProgress: (progress) {
-          if (mounted) setState(() => _downloadProgress[library.id] = progress);
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _downloadProgress[library.id] = IndexingProgress(
-            path: library.name,
-            current: 0,
-            total: 0,
-            isComplete: true,
-            error: e.toString(),
-          );
-        });
-      }
+      await widget.libraryRepository.downloadAllLibraryAudio(library: library);
     } finally {
       // Rafraîchit l'indicateur hors-ligne (téléchargement complet ou annulé).
       await _refreshOfflineCount(library);
@@ -2052,7 +2038,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // 2. Téléchargement des variantes audio (Drive uniquement).
     if (!item.isLocal) {
-      final download = _downloadProgress[item.library!.id];
+      final download =
+          widget.libraryRepository.libraryDownloadProgress(item.library!.id);
       if (download != null && !download.isComplete) {
         return _buildActivityBlock(
           value: download.total > 0 ? download.progress : null,
@@ -2060,7 +2047,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           label:
               'Téléchargement ${download.current}/'
               '${download.total > 0 ? download.total : '…'}',
-          onCancel: () => setState(() => _cancelDownloadAll = true),
+          onCancel: () =>
+              widget.libraryRepository.cancelLibraryDownload(item.library!.id),
         );
       }
       if (download?.error != null) {

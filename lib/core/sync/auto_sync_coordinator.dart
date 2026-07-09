@@ -93,6 +93,10 @@ class AutoSyncCoordinator {
         //    boards et les recâblerait sur des sons encore absents → pads perdus
         //    pour la session. Mieux vaut garder l'état local et réessayer au
         //    prochain lancement (l'index sera plus rapide, cache chaud).
+        //    L'indexation étant métadonnées-only (aucun téléchargement inline,
+        //    cf. LibraryRepository), ce timeout ne borne que le listing Drive +
+        //    les insertions : large de côté pour couvrir une arborescence
+        //    profonde (des milliers de fichiers en de nombreux sous-dossiers).
         final fullyIndexed = <Library>[];
         // Ensemble « présent sur Drive » de chaque scan complet : source de
         // vérité pour l'existence, réutilisée en 3. après le pull.
@@ -101,7 +105,7 @@ class AutoSyncCoordinator {
           try {
             final result = await _repository
                 .indexDriveFolder(library: library)
-                .timeout(const Duration(seconds: 30));
+                .timeout(const Duration(seconds: 120));
             fullyIndexed.add(library);
             presentByLibrary[library.id] = result.presentDriveFileIds;
           } catch (_) {
