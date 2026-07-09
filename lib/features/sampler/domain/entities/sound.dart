@@ -35,6 +35,12 @@ class Sound {
   /// régie musique ; `null` tant que non calculée.
   final Uint8List? waveform;
 
+  /// Génération d'extraction lors du dernier échec « format » de la waveform ;
+  /// `null` = jamais échoué / à (re)tenter. Gouverne le retry (cf.
+  /// `waveformNeedsProbe`). Entier volontairement opaque au domaine : la
+  /// politique de génération vit dans `core/audio/waveform_extractor.dart`.
+  final int? waveformProbeGeneration;
+
   /// Point d'entrée de lecture en millisecondes : tout déclenchement démarre
   /// ici au lieu du sample 0. 0 = début du fichier.
   final int startOffsetMs;
@@ -55,6 +61,7 @@ class Sound {
     this.isFavorite = false,
     this.lastPlayedAt,
     this.waveform,
+    this.waveformProbeGeneration,
     this.startOffsetMs = 0,
   });
 }

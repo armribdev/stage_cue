@@ -385,16 +385,21 @@ class SamplerNotifier extends ChangeNotifier {
     if (index < 0 || index >= padItem.pad.sounds.length) return;
     final sound = padItem.pad.sounds[index];
     if (sound.type != SoundType.music || sound.waveform != null) return;
+    // Échec « format » déjà acté à la génération courante : ne pas re-sonder.
+    if (!waveformNeedsProbe(sound.waveformProbeGeneration)) return;
 
     // Le board peut changer pendant le décodage (tâche de fond) : on capture son
     // identité pour ne pas muter/notifier un plateau devenu obsolète après l'await.
     final boardId = padItem.pad.boardId;
 
-    final bytes = await extractWaveform(filePath);
-    if (bytes == null || _activeBoardId != boardId) return;
+    final probe = await extractWaveform(filePath);
+    if (_activeBoardId != boardId) return;
+    // Moteur non prêt : rien à persister, on retentera au prochain chargement.
+    if (probe.status == WaveformProbeStatus.transient) return;
 
     try {
-      await _repository.updateSoundWaveform(sound.id, bytes);
+      // Persiste soit l'enveloppe (succès), soit le marqueur d'échec (unsupported).
+      await _repository.persistWaveformProbe(sound.id, probe);
     } catch (e) {
       debugPrint('Persistance waveform échouée (${sound.title}): $e');
       return;
@@ -405,12 +410,16 @@ class SamplerNotifier extends ChangeNotifier {
     final freshIndex =
         padItem.pad.sounds.indexWhere((s) => s.id == sound.id);
     if (freshIndex < 0) return;
+    // Réinjecte le son à jour même sur un échec `unsupported` : l'entité en
+    // mémoire porte alors la génération d'échec, ce qui évite de re-sonder le
+    // même fichier au prochain chargement de ce slot dans la même session.
     final updated = await _repository.getSoundById(sound.id);
     if (updated == null || _activeBoardId != boardId) return;
     final sounds = List<Sound>.from(padItem.pad.sounds);
     sounds[freshIndex] = updated;
     padItem.pad = padItem.pad.copyWith(sounds: sounds);
-    notifyListeners();
+    // Ne notifier que sur un vrai changement visuel (nouvelle enveloppe).
+    if (probe.status == WaveformProbeStatus.success) notifyListeners();
   }
 
   Future<void> _loadSlotAtIndex(
