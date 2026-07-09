@@ -108,6 +108,10 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
   /// défaut : aucun fondu, on opte pour une durée à chaque fois qu'on en veut).
   Duration? _selectedTransitionDuration;
 
+  /// Verrou de la durée sélectionnée (appui long) : quand `true`, la durée ne
+  /// retombe plus automatiquement sur la coupe sèche après une transition.
+  bool _transitionDurationLocked = false;
+
   static const _instantTransition = Duration(milliseconds: 100);
   static const _transitionBlinkDuration = Duration(milliseconds: 320);
 
@@ -202,20 +206,44 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
   void _toggleTransitionOption(Duration option) {
     setState(() {
       // La cellule ciseaux (sentinelle `Duration.zero`) sélectionne la coupe
-      // sèche, matérialisée par l'état `null` (aucun fondu).
+      // sèche, matérialisée par l'état `null` (aucun fondu). Elle lève aussi
+      // tout verrou éventuel.
       if (option == _CompactTransitionPicker.cutSentinel) {
         _selectedTransitionDuration = null;
+        _transitionDurationLocked = false;
         return;
       }
+      // Tap simple : sélection temporaire (reviendra au cut après transition).
+      // Reclic sur la même durée → désélection, et on lève le verrou.
       _selectedTransitionDuration =
           _selectedTransitionDuration == option ? null : option;
+      _transitionDurationLocked = false;
     });
   }
 
-  /// Après une transition, retour à la coupe sèche (état de repos par défaut).
+  /// Appui long sur une durée : verrouille (ou déverrouille) la sélection pour
+  /// qu'elle ne retombe plus sur la coupe sèche après chaque transition.
+  void _lockTransitionOption(Duration option) {
+    // Le verrou n'a pas de sens sur la coupe sèche.
+    if (option == _CompactTransitionPicker.cutSentinel) return;
+    setState(() {
+      if (_selectedTransitionDuration == option && _transitionDurationLocked) {
+        // Re-appui long sur la durée déjà verrouillée → déverrouille (la
+        // sélection redevient temporaire).
+        _transitionDurationLocked = false;
+      } else {
+        _selectedTransitionDuration = option;
+        _transitionDurationLocked = true;
+      }
+    });
+  }
+
+  /// Après une transition, retour à la coupe sèche (état de repos par défaut) —
+  /// sauf si la durée est verrouillée : elle reste alors sélectionnée.
   void _resetTransitionDurationAfter(Duration used) {
+    if (_transitionDurationLocked) return;
     Future<void>.delayed(used, () {
-      if (!mounted) return;
+      if (!mounted || _transitionDurationLocked) return;
       setState(() => _selectedTransitionDuration = null);
     });
   }
@@ -323,7 +351,9 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
       onMusicVolumeChanged: widget.onMusicVolumeChanged,
       onSeekMusic: widget.onSeekMusic,
       selectedTransitionDuration: _selectedTransitionDuration,
+      transitionDurationLocked: _transitionDurationLocked,
       onTransitionOptionTapped: _toggleTransitionOption,
+      onTransitionOptionLongPressed: _lockTransitionOption,
       activeTransitionKind: _activeTransitionKind,
       transitionProgress: _transitionProgressController,
       transitionBlinkOpacity: _transitionBlinkOpacity,
@@ -499,7 +529,9 @@ class _MusicRegieDrawer extends StatefulWidget {
   final ValueChanged<double>? onMusicVolumeChanged;
   final ValueChanged<Duration>? onSeekMusic;
   final Duration? selectedTransitionDuration;
+  final bool transitionDurationLocked;
   final ValueChanged<Duration> onTransitionOptionTapped;
+  final ValueChanged<Duration> onTransitionOptionLongPressed;
   final _MusicTransitionKind? activeTransitionKind;
   final Animation<double>? transitionProgress;
   final Animation<double>? transitionBlinkOpacity;
@@ -526,7 +558,9 @@ class _MusicRegieDrawer extends StatefulWidget {
     this.onMusicVolumeChanged,
     this.onSeekMusic,
     required this.selectedTransitionDuration,
+    required this.transitionDurationLocked,
     required this.onTransitionOptionTapped,
+    required this.onTransitionOptionLongPressed,
     this.activeTransitionKind,
     this.transitionProgress,
     this.transitionBlinkOpacity,
@@ -568,7 +602,9 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
       hasQueue: hasQueue,
       keyboardEnabled: widget.isDesktop,
       selectedTransitionDuration: widget.selectedTransitionDuration,
+      transitionDurationLocked: widget.transitionDurationLocked,
       onTransitionOptionTapped: widget.onTransitionOptionTapped,
+      onTransitionOptionLongPressed: widget.onTransitionOptionLongPressed,
       activeTransitionKind: widget.activeTransitionKind,
       transitionProgress: widget.transitionProgress,
       transitionBlinkOpacity: widget.transitionBlinkOpacity,
@@ -919,7 +955,9 @@ class _OnAirControls extends StatelessWidget {
   final bool hasQueue;
   final bool keyboardEnabled;
   final Duration? selectedTransitionDuration;
+  final bool transitionDurationLocked;
   final ValueChanged<Duration> onTransitionOptionTapped;
+  final ValueChanged<Duration> onTransitionOptionLongPressed;
   final _MusicTransitionKind? activeTransitionKind;
   final Animation<double>? transitionProgress;
   final Animation<double>? transitionBlinkOpacity;
@@ -935,7 +973,9 @@ class _OnAirControls extends StatelessWidget {
     required this.hasQueue,
     this.keyboardEnabled = false,
     required this.selectedTransitionDuration,
+    required this.transitionDurationLocked,
     required this.onTransitionOptionTapped,
+    required this.onTransitionOptionLongPressed,
     this.activeTransitionKind,
     this.transitionProgress,
     this.transitionBlinkOpacity,
@@ -1009,7 +1049,9 @@ class _OnAirControls extends StatelessWidget {
           canControl: canControl,
           hasQueue: hasQueue,
           selectedTransitionDuration: selectedTransitionDuration,
+          transitionDurationLocked: transitionDurationLocked,
           onTransitionOptionTapped: onTransitionOptionTapped,
+          onTransitionOptionLongPressed: onTransitionOptionLongPressed,
           showCut: showCut,
           activeTransitionKind: activeTransitionKind,
           transitionProgress: transitionProgress,
@@ -1100,7 +1142,9 @@ class _GroupedPlaybackControls extends StatelessWidget {
   final bool canControl;
   final bool hasQueue;
   final Duration? selectedTransitionDuration;
+  final bool transitionDurationLocked;
   final ValueChanged<Duration> onTransitionOptionTapped;
+  final ValueChanged<Duration> onTransitionOptionLongPressed;
   final bool showCut;
   final _MusicTransitionKind? activeTransitionKind;
   final Animation<double>? transitionProgress;
@@ -1114,7 +1158,9 @@ class _GroupedPlaybackControls extends StatelessWidget {
     required this.canControl,
     required this.hasQueue,
     required this.selectedTransitionDuration,
+    required this.transitionDurationLocked,
     required this.onTransitionOptionTapped,
+    required this.onTransitionOptionLongPressed,
     required this.showCut,
     this.activeTransitionKind,
     this.transitionProgress,
@@ -1247,7 +1293,9 @@ class _GroupedPlaybackControls extends StatelessWidget {
               padding: const EdgeInsets.only(left: 4, right: 8),
               child: _CompactTransitionPicker(
                 selected: selectedTransitionDuration,
+                locked: transitionDurationLocked,
                 onOptionTapped: onTransitionOptionTapped,
+                onOptionLongPressed: onTransitionOptionLongPressed,
                 showCut: showCut,
                 cellSize: _pickerCellSize(comfortable),
                 cellGap: _pickerGap(comfortable),
@@ -1506,7 +1554,11 @@ class _CompactVolumeSliderState extends State<_CompactVolumeSlider>
 /// Sélecteur minimal de durée (1 / 3 / 5 s) — reclic pour désélectionner.
 class _CompactTransitionPicker extends StatelessWidget {
   final Duration? selected;
+
+  /// Vrai si la durée [selected] est verrouillée (persiste après transition).
+  final bool locked;
   final ValueChanged<Duration> onOptionTapped;
+  final ValueChanged<Duration> onOptionLongPressed;
 
   /// Affiche une cellule de coupe sèche explicite en tête du sélecteur.
   final bool showCut;
@@ -1526,7 +1578,9 @@ class _CompactTransitionPicker extends StatelessWidget {
 
   const _CompactTransitionPicker({
     required this.selected,
+    required this.locked,
     required this.onOptionTapped,
+    required this.onOptionLongPressed,
     required this.showCut,
     required this.cellSize,
     required this.cellGap,
@@ -1562,7 +1616,9 @@ class _CompactTransitionPicker extends StatelessWidget {
             size: cellSize,
             label: '${_options[i].inSeconds}',
             isSelected: selected == _options[i],
+            isLocked: locked && selected == _options[i],
             onTap: () => onOptionTapped(_options[i]),
+            onLongPress: () => onOptionLongPressed(_options[i]),
             labelStyle: labelStyle,
             scheme: scheme,
           ),
@@ -1581,7 +1637,11 @@ class _TransitionCell extends StatelessWidget {
   /// Icône (coupe sèche) affichée à la place du libellé.
   final IconData? icon;
   final bool isSelected;
+
+  /// Durée verrouillée : affiche un cadenas en filigrane derrière le chiffre.
+  final bool isLocked;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final TextStyle? labelStyle;
   final ColorScheme scheme;
 
@@ -1590,7 +1650,9 @@ class _TransitionCell extends StatelessWidget {
     this.label,
     this.icon,
     required this.isSelected,
+    this.isLocked = false,
     required this.onTap,
+    this.onLongPress,
     required this.labelStyle,
     required this.scheme,
   }) : assert(label != null || icon != null, 'label ou icon requis');
@@ -1599,7 +1661,7 @@ class _TransitionCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final foreground =
         isSelected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
-    final child = icon != null
+    final Widget child = icon != null
         ? Icon(icon, size: size * 0.55, color: foreground)
         : Text(
             label!,
@@ -1609,10 +1671,30 @@ class _TransitionCell extends StatelessWidget {
             ),
           );
 
+    // Cadenas en filigrane derrière le chiffre — signale la durée verrouillée
+    // sans masquer le libellé, qui reste lisible par-dessus.
+    final Widget content = isLocked
+        ? Stack(
+            alignment: Alignment.center,
+            children: [
+              Transform.translate(
+                offset: const Offset(0, -2),
+                child: Icon(
+                  Icons.lock_rounded,
+                  size: size * 0.7,
+                  color: foreground.withValues(alpha: 0.22),
+                ),
+              ),
+              child,
+            ],
+          )
+        : child;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         customBorder: const CircleBorder(),
         child: Container(
           width: size,
@@ -1624,7 +1706,7 @@ class _TransitionCell extends StatelessWidget {
                   color: scheme.primaryContainer.withValues(alpha: 0.65),
                 )
               : null,
-          child: child,
+          child: content,
         ),
       ),
     );
