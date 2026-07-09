@@ -468,6 +468,19 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     });
   }
 
+  /// Vide le champ de recherche — déclenché par la croix, donc immédiat
+  /// (pas de débounce à attendre).
+  void _clearQuery() {
+    _searchDebounce?.cancel();
+    _controller.clear();
+    setState(() {
+      _query = '';
+      _selectedIndex = 0;
+    });
+    unawaited(_runTagSearch(''));
+    _scheduleTagsLoad();
+  }
+
   /// Tokens normalisés (≥ 2 chars) extraits de [_query].
   List<String> get _normalizedTokens {
     if (_query.trim().isEmpty) return const [];
@@ -861,21 +874,28 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
     final results = _buildResultsFocusable(scheme, shown, selectedIndex);
 
+    // TextFieldTapRegion : couvre tout l'overlay pour qu'aucun tap interne
+    // (filtres, items, boutons) ne compte comme un tap "en dehors" du champ
+    // de recherche — ce qui le déconcentrerait automatiquement (comportement
+    // par défaut d'EditableText.onTapOutside). Le champ garde ainsi le focus
+    // en continu, quoi que l'utilisateur clique dans l'overlay.
     if (widget._isFullPage) {
       return CallbackShortcuts(
         bindings: shortcuts,
         child: Scaffold(
           body: SafeArea(
-            child: Column(
-              children: [
-                if (!_isPadVariant) ...[
-                  _buildSearchField(scheme),
-                  _buildTypeFilters(scheme),
-                  _buildFilterDivider(scheme),
+            child: TextFieldTapRegion(
+              child: Column(
+                children: [
+                  if (!_isPadVariant) ...[
+                    _buildSearchField(scheme),
+                    _buildTypeFilters(scheme),
+                    _buildFilterDivider(scheme),
+                  ],
+                  Expanded(child: results),
+                  _buildHints(scheme, shown.isNotEmpty),
                 ],
-                Expanded(child: results),
-                _buildHints(scheme, shown.isNotEmpty),
-              ],
+              ),
             ),
           ),
         ),
@@ -903,17 +923,19 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               elevation: 8,
               borderRadius: BorderRadius.circular(16),
               clipBehavior: Clip.antiAlias,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (!_isPadVariant) ...[
-                    _buildSearchField(scheme),
-                    _buildTypeFilters(scheme),
-                    _buildFilterDivider(scheme),
+              child: TextFieldTapRegion(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!_isPadVariant) ...[
+                      _buildSearchField(scheme),
+                      _buildTypeFilters(scheme),
+                      _buildFilterDivider(scheme),
+                    ],
+                    Flexible(child: results),
+                    _buildHints(scheme, shown.isNotEmpty),
                   ],
-                  Flexible(child: results),
-                  _buildHints(scheme, shown.isNotEmpty),
-                ],
+                ),
               ),
             ),
           ),
@@ -939,11 +961,19 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
       child: Row(
         children: [
-          Icon(
-            _isMusicPicker ? SoundType.music.icon : Icons.search_rounded,
-            color: scheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 10),
+          // Page pleine (mobile) : flèche retour, seul moyen de fermer
+          // l'overlay puisqu'il n'y a pas de fond à taper.
+          if (widget._isFullPage) ...[
+            ExcludeFocus(
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.of(context).pop(),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
           Expanded(
             child: TextField(
               controller: _controller,
@@ -962,13 +992,24 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                 focusedErrorBorder: InputBorder.none,
                 hintText: _hintText,
                 isCollapsed: true,
+                suffixIcon: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, _) => _controller.text.isEmpty
+                      ? const SizedBox.shrink()
+                      : ExcludeFocus(
+                          child: IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            onPressed: _clearQuery,
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ),
+                ),
+                suffixIconConstraints: const BoxConstraints(maxHeight: 24, maxWidth: 24),
               ),
               style: const TextStyle(fontSize: 17),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close_rounded),
-            onPressed: () => Navigator.of(context).pop(),
           ),
         ],
       ),
@@ -993,13 +1034,13 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       final colors = type?.avatarColors(scheme) ??
           (background: scheme.primaryContainer, foreground: scheme.onPrimaryContainer);
       return InkWell(
+        canRequestFocus: false,
         onTap: () {
           setState(() {
             _typeFilter = type;
             _selectedIndex = 0;
           });
           _scheduleTagsLoad();
-          _focusNode.requestFocus();
         },
         child: Container(
           height: 32,
@@ -1078,7 +1119,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               _selectedIndex = 0;
             });
             _scheduleTagsLoad();
-            _focusNode.requestFocus();
           },
         ),
         _roundIconButton(
@@ -1093,7 +1133,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               _selectedIndex = 0;
             });
             _scheduleTagsLoad();
-            _focusNode.requestFocus();
           },
         ),
       ],
@@ -1254,6 +1293,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       key: _itemKey(sound.id),
       color: bgColor ?? Colors.transparent,
       child: InkWell(
+        canRequestFocus: false,
         onTap: () {
           setState(() => _selectedIndex = index);
           switch (widget.mode) {
@@ -1573,29 +1613,34 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     // porte l'état. Pour les toggles serrés type favoris/hors-ligne.
     bool flat = false,
   }) {
-    return SizedBox(
-      width: _actionButtonSize,
-      height: _actionButtonSize,
-      child: IconButton(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 18),
-        padding: EdgeInsets.zero,
-        visualDensity: VisualDensity.compact,
-        style: IconButton.styleFrom(
-          shape: const CircleBorder(),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          backgroundColor: !flat && active
-              ? scheme.primary.withValues(alpha: 0.12)
-              : Colors.transparent,
-          disabledBackgroundColor: Colors.transparent,
-          hoverColor: flat
-              ? Colors.transparent
-              : scheme.onSurface.withValues(alpha: 0.08),
-          foregroundColor: iconColor,
-        ),
-        constraints: const BoxConstraints.tightFor(
-          width: _actionButtonSize,
-          height: _actionButtonSize,
+    // ExcludeFocus : empêche ce bouton de voler le focus au champ de
+    // recherche (sinon Flutter le regagnerait en sélectionnant tout le
+    // texte, comme un Tab desktop).
+    return ExcludeFocus(
+      child: SizedBox(
+        width: _actionButtonSize,
+        height: _actionButtonSize,
+        child: IconButton(
+          onPressed: onPressed,
+          icon: Icon(icon, size: 18),
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            shape: const CircleBorder(),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            backgroundColor: !flat && active
+                ? scheme.primary.withValues(alpha: 0.12)
+                : Colors.transparent,
+            disabledBackgroundColor: Colors.transparent,
+            hoverColor: flat
+                ? Colors.transparent
+                : scheme.onSurface.withValues(alpha: 0.08),
+            foregroundColor: iconColor,
+          ),
+          constraints: const BoxConstraints.tightFor(
+            width: _actionButtonSize,
+            height: _actionButtonSize,
+          ),
         ),
       ),
     );
