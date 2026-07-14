@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 34;
+  int get schemaVersion => 35;
 
   @override
   MigrationStrategy get migration {
@@ -314,6 +314,21 @@ class AppDatabase extends _$AppDatabase {
             );
             // Supprime la colonne volume de pads (recréation de table SQLite).
             await m.alterTable(TableMigration(pads));
+          }
+        }
+        if (from < 35) {
+          // Rattrapage d'une collision de versions au merge : deux branches ont
+          // toutes deux utilisé le slot `from < 29` (l'une pour la waveform,
+          // l'autre pour le volume par pad_sound, depuis renuméroté en v34). Les
+          // bases migrées par la branche « volume » ont atteint user_version 29
+          // SANS la colonne `waveform` et sautent donc à jamais le `from < 29`.
+          // On ré-applique ici l'ajout, gardé par un test d'existence pour rester
+          // sans effet sur les bases déjà correctes (branche waveform ou fraîches).
+          if (!await _columnExists('sounds', 'waveform')) {
+            await m.addColumn(sounds, sounds.waveform);
+          }
+          if (!await _columnExists('sounds', 'waveform_probe_generation')) {
+            await m.addColumn(sounds, sounds.waveformProbeGeneration);
           }
         }
       },
