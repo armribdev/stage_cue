@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../../../../core/audio/waveform_extractor.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
@@ -85,6 +86,12 @@ class SoundRepository {
     await _soundDataSource.updateSoundType(id, type);
   }
 
+  /// Persiste l'issue d'une extraction waveform (enveloppe réussie ou marqueur
+  /// de génération d'échec pour ne pas re-sonder en boucle un format refusé).
+  Future<void> persistWaveformProbe(int id, WaveformProbe probe) async {
+    await _soundDataSource.persistWaveformProbe(id, probe);
+  }
+
   /// Marque ou démarque un son comme favori.
   Future<void> setSoundFavorite(int id, bool isFavorite) async {
     await _soundDataSource.setFavorite(id, isFavorite);
@@ -103,6 +110,7 @@ class SoundRepository {
     String? displayName,
     bool updateDisplayName = false,
     double? volume,
+    int? startOffsetMs,
   }) async {
     await _soundDataSource.updateSoundSettings(
       id: id,
@@ -111,6 +119,7 @@ class SoundRepository {
       displayName: displayName,
       updateDisplayName: updateDisplayName,
       volume: volume,
+      startOffsetMs: startOffsetMs,
     );
   }
 

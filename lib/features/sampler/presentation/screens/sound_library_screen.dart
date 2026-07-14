@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/database/database.dart' as db;
+import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../../../../core/utils/sound_display_paths.dart';
@@ -655,103 +656,50 @@ class _LibraryLoadingList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      controller: scrollController,
-      itemCount: 6,
-      itemBuilder: (context, index) {
-        return const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: _SkeletonCard(),
-        );
-      },
-    );
-  }
-}
-
-class _SkeletonCard extends StatefulWidget {
-  const _SkeletonCard();
-
-  @override
-  State<_SkeletonCard> createState() => _SkeletonCardState();
-}
-
-class _SkeletonCardState extends State<_SkeletonCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 950),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final textScaler = MediaQuery.textScalerOf(context);
     final titleHeight = textScaler.scale(12).clamp(12, 20).toDouble();
     final subtitleHeight = textScaler.scale(10).clamp(10, 18).toDouble();
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final alpha = 0.14 + (_controller.value * 0.1);
-        return Card(
-          child: ListTile(
-            isThreeLine: true,
-            leading: CircleAvatar(
-              backgroundColor: scheme.onSurface.withValues(alpha: alpha),
-            ),
-            title: Container(
-              height: titleHeight,
-              decoration: BoxDecoration(
-                color: scheme.onSurface.withValues(alpha: alpha),
-                borderRadius: BorderRadius.circular(6),
-              ),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 6),
-                Container(
-                  height: subtitleHeight,
-                  decoration: BoxDecoration(
-                    color: scheme.onSurface.withValues(alpha: alpha * 0.9),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+    // Un seul contrôleur pour toute la liste : les cartes pulsent en phase.
+    return Skeleton(
+      child: ListView.builder(
+        controller: scrollController,
+        itemCount: 6,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Card(
+              child: ListTile(
+                isThreeLine: true,
+                leading: const SkeletonBox(
+                  width: 40,
+                  height: 40,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 6),
-                FractionallySizedBox(
-                  widthFactor: 0.45,
-                  child: Container(
-                    height: subtitleHeight,
-                    decoration: BoxDecoration(
-                      color: scheme.onSurface.withValues(alpha: alpha * 0.75),
-                      borderRadius: BorderRadius.circular(6),
+                title: SkeletonBox(height: titleHeight),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 6),
+                    SkeletonBox(height: subtitleHeight, intensity: 0.9),
+                    const SizedBox(height: 6),
+                    SkeletonLine(
+                      widthFactor: 0.45,
+                      height: subtitleHeight,
+                      intensity: 0.75,
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-            trailing: Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: scheme.onSurface.withValues(alpha: alpha * 0.8),
-                shape: BoxShape.circle,
+                trailing: const SkeletonBox(
+                  width: 24,
+                  height: 24,
+                  shape: BoxShape.circle,
+                  intensity: 0.8,
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

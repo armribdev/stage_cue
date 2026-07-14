@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/skeleton.dart';
 import '../../../../core/sync/drive_models.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../data/repositories/library_repository.dart';
@@ -319,7 +320,16 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
 
   Widget _buildList() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return Skeleton(
+        child: ListView.separated(
+          itemCount: 6,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (context, index) => const ListTile(
+            leading: SkeletonBox(width: 24, height: 24),
+            title: SkeletonLine(widthFactor: 0.6),
+          ),
+        ),
+      );
     }
 
     if (_error != null) {

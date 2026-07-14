@@ -8,6 +8,7 @@ import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/audio/audio_file_validation.dart';
 import '../../../../core/audio/local_sound_probe.dart';
+import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/sync/download_queue.dart';
 import '../../data/repositories/library_repository.dart'
     show LibraryRepository, SoundNotAvailableLocallyException;
@@ -40,6 +41,11 @@ class SamplerNotifier extends ChangeNotifier {
 
   int? _activeBoardId;
   _RemovedPadSnapshot? _lastRemovedPad;
+
+  /// Réinitialisé à chaque entrée en mode live (Mode Spectacle) : force le
+  /// tout premier pad ajouté via la recherche-éclair sur une nouvelle ligne
+  /// plutôt qu'à la suite de la dernière ligne déjà en place sur scène.
+  bool _forceNewRowOnNextQuickAdd = false;
   int _draftPadIdSeq = -1;
   final _random = Random();
 
@@ -47,6 +53,11 @@ class SamplerNotifier extends ChangeNotifier {
   /// du master musique et de la file. Plusieurs bruitages/ambiances peuvent
   /// jouer simultanément ; chacun se libère seul à la fin de sa lecture.
   final Set<AudioPlayerService> _previewPlayers = {};
+
+  /// Lecteur unique pour l'aperçu bibliothèque (play/pause, un son à la fois).
+  AudioPlayerService? _libraryPreviewPlayer;
+  int? _libraryPreviewSoundId;
+  StreamSubscription<bool>? _libraryPreviewSub;
 
   /// File de téléchargement priorisée à concurrence bornée (refonte UX P2).
   final DownloadQueue _downloadQueue = DownloadQueue(maxConcurrent: 2);
@@ -364,6 +375,55 @@ class SamplerNotifier extends ChangeNotifier {
     padItem.pad = padItem.pad.copyWith(sounds: sounds);
   }
 
+  /// Calcule et persiste l'enveloppe waveform d'un son musique dont le fichier
+  /// vient d'être chargé, si elle manque encore. Réinjecte ensuite le son (avec
+  /// sa waveform) dans le pad en mémoire et notifie — la régie l'affiche dès
+  /// qu'elle est prête, sans bloquer le démarrage de la lecture.
+  Future<void> _ensureWaveformForSound(
+    PadItem padItem,
+    int index,
+    String filePath,
+  ) async {
+    if (index < 0 || index >= padItem.pad.sounds.length) return;
+    final sound = padItem.pad.sounds[index];
+    if (sound.type != SoundType.music || sound.waveform != null) return;
+    // Échec « format » déjà acté à la génération courante : ne pas re-sonder.
+    if (!waveformNeedsProbe(sound.waveformProbeGeneration)) return;
+
+    // Le board peut changer pendant le décodage (tâche de fond) : on capture son
+    // identité pour ne pas muter/notifier un plateau devenu obsolète après l'await.
+    final boardId = padItem.pad.boardId;
+
+    final probe = await extractWaveform(filePath);
+    if (_activeBoardId != boardId) return;
+    // Moteur non prêt : rien à persister, on retentera au prochain chargement.
+    if (probe.status == WaveformProbeStatus.transient) return;
+
+    try {
+      // Persiste soit l'enveloppe (succès), soit le marqueur d'échec (unsupported).
+      await _repository.persistWaveformProbe(sound.id, probe);
+    } catch (e) {
+      debugPrint('Persistance waveform échouée (${sound.title}): $e');
+      return;
+    }
+    if (_activeBoardId != boardId) return;
+
+    // Le pad a pu changer depuis (re-tri, suppression) : relocaliser par id.
+    final freshIndex =
+        padItem.pad.sounds.indexWhere((s) => s.id == sound.id);
+    if (freshIndex < 0) return;
+    // Réinjecte le son à jour même sur un échec `unsupported` : l'entité en
+    // mémoire porte alors la génération d'échec, ce qui évite de re-sonder le
+    // même fichier au prochain chargement de ce slot dans la même session.
+    final updated = await _repository.getSoundById(sound.id);
+    if (updated == null || _activeBoardId != boardId) return;
+    final sounds = List<Sound>.from(padItem.pad.sounds);
+    sounds[freshIndex] = updated;
+    padItem.pad = padItem.pad.copyWith(sounds: sounds);
+    // Ne notifier que sur un vrai changement visuel (nouvelle enveloppe).
+    if (probe.status == WaveformProbeStatus.success) notifyListeners();
+  }
+
   Future<void> _loadSlotAtIndex(
     PadItem padItem,
     int index, {
@@ -397,6 +457,9 @@ class SamplerNotifier extends ChangeNotifier {
         player: await AudioPlayerService.create(resolvedPath),
       );
       await _syncPadSoundMetadata(padItem, index);
+      // Calcul paresseux de la waveform (régie musique) — en tâche de fond pour
+      // ne pas retarder le démarrage de la lecture.
+      unawaited(_ensureWaveformForSound(padItem, index, resolvedPath));
     } on SoundNotAvailableLocallyException catch (e) {
       padItem.slots[index] = PadSoundSlot(
         availability: _availabilityFromException(e),
@@ -953,7 +1016,34 @@ class SamplerNotifier extends ChangeNotifier {
     // sans couper les précédents ; sur un multipad la variante suivante est
     // choisie selon le mode de lecture. L'arrêt se fait via appui long (ce pad)
     // ou le bouton « Tout arrêter » — jamais par un second tap.
-    final soundIndex = _pickSoundIndex(resolved);
+    await _playOverlappingSoundAtIndex(resolved, _pickSoundIndex(resolved));
+  }
+
+  /// Joue une variante précise d'un (multi)pad, en dehors du choix automatique
+  /// (`_pickSoundIndex`) — ex. sélection explicite depuis la liste des sons
+  /// d'un multipad. Pour un pad musique, court-circuite la file/reprise et
+  /// joue directement ce son (comme un tap normal sur un pad simple).
+  Future<void> playPadSoundAtIndex(PadItem padItem, int soundIndex) async {
+    final resolved = _resolveBoardPadItem(padItem);
+    if (!resolved.isPlayable) return;
+    if (soundIndex < 0 || soundIndex >= resolved.slots.length) return;
+    if (!_slotEligibleForPlayback(resolved, soundIndex)) return;
+
+    if (resolved.pad.isMusicPad) {
+      // Même mécanisme que « suivant » dans la file (`playNextInQueueNow`) :
+      // `playMusicNow` coupe ce qui joue puis démarre cette variante — un seul
+      // point d'entrée pour changer de musique, quel que soit le déclencheur.
+      await _music.playMusicNow(resolved, soundIndex: soundIndex);
+      return;
+    }
+
+    await _playOverlappingSoundAtIndex(resolved, soundIndex);
+  }
+
+  Future<void> _playOverlappingSoundAtIndex(
+    PadItem resolved,
+    int soundIndex,
+  ) async {
     final player = resolved.slots[soundIndex].player;
     debugPrint(
       '[TOGGLE] → play overlapping soundIndex=$soundIndex '
@@ -961,13 +1051,27 @@ class SamplerNotifier extends ChangeNotifier {
       '_nextSoundIndex=${resolved._nextSoundIndex}',
     );
     if (player == null) return;
+    await _syncPadSoundMetadata(resolved, soundIndex);
+    // Point d'entrée : le déclenchement démarre à cet offset au lieu du sample 0.
+    var startOffsetMs = resolved.pad.sounds[soundIndex].startOffsetMs;
+    final duration = player.duration;
+    if (duration > Duration.zero) {
+      final maxMs = duration.inMilliseconds;
+      if (startOffsetMs >= maxMs) {
+        startOffsetMs = (maxMs - 1).clamp(0, maxMs);
+      }
+    }
+    final startOffset = Duration(milliseconds: startOffsetMs);
     await player.playOverlapping(
       volume: _effectiveVolume(resolved, soundIndex: soundIndex),
+      startOffset: startOffset,
     );
     // Ticket de progression : une barre superposée par voix, auto-supprimée à
-    // la fin du son (bump de révision pour rafraîchir le seul PadButton).
+    // la fin du son (bump de révision pour rafraîchir le seul PadButton). La
+    // durée restante tient compte du point d'entrée sauté en tête.
+    final remaining = player.duration - startOffset;
     resolved.addPlaybackTicket(
-      player.duration,
+      remaining > Duration.zero ? remaining : player.duration,
       onExpire: () => _notifyPad(resolved),
     );
     _markPlayedAt(resolved, soundIndex);
@@ -1000,12 +1104,19 @@ class SamplerNotifier extends ChangeNotifier {
       await _stopAllSlotPlayers(padItem);
       changed = true;
     }
+    if (_libraryPreviewSoundId != null || _previewPlayers.isNotEmpty) {
+      changed = true;
+    }
+    stopAllPreviews();
     if (changed) notifyListeners();
   }
 
-  /// Au moins un pad non-musique joue actuellement.
+  /// Au moins un pad non-musique joue actuellement, ou une pré-écoute
+  /// (recherche rapide / bibliothèque) est en cours.
   bool get hasNonMusicSoundsPlaying =>
-      _state.pads.any((p) => !p.pad.isMusicPad && p.isPlaying);
+      _state.pads.any((p) => !p.pad.isMusicPad && p.isPlaying) ||
+      _libraryPreviewSoundId != null ||
+      _previewPlayers.isNotEmpty;
 
   /// Arrête toutes les voix de chaque variante du pad (sans notifier).
   Future<void> _stopAllSlotPlayers(PadItem padItem) async {
@@ -1030,34 +1141,8 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<void> updateSoundType(int soundId, SoundType type) async {
-    for (final padItem in _state.pads) {
-      final sounds = padItem.pad.sounds;
-      final idx = sounds.indexWhere((s) => s.id == soundId);
-      if (idx >= 0) {
-        final s = sounds[idx];
-        final updated = List<Sound>.from(sounds);
-        updated[idx] = Sound(
-          id: s.id,
-          title: s.title,
-          displayName: s.displayName,
-          filePath: s.filePath,
-          type: type,
-          colorValue: s.colorValue,
-          volume: s.volume,
-          createdAt: s.createdAt,
-          libraryId: s.libraryId,
-          relativePath: s.relativePath,
-          contentHash: s.contentHash,
-          isFavorite: s.isFavorite,
-          lastPlayedAt: s.lastPlayedAt,
-        );
-        padItem.pad = padItem.pad.copyWith(sounds: updated);
-        _notifyPad(padItem);
-      }
-    }
-    notifyListeners();
     await _repository.updateSoundType(soundId, type);
-    await loadSounds();
+    await _music.refreshSoundMetadata(soundId);
   }
 
   Future<bool> toggleSoundFavorite(int soundId) async {
@@ -1356,6 +1441,8 @@ class SamplerNotifier extends ChangeNotifier {
   Future<void> toggleCurrentMusicPlayback() =>
       _music.toggleCurrentMusicPlayback();
   Future<void> restartCurrentMusic() => _music.restartCurrentMusic();
+  Future<void> seekPausedMusic(Duration position) =>
+      _music.seekPausedMusic(position);
   Future<void> skipToNextMusic() => _music.skipToNextMusic();
   Future<void> stopCurrentMusic() => _music.stopCurrentMusic();
   Future<void> fadeOutCurrentMusic(Duration d) =>
@@ -1364,6 +1451,8 @@ class SamplerNotifier extends ChangeNotifier {
       _music.crossfadeToNextMusic(d);
   PadItem? findMusicPadForSound(int id) => _music.findMusicPadForSound(id);
   PadItem? resolveMusicPad(int id) => _music.resolveMusicPad(id);
+  Future<void> refreshSoundMetadata(int soundId) =>
+      _music.refreshSoundMetadata(soundId);
   Future<void> setMusicVolume(double v, {bool smooth = false}) =>
       _music.setMusicVolume(v, smooth: smooth);
   Future<void> toggleMusicMute() => _music.toggleMusicMute();
@@ -1783,18 +1872,94 @@ class SamplerNotifier extends ChangeNotifier {
     }
   }
 
+  /// Pré-écoute d'un son (recherche-éclair).
+  ///
+  /// La musique passe par la régie live ; bruitages/ambiances en fire-and-forget
+  /// depuis le [Sound.startOffsetMs].
   Future<bool> previewSound(int soundId) async {
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
-    // Musique : lecture directe dans la régie (persiste après fermeture de la
-    // recherche, démarrage immédiat sans transition).
     if (sound.type == SoundType.music) {
       final padItem = await playMusicBySoundId(soundId);
       return padItem != null;
     }
-    // Bruitage/ambiance : pré-écoute fire-and-forget. On n'arrête pas les
-    // pré-écoutes en cours — on peut en lancer autant que voulu, elles jouent
-    // simultanément et se libèrent chacune à la fin.
+    return _playEphemeralPreview(sound);
+  }
+
+  /// Son en cours d'aperçu dans la bibliothèque, ou `null`.
+  int? get libraryPreviewSoundId => _libraryPreviewSoundId;
+
+  /// Indique si l'aperçu bibliothèque de [soundId] est audible.
+  bool libraryPreviewIsPlaying(int soundId) =>
+      _libraryPreviewSoundId == soundId &&
+      (_libraryPreviewPlayer?.isPlaying ?? false);
+
+  /// Bascule play/pause pour l'aperçu bibliothèque (lecteur unique).
+  Future<bool> toggleLibraryPreview(int soundId) async {
+    final player = _libraryPreviewPlayer;
+    if (_libraryPreviewSoundId == soundId && player != null) {
+      if (player.isPlaying) {
+        await player.pause();
+        _notify();
+        return true;
+      }
+      if (player.isPaused) {
+        await player.resume();
+        _notify();
+        return true;
+      }
+    }
+
+    stopLibraryPreview(notify: false);
+    final sound = await _repository.getSoundById(soundId);
+    if (sound == null) return false;
+    return _startLibraryPreview(sound);
+  }
+
+  /// Arrête et libère l'aperçu bibliothèque.
+  void stopLibraryPreview({bool notify = true}) {
+    _libraryPreviewSub?.cancel();
+    _libraryPreviewSub = null;
+    _libraryPreviewPlayer?.dispose();
+    _libraryPreviewPlayer = null;
+    _libraryPreviewSoundId = null;
+    if (notify) _notify();
+  }
+
+  Future<bool> _startLibraryPreview(Sound sound) async {
+    try {
+      final path = await _resolvePlayablePath(
+        sound,
+        downloadIfNeeded: allowsSoundDownload,
+      );
+      final player = await AudioPlayerService.create(path);
+      _libraryPreviewPlayer = player;
+      _libraryPreviewSoundId = sound.id;
+      _libraryPreviewSub = player.onPlayerStateChanged.listen((playing) {
+        if (playing) return;
+        stopLibraryPreview();
+      });
+      var startOffsetMs = sound.startOffsetMs;
+      final duration = player.duration;
+      if (duration > Duration.zero) {
+        final maxMs = duration.inMilliseconds;
+        if (startOffsetMs >= maxMs) {
+          startOffsetMs = (maxMs - 1).clamp(0, maxMs);
+        }
+      }
+      await player.playFromPosition(Duration(milliseconds: startOffsetMs));
+      _markPlayed(sound.id);
+      _notify();
+      return true;
+    } catch (e) {
+      debugPrint('Aperçu bibliothèque échoué pour ${sound.title}: $e');
+      stopLibraryPreview(notify: false);
+      return false;
+    }
+  }
+
+  /// Pré-écoute fire-and-forget depuis le point d'entrée du son.
+  Future<bool> _playEphemeralPreview(Sound sound) async {
     try {
       final path = await _resolvePlayablePath(
         sound,
@@ -1808,9 +1973,19 @@ class SamplerNotifier extends ChangeNotifier {
         sub?.cancel();
         _previewPlayers.remove(player);
         player.dispose();
+        notifyListeners();
       });
-      await player.play();
-      _markPlayed(soundId);
+      var startOffsetMs = sound.startOffsetMs;
+      final duration = player.duration;
+      if (duration > Duration.zero) {
+        final maxMs = duration.inMilliseconds;
+        if (startOffsetMs >= maxMs) {
+          startOffsetMs = (maxMs - 1).clamp(0, maxMs);
+        }
+      }
+      await player.playFromPosition(Duration(milliseconds: startOffsetMs));
+      _markPlayed(sound.id);
+      notifyListeners();
       return true;
     } catch (e) {
       debugPrint('Pré-écoute échouée pour ${sound.title}: $e');
@@ -1820,12 +1995,20 @@ class SamplerNotifier extends ChangeNotifier {
 
   /// Arrête et libère toutes les pré-écoutes en cours.
   void stopAllPreviews() {
+    stopLibraryPreview(notify: false);
     if (_previewPlayers.isEmpty) return;
     final players = _previewPlayers.toList();
     _previewPlayers.clear();
     for (final player in players) {
       player.dispose();
     }
+  }
+
+  /// À appeler à l'entrée en mode live (Mode Spectacle) : le prochain pad
+  /// ajouté via la recherche-éclair démarre une nouvelle ligne plutôt que de
+  /// s'ajouter à la suite de la dernière ligne déjà en place.
+  void markPerformanceModeEntered() {
+    _forceNewRowOnNextQuickAdd = true;
   }
 
   Future<QuickSearchPrepareResult> prepareSoundFromQuickSearch(
@@ -1852,15 +2035,21 @@ class SamplerNotifier extends ChangeNotifier {
     final boardId = _activeBoardId;
     if (boardId == null) return const QuickSearchPrepareResult.none();
 
+    final forceNewRow = _forceNewRowOnNextQuickAdd;
+
     final result = await prepareSfxOnBoard(
       soundId: soundId,
       padsOnBoard: _padsOnBoardRefs(),
-      createPad: (placement) => _repository.createPadWithSettings(
-        boardId: boardId,
-        soundIds: [soundId],
-        rowIndex: placement.rowIndex,
-        sortOrder: placement.globalSortOrder,
-      ),
+      forceNewRow: forceNewRow,
+      createPad: (placement) {
+        _forceNewRowOnNextQuickAdd = false;
+        return _repository.createPadWithSettings(
+          boardId: boardId,
+          soundIds: [soundId],
+          rowIndex: placement.rowIndex,
+          sortOrder: placement.globalSortOrder,
+        );
+      },
       reloadPads: () async {
         await loadSounds(boardId: boardId, silent: true);
         return _padsOnBoardRefs();

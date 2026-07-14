@@ -70,21 +70,19 @@ class LocalTagDataSource {
     if (normalized.isEmpty) {
       return {};
     }
-    final like = '%$normalized%';
-    final tagIdRows = await _database.customSelect(
-      '''
-        SELECT id FROM tags WHERE normalized_name LIKE ?
-        UNION
-        SELECT tag_id AS id FROM tag_aliases WHERE normalized_alias LIKE ?
-      ''',
-      variables: [Variable<String>(like), Variable<String>(like)],
-    ).get();
 
-    if (tagIdRows.isEmpty) {
+    var tagIds = await _tagIdsMatchingSubstring(normalized);
+    if (tagIds.isEmpty) {
+      // Pas de correspondance exacte : peut-être une faute de frappe. Le
+      // catalogue de tags reste petit (quelques centaines d'entrées au
+      // plus), donc un balayage flou en mémoire est négligeable — contrairement
+      // à un LIKE flou en SQL, qui ne pourrait pas utiliser d'index de toute façon.
+      tagIds = await _tagIdsMatchingTypo(normalized);
+    }
+    if (tagIds.isEmpty) {
       return {};
     }
 
-    final tagIds = tagIdRows.map((r) => r.read<int>('id')).toList();
     final placeholders = List.filled(tagIds.length, '?').join(',');
     final soundRows = await _database.customSelect(
       'SELECT DISTINCT sound_id FROM sound_tags WHERE tag_id IN ($placeholders)',
@@ -92,6 +90,41 @@ class LocalTagDataSource {
     ).get();
 
     return soundRows.map((r) => r.read<int>('sound_id')).toSet();
+  }
+
+  Future<List<int>> _tagIdsMatchingSubstring(String normalized) async {
+    final like = '%$normalized%';
+    final rows = await _database.customSelect(
+      '''
+        SELECT id FROM tags WHERE normalized_name LIKE ?
+        UNION
+        SELECT tag_id AS id FROM tag_aliases WHERE normalized_alias LIKE ?
+      ''',
+      variables: [Variable<String>(like), Variable<String>(like)],
+    ).get();
+    return rows.map((r) => r.read<int>('id')).toList();
+  }
+
+  Future<List<int>> _tagIdsMatchingTypo(String normalized) async {
+    final nameRows = await _database
+        .customSelect('SELECT id, normalized_name FROM tags')
+        .get();
+    final aliasRows = await _database
+        .customSelect('SELECT tag_id, normalized_alias FROM tag_aliases')
+        .get();
+
+    final matched = <int>{};
+    for (final row in nameRows) {
+      if (matchesWithTypo(row.read<String>('normalized_name'), normalized)) {
+        matched.add(row.read<int>('id'));
+      }
+    }
+    for (final row in aliasRows) {
+      if (matchesWithTypo(row.read<String>('normalized_alias'), normalized)) {
+        matched.add(row.read<int>('tag_id'));
+      }
+    }
+    return matched.toList();
   }
 
   Future<List<domain.TagCategoryWithTags>> getCatalog() async {

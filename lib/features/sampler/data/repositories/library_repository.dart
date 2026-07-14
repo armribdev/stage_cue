@@ -18,6 +18,7 @@ import '../../../../core/sync/google_drive_client.dart';
 import '../../../../core/sync/saf_drive_owner_resolver.dart';
 import '../../../../core/sync/library_sound_paths.dart';
 import '../../../../core/sync/library_sync_service.dart';
+import '../../../../core/sync/reconcile_path_matcher.dart';
 import '../../../../core/sync/snapshot_store.dart';
 import '../../../../core/utils/file_utils.dart' show isAudioFile;
 import '../../../../core/utils/path_unicode.dart';
@@ -51,6 +52,23 @@ class DriveFolderLinkInitResult {
 
   /// Upload si la BDD distante n'existait pas ou si de nouveaux fichiers ont été indexés.
   bool get shouldUpload => !hadRemoteSnapshot || indexedNewFiles > 0;
+}
+
+/// Résultat d'un scan complet d'un dossier Drive.
+class DriveIndexResult {
+  /// Nombre de nouveaux fichiers indexés (lignes `sounds` créées).
+  final int newFileCount;
+
+  /// IDs Drive de TOUS les fichiers audio vus lors de ce scan complet. Source
+  /// de vérité pour l'existence : sert à élaguer les sons disparus, y compris
+  /// après un pull de snapshot périmé qui aurait pu en réinsérer un (cf.
+  /// [LibraryRepository.pruneSoundsAbsentFromDrive]).
+  final Set<String> presentDriveFileIds;
+
+  const DriveIndexResult({
+    required this.newFileCount,
+    required this.presentDriveFileIds,
+  });
 }
 
 /// Orchestration des bibliothèques portables : relie l'authentification Drive
@@ -688,7 +706,7 @@ class LibraryRepository extends ChangeNotifier {
 
     return DriveFolderLinkInitResult(
       hadRemoteSnapshot: hasRemote,
-      indexedNewFiles: indexed,
+      indexedNewFiles: indexed.newFileCount,
     );
   }
 
@@ -864,7 +882,11 @@ class LibraryRepository extends ChangeNotifier {
         if (await isPlausibleAudioFile(localFile)) {
           final resolvedPath = p.normalize(localFile.absolute.path);
           await _soundDataSource.syncLibrarySoundLocalPath(sound.id, resolvedPath);
-          await _materializeSoundFileMetadataIfNeeded(sound, localFile);
+          // Fire-and-forget : le backfill (hash/waveform) est un best-effort qui
+          // ne doit jamais bloquer la résolution du chemin — une simple sonde de
+          // disponibilité (recherche) ne doit pas attendre un décodage natif lent
+          // ou en échec sur potentiellement des centaines de sons.
+          unawaited(_materializeSoundFileMetadataIfNeeded(sound, localFile));
           clearUnloadablePath(localPath);
           return resolvedPath;
         }
@@ -1040,10 +1062,13 @@ class LibraryRepository extends ChangeNotifier {
       if (isCancelled?.call() == true) break;
 
       final sound = sounds[i];
-      final relativePath = sound.relativePath!;
-      final localPath = _cacheManager.localPathFor(library, relativePath);
+      final relativePath = sound.relativePath;
 
       try {
+        if (relativePath == null) {
+          throw StateError('Aucun chemin Drive associé');
+        }
+        final localPath = _cacheManager.localPathFor(library, relativePath);
         if (!await File(localPath).exists()) {
           final resolvedLocalPath = await _cacheManager.ensureCached(
             client: client,
@@ -1098,7 +1123,7 @@ class LibraryRepository extends ChangeNotifier {
   /// Passe par [_withDriveClient] : un token périmé en cours d'indexation est
   /// renouvelé silencieusement et l'opération réessayée (idempotente, upsert
   /// par driveFileId), sans forcer de reconnexion interactive.
-  Future<int> indexDriveFolder({
+  Future<DriveIndexResult> indexDriveFolder({
     required Library library,
     void Function(IndexingProgress)? onProgress,
   }) {
@@ -1116,7 +1141,27 @@ class LibraryRepository extends ChangeNotifier {
     );
   }
 
-  Future<int> _indexDriveFolder({
+  /// Élague les sons dont le fichier a disparu de Drive, d'après l'ensemble
+  /// [presentDriveFileIds] d'un scan RÉUSSI, et évince leur fichier du cache
+  /// local. Sert à redonner le dernier mot au scan live après un pull de
+  /// snapshot : un snapshot distant périmé (poussé par un appareil qui n'a pas
+  /// encore rescanné) peut réinsérer un son pointant vers un fichier déjà
+  /// supprimé — cet appel le retire à nouveau.
+  Future<void> pruneSoundsAbsentFromDrive({
+    required Library library,
+    required Set<String> presentDriveFileIds,
+  }) async {
+    final prunedPaths = await _soundDataSource.pruneLibrarySoundsAbsentFromDrive(
+      libraryId: library.id,
+      keptDriveFileIds: presentDriveFileIds,
+    );
+    // La ligne en base disparaît : le fichier téléchargé ne doit pas subsister.
+    for (final relativePath in prunedPaths) {
+      await _cacheManager.evictCachedFile(library, relativePath);
+    }
+  }
+
+  Future<DriveIndexResult> _indexDriveFolder({
     required DriveClient client,
     required Library library,
     required String folderId,
@@ -1203,14 +1248,39 @@ class LibraryRepository extends ChangeNotifier {
           folderId: folderId,
         );
 
-        final created = await _soundDataSource.syncLibrarySoundFromDriveIndex(
+        final result = await _soundDataSource.syncLibrarySoundFromDriveIndex(
           libraryId: library.id,
           relativePath: audio.relativePath,
           localPath: localPath,
           driveFileId: audio.driveFileId,
+          driveMd5: audio.driveMd5,
           folderId: folderId,
         );
-        if (created) indexedCount++;
+        if (result.created) indexedCount++;
+
+        // Édition « en place » sur Drive (contenu écrasé à ID constant) : le
+        // fichier de cache local est périmé. La waveform et le contentHash ont
+        // déjà été réinitialisés en base ; on évince le fichier pour forcer un
+        // re-téléchargement, et on le re-matérialise aussitôt si la bibliothèque
+        // est en téléchargement auto (cache chaud pour le live).
+        if (result.contentChanged) {
+          await _cacheManager.evictCachedFile(library, audio.relativePath);
+          if (library.autoDownload) {
+            try {
+              localPath = await _cacheManager.ensureCached(
+                client: client,
+                library: library,
+                relativePath: audio.relativePath,
+                driveFileId: audio.driveFileId,
+              );
+            } catch (e) {
+              debugPrint(
+                'Index Drive : re-téléchargement post-édition échoué pour '
+                '${audio.relativePath}: $e',
+              );
+            }
+          }
+        }
 
         onProgress?.call(
           IndexingProgress(
@@ -1222,6 +1292,17 @@ class LibraryRepository extends ChangeNotifier {
         );
       }
 
+      // Élagage symétrique de l'ajout : le scan ci-dessus est complet (listFolder
+      // pagine intégralement) et n'a pu être atteint qu'après un parcours sans
+      // erreur — sûr donc pour supprimer les sons dont le fichier a été retiré
+      // directement sur Drive (identité forte absente du scan). Les sons legacy
+      // sans driveFileId sont épargnés (réalignés par chemin, jamais élagués).
+      final seenDriveIds = audioFiles.map((e) => e.driveFileId).toSet();
+      await pruneSoundsAbsentFromDrive(
+        library: library,
+        presentDriveFileIds: seenDriveIds,
+      );
+
       onProgress?.call(
         IndexingProgress(
           path: library.name,
@@ -1232,7 +1313,10 @@ class LibraryRepository extends ChangeNotifier {
         ),
       );
 
-      return indexedCount;
+      return DriveIndexResult(
+        newFileCount: indexedCount,
+        presentDriveFileIds: seenDriveIds,
+      );
     } catch (e) {
       // Une erreur d'auth est gérée par [_withDriveClient] (renouvellement +
       // réessai) : ne pas afficher d'état d'erreur qui clignoterait avant le
@@ -1272,6 +1356,7 @@ class LibraryRepository extends ChangeNotifier {
           ({
             String relativePath,
             String driveFileId,
+            String? driveMd5,
             String folderDriveId,
             String folderRelativePath,
           })>> _collectDriveAudioFiles(
@@ -1283,6 +1368,7 @@ class LibraryRepository extends ChangeNotifier {
     final results = <({
       String relativePath,
       String driveFileId,
+      String? driveMd5,
       String folderDriveId,
       String folderRelativePath,
     })>[];
@@ -1319,6 +1405,7 @@ class LibraryRepository extends ChangeNotifier {
         results.add((
           relativePath: relativePath,
           driveFileId: child.id,
+          driveMd5: child.md5Checksum,
           folderDriveId: folderId,
           folderRelativePath: relativePrefix,
         ));
@@ -1354,7 +1441,8 @@ class LibraryRepository extends ChangeNotifier {
       final candidates = byBasename[p.basename(current).toLowerCase()];
       if (candidates == null || candidates.isEmpty) continue;
 
-      final corrected = _pickBestReconcileCandidate(current, candidates);
+      final corrected =
+          ReconcilePathMatcher.pickBestCandidate(current, candidates);
       if (corrected == null) continue;
       await _soundDataSource.updateSoundRelativePath(
         soundId: sound.id,
@@ -1362,20 +1450,6 @@ class LibraryRepository extends ChangeNotifier {
         localPath: _cacheManager.localPathFor(library, corrected),
       );
     }
-  }
-
-  String? _pickBestReconcileCandidate(
-    String currentPath,
-    List<String> candidates,
-  ) {
-    if (candidates.length == 1) return candidates.single;
-
-    final currentLower = currentPath.toLowerCase();
-    final exact = candidates
-        .where((path) => path.toLowerCase() == currentLower)
-        .toList();
-    if (exact.length == 1) return exact.single;
-    return null;
   }
 
   /// Réaligne le chemin relatif d'un son sur Drive avant téléchargement.
@@ -1400,7 +1474,8 @@ class LibraryRepository extends ChangeNotifier {
     );
     if (matches.isEmpty) return relativePath;
 
-    final corrected = _pickBestReconcileCandidate(relativePath, matches);
+    final corrected =
+        ReconcilePathMatcher.pickBestCandidate(relativePath, matches);
     if (corrected == null || corrected == relativePath) return relativePath;
 
     await _soundDataSource.updateSoundRelativePath(

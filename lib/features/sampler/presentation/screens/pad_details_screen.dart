@@ -8,6 +8,8 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
+import '../../domain/entities/tag_item.dart';
+import '../widgets/scrolling_text.dart';
 import '../widgets/sound_picker_overlay.dart';
 
 /// Écran de détails d'un pad — réglages, sons, mode de lecture.
@@ -476,9 +478,12 @@ class _SoundRow extends StatefulWidget {
 }
 
 class _SoundRowState extends State<_SoundRow> {
+  static const _maxVisibleTags = 3;
+
   Set<int> _tagIds = {};
   bool _loaded = false;
   late double _volume;
+  bool _hovered = false;
 
   @override
   void initState() {
@@ -560,6 +565,96 @@ class _SoundRowState extends State<_SoundRow> {
     await widget.notifier.downloadPadSoundAtIndex(padItem, widget.slotIndex);
   }
 
+  List<TagItem> _resolvedTags() {
+    final tags = <TagItem>[];
+    for (final cat in widget.tagCatalog) {
+      for (final tag in cat.tags) {
+        if (_tagIds.contains(tag.id)) tags.add(tag);
+      }
+    }
+    return tags;
+  }
+
+  Color? _categoryColor(int categoryId) {
+    for (final group in widget.tagCatalog) {
+      if (group.category.id == categoryId) return Color(group.category.color);
+    }
+    return null;
+  }
+
+  Widget _buildTagRow(ColorScheme scheme, List<TagItem> tags) {
+    final visible = tags.take(_maxVisibleTags).toList();
+    final overflow = tags.length - visible.length;
+    return Row(
+      children: [
+        for (final tag in visible) ...[
+          _buildTagChip(scheme, tag),
+          const SizedBox(width: 4),
+        ],
+        if (overflow > 0)
+          Text(
+            '+$overflow',
+            style: TextStyle(
+              fontSize: 10,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTagChip(ColorScheme scheme, TagItem tag) {
+    final color = _categoryColor(tag.categoryId);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: color?.withAlpha(24),
+        borderRadius: BorderRadius.circular(4),
+        border: color == null ? null : Border.all(color: color),
+      ),
+      child: Text(
+        tag.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 10, color: color ?? scheme.onSurfaceVariant),
+      ),
+    );
+  }
+
+  Widget _buildSubtitle(
+    ColorScheme scheme, {
+    required bool isLocal,
+    required bool isDownloading,
+  }) {
+    if (isDownloading) {
+      return Text(
+        'Téléchargement…',
+        style: TextStyle(
+          fontSize: 12,
+          color: scheme.primary,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Text(
+          widget.sound.typeDisplayLabel,
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+        ),
+        if (!isLocal) ...[
+          const SizedBox(width: 6),
+          Icon(
+            Icons.cloud_outlined,
+            size: 13,
+            color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -573,65 +668,40 @@ class _SoundRowState extends State<_SoundRow> {
         final isLocal = _isLocal(availability);
         final isDownloading = padItem.downloadingSlotIndex == widget.slotIndex;
         final canDownload = _canDownload(availability) && !isDownloading;
-        final mutedColor = scheme.onSurface.withValues(alpha: 0.42);
+
+        final tags = _loaded ? _resolvedTags() : const <TagItem>[];
 
         final soundContent = Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _SoundSlotAvatar(
-              type: sound.type,
-              isLocal: isLocal,
-              isDownloading: isDownloading,
+            Icon(
+              sound.type?.icon ?? Icons.help_outline_rounded,
+              color: scheme.onSurfaceVariant,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 16),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    sound.displayName ?? sound.title,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: isLocal ? null : mutedColor,
+              child: MouseRegion(
+                onEnter: (_) => setState(() => _hovered = true),
+                onExit: (_) => setState(() => _hovered = false),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ScrollingTextSpan(
+                      animate: _hovered,
+                      span: TextSpan(text: sound.displayName ?? sound.title),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    sound.typeDisplayLabel,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: isLocal
-                          ? scheme.onSurfaceVariant
-                          : mutedColor,
+                    _buildSubtitle(
+                      scheme,
+                      isLocal: isLocal,
+                      isDownloading: isDownloading,
                     ),
-                  ),
-                  if (_loaded && _tagIds.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 2,
-                      children: [
-                        for (final cat in widget.tagCatalog)
-                          ...cat.tags
-                              .where((t) => _tagIds.contains(t.id))
-                              .map(
-                                (t) => Chip(
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  padding: EdgeInsets.zero,
-                                  label: Text(
-                                    t.name,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall,
-                                  ),
-                                  backgroundColor:
-                                      Color(cat.category.color).withAlpha(40),
-                                ),
-                              ),
-                      ],
-                    ),
+                    if (tags.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      _buildTagRow(scheme, tags),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
             if (widget.canRemove)
@@ -676,59 +746,6 @@ class _SoundRowState extends State<_SoundRow> {
         );
       },
     );
-  }
-}
-
-/// Avatar du son avec état local / téléchargement.
-class _SoundSlotAvatar extends StatelessWidget {
-  final SoundType? type;
-  final bool isLocal;
-  final bool isDownloading;
-
-  const _SoundSlotAvatar({
-    required this.type,
-    required this.isLocal,
-    required this.isDownloading,
-  });
-
-  static const double _radius = 16;
-  static const double _iconSize = 18;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    const ringSize = _radius * 2 + 8;
-
-    Widget avatar = Opacity(
-      opacity: isLocal ? 1 : 0.38,
-      child: SoundTypeAvatar(
-        type: type,
-        radius: _radius,
-        iconSize: _iconSize,
-      ),
-    );
-
-    avatar = SizedBox(
-      width: ringSize,
-      height: ringSize,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (isDownloading)
-            SizedBox(
-              width: ringSize,
-              height: ringSize,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: scheme.primary,
-              ),
-            ),
-          avatar,
-        ],
-      ),
-    );
-
-    return avatar;
   }
 }
 

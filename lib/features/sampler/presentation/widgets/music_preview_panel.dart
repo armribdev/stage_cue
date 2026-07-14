@@ -2,6 +2,14 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart'
+    show
+        HardwareKeyboard,
+        KeyDownEvent,
+        KeyEvent,
+        KeyUpEvent,
+        LogicalKeyboardKey;
+import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/utils/sound_color_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
@@ -56,6 +64,9 @@ class MusicPreviewPanel extends StatefulWidget {
   final ValueChanged<double>? onMusicVolumeChanged;
   final ValueChanged<Duration>? onFadeOut;
   final ValueChanged<Duration>? onTransitionToNext;
+
+  /// Repositionne la lecture quand la régie est en pause (scrub sur la waveform).
+  final ValueChanged<Duration>? onSeekMusic;
   final bool isAdvanced;
   final ValueChanged<bool> onAdvancedChanged;
   final bool isDesktop;
@@ -80,6 +91,7 @@ class MusicPreviewPanel extends StatefulWidget {
     this.onMusicVolumeChanged,
     this.onFadeOut,
     this.onTransitionToNext,
+    this.onSeekMusic,
     this.isDesktop = false,
     this.isLocked = false,
     this.onLockedChanged,
@@ -95,6 +107,10 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
   /// Durée du fondu sélectionnée — `null` = coupe sèche (état de repos par
   /// défaut : aucun fondu, on opte pour une durée à chaque fois qu'on en veut).
   Duration? _selectedTransitionDuration;
+
+  /// Verrou de la durée sélectionnée (appui long) : quand `true`, la durée ne
+  /// retombe plus automatiquement sur la coupe sèche après une transition.
+  bool _transitionDurationLocked = false;
 
   static const _instantTransition = Duration(milliseconds: 100);
   static const _transitionBlinkDuration = Duration(milliseconds: 320);
@@ -190,20 +206,44 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
   void _toggleTransitionOption(Duration option) {
     setState(() {
       // La cellule ciseaux (sentinelle `Duration.zero`) sélectionne la coupe
-      // sèche, matérialisée par l'état `null` (aucun fondu).
+      // sèche, matérialisée par l'état `null` (aucun fondu). Elle lève aussi
+      // tout verrou éventuel.
       if (option == _CompactTransitionPicker.cutSentinel) {
         _selectedTransitionDuration = null;
+        _transitionDurationLocked = false;
         return;
       }
+      // Tap simple : sélection temporaire (reviendra au cut après transition).
+      // Reclic sur la même durée → désélection, et on lève le verrou.
       _selectedTransitionDuration =
           _selectedTransitionDuration == option ? null : option;
+      _transitionDurationLocked = false;
     });
   }
 
-  /// Après une transition, retour à la coupe sèche (état de repos par défaut).
+  /// Appui long sur une durée : verrouille (ou déverrouille) la sélection pour
+  /// qu'elle ne retombe plus sur la coupe sèche après chaque transition.
+  void _lockTransitionOption(Duration option) {
+    // Le verrou n'a pas de sens sur la coupe sèche.
+    if (option == _CompactTransitionPicker.cutSentinel) return;
+    setState(() {
+      if (_selectedTransitionDuration == option && _transitionDurationLocked) {
+        // Re-appui long sur la durée déjà verrouillée → déverrouille (la
+        // sélection redevient temporaire).
+        _transitionDurationLocked = false;
+      } else {
+        _selectedTransitionDuration = option;
+        _transitionDurationLocked = true;
+      }
+    });
+  }
+
+  /// Après une transition, retour à la coupe sèche (état de repos par défaut) —
+  /// sauf si la durée est verrouillée : elle reste alors sélectionnée.
   void _resetTransitionDurationAfter(Duration used) {
+    if (_transitionDurationLocked) return;
     Future<void>.delayed(used, () {
-      if (!mounted) return;
+      if (!mounted || _transitionDurationLocked) return;
       setState(() => _selectedTransitionDuration = null);
     });
   }
@@ -309,8 +349,11 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
       onRemoveFromQueue: widget.onRemoveFromQueue,
       onReorderMusicQueue: widget.onReorderMusicQueue,
       onMusicVolumeChanged: widget.onMusicVolumeChanged,
+      onSeekMusic: widget.onSeekMusic,
       selectedTransitionDuration: _selectedTransitionDuration,
+      transitionDurationLocked: _transitionDurationLocked,
       onTransitionOptionTapped: _toggleTransitionOption,
+      onTransitionOptionLongPressed: _lockTransitionOption,
       activeTransitionKind: _activeTransitionKind,
       transitionProgress: _transitionProgressController,
       transitionBlinkOpacity: _transitionBlinkOpacity,
@@ -484,8 +527,11 @@ class _MusicRegieDrawer extends StatefulWidget {
   final ValueChanged<int>? onRemoveFromQueue;
   final void Function(int oldIndex, int newIndex)? onReorderMusicQueue;
   final ValueChanged<double>? onMusicVolumeChanged;
+  final ValueChanged<Duration>? onSeekMusic;
   final Duration? selectedTransitionDuration;
+  final bool transitionDurationLocked;
   final ValueChanged<Duration> onTransitionOptionTapped;
+  final ValueChanged<Duration> onTransitionOptionLongPressed;
   final _MusicTransitionKind? activeTransitionKind;
   final Animation<double>? transitionProgress;
   final Animation<double>? transitionBlinkOpacity;
@@ -510,8 +556,11 @@ class _MusicRegieDrawer extends StatefulWidget {
     this.onRemoveFromQueue,
     this.onReorderMusicQueue,
     this.onMusicVolumeChanged,
+    this.onSeekMusic,
     required this.selectedTransitionDuration,
+    required this.transitionDurationLocked,
     required this.onTransitionOptionTapped,
+    required this.onTransitionOptionLongPressed,
     this.activeTransitionKind,
     this.transitionProgress,
     this.transitionBlinkOpacity,
@@ -551,8 +600,11 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
       isPlaying: isPlaying,
       hasCurrent: hasCurrent,
       hasQueue: hasQueue,
+      keyboardEnabled: widget.isDesktop,
       selectedTransitionDuration: widget.selectedTransitionDuration,
+      transitionDurationLocked: widget.transitionDurationLocked,
       onTransitionOptionTapped: widget.onTransitionOptionTapped,
+      onTransitionOptionLongPressed: widget.onTransitionOptionLongPressed,
       activeTransitionKind: widget.activeTransitionKind,
       transitionProgress: widget.transitionProgress,
       transitionBlinkOpacity: widget.transitionBlinkOpacity,
@@ -599,6 +651,8 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
                   padItem: current,
                   isPlaying: isPlaying,
                   height: 4,
+                  waveformHeight: 26,
+                  onSeek: widget.onSeekMusic,
                 ),
               ],
               const SizedBox(height: 12),
@@ -621,6 +675,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
           padItem: current,
           isPlaying: isPlaying,
           controls: onAirControls,
+          onSeek: widget.onSeekMusic,
         );
         final queueSection = _PassageQueueSection(
           queue: queue,
@@ -898,8 +953,11 @@ class _OnAirControls extends StatelessWidget {
   final bool isPlaying;
   final bool hasCurrent;
   final bool hasQueue;
+  final bool keyboardEnabled;
   final Duration? selectedTransitionDuration;
+  final bool transitionDurationLocked;
   final ValueChanged<Duration> onTransitionOptionTapped;
+  final ValueChanged<Duration> onTransitionOptionLongPressed;
   final _MusicTransitionKind? activeTransitionKind;
   final Animation<double>? transitionProgress;
   final Animation<double>? transitionBlinkOpacity;
@@ -913,8 +971,11 @@ class _OnAirControls extends StatelessWidget {
     required this.isPlaying,
     required this.hasCurrent,
     required this.hasQueue,
+    this.keyboardEnabled = false,
     required this.selectedTransitionDuration,
+    required this.transitionDurationLocked,
     required this.onTransitionOptionTapped,
+    required this.onTransitionOptionLongPressed,
     this.activeTransitionKind,
     this.transitionProgress,
     this.transitionBlinkOpacity,
@@ -938,6 +999,8 @@ class _OnAirControls extends StatelessWidget {
       child: _CompactVolumeSlider(
         value: volume,
         onChanged: onVolumeChanged,
+        isPlaying: isPlaying,
+        keyboardEnabled: keyboardEnabled,
       ),
     );
 
@@ -986,7 +1049,9 @@ class _OnAirControls extends StatelessWidget {
           canControl: canControl,
           hasQueue: hasQueue,
           selectedTransitionDuration: selectedTransitionDuration,
+          transitionDurationLocked: transitionDurationLocked,
           onTransitionOptionTapped: onTransitionOptionTapped,
+          onTransitionOptionLongPressed: onTransitionOptionLongPressed,
           showCut: showCut,
           activeTransitionKind: activeTransitionKind,
           transitionProgress: transitionProgress,
@@ -1077,7 +1142,9 @@ class _GroupedPlaybackControls extends StatelessWidget {
   final bool canControl;
   final bool hasQueue;
   final Duration? selectedTransitionDuration;
+  final bool transitionDurationLocked;
   final ValueChanged<Duration> onTransitionOptionTapped;
+  final ValueChanged<Duration> onTransitionOptionLongPressed;
   final bool showCut;
   final _MusicTransitionKind? activeTransitionKind;
   final Animation<double>? transitionProgress;
@@ -1091,7 +1158,9 @@ class _GroupedPlaybackControls extends StatelessWidget {
     required this.canControl,
     required this.hasQueue,
     required this.selectedTransitionDuration,
+    required this.transitionDurationLocked,
     required this.onTransitionOptionTapped,
+    required this.onTransitionOptionLongPressed,
     required this.showCut,
     this.activeTransitionKind,
     this.transitionProgress,
@@ -1224,7 +1293,9 @@ class _GroupedPlaybackControls extends StatelessWidget {
               padding: const EdgeInsets.only(left: 4, right: 8),
               child: _CompactTransitionPicker(
                 selected: selectedTransitionDuration,
+                locked: transitionDurationLocked,
                 onOptionTapped: onTransitionOptionTapped,
+                onOptionLongPressed: onTransitionOptionLongPressed,
                 showCut: showCut,
                 cellSize: _pickerCellSize(comfortable),
                 cellGap: _pickerGap(comfortable),
@@ -1240,40 +1311,222 @@ class _GroupedPlaybackControls extends StatelessWidget {
 
 /// Slider volume — affiche le pourcentage via le label natif du curseur
 /// pendant le drag (position toujours exacte, gérée par Flutter).
+///
+/// En lecture (`isPlaying`), un appui ne saute plus directement au point
+/// touché : le volume rampe progressivement (≈ 3 s pour tout le parcours) vers
+/// l'endroit maintenu, et s'arrête net au relâchement — fondu manuel de régie.
+///
+/// Sur desktop (`keyboardEnabled`), les flèches ↑/↓ du clavier maintenues
+/// pilotent le même ramp, sans dépendre du focus (handler clavier global).
 class _CompactVolumeSlider extends StatefulWidget {
   final double value;
   final ValueChanged<double>? onChanged;
+  final bool isPlaying;
+  final bool keyboardEnabled;
 
   const _CompactVolumeSlider({
     required this.value,
     this.onChanged,
+    this.isPlaying = false,
+    this.keyboardEnabled = false,
   });
 
   @override
   State<_CompactVolumeSlider> createState() => _CompactVolumeSliderState();
 }
 
-class _CompactVolumeSliderState extends State<_CompactVolumeSlider> {
+class _CompactVolumeSliderState extends State<_CompactVolumeSlider>
+    with SingleTickerProviderStateMixin {
   double? _localValue;
 
+  /// Ticker qui rampe le volume vers le point maintenu (mode lecture).
+  Ticker? _rampTicker;
+
+  /// Fraction cible (0→1) sous le doigt tant qu'il est enfoncé — `null` au repos.
+  double? _rampTarget;
+  Duration _lastRampTick = Duration.zero;
+
+  /// Touche fléchée en cours de maintien (ramp clavier) — `null` sinon.
+  LogicalKeyboardKey? _rampKey;
+
+  /// Vrai si le ramp courant est piloté au pointeur : il doit être coupé si la
+  /// lecture s'arrête (le relâchement ne serait plus délivré). Un ramp clavier
+  /// reçoit toujours son KeyUpEvent via le handler global, pas ce besoin.
+  bool _rampFromPointer = false;
+
+  /// Marge horizontale du rail (rayon du pouce) pour convertir x → fraction.
+  static const _trackInset = 8.0;
+
+  /// Vitesse du ramp : parcours complet 0→100 % en ≈ 3 s.
+  static const _rampUnitsPerSecond = 1 / 3;
+
   double get _displayValue => _localValue ?? widget.value;
+
+  /// Le ramp progressif ne s'active qu'à l'antenne et si le slider est actif.
+  bool get _rampEnabled => widget.isPlaying && widget.onChanged != null;
+
+  @override
+  void initState() {
+    super.initState();
+    // Handler clavier global : les flèches ↑/↓ agissent sans dépendre du focus
+    // (indispensable en régie live où le focus est souvent ailleurs). Filtré
+    // sur desktop et sur les seules flèches verticales dans le handler.
+    HardwareKeyboard.instance.addHandler(_handleGlobalKey);
+  }
+
+  @override
+  void didUpdateWidget(_CompactVolumeSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // La lecture s'arrête (ou le slider se désactive) pendant un appui pointeur :
+    // le Listener disparaît, donc on coupe le ramp nous-mêmes pour ne pas
+    // laisser le ticker tourner dans le vide.
+    if (!_rampEnabled && _rampFromPointer && _rampTarget != null) {
+      _rampTarget = null;
+      _rampFromPointer = false;
+      _rampTicker?.stop();
+      _localValue = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
+    _rampTicker?.dispose();
+    super.dispose();
+  }
+
+  double _fractionFromLocalX(double dx) {
+    final box = context.findRenderObject() as RenderBox?;
+    final width = box?.size.width ?? 0;
+    final usable = width - 2 * _trackInset;
+    if (usable <= 0) return _displayValue.clamp(0.0, 1.0);
+    return ((dx - _trackInset) / usable).clamp(0.0, 1.0);
+  }
+
+  /// Démarre (ou redirige) le ramp vers une fraction cible 0→1.
+  void _beginRamp(double target) {
+    _rampTarget = target;
+    _lastRampTick = Duration.zero;
+    _rampTicker ??= createTicker(_onRampTick);
+    if (!_rampTicker!.isActive) _rampTicker!.start();
+  }
+
+  void _startRamp(PointerDownEvent event) {
+    _rampFromPointer = true;
+    _beginRamp(_fractionFromLocalX(event.localPosition.dx));
+  }
+
+  void _updateRampTarget(PointerMoveEvent event) {
+    _rampTarget = _fractionFromLocalX(event.localPosition.dx);
+  }
+
+  void _stopRamp() {
+    _rampTarget = null;
+    _rampKey = null;
+    _rampFromPointer = false;
+    _rampTicker?.stop();
+    // La dernière valeur atteinte a déjà été poussée via onChanged : on repasse
+    // sur widget.value (identique) pour rester synchronisé avec le parent.
+    if (_localValue != null) {
+      setState(() => _localValue = null);
+    }
+  }
+
+  /// Un champ texte a-t-il le focus ? Dans ce cas on laisse les flèches à
+  /// l'édition (déplacement du curseur) plutôt que de piloter le volume.
+  bool _isEditingText() {
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    return ctx != null &&
+        ctx.findAncestorStateOfType<EditableTextState>() != null;
+  }
+
+  /// Handler clavier global : flèches ↑/↓ maintenues → ramp du volume vers
+  /// 100 % / 0 %, relâché = arrêt net. Ne consomme que les flèches verticales
+  /// (les autres touches passent) et seulement sur desktop, slider actif, hors
+  /// saisie texte — sinon comportement clavier normal préservé.
+  bool _handleGlobalKey(KeyEvent event) {
+    if (!widget.keyboardEnabled || widget.onChanged == null) return false;
+    final key = event.logicalKey;
+    final isUp = key == LogicalKeyboardKey.arrowUp;
+    final isDown = key == LogicalKeyboardKey.arrowDown;
+    if (!isUp && !isDown) return false;
+    if (_isEditingText()) return false;
+
+    if (event is KeyDownEvent) {
+      _rampKey = key;
+      _beginRamp(isUp ? 1.0 : 0.0);
+    } else if (event is KeyUpEvent && key == _rampKey) {
+      _stopRamp();
+    }
+    // KeyRepeatEvent : rien à faire, le ramp tourne déjà — on consomme quand même.
+    return true;
+  }
+
+  void _onRampTick(Duration elapsed) {
+    final target = _rampTarget;
+    if (target == null) return;
+    final dt = (elapsed - _lastRampTick).inMicroseconds / 1e6;
+    _lastRampTick = elapsed;
+    if (dt <= 0) return;
+
+    final current = _displayValue;
+    final maxStep = _rampUnitsPerSecond * dt;
+    final double next;
+    if ((target - current).abs() <= maxStep) {
+      next = target;
+    } else {
+      next = current + (target > current ? maxStep : -maxStep);
+    }
+    if (next == current) return;
+    setState(() => _localValue = next);
+    widget.onChanged!(next);
+  }
 
   @override
   Widget build(BuildContext context) {
     final fraction = _displayValue.clamp(0.0, 1.0);
 
-    return SizedBox(
-      height: 42,
-      child: SliderTheme(
-        data: SliderTheme.of(context).copyWith(
-          trackHeight: 3,
-          thumbShape: const RoundSliderThumbShape(
-            enabledThumbRadius: 8,
-            disabledThumbRadius: 8,
+    final sliderTheme = SliderTheme.of(context).copyWith(
+      trackHeight: 3,
+      thumbShape: const RoundSliderThumbShape(
+        enabledThumbRadius: 8,
+        disabledThumbRadius: 8,
+      ),
+      overlayShape: SliderComponentShape.noOverlay,
+      showValueIndicator: ShowValueIndicator.onDrag,
+    );
+
+    final Widget sliderCore;
+    if (_rampEnabled) {
+      // Lecture : le Slider natif n'affiche que la position courante — les
+      // pointeurs sont interceptés pour piloter le ramp à la main.
+      sliderCore = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Listener(
+          // Opaque : l'enfant IgnorePointer n'est pas hit-testable, donc sans
+          // ça (deferToChild par défaut) le Listener ne recevrait aucun appui.
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: _startRamp,
+          onPointerMove: _updateRampTarget,
+          onPointerUp: (_) => _stopRamp(),
+          onPointerCancel: (_) => _stopRamp(),
+          child: IgnorePointer(
+            child: SliderTheme(
+              data: sliderTheme,
+              child: Slider(
+                value: fraction,
+                min: 0.0,
+                max: 1.0,
+                label: '${(fraction * 100).round()}%',
+                onChanged: (_) {},
+              ),
+            ),
           ),
-          overlayShape: SliderComponentShape.noOverlay,
-          showValueIndicator: ShowValueIndicator.onDrag,
         ),
+      );
+    } else {
+      sliderCore = SliderTheme(
+        data: sliderTheme,
         child: Slider(
           value: widget.value,
           min: 0.0,
@@ -1289,15 +1542,23 @@ class _CompactVolumeSliderState extends State<_CompactVolumeSlider> {
               ? null
               : (_) => setState(() => _localValue = null),
         ),
-      ),
-    );
+      );
+    }
+
+    // Les flèches clavier passent par le handler global (indépendant du focus),
+    // donc aucun wrapper Focus ici — juste le rail.
+    return SizedBox(height: 42, child: sliderCore);
   }
 }
 
 /// Sélecteur minimal de durée (1 / 3 / 5 s) — reclic pour désélectionner.
 class _CompactTransitionPicker extends StatelessWidget {
   final Duration? selected;
+
+  /// Vrai si la durée [selected] est verrouillée (persiste après transition).
+  final bool locked;
   final ValueChanged<Duration> onOptionTapped;
+  final ValueChanged<Duration> onOptionLongPressed;
 
   /// Affiche une cellule de coupe sèche explicite en tête du sélecteur.
   final bool showCut;
@@ -1317,7 +1578,9 @@ class _CompactTransitionPicker extends StatelessWidget {
 
   const _CompactTransitionPicker({
     required this.selected,
+    required this.locked,
     required this.onOptionTapped,
+    required this.onOptionLongPressed,
     required this.showCut,
     required this.cellSize,
     required this.cellGap,
@@ -1353,7 +1616,9 @@ class _CompactTransitionPicker extends StatelessWidget {
             size: cellSize,
             label: '${_options[i].inSeconds}',
             isSelected: selected == _options[i],
+            isLocked: locked && selected == _options[i],
             onTap: () => onOptionTapped(_options[i]),
+            onLongPress: () => onOptionLongPressed(_options[i]),
             labelStyle: labelStyle,
             scheme: scheme,
           ),
@@ -1372,7 +1637,11 @@ class _TransitionCell extends StatelessWidget {
   /// Icône (coupe sèche) affichée à la place du libellé.
   final IconData? icon;
   final bool isSelected;
+
+  /// Durée verrouillée : affiche un cadenas en filigrane derrière le chiffre.
+  final bool isLocked;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final TextStyle? labelStyle;
   final ColorScheme scheme;
 
@@ -1381,7 +1650,9 @@ class _TransitionCell extends StatelessWidget {
     this.label,
     this.icon,
     required this.isSelected,
+    this.isLocked = false,
     required this.onTap,
+    this.onLongPress,
     required this.labelStyle,
     required this.scheme,
   }) : assert(label != null || icon != null, 'label ou icon requis');
@@ -1390,7 +1661,7 @@ class _TransitionCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final foreground =
         isSelected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
-    final child = icon != null
+    final Widget child = icon != null
         ? Icon(icon, size: size * 0.55, color: foreground)
         : Text(
             label!,
@@ -1400,10 +1671,30 @@ class _TransitionCell extends StatelessWidget {
             ),
           );
 
+    // Cadenas en filigrane derrière le chiffre — signale la durée verrouillée
+    // sans masquer le libellé, qui reste lisible par-dessus.
+    final Widget content = isLocked
+        ? Stack(
+            alignment: Alignment.center,
+            children: [
+              Transform.translate(
+                offset: const Offset(0, -2),
+                child: Icon(
+                  Icons.lock_rounded,
+                  size: size * 0.7,
+                  color: foreground.withValues(alpha: 0.22),
+                ),
+              ),
+              child,
+            ],
+          )
+        : child;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         customBorder: const CircleBorder(),
         child: Container(
           width: size,
@@ -1415,7 +1706,7 @@ class _TransitionCell extends StatelessWidget {
                   color: scheme.primaryContainer.withValues(alpha: 0.65),
                 )
               : null,
-          child: child,
+          child: content,
         ),
       ),
     );
@@ -1626,11 +1917,13 @@ class _OnAirCard extends StatelessWidget {
   final PadItem? padItem;
   final bool isPlaying;
   final Widget controls;
+  final ValueChanged<Duration>? onSeek;
 
   const _OnAirCard({
     required this.padItem,
     required this.isPlaying,
     required this.controls,
+    this.onSeek,
   });
 
   @override
@@ -1720,6 +2013,7 @@ class _OnAirCard extends StatelessWidget {
                 padItem: padItem,
                 isPlaying: isPlaying,
                 showTimes: true,
+                onSeek: onSeek,
               ),
             const SizedBox(height: 12),
             controls,
@@ -1736,11 +2030,21 @@ class _RegieProgressBar extends StatefulWidget {
   final bool showTimes;
   final double height;
 
+  /// Hauteur de la waveform quand le son courant en possède une ; à défaut on
+  /// retombe sur la barre linéaire d'épaisseur [height].
+  final double waveformHeight;
+
+  /// Repositionne la lecture (scrub) — actif uniquement quand le pad est en
+  /// pause et qu'une waveform est affichée. `null` = pas de seek.
+  final ValueChanged<Duration>? onSeek;
+
   const _RegieProgressBar({
     required this.padItem,
     this.isPlaying = false,
     this.showTimes = false,
     this.height = 4,
+    this.waveformHeight = 34,
+    this.onSeek,
   });
 
   @override
@@ -1810,22 +2114,80 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
     return (position: position, duration: duration, value: value);
   }
 
+  /// Son actuellement à l'antenne (ou en pause), pour résoudre sa waveform.
+  Sound? get _currentSound {
+    final padItem = widget.padItem;
+    if (padItem == null || padItem.pad.sounds.isEmpty) return null;
+    final idx = padItem.currentSoundIndex ?? padItem.pausedPlayerIndex ?? 0;
+    if (idx < 0 || idx >= padItem.pad.sounds.length) {
+      return padItem.pad.sounds.first;
+    }
+    return padItem.pad.sounds[idx];
+  }
+
+  /// Traduit une abscisse tactile [dx] (sur une largeur [width]) en position de
+  /// lecture et la transmet via [widget.onSeek].
+  void _handleSeek(double dx, double width, Duration duration) {
+    if (width <= 0 || duration <= Duration.zero) return;
+    final fraction = (dx / width).clamp(0.0, 1.0);
+    widget.onSeek?.call(duration * fraction);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final playback = _playbackState();
+    final bars = _hasTrack
+        ? decodeWaveformBars(_currentSound?.waveform)
+        : const <double>[];
+
+    final Widget progressWidget;
+    if (bars.isNotEmpty) {
+      final Widget waveform = _WaveformProgress(
+        bars: bars,
+        progress: _hasTrack ? playback.value : 0,
+        height: widget.waveformHeight,
+        playedColor: scheme.primary,
+        remainingColor: scheme.outlineVariant.withValues(alpha: 0.55),
+      );
+
+      // Scrub tactile — uniquement quand la régie est en pause : on repère une
+      // nouvelle position de reprise sans relancer la lecture.
+      final canSeek =
+          widget.onSeek != null && (widget.padItem?.isPaused ?? false);
+      if (canSeek && playback.duration > Duration.zero) {
+        progressWidget = LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            void seekTo(double dx) =>
+                _handleSeek(dx, width, playback.duration);
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (d) => seekTo(d.localPosition.dx),
+              onHorizontalDragStart: (d) => seekTo(d.localPosition.dx),
+              onHorizontalDragUpdate: (d) => seekTo(d.localPosition.dx),
+              child: waveform,
+            );
+          },
+        );
+      } else {
+        progressWidget = waveform;
+      }
+    } else {
+      progressWidget = ClipRRect(
+        borderRadius: BorderRadius.circular(widget.height),
+        child: LinearProgressIndicator(
+          value: _hasTrack ? playback.value : 0,
+          minHeight: widget.height,
+          backgroundColor: scheme.outlineVariant.withValues(alpha: 0.35),
+          valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+        ),
+      );
+    }
 
     return Column(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(widget.height),
-          child: LinearProgressIndicator(
-            value: _hasTrack ? playback.value : 0,
-            minHeight: widget.height,
-            backgroundColor: scheme.outlineVariant.withValues(alpha: 0.35),
-            valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
-          ),
-        ),
+        progressWidget,
         if (widget.showTimes) ...[
           const SizedBox(height: 6),
           Row(
@@ -1858,6 +2220,146 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
     final seconds = totalSeconds % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
+}
+
+/// Waveform de régie : barres de largeur FIXE (indépendante de la taille du
+/// widget et de la durée du morceau). Le nombre de barres découle de la largeur
+/// disponible ; l'enveloppe stockée est rééchantillonnée par PIC (max) pour ne
+/// pas écraser les crêtes. La portion jouée (gauche) est colorée [playedColor].
+class _WaveformProgress extends StatelessWidget {
+  final List<double> bars;
+  final double progress;
+  final double height;
+  final Color playedColor;
+  final Color remainingColor;
+
+  /// Largeur et espacement d'une barre, en pixels logiques (entiers → tracé net).
+  static const double _barWidth = 2.0;
+  static const double _barGap = 2.0;
+  static const double _slot = _barWidth + _barGap;
+
+  const _WaveformProgress({
+    required this.bars,
+    required this.progress,
+    required this.height,
+    required this.playedColor,
+    required this.remainingColor,
+  });
+
+  /// Rééchantillonne [src] (0..1) vers [target] barres en prenant le pic (max)
+  /// de chaque groupe — préserve les crêtes quelle que soit la densité.
+  static List<double> _resamplePeaks(List<double> src, int target) {
+    if (src.isEmpty || target <= 0) return const [];
+    if (target >= src.length) {
+      // Plus de barres que d'échantillons : on répète le plus proche.
+      return [
+        for (var i = 0; i < target; i++)
+          src[((i * src.length) ~/ target).clamp(0, src.length - 1)],
+      ];
+    }
+    final out = List<double>.filled(target, 0);
+    for (var t = 0; t < target; t++) {
+      final start = (t * src.length) ~/ target;
+      var end = ((t + 1) * src.length) ~/ target;
+      if (end <= start) end = start + 1;
+      if (end > src.length) end = src.length;
+      var peak = 0.0;
+      for (var j = start; j < end; j++) {
+        if (src[j] > peak) peak = src[j];
+      }
+      out[t] = peak;
+    }
+    return out;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final count = (width / _slot).floor();
+          if (count <= 0 || bars.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          final peaks = _resamplePeaks(bars, count);
+          // Centre le bloc de barres : reste réparti en marge gauche/droite.
+          final offset = (width - count * _slot) / 2;
+          return CustomPaint(
+            size: Size(width, height),
+            painter: _WaveformPainter(
+              peaks: peaks,
+              barWidth: _barWidth,
+              slot: _slot,
+              offset: offset,
+              progress: progress.clamp(0.0, 1.0),
+              playedColor: playedColor,
+              remainingColor: remainingColor,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _WaveformPainter extends CustomPainter {
+  final List<double> peaks;
+  final double barWidth;
+  final double slot;
+  final double offset;
+  final double progress;
+  final Color playedColor;
+  final Color remainingColor;
+
+  _WaveformPainter({
+    required this.peaks,
+    required this.barWidth,
+    required this.slot,
+    required this.offset,
+    required this.progress,
+    required this.playedColor,
+    required this.remainingColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (peaks.isEmpty || size.width <= 0) return;
+
+    final centerY = size.height / 2;
+    final maxHalf = size.height / 2;
+    final radius = Radius.circular(barWidth / 2);
+    final playedX = size.width * progress;
+
+    final playedPaint = Paint()..color = playedColor;
+    final remainingPaint = Paint()..color = remainingColor;
+
+    for (var i = 0; i < peaks.length; i++) {
+      // Position arrondie au pixel entier → toutes les barres ont la même
+      // largeur visuelle (pas d'écrasement sous-pixel par l'anti-aliasing).
+      final x = (offset + i * slot).roundToDouble();
+      // Plancher visuel : même un silence reste une fine ligne médiane.
+      final half = (peaks[i] * maxHalf).clamp(1.0, maxHalf);
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTRB(x, centerY - half, x + barWidth, centerY + half),
+        radius,
+      );
+      canvas.drawRRect(
+        rect,
+        x + barWidth / 2 <= playedX ? playedPaint : remainingPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WaveformPainter old) =>
+      old.progress != progress ||
+      old.peaks != peaks ||
+      old.offset != offset ||
+      old.playedColor != playedColor ||
+      old.remainingColor != remainingColor;
 }
 
 class _PassageQueueSection extends StatelessWidget {

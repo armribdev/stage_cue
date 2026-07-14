@@ -20,6 +20,9 @@ class FakeAudioPlayerService implements AudioPlayerService {
   bool get isPlaying => false;
 
   @override
+  bool get isPaused => false;
+
+  @override
   Stream<bool> get onPlayerStateChanged => _controller.stream;
 
   @override
@@ -29,7 +32,8 @@ class FakeAudioPlayerService implements AudioPlayerService {
   Future<void> play() async {}
 
   @override
-  Future<void> playFromPosition(Duration position) async {}
+  Future<bool> playFromPosition(Duration position, {double volume = 1.0}) async =>
+      true;
 
   @override
   Duration get position => Duration.zero;
@@ -41,10 +45,19 @@ class FakeAudioPlayerService implements AudioPlayerService {
   Future<void> stop() async {}
 
   @override
-  Future<void> playAtVolume(double volume) async {}
+  Future<void> pause() async {}
 
   @override
-  Future<void> playOverlapping({double volume = 1.0}) async {}
+  Future<void> resume() async {}
+
+  @override
+  Future<void> playAtVolume(double volume, {Duration startOffset = Duration.zero}) async {}
+
+  @override
+  Future<void> playOverlapping({
+    double volume = 1.0,
+    Duration startOffset = Duration.zero,
+  }) async {}
 
   @override
   void fadeVolumeTo(double to, Duration duration) {}

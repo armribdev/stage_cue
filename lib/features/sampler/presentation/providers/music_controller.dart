@@ -15,6 +15,11 @@ class MusicController {
   double _musicVolumeBeforeMute = 1.0;
   static const _sliderFadeDuration = Duration(milliseconds: 120);
 
+  /// Fondu appliqué quand un tap coupe un multipad musique en cours de
+  /// lecture (évite la coupure sèche à l'antenne) — même durée que la plus
+  /// courte option manuelle du sélecteur de régie.
+  static const _multipadTapStopFadeDuration = Duration(seconds: 1);
+
   /// Verrou d'avance automatique : chaque opération qui ne doit pas déclencher
   /// l'avance automatique incrémente ce compteur et le décrémente dans finally.
   int _musicAdvanceLockCount = 0;
@@ -35,6 +40,28 @@ class MusicController {
     final msg = _lastPlaybackError;
     _lastPlaybackError = null;
     return msg;
+  }
+
+  /// Point d'entrée configuré sur le son du slot [index] d'un pad — position de
+  /// départ d'une lecture fraîche (0 si l'index est hors limites).
+  /// [player] sert à borner l'offset à la durée du fichier (évite un seek hors
+  /// fin qui termine la voix immédiatement sans son audible).
+  Duration _startOffsetOf(
+    PadItem padItem,
+    int index,
+    AudioPlayerService player,
+  ) {
+    final sounds = padItem.pad.sounds;
+    if (index < 0 || index >= sounds.length) return Duration.zero;
+    var ms = sounds[index].startOffsetMs;
+    final duration = player.duration;
+    if (duration > Duration.zero) {
+      final maxMs = duration.inMilliseconds;
+      if (ms >= maxMs) {
+        ms = (maxMs - 1).clamp(0, maxMs);
+      }
+    }
+    return Duration(milliseconds: ms);
   }
 
   /// Volume effectif du son à [soundIndex] (défaut : le son courant du pad, ou
@@ -89,9 +116,17 @@ class MusicController {
   // ── Lecture musique ───────────────────────────────────────────────────────
 
   Future<void> _toggleMusicPad(PadItem padItem) async {
-    // Ce pad joue → pause (mémorise la position pour reprise)
+    // Ce pad joue :
+    // - multipad → coupe (fondu) sans mémoriser de reprise ; le prochain tap
+    //   choisira un autre son du multipad (aléatoire ou séquentiel selon le
+    //   mode de lecture du pad, voir `_pickSoundIndex`).
+    // - pad simple → pause (mémorise la position pour reprise à l'identique).
     if (padItem.isPlaying) {
-      await _stopMusicPad(padItem, manual: true, clearOnAir: false);
+      if (padItem.pad.sounds.length > 1) {
+        await _fadeOutAndStopMusicPad(padItem, _multipadTapStopFadeDuration);
+      } else {
+        await _stopMusicPad(padItem, manual: true, clearOnAir: false);
+      }
       return;
     }
 
@@ -123,27 +158,43 @@ class MusicController {
     await playMusicNow(padItem);
   }
 
-  Future<void> playMusicNow(PadItem padItem) async {
+  /// [soundIndex] : force la variante à jouer (ex. choix explicite dans un
+  /// multipad) au lieu de laisser `_pickSoundIndex` piocher automatiquement.
+  Future<void> playMusicNow(PadItem padItem, {int? soundIndex}) async {
     if (!padItem.isPlayable) return;
+    await _switchToMusic(padItem, soundIndex: soundIndex);
+  }
 
+  /// Point d'entrée unique pour « passer » à une autre musique — déclenchement
+  /// explicite (pad, variante d'un multipad, recherche) ou avance dans la file
+  /// ([playNextInQueueNow]) : coupe ce qui joue, puis démarre [target]. Une
+  /// seule musique joue à la fois, hors fondu enchaîné explicite (crossfade).
+  Future<bool> _switchToMusic(PadItem target, {int? soundIndex}) async {
     final current = _o._state.currentMusicPad;
-    if (current != null && current.pad.id != padItem.pad.id) {
-      if (current.isPlaying) {
-        await _stopMusicPad(current, manual: true);
-      } else if (current.isPaused) {
-        // Abandon la pause du pad courant avant d'en jouer un autre.
-        current.clearPausedPlayback();
-        _o._state = _o._state.copyWith(clearCurrentMusicPad: true);
-        _o._notify();
+    if (current != null) {
+      // Même pad ET même variante déjà en cours (ex. simple pad relancé, ou
+      // ré-appui sur la variante déjà jouée dans le picker) : pas de coupure,
+      // `_playMusicPad` ci-dessous relance ce même lecteur.
+      final sameSlot = current.pad.id == target.pad.id &&
+          (soundIndex == null || soundIndex == current.currentSoundIndex);
+      if (!sameSlot) {
+        if (current.isPlaying) {
+          await _stopMusicPad(current, manual: true);
+        } else if (current.isPaused) {
+          // Abandon la pause du pad courant avant d'en jouer un autre.
+          current.clearPausedPlayback();
+          _o._state = _o._state.copyWith(clearCurrentMusicPad: true);
+          _o._notify();
+        }
       }
     }
 
     _o._state = _o._state.copyWith(
       musicQueuePadIds: _o._state.musicQueuePadIds
-          .where((id) => id != padItem.pad.id)
+          .where((id) => id != target.pad.id)
           .toList(),
     );
-    await _playMusicPad(padItem);
+    return _playMusicPad(target, soundIndex: soundIndex);
   }
 
   Future<PadItem?> playMusicBySoundId(int soundId) async {
@@ -185,7 +236,21 @@ class MusicController {
     final padId = padItem.pad.id;
     final current = _o._state.currentMusicPad;
 
-    if (current?.pad.id == padId && (current?.isPlaying ?? false)) {
+    if (current?.pad.id == padId) {
+      if (current?.isPlaying ?? false) {
+        return padItem;
+      }
+      // Même pad à l'antenne mais arrêté ou en pause : relancer (point d'entrée
+      // frais) au lieu d'un no-op silencieux via enqueueMusicPad.
+      final ready = await _prepareMusicPadForPlayback(
+        padItem,
+        downloadIfNeeded: true,
+      );
+      if (!ready) {
+        _setMusicLoadError(padItem);
+        return null;
+      }
+      await playMusicNow(padItem);
       return padItem;
     }
     if (_o._state.musicQueuePadIds.contains(padId)) {
@@ -205,12 +270,7 @@ class MusicController {
     final next = await _prepareNextQueuedMusic(nextId);
     if (next == null) return false;
 
-    final current = _o._state.currentMusicPad;
-    if (current != null && current.isPlaying) {
-      await _stopMusicPad(current, manual: true);
-    }
-
-    return _playMusicPad(next);
+    return _switchToMusic(next);
   }
 
   Future<void> stopCurrentMusic() async {
@@ -242,6 +302,23 @@ class MusicController {
       fromPosition: current.pausedPlaybackPosition,
       soundIndex: current.pausedPlayerIndex,
     );
+  }
+
+  /// Repositionne la lecture du pad musique courant EN PAUSE (scrub sur la
+  /// waveform de régie) : met à jour la position mémorisée, d'où la reprise
+  /// repartira. Sans effet si aucun pad n'est en pause. La lecture n'est jamais
+  /// relancée ici — c'est un simple repérage.
+  Future<void> seekPausedMusic(Duration position) async {
+    final current = _o._state.currentMusicPad;
+    if (current == null || !current.isPaused) return;
+
+    final duration = current.progressPlayer?.duration ?? Duration.zero;
+    var target = position;
+    if (target < Duration.zero) target = Duration.zero;
+    if (duration > Duration.zero && target > duration) target = duration;
+
+    current.pausedPlaybackPosition = target;
+    _o._notify();
   }
 
   Future<void> restartCurrentMusic() async {
@@ -328,7 +405,10 @@ class MusicController {
       );
       _o._notify();
 
-      await nextPlayer.playAtVolume(0);
+      await nextPlayer.playAtVolume(
+        0,
+        startOffset: _startOffsetOf(next, soundIndex, nextPlayer),
+      );
       next._currentPlayerIndex = soundIndex;
       next.isPlaying = true;
 
@@ -387,22 +467,49 @@ class MusicController {
   /// Résout un pad musique par id — sur la scène ou hors-scène (régie seule).
   PadItem? resolveMusicPad(int padId) => _resolvePadItem(padId);
 
-  PadItem? _findPadItemForSound(int soundId) {
+  /// Pad musique **simple** (un seul son) correspondant à un son, sur la scène
+  /// ou hors-scène. Un multipad ne doit jamais être résolu ici : depuis la
+  /// recherche, on ne veut déclencher que le son précis choisi, pas laisser le
+  /// multipad piocher parmi ses variantes ([_pickSoundIndex]).
+  PadItem? _findSimpleMusicPadForSound(int soundId) {
     for (final padItem in _o._state.pads) {
-      if (padItem.pad.sounds.any((sound) => sound.id == soundId)) {
-        return padItem;
-      }
+      final sounds = padItem.pad.sounds;
+      if (sounds.length == 1 && sounds.first.id == soundId) return padItem;
     }
     for (final padItem in _offStageMusicPads.values) {
-      if (padItem.pad.sounds.any((sound) => sound.id == soundId)) {
-        return padItem;
-      }
+      final sounds = padItem.pad.sounds;
+      if (sounds.length == 1 && sounds.first.id == soundId) return padItem;
     }
     return null;
   }
 
-  /// Pad musique correspondant à un son, sur la scène ou hors-scène.
-  PadItem? findMusicPadForSound(int soundId) => _findPadItemForSound(soundId);
+  /// Pad musique correspondant à un son, sur la scène ou hors-scène — ne
+  /// renvoie jamais un multipad (voir [_findSimpleMusicPadForSound]).
+  PadItem? findMusicPadForSound(int soundId) =>
+      _findSimpleMusicPadForSound(soundId);
+
+  /// Réinjecte en mémoire les métadonnées à jour d'un son (point d'entrée,
+  /// volume, etc.) sur tous les pads qui le référencent, sans toucher aux
+  /// lecteurs audio en cours — le nouveau point d'entrée s'applique à la
+  /// prochaine lecture seulement.
+  Future<void> refreshSoundMetadata(int soundId) async {
+    await _syncSoundMetadataInPads(_o._state.pads, soundId);
+    await _syncSoundMetadataInPads(_offStageMusicPads.values, soundId);
+    _o._notify();
+  }
+
+  Future<void> _syncSoundMetadataInPads(
+    Iterable<PadItem> padItems,
+    int soundId,
+  ) async {
+    for (final padItem in padItems) {
+      for (var i = 0; i < padItem.pad.sounds.length; i++) {
+        if (padItem.pad.sounds[i].id == soundId) {
+          await _o._syncPadSoundMetadata(padItem, i);
+        }
+      }
+    }
+  }
 
   // ── Synchronisation état ──────────────────────────────────────────────────
 
@@ -473,20 +580,44 @@ class MusicController {
       return false;
     }
 
+    // Métadonnées à jour (point d'entrée édité en bibliothèque, etc.).
+    await _o._syncPadSoundMetadata(padItem, index);
+
     padItem.clearPausedPlayback();
+
+    final volume = _effectiveVolume(padItem, soundIndex: index);
+    final startPos = resumePosition != null && resumePosition > Duration.zero
+        ? resumePosition
+        : _startOffsetOf(padItem, index, player);
+
+    var started = await player.playFromPosition(startPos, volume: volume);
+    if (!started) {
+      // Source SoLoud peut avoir été invalidée (ex. éditeur de point d'entrée).
+      await _o._loadSlotAtIndex(
+        padItem,
+        index,
+        downloadIfNeeded: true,
+      );
+      _o._attachPlayerListeners(padItem);
+      final reloaded = padItem.slots[index].player;
+      if (reloaded == null) {
+        _setMusicLoadError(padItem);
+        return false;
+      }
+      started = await reloaded.playFromPosition(startPos, volume: volume);
+    }
+
+    if (!started) {
+      _setMusicLoadError(padItem);
+      return false;
+    }
+
     _o._state = _o._state.copyWith(
       currentMusicPad: padItem,
       musicQueuePadIds: _o._state.musicQueuePadIds
           .where((id) => id != padItem.pad.id)
           .toList(),
     );
-
-    player.setVolume(_effectiveVolume(padItem, soundIndex: index));
-    if (resumePosition != null && resumePosition > Duration.zero) {
-      await player.playFromPosition(resumePosition);
-    } else {
-      await player.play();
-    }
     _o._markPlayedAt(padItem, index);
     _o._notify();
     return true;
@@ -504,12 +635,30 @@ class MusicController {
       _capturePausedPlayback(padItem);
     }
     try {
-      await padItem.currentPlayer?.stop();
+      // On coupe toute voix réellement active du pad plutôt que de se fier au
+      // seul `currentPlayer` (résolu via `_currentPlayerIndex`) : cet index
+      // n'est mis à jour que de façon asynchrone par le listener
+      // `onPlayerStateChanged` (voir `_attachPlayerListeners`), donc pas fiable
+      // juste après un `play` récent — un stop ciblé sur un index pas encore à
+      // jour deviendrait un no-op silencieux et laisserait l'ancienne variante
+      // jouer en même temps que la nouvelle.
+      for (final slot in padItem.slots) {
+        final player = slot.player;
+        if (player != null && player.isPlaying) {
+          await player.stop();
+        }
+      }
     } finally {
       if (manual) {
         if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
       }
     }
+    // Le stream `onPlayerStateChanged` ne notifie l'arrêt qu'après ce point
+    // (au-delà du verrou ci-dessus) : figer isPlaying/_currentPlayerIndex ici
+    // évite que le listener tardif ne (re)déclenche `_handleMusicPlaybackEnded`
+    // et n'efface `currentMusicPad` pour un simple pause manuel.
+    padItem.isPlaying = false;
+    padItem._currentPlayerIndex = null;
 
     var nextState = _o._state;
     if (clearOnAir && _o._state.currentMusicPad?.pad.id == padItem.pad.id) {
@@ -524,6 +673,27 @@ class MusicController {
     }
     _o._state = nextState;
     _o._notify();
+  }
+
+  /// Coupe un pad musique avec un fondu sortant, sans mémoriser de position
+  /// de reprise (contrairement à [fadeOutCurrentMusic]) : le pad repart de
+  /// zéro — et pioche un nouveau son via [_pickSoundIndex] pour un multipad —
+  /// au prochain tap plutôt que de reprendre en pause.
+  Future<void> _fadeOutAndStopMusicPad(PadItem padItem, Duration duration) async {
+    final player = padItem.currentPlayer;
+    if (duration == Duration.zero || player == null) {
+      await _stopMusicPad(padItem, manual: true);
+      return;
+    }
+
+    _musicAdvanceLockCount++;
+    try {
+      player.fadeVolumeTo(0, duration);
+      await Future<void>.delayed(duration);
+    } finally {
+      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
+    }
+    await _stopMusicPad(padItem, manual: true);
   }
 
   void _handleMusicPlaybackEnded(PadItem padItem) {
@@ -556,7 +726,7 @@ class MusicController {
   }
 
   Future<PadItem?> _findOrCreateMusicPadForSound(int soundId) async {
-    var existing = _findPadItemForSound(soundId);
+    var existing = _findSimpleMusicPadForSound(soundId);
     if (existing != null) {
       for (var i = 0; i < existing.pad.sounds.length; i++) {
         await _o._syncPadSoundMetadata(existing, i);
@@ -570,8 +740,13 @@ class MusicController {
           await _o._repository.getSoundIdToFirstPadIdInBoard(boardId);
       if (padIdBySound.containsKey(soundId)) {
         await _o.loadSounds(boardId: boardId);
-        existing = _findPadItemForSound(soundId);
-        if (existing != null) return existing;
+        existing = _findSimpleMusicPadForSound(soundId);
+        if (existing != null) {
+          for (var i = 0; i < existing.pad.sounds.length; i++) {
+            await _o._syncPadSoundMetadata(existing, i);
+          }
+          return existing;
+        }
       }
     }
 
@@ -608,7 +783,6 @@ class MusicController {
   }
 
   Future<PadItem?> _createOffStageMusicPad(int soundId) async {
-    cleanupOffStagePads();
     try {
       final sound = await _o._repository.getSoundById(soundId);
       if (sound == null) {
@@ -685,7 +859,10 @@ class MusicController {
       }
       final targetVolume = _effectiveVolume(next, soundIndex: soundIndex);
 
-      await nextPlayer.playAtVolume(0);
+      await nextPlayer.playAtVolume(
+        0,
+        startOffset: _startOffsetOf(next, soundIndex, nextPlayer),
+      );
       next._currentPlayerIndex = soundIndex;
       next.isPlaying = true;
       nextPlayer.fadeVolumeTo(targetVolume, duration);

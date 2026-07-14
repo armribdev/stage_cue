@@ -101,6 +101,12 @@ class Sounds extends Table {
   // c'est la source de vérité de l'identité d'un son de bibliothèque Drive.
   // null pour un son local ou pas encore réconcilié avec l'index Drive.
   TextColumn get driveFileId => text().nullable()();
+  // Marque de révision DISTANTE du fichier Drive (`md5Checksum`). Change quand le
+  // contenu est écrasé « en place » sur Drive à ID constant : sert à détecter une
+  // édition (le cache local, la waveform et le contentHash deviennent périmés et
+  // doivent être invalidés). Le `type`, lui, ne change jamais ici (cf. audio.md).
+  // null = son local, legacy, ou pas encore réconcilié avec l'index Drive.
+  TextColumn get driveMd5 => text().nullable()();
   // Dossier propriétaire (ses fichiers directs) : unité d'appartenance et de
   // snapshot par-dossier. null = son local ou antérieur au modèle par-dossier.
   IntColumn get folderId => integer()
@@ -111,6 +117,22 @@ class Sounds extends Table {
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
   /// Dernière lecture (pré-écoute ou déclenchement) — tri par récence.
   DateTimeColumn get lastPlayedAt => dateTime().nullable()();
+  /// Enveloppe RMS pré-calculée (1 octet 0–255 par barre) pour dessiner la
+  /// waveform en régie musique — clé implicite = contenu (immuable). null tant
+  /// que non calculée (son non-musique, fichier absent, ou probe échoué) ;
+  /// remplie paresseusement au premier chargement du son musique.
+  BlobColumn get waveform => blob().nullable()();
+  /// Génération de la capacité d'extraction (`kWaveformProbeGeneration`) en
+  /// vigueur lors du DERNIER échec « format » de l'extraction waveform. `null` =
+  /// jamais échoué / à (re)tenter. Permet de ne PAS re-sonder en boucle un fichier
+  /// que le backend de sampling refuse, tout en re-tentant AUTOMATIQUEMENT après
+  /// une amélioration de la capacité d'extraction (ex. upgrade flutter_soloud qui
+  /// corrige la lecture d'échantillons sur les noms accentués sous Windows).
+  IntColumn get waveformProbeGeneration => integer().nullable()();
+  /// Point d'entrée de lecture, en millisecondes depuis le début du fichier :
+  /// tout déclenchement (bruitage ou régie musique) démarre ici au lieu du
+  /// sample 0. 0 = début du fichier. Propriété de contenu comme [waveform].
+  IntColumn get startOffsetMs => integer().withDefault(const Constant(0))();
 }
 
 class SoundBoards extends Table {

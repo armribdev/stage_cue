@@ -3,12 +3,14 @@ import 'dart:io';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart' as gsi;
 import 'package:googleapis/drive/v3.dart' as drive;
-import 'package:googleapis_auth/googleapis_auth.dart' show AccessDeniedException;
+import 'package:googleapis_auth/googleapis_auth.dart'
+    show AccessDeniedException, ServerRequestFailedException;
 import 'package:http/http.dart' as http;
 
 import 'drive_account_profile.dart';
 import 'drive_client.dart';
 import 'drive_models.dart';
+import 'drive_profile_cache.dart';
 import 'google_drive_desktop_auth.dart';
 
 /// Champs Drive demandés pour décrire un fichier (révision, hash, taille…).
@@ -54,12 +56,23 @@ class GoogleDriveClient implements DriveClient {
     return false;
   }
 
+  static bool _isOAuthClientConfigurationError(Object error) {
+    if (error is! ServerRequestFailedException) {
+      return false;
+    }
+    final message = error.message.toLowerCase();
+    return message.contains('unauthorized_client') ||
+        message.contains('invalid_client');
+  }
+
   /// Exécute [fn] et convertit toute erreur d'auth en [DriveAuthException].
   Future<T> _guard<T>(Future<T> Function() fn) async {
     try {
       return await fn();
     } catch (e) {
-      if (_isAuthError(e)) throw const DriveAuthException();
+      if (_isAuthError(e) || _isOAuthClientConfigurationError(e)) {
+        throw const DriveAuthException();
+      }
       rethrow;
     }
   }
@@ -414,10 +427,19 @@ class GoogleDriveClient implements DriveClient {
 /// Authentificateur Google : OAuth via `google_sign_in` (mobile/macOS) ou
 /// navigateur système (Windows/Linux), puis [GoogleDriveClient].
 class GoogleDriveAuthenticator implements DriveAuthenticator {
-  GoogleDriveAuthenticator({DriveAuthenticator? authenticator})
-      : _delegate = authenticator ?? _createPlatformAuthenticator();
+  GoogleDriveAuthenticator({
+    DriveAuthenticator? authenticator,
+    DriveProfileStore? profileStore,
+  })  : _delegate = authenticator ?? _createPlatformAuthenticator(),
+        _profileStore = profileStore ?? const DriveProfileStore();
 
   final DriveAuthenticator _delegate;
+  final DriveProfileStore _profileStore;
+
+  /// Dernier profil connu, restauré depuis le disque au lancement. Sert de
+  /// repli quand le délégué n'a pas encore résolu le profil (ex. hors-ligne),
+  /// pour afficher immédiatement nom/e-mail/photo.
+  DriveAccountProfile? _persistedProfile;
 
   static DriveAuthenticator _createPlatformAuthenticator() {
     if (Platform.isWindows || Platform.isLinux) {
@@ -427,25 +449,62 @@ class GoogleDriveAuthenticator implements DriveAuthenticator {
   }
 
   @override
-  String? get accountEmail => _delegate.accountEmail;
+  String? get accountEmail => accountProfile?.email;
 
   @override
-  DriveAccountProfile? get accountProfile => _delegate.accountProfile;
+  DriveAccountProfile? get accountProfile =>
+      _delegate.accountProfile ?? _persistedProfile;
+
+  /// Recopie le profil résolu par le délégué vers le cache mémoire + disque.
+  /// Si le délégué n'a pas de profil (hors-ligne, id_token illisible), on
+  /// restaure le dernier profil persisté pour conserver l'affichage.
+  Future<void> _syncPersistedProfile() async {
+    final current = _delegate.accountProfile;
+    if (current == null) {
+      _persistedProfile ??= await _profileStore.load();
+      return;
+    }
+    if (current != _persistedProfile) {
+      _persistedProfile = current;
+      await _profileStore.save(current);
+    }
+  }
 
   @override
-  Future<DriveClient?> connect() => _delegate.connect();
+  Future<DriveClient?> connect() async {
+    final client = await _delegate.connect();
+    await _syncPersistedProfile();
+    return client;
+  }
 
   @override
-  Future<DriveClient?> connectSilently() => _delegate.connectSilently();
+  Future<DriveClient?> connectSilently() async {
+    final client = await _delegate.connectSilently();
+    await _syncPersistedProfile();
+    return client;
+  }
 
   @override
-  Future<void> restoreAccountProfile() => _delegate.restoreAccountProfile();
+  Future<void> restoreAccountProfile() async {
+    // Restaure d'abord le profil mis en cache pour un affichage immédiat, puis
+    // laisse le délégué le rafraîchir (id_token local, sinon réseau).
+    _persistedProfile ??= await _profileStore.load();
+    await _delegate.restoreAccountProfile();
+    await _syncPersistedProfile();
+  }
 
   @override
-  Future<void> refreshAccountProfile() => _delegate.refreshAccountProfile();
+  Future<void> refreshAccountProfile() async {
+    await _delegate.refreshAccountProfile();
+    await _syncPersistedProfile();
+  }
 
   @override
-  Future<void> signOut() => _delegate.signOut();
+  Future<void> signOut() async {
+    await _delegate.signOut();
+    _persistedProfile = null;
+    await _profileStore.clear();
+  }
 }
 
 /// OAuth via le plugin `google_sign_in` (Android, iOS, macOS).

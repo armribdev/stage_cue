@@ -4,7 +4,10 @@ import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
+import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
+import '../widgets/sound_type_picker.dart';
+import '../widgets/start_offset_editor.dart';
 import '../widgets/tag_chips_editor.dart';
 
 /// Écran d'édition d'un son dans la bibliothèque.
@@ -13,6 +16,7 @@ class SoundDetailsScreen extends StatefulWidget {
   final List<TagCategoryWithTags> tagCatalog;
   final List<TagItem> initialTags;
   final SoundRepository repository;
+  final SamplerNotifier? notifier;
 
   const SoundDetailsScreen({
     super.key,
@@ -20,6 +24,7 @@ class SoundDetailsScreen extends StatefulWidget {
     required this.tagCatalog,
     required this.initialTags,
     required this.repository,
+    this.notifier,
   });
 
   @override
@@ -30,7 +35,9 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
   late String _displayNameValue;
   late int? _selectedColorValue;
   late double _selectedVolume;
+  late int _startOffsetMs;
   late Set<int> _selectedTagIds;
+  late SoundType? _selectedType;
   bool _isSaving = false;
 
   static const List<Color> _defaultColorChoices = <Color>[
@@ -50,7 +57,9 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
     _displayNameValue = widget.sound.displayName ?? '';
     _selectedColorValue = widget.sound.colorValue;
     _selectedVolume = widget.sound.volume.clamp(0.0, 1.0);
+    _startOffsetMs = widget.sound.startOffsetMs;
     _selectedTagIds = widget.initialTags.map((t) => t.id).toSet();
+    _selectedType = widget.sound.type;
   }
 
   String? _normalizedDisplayNameOrNull(String value) {
@@ -69,11 +78,19 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
         displayName: _normalizedDisplayNameOrNull(_displayNameValue),
         updateDisplayName: true,
         volume: _selectedVolume,
+        startOffsetMs: _startOffsetMs,
       );
       await widget.repository.setTagsForSound(
         widget.sound.id,
         _selectedTagIds.toList(),
       );
+      if (_selectedType != null && _selectedType != widget.sound.type) {
+        await widget.repository.updateSoundType(
+          widget.sound.id,
+          _selectedType!,
+        );
+      }
+      await widget.notifier?.refreshSoundMetadata(widget.sound.id);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {
@@ -124,6 +141,16 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            Text(
+              'Type de son',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            SoundTypePicker(
+              selected: _selectedType,
+              onChanged: (type) => setState(() => _selectedType = type),
+            ),
             const SizedBox(height: 16),
             Text(
               'Couleur par défaut',
@@ -172,6 +199,25 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
                   setState(() => _selectedVolume = value.clamp(0.0, 1.0)),
             ),
             const SizedBox(height: 8),
+            Text(
+              'Point d\'entrée',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'La lecture démarre à ce point au lieu du début du fichier.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            StartOffsetEditor(
+              filePath: widget.sound.filePath,
+              waveform: widget.sound.waveform,
+              initialOffsetMs: _startOffsetMs,
+              onChanged: (ms) => setState(() => _startOffsetMs = ms),
+            ),
+            const SizedBox(height: 16),
             Text('Tags', style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 8),
             TagChipsEditor(
@@ -235,28 +281,15 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
       color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
 
   Widget _buildSoundTypeHeader(BuildContext context) {
-    final type = widget.sound.type;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SoundTypeAvatar(type: type, radius: 32, iconSize: 32),
+        SoundTypeAvatar(type: _selectedType, radius: 32, iconSize: 32),
         const SizedBox(width: 16),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.sound.title,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                widget.sound.typeDisplayLabel,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-              ),
-            ],
+          child: Text(
+            widget.sound.title,
+            style: Theme.of(context).textTheme.titleLarge,
           ),
         ),
       ],

@@ -51,7 +51,15 @@ class LastRowPadPlacement {
 }
 
 /// Calcule où placer un nouveau pad : dernière case de la dernière ligne.
-LastRowPadPlacement computeLastRowAppendPlacement(Iterable<Pad> pads) {
+///
+/// [forceNewRow] place le pad en début d'une toute nouvelle ligne au lieu de
+/// l'ajouter à la suite de la dernière ligne existante — utilisé pour le
+/// premier ajout d'une session de recherche-éclair en mode live, afin de ne
+/// pas polluer la dernière ligne déjà en place sur scène.
+LastRowPadPlacement computeLastRowAppendPlacement(
+  Iterable<Pad> pads, {
+  bool forceNewRow = false,
+}) {
   final onStage = pads.toList(growable: false);
   if (onStage.isEmpty) {
     return const LastRowPadPlacement(
@@ -70,8 +78,17 @@ LastRowPadPlacement computeLastRowAppendPlacement(Iterable<Pad> pads) {
   }
 
   final lastRowIndex = byRow.keys.reduce(max);
-  final lastRowPads = byRow[lastRowIndex]!;
   final maxSortOrder = onStage.map((p) => p.sortOrder).reduce(max);
+
+  if (forceNewRow) {
+    return LastRowPadPlacement(
+      rowIndex: lastRowIndex + 1,
+      insertionPositionInRow: 0,
+      globalSortOrder: maxSortOrder + 1,
+    );
+  }
+
+  final lastRowPads = byRow[lastRowIndex]!;
 
   return LastRowPadPlacement(
     rowIndex: lastRowIndex,
@@ -100,6 +117,7 @@ Future<QuickSearchPrepareResult> prepareSfxOnBoard({
   required Iterable<({Pad pad, bool isDraft})> padsOnBoard,
   required Future<int> Function(LastRowPadPlacement placement) createPad,
   required Future<Iterable<({Pad pad, bool isDraft})>> Function() reloadPads,
+  bool forceNewRow = false,
 }) async {
   final refs = onStagePadRefs(items: padsOnBoard);
 
@@ -112,7 +130,8 @@ Future<QuickSearchPrepareResult> prepareSfxOnBoard({
     for (final item in padsOnBoard)
       if (!item.isDraft) item.pad,
   ];
-  final placement = computeLastRowAppendPlacement(stagePads);
+  final placement =
+      computeLastRowAppendPlacement(stagePads, forceNewRow: forceNewRow);
   final padId = await createPad(placement);
 
   final reloaded = await reloadPads();

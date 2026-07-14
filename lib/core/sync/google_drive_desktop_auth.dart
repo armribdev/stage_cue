@@ -74,108 +74,36 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
       _cachedProfile = null;
       return;
     }
-    _cachedProfile = await _resolveProfileFromStored(stored);
+    try {
+      _cachedProfile = await _resolveProfileFromStored(stored);
+    } catch (error) {
+      if (isOAuthClientConfigurationError(error)) {
+        await _invalidateStoredSession();
+      }
+      _cachedProfile = null;
+    }
   }
 
-  /// Profil depuis le stockage local, avec userinfo via client à refresh auto.
+  /// Profil depuis le stockage local (access token + id_token, sans refresh).
   Future<DriveAccountProfile?> _resolveProfileFromStored(
     _StoredCredentials stored,
   ) async {
-    final authClient = _createProfileAuthHttpClient(stored);
-    if (authClient == null) {
-      return _resolveProfile(stored.credentials);
-    }
-
-    try {
-      final fromIdToken = _profileFromIdToken(stored.credentials.idToken);
-      DriveAccountProfile? fromUserInfo;
-
-      for (final path in ['/oauth2/v3/userinfo', '/oauth2/v2/userinfo']) {
-        final response = await authClient.get(
-          Uri.https('www.googleapis.com', path),
-        );
-        if (response.statusCode != 200) {
-          continue;
-        }
-
-        final payload = jsonDecode(response.body) as Map<String, dynamic>;
-        final email = payload['email'] as String?;
-        if (email == null || email.isEmpty) {
-          continue;
-        }
-
-        fromUserInfo = DriveAccountProfile(
-          email: email,
-          displayName: payload['name'] as String?,
-          photoUrl: payload['picture'] as String?,
-        );
-        break;
-      }
-
-      if (fromIdToken == null && fromUserInfo == null) {
-        return null;
-      }
-      if (fromIdToken == null) {
-        return fromUserInfo;
-      }
-      if (fromUserInfo == null) {
-        return fromIdToken;
-      }
-
-      return DriveAccountProfile(
-        email: fromIdToken.email,
-        displayName: fromUserInfo.displayName ?? fromIdToken.displayName,
-        photoUrl: fromUserInfo.photoUrl ?? fromIdToken.photoUrl,
-      );
-    } finally {
-      authClient.close();
-    }
+    return _resolveProfile(stored.credentials);
   }
 
-  /// Client HTTP authentifié éphémère (sans écouter les mises à jour de token).
-  http.Client? _createProfileAuthHttpClient(_StoredCredentials stored) {
-    final credentials = stored.credentials;
-    final scopes =
-        credentials.scopes.isEmpty ? _kDriveScopes : credentials.scopes;
-    final expiry = stored.expiresAt;
-    final accessTokenExpiry = expiry == null || expiry.isBefore(DateTime.now())
-        ? DateTime.now().toUtc().subtract(const Duration(seconds: 1))
-        : expiry;
-    final refreshToken = credentials.refreshToken;
-
-    if (refreshToken != null && refreshToken.isNotEmpty) {
-      return auth.autoRefreshingClient(
-        auth.ClientId(
-          GoogleOAuthConfig.clientId,
-          GoogleOAuthConfig.clientSecret,
-        ),
-        auth.AccessCredentials(
-          auth.AccessToken(
-            credentials.tokenType ?? 'Bearer',
-            credentials.accessToken,
-            accessTokenExpiry,
-          ),
-          refreshToken,
-          scopes,
-          idToken: credentials.idToken,
-        ),
-        http.Client(),
-      );
+  /// Vrai si [error] indique un client OAuth mal configuré ou des jetons
+  /// émis pour un autre client (refresh impossible).
+  static bool isOAuthClientConfigurationError(Object error) {
+    if (error is! auth.ServerRequestFailedException) {
+      return false;
     }
+    final message = error.message.toLowerCase();
+    return message.contains('unauthorized_client') ||
+        message.contains('invalid_client');
+  }
 
-    return auth.authenticatedClient(
-      http.Client(),
-      auth.AccessCredentials(
-        auth.AccessToken(
-          credentials.tokenType ?? 'Bearer',
-          credentials.accessToken,
-          accessTokenExpiry,
-        ),
-        null,
-        scopes,
-        idToken: credentials.idToken,
-      ),
-    );
+  Future<void> _invalidateStoredSession() async {
+    await signOut();
   }
 
   Future<DriveClient?> _clientForCredentials(
@@ -275,10 +203,17 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
         ? DateTime.now().toUtc().subtract(const Duration(seconds: 1))
         : expiry;
 
-    return _clientForCredentials(
-      stored.credentials,
-      accessTokenExpiry: accessTokenExpiry,
-    );
+    try {
+      return await _clientForCredentials(
+        stored.credentials,
+        accessTokenExpiry: accessTokenExpiry,
+      );
+    } catch (error) {
+      if (isOAuthClientConfigurationError(error)) {
+        await _invalidateStoredSession();
+      }
+      return null;
+    }
   }
 
   Future<DateTime> _resolveAccessTokenExpiry(
