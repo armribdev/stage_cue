@@ -5,162 +5,121 @@ import '../../domain/entities/library.dart';
 import '../providers/sync_controller.dart';
 
 /// Indique une session Google expirée signalée par [SyncController].
-bool isDriveAuthExpired(SyncState state) {
-  return state.status == SyncStatus.offline &&
-      state.message != null &&
-      state.message!.contains('Session Google');
-}
+bool isDriveAuthExpired(SyncState state) => state.authExpired;
 
-/// Bandeau d'état de synchronisation Drive (Paramètres, section Google Drive).
-class SyncStatusBanner extends StatelessWidget {
-  final SyncState state;
+/// Indicateur de synchro Drive compact et non bloquant, destiné à la barre de
+/// la page Paramètres.
+///
+/// Caché tant que la synchro est `idle` (aucun bruit pour un usage 100 % local) ;
+/// dès qu'une bibliothèque Drive est en jeu, il rend l'état d'un coup d'œil
+/// (couleur + libellé court) et déclenche [onTap] (résolution de conflit ou
+/// défilement vers la section Drive).
+class SyncStatusPill extends StatelessWidget {
+  final SyncController syncController;
+  final VoidCallback onTap;
 
-  const SyncStatusBanner({super.key, required this.state});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final (icon, label, color) = switch (state.status) {
-      SyncStatus.idle => (
-          Icons.cloud_queue,
-          'Prêt',
-          scheme.onSurfaceVariant,
-        ),
-      SyncStatus.syncing => (
-          Icons.sync,
-          'Synchronisation…',
-          scheme.primary,
-        ),
-      SyncStatus.synced => (
-          Icons.check_circle,
-          'Synchronisé',
-          scheme.primary,
-        ),
-      SyncStatus.offline => (
-          Icons.cloud_off,
-          'Hors-ligne',
-          scheme.tertiary,
-        ),
-      SyncStatus.conflict => (
-          Icons.warning,
-          'Conflit',
-          scheme.error,
-        ),
-      SyncStatus.error => (
-          Icons.error,
-          'Erreur',
-          scheme.error,
-        ),
-    };
-
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 8),
-        Text(label, style: TextStyle(color: color)),
-        if (state.message != null) ...[
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              state.message!,
-              style: TextStyle(fontSize: 12, color: scheme.error),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-/// Ligne compacte : compte Google et session HTTP active (token valide).
-class DriveConnectionStatusRow extends StatelessWidget {
-  final String? email;
-  final bool sessionActive;
-  final bool isBusy;
-  final String? detailMessage;
-  final VoidCallback? onDisconnect;
-  final VoidCallback? onReconnect;
-
-  const DriveConnectionStatusRow({
+  const SyncStatusPill({
     super.key,
-    required this.email,
-    required this.sessionActive,
-    required this.isBusy,
-    this.detailMessage,
-    this.onDisconnect,
-    this.onReconnect,
+    required this.syncController,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final signedIn = email != null;
-    final statusLabel = switch ((signedIn, sessionActive)) {
-      (true, true) => 'Connecté : $email',
-      (true, false) => 'Compte $email — session à renouveler',
-      (_, _) => 'Non connecté à Drive',
-    };
-    final iconColor = switch ((signedIn, sessionActive)) {
-      (true, true) => scheme.primary,
-      (true, false) => scheme.tertiary,
-      (_, _) => scheme.onSurfaceVariant,
-    };
+    return ListenableBuilder(
+      listenable: syncController,
+      builder: (context, _) {
+        final status = syncController.state.status;
+        if (status == SyncStatus.idle) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              sessionActive
-                  ? Icons.cloud_done
-                  : signedIn
-                      ? Icons.cloud_queue
-                      : Icons.cloud_off,
-              size: 20,
-              color: iconColor,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                statusLabel,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: signedIn && !sessionActive ? scheme.tertiary : null,
+        final scheme = Theme.of(context).colorScheme;
+        final (color, label, icon, spinning) = _visuals(status, scheme);
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Tooltip(
+            message: 'Synchronisation Drive',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (spinning)
+                      SizedBox(
+                        width: 13,
+                        height: 13,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: color,
+                        ),
+                      )
+                    else
+                      Icon(icon, size: 15, color: color),
+                    const SizedBox(width: 6),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            if (!sessionActive && signedIn && onReconnect != null)
-              TextButton(
-                onPressed: isBusy ? null : onReconnect,
-                child: const Text('Renouveler'),
-              ),
-            if (onDisconnect != null)
-              IconButton(
-                onPressed: isBusy ? null : onDisconnect,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-                visualDensity: VisualDensity.compact,
-                icon: Icon(
-                  Icons.logout_outlined,
-                  size: 20,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-          ],
-        ),
-        if (detailMessage != null) ...[
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.only(left: 28),
-            child: Text(
-              detailMessage!,
-              style: TextStyle(fontSize: 12, color: scheme.error),
             ),
           ),
-        ],
-      ],
+        );
+      },
     );
+  }
+
+  (Color, String, IconData, bool) _visuals(
+    SyncStatus status,
+    ColorScheme scheme,
+  ) {
+    return switch (status) {
+      SyncStatus.syncing => (
+          scheme.primary,
+          'Synchro…',
+          Icons.sync_rounded,
+          true,
+        ),
+      SyncStatus.synced => (
+          scheme.primary,
+          'À jour',
+          Icons.cloud_done_outlined,
+          false,
+        ),
+      // Hors-ligne : neutre, jamais alarmiste — le travail local est normal.
+      SyncStatus.offline => (
+          scheme.onSurfaceVariant,
+          'Hors-ligne',
+          Icons.cloud_off_outlined,
+          false,
+        ),
+      SyncStatus.conflict => (
+          scheme.error,
+          'Conflit',
+          Icons.merge_type_rounded,
+          false,
+        ),
+      SyncStatus.error => (
+          scheme.error,
+          'Erreur sync',
+          Icons.error_outline_rounded,
+          false,
+        ),
+      SyncStatus.idle => (
+          scheme.onSurfaceVariant,
+          '',
+          Icons.cloud_outlined,
+          false,
+        ),
+    };
   }
 }
 

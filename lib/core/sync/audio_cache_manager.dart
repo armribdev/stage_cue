@@ -340,6 +340,34 @@ class AudioCacheManager {
 
   // ── Éviction LRU ─────────────────────────────────────────────────────────
 
+  /// Évince explicitement un fichier du cache (suppression fichier + entrée
+  /// LRU). Deux usages à l'indexation :
+  /// - retrait du son côté Drive (élagage) — évite de laisser un fichier orphelin
+  ///   sur disque et une entrée LRU fantôme (`total` surévalué → évictions
+  ///   prématurées d'autres sons) ;
+  /// - édition « en place » (contenu écrasé à ID constant) — force le
+  ///   re-téléchargement du contenu à jour au prochain accès.
+  ///
+  /// Best-effort : un échec de suppression ne doit pas interrompre l'indexation.
+  Future<void> evictCachedFile(Library library, String relativePath) async {
+    final normalized = LibrarySoundPaths.normalizeRelativePath(relativePath);
+    final localPath = localPathFor(library, normalized);
+    final canonical =
+        await PathUnicode.canonicalizeLocalPath(localPath) ?? localPath;
+    try {
+      final file = File(canonical);
+      if (await file.exists()) await file.delete();
+    } catch (_) {
+      // Best-effort : un fichier non supprimable ne doit pas bloquer l'index.
+    }
+    final index = await _indexFor(library.localRootPath);
+    // L'entrée LRU peut avoir été inscrite sous la forme normalisée (ensureCached)
+    // ou brute (importFile) : on retire les deux clés par précaution.
+    final removed = index.entries.remove(normalized) != null;
+    final removedRaw = index.entries.remove(relativePath) != null;
+    if (removed || removedRaw) await index.save();
+  }
+
   Future<void> _touch(Library library, String relativePath, int size) async {
     final index = await _indexFor(library.localRootPath);
     index.entries[relativePath] = _AccessEntry(_clock(), size);

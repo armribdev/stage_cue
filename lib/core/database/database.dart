@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 34;
 
   @override
   MigrationStrategy get migration {
@@ -263,6 +263,37 @@ class AppDatabase extends _$AppDatabase {
           );
         }
         if (from < 29) {
+          // Waveform pré-calculée pour la régie musique (enveloppe RMS par
+          // barre). Colonne nullable — les sons existants restent à null et
+          // sont calculés paresseusement au premier chargement en régie.
+          await m.addColumn(sounds, sounds.waveform);
+        }
+        if (from < 30) {
+          // Point d'entrée par son : la lecture démarre à cet offset au lieu
+          // du sample 0. Défaut 0 → comportement inchangé pour l'existant.
+          await m.addColumn(sounds, sounds.startOffsetMs);
+        }
+        if (from < 31) {
+          // Marque de révision Drive (`md5Checksum`) par son : détecte une
+          // édition « en place » (contenu écrasé à ID de fichier constant) pour
+          // invalider cache local + waveform + contentHash. Backfill au prochain
+          // scan Drive (null → aucune invalidation tant que la marque est absente).
+          await m.addColumn(sounds, sounds.driveMd5);
+        }
+        if (from < 32) {
+          await _ensureMusicCategoryTags();
+        }
+        if (from < 33) {
+          // État d'échec VERSIONNÉ de l'extraction waveform : mémorise la
+          // génération d'extraction lors d'un échec « format » pour ne pas
+          // re-sonder en boucle un fichier que le backend refuse, tout en le
+          // re-tentant après une montée de capacité (cf. kWaveformProbeGeneration).
+          // Backfill implicite : colonne null → les sons sans waveform seront
+          // (re)tentés à la prochaine occasion, ce qui « guérit » d'un coup les
+          // fichiers auparavant en échec après un upgrade de flutter_soloud.
+          await m.addColumn(sounds, sounds.waveformProbeGeneration);
+        }
+        if (from < 34) {
           // Le volume passe du pad au couple (pad, son) : chaque son d'un pad a
           // désormais son propre volume (override), au lieu d'un volume unique
           // pour tout le pad. Backfill : chaque pad_sound hérite du volume actuel
@@ -515,6 +546,12 @@ class AppDatabase extends _$AppDatabase {
         sortOrder: 5,
         description: 'Couleur émotionnelle ou style de scène.',
       );
+      await insertCategory(
+        name: 'MUSIQUE',
+        color: 0xFF00BCD4,
+        sortOrder: 6,
+        description: 'Rôle ou fonction de la musique dans la scène.',
+      );
 
       Future<int> getCategoryId(String name) async {
         final row = await customSelect(
@@ -621,6 +658,8 @@ class AppDatabase extends _$AppDatabase {
       await insertTag('Sombre', 'EMOTION_STYLE');
       await insertTag('Léger', 'EMOTION_STYLE');
       await insertTag('Poétique', 'EMOTION_STYLE');
+      // MUSIQUE
+      await insertTag('Musique d\'ambiance', 'MUSIQUE');
 
       Future<void> insertAlias(String alias, String tagName) async {
         final tagId = tagByName[tagName]!;
@@ -692,6 +731,89 @@ class AppDatabase extends _$AppDatabase {
       await insertAlias('dramatique', 'Drame');
       await insertAlias('tragique', 'Drame');
       await insertAlias('enjoué', 'Léger');
+      await insertAlias('fond musical', 'Musique d\'ambiance');
+      await insertAlias('musique de fond', 'Musique d\'ambiance');
+      await insertAlias('ambiance musicale', 'Musique d\'ambiance');
+      await insertAlias('instrumental', 'Musique d\'ambiance');
+    });
+  }
+
+  /// Catégorie MUSIQUE + tag « Musique d'ambiance » pour les bases existantes.
+  Future<void> _ensureMusicCategoryTags() async {
+    const categoryName = 'MUSIQUE';
+    const tagName = 'Musique d\'ambiance';
+    const tagDescription =
+        'Musique de fond pour installer une atmosphère, souvent sans paroles.';
+
+    await transaction(() async {
+      var categoryRow = await customSelect(
+        'SELECT id FROM tag_categories WHERE name = ? LIMIT 1',
+        variables: [Variable<String>(categoryName)],
+      ).getSingleOrNull();
+
+      if (categoryRow == null) {
+        await customStatement(
+          'INSERT INTO tag_categories (name, color, sort_order, description) '
+          'VALUES (?, ?, ?, ?)',
+          [
+            categoryName,
+            0xFF00BCD4,
+            6,
+            'Rôle ou fonction de la musique dans la scène.',
+          ],
+        );
+        categoryRow = await customSelect(
+          'SELECT id FROM tag_categories WHERE name = ? LIMIT 1',
+          variables: [Variable<String>(categoryName)],
+        ).getSingle();
+      }
+
+      final categoryId = categoryRow.read<int>('id');
+      final normalizedTag = _normalize(tagName);
+      var tagRow = await customSelect(
+        'SELECT id FROM tags WHERE category_id = ? AND normalized_name = ? LIMIT 1',
+        variables: [
+          Variable<int>(categoryId),
+          Variable<String>(normalizedTag),
+        ],
+      ).getSingleOrNull();
+
+      if (tagRow == null) {
+        await customStatement(
+          'INSERT INTO tags (category_id, name, normalized_name, description) '
+          'VALUES (?, ?, ?, ?)',
+          [categoryId, tagName, normalizedTag, tagDescription],
+        );
+        tagRow = await customSelect(
+          'SELECT id FROM tags WHERE category_id = ? AND normalized_name = ? LIMIT 1',
+          variables: [
+            Variable<int>(categoryId),
+            Variable<String>(normalizedTag),
+          ],
+        ).getSingle();
+      }
+
+      final tagId = tagRow.read<int>('id');
+      Future<void> ensureAlias(String alias) async {
+        final normalizedAlias = _normalize(alias);
+        final existing = await customSelect(
+          'SELECT id FROM tag_aliases WHERE tag_id = ? AND normalized_alias = ? LIMIT 1',
+          variables: [
+            Variable<int>(tagId),
+            Variable<String>(normalizedAlias),
+          ],
+        ).getSingleOrNull();
+        if (existing != null) return;
+        await customStatement(
+          'INSERT INTO tag_aliases (tag_id, alias, normalized_alias) VALUES (?, ?, ?)',
+          [tagId, alias, normalizedAlias],
+        );
+      }
+
+      await ensureAlias('fond musical');
+      await ensureAlias('musique de fond');
+      await ensureAlias('ambiance musicale');
+      await ensureAlias('instrumental');
     });
   }
 

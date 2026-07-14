@@ -1585,6 +1585,17 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _driveMd5Meta = const VerificationMeta(
+    'driveMd5',
+  );
+  @override
+  late final GeneratedColumn<String> driveMd5 = GeneratedColumn<String>(
+    'drive_md5',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _folderIdMeta = const VerificationMeta(
     'folderId',
   );
@@ -1625,6 +1636,40 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _waveformMeta = const VerificationMeta(
+    'waveform',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> waveform = GeneratedColumn<Uint8List>(
+    'waveform',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _waveformProbeGenerationMeta =
+      const VerificationMeta('waveformProbeGeneration');
+  @override
+  late final GeneratedColumn<int> waveformProbeGeneration =
+      GeneratedColumn<int>(
+        'waveform_probe_generation',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _startOffsetMsMeta = const VerificationMeta(
+    'startOffsetMs',
+  );
+  @override
+  late final GeneratedColumn<int> startOffsetMs = GeneratedColumn<int>(
+    'start_offset_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1639,9 +1684,13 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     relativePath,
     contentHash,
     driveFileId,
+    driveMd5,
     folderId,
     isFavorite,
     lastPlayedAt,
+    waveform,
+    waveformProbeGeneration,
+    startOffsetMs,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1734,6 +1783,12 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         ),
       );
     }
+    if (data.containsKey('drive_md5')) {
+      context.handle(
+        _driveMd5Meta,
+        driveMd5.isAcceptableOrUnknown(data['drive_md5']!, _driveMd5Meta),
+      );
+    }
     if (data.containsKey('folder_id')) {
       context.handle(
         _folderIdMeta,
@@ -1752,6 +1807,30 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         lastPlayedAt.isAcceptableOrUnknown(
           data['last_played_at']!,
           _lastPlayedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('waveform')) {
+      context.handle(
+        _waveformMeta,
+        waveform.isAcceptableOrUnknown(data['waveform']!, _waveformMeta),
+      );
+    }
+    if (data.containsKey('waveform_probe_generation')) {
+      context.handle(
+        _waveformProbeGenerationMeta,
+        waveformProbeGeneration.isAcceptableOrUnknown(
+          data['waveform_probe_generation']!,
+          _waveformProbeGenerationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('start_offset_ms')) {
+      context.handle(
+        _startOffsetMsMeta,
+        startOffsetMs.isAcceptableOrUnknown(
+          data['start_offset_ms']!,
+          _startOffsetMsMeta,
         ),
       );
     }
@@ -1814,6 +1893,10 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.string,
         data['${effectivePrefix}drive_file_id'],
       ),
+      driveMd5: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}drive_md5'],
+      ),
       folderId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}folder_id'],
@@ -1826,6 +1909,18 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_played_at'],
       ),
+      waveform: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}waveform'],
+      ),
+      waveformProbeGeneration: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}waveform_probe_generation'],
+      ),
+      startOffsetMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}start_offset_ms'],
+      )!,
     );
   }
 
@@ -1853,6 +1948,7 @@ class Sound extends DataClass implements Insertable<Sound> {
   final String? relativePath;
   final String? contentHash;
   final String? driveFileId;
+  final String? driveMd5;
   final int? folderId;
 
   /// Marqué favori par l'opérateur : accès 1-tap aux sons du spectacle.
@@ -1860,6 +1956,25 @@ class Sound extends DataClass implements Insertable<Sound> {
 
   /// Dernière lecture (pré-écoute ou déclenchement) — tri par récence.
   final DateTime? lastPlayedAt;
+
+  /// Enveloppe RMS pré-calculée (1 octet 0–255 par barre) pour dessiner la
+  /// waveform en régie musique — clé implicite = contenu (immuable). null tant
+  /// que non calculée (son non-musique, fichier absent, ou probe échoué) ;
+  /// remplie paresseusement au premier chargement du son musique.
+  final Uint8List? waveform;
+
+  /// Génération de la capacité d'extraction (`kWaveformProbeGeneration`) en
+  /// vigueur lors du DERNIER échec « format » de l'extraction waveform. `null` =
+  /// jamais échoué / à (re)tenter. Permet de ne PAS re-sonder en boucle un fichier
+  /// que le backend de sampling refuse, tout en re-tentant AUTOMATIQUEMENT après
+  /// une amélioration de la capacité d'extraction (ex. upgrade flutter_soloud qui
+  /// corrige la lecture d'échantillons sur les noms accentués sous Windows).
+  final int? waveformProbeGeneration;
+
+  /// Point d'entrée de lecture, en millisecondes depuis le début du fichier :
+  /// tout déclenchement (bruitage ou régie musique) démarre ici au lieu du
+  /// sample 0. 0 = début du fichier. Propriété de contenu comme [waveform].
+  final int startOffsetMs;
   const Sound({
     required this.id,
     required this.title,
@@ -1873,9 +1988,13 @@ class Sound extends DataClass implements Insertable<Sound> {
     this.relativePath,
     this.contentHash,
     this.driveFileId,
+    this.driveMd5,
     this.folderId,
     required this.isFavorite,
     this.lastPlayedAt,
+    this.waveform,
+    this.waveformProbeGeneration,
+    required this.startOffsetMs,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1906,6 +2025,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     if (!nullToAbsent || driveFileId != null) {
       map['drive_file_id'] = Variable<String>(driveFileId);
     }
+    if (!nullToAbsent || driveMd5 != null) {
+      map['drive_md5'] = Variable<String>(driveMd5);
+    }
     if (!nullToAbsent || folderId != null) {
       map['folder_id'] = Variable<int>(folderId);
     }
@@ -1913,6 +2035,13 @@ class Sound extends DataClass implements Insertable<Sound> {
     if (!nullToAbsent || lastPlayedAt != null) {
       map['last_played_at'] = Variable<DateTime>(lastPlayedAt);
     }
+    if (!nullToAbsent || waveform != null) {
+      map['waveform'] = Variable<Uint8List>(waveform);
+    }
+    if (!nullToAbsent || waveformProbeGeneration != null) {
+      map['waveform_probe_generation'] = Variable<int>(waveformProbeGeneration);
+    }
+    map['start_offset_ms'] = Variable<int>(startOffsetMs);
     return map;
   }
 
@@ -1942,6 +2071,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       driveFileId: driveFileId == null && nullToAbsent
           ? const Value.absent()
           : Value(driveFileId),
+      driveMd5: driveMd5 == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driveMd5),
       folderId: folderId == null && nullToAbsent
           ? const Value.absent()
           : Value(folderId),
@@ -1949,6 +2081,13 @@ class Sound extends DataClass implements Insertable<Sound> {
       lastPlayedAt: lastPlayedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastPlayedAt),
+      waveform: waveform == null && nullToAbsent
+          ? const Value.absent()
+          : Value(waveform),
+      waveformProbeGeneration: waveformProbeGeneration == null && nullToAbsent
+          ? const Value.absent()
+          : Value(waveformProbeGeneration),
+      startOffsetMs: Value(startOffsetMs),
     );
   }
 
@@ -1972,9 +2111,15 @@ class Sound extends DataClass implements Insertable<Sound> {
       relativePath: serializer.fromJson<String?>(json['relativePath']),
       contentHash: serializer.fromJson<String?>(json['contentHash']),
       driveFileId: serializer.fromJson<String?>(json['driveFileId']),
+      driveMd5: serializer.fromJson<String?>(json['driveMd5']),
       folderId: serializer.fromJson<int?>(json['folderId']),
       isFavorite: serializer.fromJson<bool>(json['isFavorite']),
       lastPlayedAt: serializer.fromJson<DateTime?>(json['lastPlayedAt']),
+      waveform: serializer.fromJson<Uint8List?>(json['waveform']),
+      waveformProbeGeneration: serializer.fromJson<int?>(
+        json['waveformProbeGeneration'],
+      ),
+      startOffsetMs: serializer.fromJson<int>(json['startOffsetMs']),
     );
   }
   @override
@@ -1995,9 +2140,15 @@ class Sound extends DataClass implements Insertable<Sound> {
       'relativePath': serializer.toJson<String?>(relativePath),
       'contentHash': serializer.toJson<String?>(contentHash),
       'driveFileId': serializer.toJson<String?>(driveFileId),
+      'driveMd5': serializer.toJson<String?>(driveMd5),
       'folderId': serializer.toJson<int?>(folderId),
       'isFavorite': serializer.toJson<bool>(isFavorite),
       'lastPlayedAt': serializer.toJson<DateTime?>(lastPlayedAt),
+      'waveform': serializer.toJson<Uint8List?>(waveform),
+      'waveformProbeGeneration': serializer.toJson<int?>(
+        waveformProbeGeneration,
+      ),
+      'startOffsetMs': serializer.toJson<int>(startOffsetMs),
     };
   }
 
@@ -2014,9 +2165,13 @@ class Sound extends DataClass implements Insertable<Sound> {
     Value<String?> relativePath = const Value.absent(),
     Value<String?> contentHash = const Value.absent(),
     Value<String?> driveFileId = const Value.absent(),
+    Value<String?> driveMd5 = const Value.absent(),
     Value<int?> folderId = const Value.absent(),
     bool? isFavorite,
     Value<DateTime?> lastPlayedAt = const Value.absent(),
+    Value<Uint8List?> waveform = const Value.absent(),
+    Value<int?> waveformProbeGeneration = const Value.absent(),
+    int? startOffsetMs,
   }) => Sound(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -2030,9 +2185,15 @@ class Sound extends DataClass implements Insertable<Sound> {
     relativePath: relativePath.present ? relativePath.value : this.relativePath,
     contentHash: contentHash.present ? contentHash.value : this.contentHash,
     driveFileId: driveFileId.present ? driveFileId.value : this.driveFileId,
+    driveMd5: driveMd5.present ? driveMd5.value : this.driveMd5,
     folderId: folderId.present ? folderId.value : this.folderId,
     isFavorite: isFavorite ?? this.isFavorite,
     lastPlayedAt: lastPlayedAt.present ? lastPlayedAt.value : this.lastPlayedAt,
+    waveform: waveform.present ? waveform.value : this.waveform,
+    waveformProbeGeneration: waveformProbeGeneration.present
+        ? waveformProbeGeneration.value
+        : this.waveformProbeGeneration,
+    startOffsetMs: startOffsetMs ?? this.startOffsetMs,
   );
   Sound copyWithCompanion(SoundsCompanion data) {
     return Sound(
@@ -2056,6 +2217,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       driveFileId: data.driveFileId.present
           ? data.driveFileId.value
           : this.driveFileId,
+      driveMd5: data.driveMd5.present ? data.driveMd5.value : this.driveMd5,
       folderId: data.folderId.present ? data.folderId.value : this.folderId,
       isFavorite: data.isFavorite.present
           ? data.isFavorite.value
@@ -2063,6 +2225,13 @@ class Sound extends DataClass implements Insertable<Sound> {
       lastPlayedAt: data.lastPlayedAt.present
           ? data.lastPlayedAt.value
           : this.lastPlayedAt,
+      waveform: data.waveform.present ? data.waveform.value : this.waveform,
+      waveformProbeGeneration: data.waveformProbeGeneration.present
+          ? data.waveformProbeGeneration.value
+          : this.waveformProbeGeneration,
+      startOffsetMs: data.startOffsetMs.present
+          ? data.startOffsetMs.value
+          : this.startOffsetMs,
     );
   }
 
@@ -2081,9 +2250,13 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('relativePath: $relativePath, ')
           ..write('contentHash: $contentHash, ')
           ..write('driveFileId: $driveFileId, ')
+          ..write('driveMd5: $driveMd5, ')
           ..write('folderId: $folderId, ')
           ..write('isFavorite: $isFavorite, ')
-          ..write('lastPlayedAt: $lastPlayedAt')
+          ..write('lastPlayedAt: $lastPlayedAt, ')
+          ..write('waveform: $waveform, ')
+          ..write('waveformProbeGeneration: $waveformProbeGeneration, ')
+          ..write('startOffsetMs: $startOffsetMs')
           ..write(')'))
         .toString();
   }
@@ -2102,9 +2275,13 @@ class Sound extends DataClass implements Insertable<Sound> {
     relativePath,
     contentHash,
     driveFileId,
+    driveMd5,
     folderId,
     isFavorite,
     lastPlayedAt,
+    $driftBlobEquality.hash(waveform),
+    waveformProbeGeneration,
+    startOffsetMs,
   );
   @override
   bool operator ==(Object other) =>
@@ -2122,9 +2299,13 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.relativePath == this.relativePath &&
           other.contentHash == this.contentHash &&
           other.driveFileId == this.driveFileId &&
+          other.driveMd5 == this.driveMd5 &&
           other.folderId == this.folderId &&
           other.isFavorite == this.isFavorite &&
-          other.lastPlayedAt == this.lastPlayedAt);
+          other.lastPlayedAt == this.lastPlayedAt &&
+          $driftBlobEquality.equals(other.waveform, this.waveform) &&
+          other.waveformProbeGeneration == this.waveformProbeGeneration &&
+          other.startOffsetMs == this.startOffsetMs);
 }
 
 class SoundsCompanion extends UpdateCompanion<Sound> {
@@ -2140,9 +2321,13 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<String?> relativePath;
   final Value<String?> contentHash;
   final Value<String?> driveFileId;
+  final Value<String?> driveMd5;
   final Value<int?> folderId;
   final Value<bool> isFavorite;
   final Value<DateTime?> lastPlayedAt;
+  final Value<Uint8List?> waveform;
+  final Value<int?> waveformProbeGeneration;
+  final Value<int> startOffsetMs;
   const SoundsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -2156,9 +2341,13 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.relativePath = const Value.absent(),
     this.contentHash = const Value.absent(),
     this.driveFileId = const Value.absent(),
+    this.driveMd5 = const Value.absent(),
     this.folderId = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
+    this.waveform = const Value.absent(),
+    this.waveformProbeGeneration = const Value.absent(),
+    this.startOffsetMs = const Value.absent(),
   });
   SoundsCompanion.insert({
     this.id = const Value.absent(),
@@ -2173,9 +2362,13 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.relativePath = const Value.absent(),
     this.contentHash = const Value.absent(),
     this.driveFileId = const Value.absent(),
+    this.driveMd5 = const Value.absent(),
     this.folderId = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
+    this.waveform = const Value.absent(),
+    this.waveformProbeGeneration = const Value.absent(),
+    this.startOffsetMs = const Value.absent(),
   }) : title = Value(title),
        filePath = Value(filePath);
   static Insertable<Sound> custom({
@@ -2191,9 +2384,13 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<String>? relativePath,
     Expression<String>? contentHash,
     Expression<String>? driveFileId,
+    Expression<String>? driveMd5,
     Expression<int>? folderId,
     Expression<bool>? isFavorite,
     Expression<DateTime>? lastPlayedAt,
+    Expression<Uint8List>? waveform,
+    Expression<int>? waveformProbeGeneration,
+    Expression<int>? startOffsetMs,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2208,9 +2405,14 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (relativePath != null) 'relative_path': relativePath,
       if (contentHash != null) 'content_hash': contentHash,
       if (driveFileId != null) 'drive_file_id': driveFileId,
+      if (driveMd5 != null) 'drive_md5': driveMd5,
       if (folderId != null) 'folder_id': folderId,
       if (isFavorite != null) 'is_favorite': isFavorite,
       if (lastPlayedAt != null) 'last_played_at': lastPlayedAt,
+      if (waveform != null) 'waveform': waveform,
+      if (waveformProbeGeneration != null)
+        'waveform_probe_generation': waveformProbeGeneration,
+      if (startOffsetMs != null) 'start_offset_ms': startOffsetMs,
     });
   }
 
@@ -2227,9 +2429,13 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<String?>? relativePath,
     Value<String?>? contentHash,
     Value<String?>? driveFileId,
+    Value<String?>? driveMd5,
     Value<int?>? folderId,
     Value<bool>? isFavorite,
     Value<DateTime?>? lastPlayedAt,
+    Value<Uint8List?>? waveform,
+    Value<int?>? waveformProbeGeneration,
+    Value<int>? startOffsetMs,
   }) {
     return SoundsCompanion(
       id: id ?? this.id,
@@ -2244,9 +2450,14 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       relativePath: relativePath ?? this.relativePath,
       contentHash: contentHash ?? this.contentHash,
       driveFileId: driveFileId ?? this.driveFileId,
+      driveMd5: driveMd5 ?? this.driveMd5,
       folderId: folderId ?? this.folderId,
       isFavorite: isFavorite ?? this.isFavorite,
       lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
+      waveform: waveform ?? this.waveform,
+      waveformProbeGeneration:
+          waveformProbeGeneration ?? this.waveformProbeGeneration,
+      startOffsetMs: startOffsetMs ?? this.startOffsetMs,
     );
   }
 
@@ -2291,6 +2502,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     if (driveFileId.present) {
       map['drive_file_id'] = Variable<String>(driveFileId.value);
     }
+    if (driveMd5.present) {
+      map['drive_md5'] = Variable<String>(driveMd5.value);
+    }
     if (folderId.present) {
       map['folder_id'] = Variable<int>(folderId.value);
     }
@@ -2299,6 +2513,17 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     }
     if (lastPlayedAt.present) {
       map['last_played_at'] = Variable<DateTime>(lastPlayedAt.value);
+    }
+    if (waveform.present) {
+      map['waveform'] = Variable<Uint8List>(waveform.value);
+    }
+    if (waveformProbeGeneration.present) {
+      map['waveform_probe_generation'] = Variable<int>(
+        waveformProbeGeneration.value,
+      );
+    }
+    if (startOffsetMs.present) {
+      map['start_offset_ms'] = Variable<int>(startOffsetMs.value);
     }
     return map;
   }
@@ -2318,9 +2543,13 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('relativePath: $relativePath, ')
           ..write('contentHash: $contentHash, ')
           ..write('driveFileId: $driveFileId, ')
+          ..write('driveMd5: $driveMd5, ')
           ..write('folderId: $folderId, ')
           ..write('isFavorite: $isFavorite, ')
-          ..write('lastPlayedAt: $lastPlayedAt')
+          ..write('lastPlayedAt: $lastPlayedAt, ')
+          ..write('waveform: $waveform, ')
+          ..write('waveformProbeGeneration: $waveformProbeGeneration, ')
+          ..write('startOffsetMs: $startOffsetMs')
           ..write(')'))
         .toString();
   }
@@ -7579,9 +7808,13 @@ typedef $$SoundsTableCreateCompanionBuilder =
       Value<String?> relativePath,
       Value<String?> contentHash,
       Value<String?> driveFileId,
+      Value<String?> driveMd5,
       Value<int?> folderId,
       Value<bool> isFavorite,
       Value<DateTime?> lastPlayedAt,
+      Value<Uint8List?> waveform,
+      Value<int?> waveformProbeGeneration,
+      Value<int> startOffsetMs,
     });
 typedef $$SoundsTableUpdateCompanionBuilder =
     SoundsCompanion Function({
@@ -7597,9 +7830,13 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<String?> relativePath,
       Value<String?> contentHash,
       Value<String?> driveFileId,
+      Value<String?> driveMd5,
       Value<int?> folderId,
       Value<bool> isFavorite,
       Value<DateTime?> lastPlayedAt,
+      Value<Uint8List?> waveform,
+      Value<int?> waveformProbeGeneration,
+      Value<int> startOffsetMs,
     });
 
 final class $$SoundsTableReferences
@@ -7762,6 +7999,11 @@ class $$SoundsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get driveMd5 => $composableBuilder(
+    column: $table.driveMd5,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<bool> get isFavorite => $composableBuilder(
     column: $table.isFavorite,
     builder: (column) => ColumnFilters(column),
@@ -7769,6 +8011,21 @@ class $$SoundsTableFilterComposer
 
   ColumnFilters<DateTime> get lastPlayedAt => $composableBuilder(
     column: $table.lastPlayedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get waveform => $composableBuilder(
+    column: $table.waveform,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get waveformProbeGeneration => $composableBuilder(
+    column: $table.waveformProbeGeneration,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get startOffsetMs => $composableBuilder(
+    column: $table.startOffsetMs,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7958,6 +8215,11 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get driveMd5 => $composableBuilder(
+    column: $table.driveMd5,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isFavorite => $composableBuilder(
     column: $table.isFavorite,
     builder: (column) => ColumnOrderings(column),
@@ -7965,6 +8227,21 @@ class $$SoundsTableOrderingComposer
 
   ColumnOrderings<DateTime> get lastPlayedAt => $composableBuilder(
     column: $table.lastPlayedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get waveform => $composableBuilder(
+    column: $table.waveform,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get waveformProbeGeneration => $composableBuilder(
+    column: $table.waveformProbeGeneration,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get startOffsetMs => $composableBuilder(
+    column: $table.startOffsetMs,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -8065,6 +8342,9 @@ class $$SoundsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get driveMd5 =>
+      $composableBuilder(column: $table.driveMd5, builder: (column) => column);
+
   GeneratedColumn<bool> get isFavorite => $composableBuilder(
     column: $table.isFavorite,
     builder: (column) => column,
@@ -8072,6 +8352,19 @@ class $$SoundsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get lastPlayedAt => $composableBuilder(
     column: $table.lastPlayedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get waveform =>
+      $composableBuilder(column: $table.waveform, builder: (column) => column);
+
+  GeneratedColumn<int> get waveformProbeGeneration => $composableBuilder(
+    column: $table.waveformProbeGeneration,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get startOffsetMs => $composableBuilder(
+    column: $table.startOffsetMs,
     builder: (column) => column,
   );
 
@@ -8243,9 +8536,13 @@ class $$SoundsTableTableManager
                 Value<String?> relativePath = const Value.absent(),
                 Value<String?> contentHash = const Value.absent(),
                 Value<String?> driveFileId = const Value.absent(),
+                Value<String?> driveMd5 = const Value.absent(),
                 Value<int?> folderId = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
+                Value<Uint8List?> waveform = const Value.absent(),
+                Value<int?> waveformProbeGeneration = const Value.absent(),
+                Value<int> startOffsetMs = const Value.absent(),
               }) => SoundsCompanion(
                 id: id,
                 title: title,
@@ -8259,9 +8556,13 @@ class $$SoundsTableTableManager
                 relativePath: relativePath,
                 contentHash: contentHash,
                 driveFileId: driveFileId,
+                driveMd5: driveMd5,
                 folderId: folderId,
                 isFavorite: isFavorite,
                 lastPlayedAt: lastPlayedAt,
+                waveform: waveform,
+                waveformProbeGeneration: waveformProbeGeneration,
+                startOffsetMs: startOffsetMs,
               ),
           createCompanionCallback:
               ({
@@ -8277,9 +8578,13 @@ class $$SoundsTableTableManager
                 Value<String?> relativePath = const Value.absent(),
                 Value<String?> contentHash = const Value.absent(),
                 Value<String?> driveFileId = const Value.absent(),
+                Value<String?> driveMd5 = const Value.absent(),
                 Value<int?> folderId = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
+                Value<Uint8List?> waveform = const Value.absent(),
+                Value<int?> waveformProbeGeneration = const Value.absent(),
+                Value<int> startOffsetMs = const Value.absent(),
               }) => SoundsCompanion.insert(
                 id: id,
                 title: title,
@@ -8293,9 +8598,13 @@ class $$SoundsTableTableManager
                 relativePath: relativePath,
                 contentHash: contentHash,
                 driveFileId: driveFileId,
+                driveMd5: driveMd5,
                 folderId: folderId,
                 isFavorite: isFavorite,
                 lastPlayedAt: lastPlayedAt,
+                waveform: waveform,
+                waveformProbeGeneration: waveformProbeGeneration,
+                startOffsetMs: startOffsetMs,
               ),
           withReferenceMapper: (p0) => p0
               .map(

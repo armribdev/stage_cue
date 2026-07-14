@@ -4,7 +4,6 @@ import 'dart:math' show max;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../providers/sampler_provider.dart';
-import '../providers/sync_controller.dart';
 import '../widgets/pad_button.dart' show padSoundAvailabilityIcon;
 import '../models/pad_sound_slot.dart';
 import '../widgets/pad_item.dart' show PadCard;
@@ -14,13 +13,14 @@ import '../widgets/music_picker_sheet.dart';
 import '../widgets/quick_search_overlay.dart';
 import '../widgets/audio_vu_meter.dart';
 import '../widgets/app_form_dialog.dart';
+import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/layout_utils.dart';
-import '../widgets/drive_sync_ui.dart';
 import 'settings_screen.dart';
 import 'pad_details_screen.dart';
 import 'sound_library_manage_screen.dart';
@@ -35,6 +35,16 @@ class _AddPadIntent extends Intent {
 
 class _QuickSearchIntent extends Intent {
   const _QuickSearchIntent();
+}
+
+class _StopAllIntent extends Intent {
+  const _StopAllIntent();
+}
+
+/// Recherche-éclair pré-filtrée par type de son (Ctrl+G/H/J).
+class _QuickSearchFilteredIntent extends Intent {
+  final SoundType type;
+  const _QuickSearchFilteredIntent(this.type);
 }
 
 /// Écran principal du sampler
@@ -55,8 +65,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   bool _isPerformanceMode = false;
 
-  /// Mode classique éditable : croix de suppression + déplacement des pads.
-  /// Verrouillé en Mode Spectacle (lecture seule, aucune modif accidentelle).
+  /// Mode classique éditable : croix de suppression, crayon et slots « + ».
+  /// Verrouillé en Mode Spectacle pour éviter toute modif accidentelle — le
+  /// déplacement des pads reste toutefois permis dans les deux modes.
   bool get _isEditable => !_isPerformanceMode;
 
   int? _draggingPadId;
@@ -406,38 +417,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
     await _notifier.loadSounds();
   }
 
-  /// Ouvre Paramètres (section Drive) depuis la pastille ambiante, ou résout
-  /// un conflit directement si la pastille signale un état conflictuel.
-  Future<void> _openDriveSettings() async {
-    final syncController = widget.services.syncController;
-    if (syncController.state.status == SyncStatus.conflict) {
-      await resolveSyncConflictFromPill(
-        context: context,
-        syncController: syncController,
-        libraryRepository: widget.services.libraryRepository,
-        onResolved: () async {
-          if (!mounted) return;
-          await _notifier.loadBoards();
-        },
-      );
-      return;
-    }
-
-    await SettingsScreen.open(
-      context,
-      database: _database,
-      libraryRepository: widget.services.libraryRepository,
-      syncController: syncController,
-      appPreferences: widget.services.appPreferences,
-      scrollToDriveSection: true,
-    );
-    if (!mounted) return;
-    await _notifier.loadBoards();
-  }
-
   /// Ouvre la recherche-éclair (overlay) ; met en évidence le pad dédié préparé.
-  Future<void> _openQuickSearch() async {
-    final result = await QuickSearchOverlay.show(context, notifier: _notifier);
+  /// [typeFilter] pré-filtre sur un type de son (Ctrl+G/H/J).
+  Future<void> _openQuickSearch({SoundType? typeFilter}) async {
+    final result = await QuickSearchOverlay.show(
+      context,
+      notifier: _notifier,
+      initialTypeFilter: typeFilter,
+    );
     if (!mounted) return;
     // Les pré-écoutes (bruitages/ambiances) jouent jusqu'à la fin et se libèrent
     // seules ; les musiques jouent dans la régie. Rien à couper à la fermeture.
@@ -734,8 +721,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
     return _notifier.isPadVisibleInOfflineMode(pad);
   }
 
-  /// Entre/sort du Mode Spectacle : verrouille l'édition (croix, déplacement,
-  /// ajout) et suspend les push Drive auto pour éviter tout jank pendant le live.
+  /// Entre/sort du Mode Spectacle : verrouille l'édition (croix, ajout) mais
+  /// laisse le déplacement des pads possible, et suspend les push Drive auto
+  /// pour éviter tout jank pendant le live.
   void _togglePerformanceMode() {
     setState(() {
       _isPerformanceMode = !_isPerformanceMode;
@@ -749,6 +737,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final syncController = widget.services.syncController;
     if (_isPerformanceMode) {
       syncController.pauseAutoSync();
+      _notifier.markPerformanceModeEntered();
     } else {
       syncController.resumeAutoSync();
     }
@@ -784,6 +773,11 @@ class _SamplerScreenState extends State<SamplerScreen> {
     SoundBoard board, {
     required int rowIndex,
   }) {
+    // Mode Spectacle : le slot « + » occupe toujours sa place dans la grille
+    // (géométrie de drag inchangée) mais reste invisible et inerte — seul le
+    // déplacement des pads existants reste permis.
+    if (!_isEditable) return const SizedBox.shrink();
+
     final scheme = Theme.of(context).colorScheme;
     Widget card = DashedSlotFrame(
       onTap: () => _openAddPadFlow(board, rowIndex: rowIndex),
@@ -929,7 +923,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
     SoundBoard selectedBoard,
   ) {
     return LayoutBuilder(
-      key: ValueKey<bool>(_isEditable),
       builder: (context, constraints) {
         final screenWidth = constraints.maxWidth;
         _lastGridWidth = screenWidth;
@@ -954,40 +947,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
         final hasPads = rowMap.isNotEmpty;
         final displayRowIndices = hasPads ? rowIndices : [0];
 
-        // Mode Spectacle : grille verrouillée, pads simples (ni croix ni « + »).
-        if (!_isEditable) {
-          return SingleChildScrollView(
-            key: const ValueKey('pads_locked_rows'),
-            controller: _normalGridScrollController,
-            padding: _padsGridScrollPadding(context),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (int i = 0; i < displayRowIndices.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 14,
-                    runSpacing: 14,
-                    children: _buildRowCells(
-                      context: context,
-                      state: state,
-                      board: selectedBoard,
-                      rowIndex: displayRowIndices[i],
-                      rowPads: rowMap[displayRowIndices[i]] ?? const [],
-                      cellWidth: cellWidth,
-                      cellHeight: cellHeight,
-                      editable: false,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          );
-        }
-
-        // Mode classique éditable : déplacement (glisser immédiat) + croix +
-        // slots « + ». Une ligne « nouvelle rangée » finale accueille un pad
-        // déposé sous la grille.
+        // Grille interactive, déplacement (glisser immédiat) toujours permis —
+        // y compris en Mode Spectacle. Croix de suppression, crayon et slots
+        // « + » restent gérés par `_isEditable` (voir `_buildPadWidget` et
+        // `_buildAddToRowButton`) et disparaissent hors du mode classique.
+        // Une ligne « nouvelle rangée » finale accueille un pad déposé sous la
+        // grille.
         final newRowIndex = hasPads ? rowIndices.last + 1 : null;
 
         final dropTarget = _dropTarget;
@@ -1486,8 +1451,21 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 if (!mounted || !removed) return;
               }
             : null,
+        onShowSounds: padItem.totalSoundCount > 1
+            ? () => _showPadSoundPicker(context, padItem)
+            : null,
       ),
     );
+  }
+
+  /// Overlay listant les sons d'un multipad — permet de déclencher une
+  /// variante précise plutôt que de laisser le pad piocher automatiquement.
+  void _showPadSoundPicker(BuildContext context, PadItem padItem) {
+    unawaited(SoundPickerOverlay.showForPadVariant(
+      context,
+      notifier: _notifier,
+      padItem: padItem,
+    ));
   }
 
   Widget _buildSamplerContent(BuildContext context, SamplerState state) {
@@ -1522,14 +1500,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
         ),
         builder: (context) {
           if (selectedBoard == null) {
-            return Center(
-              child: isBoardsLoading
-                  ? const CircularProgressIndicator()
-                  : const Text('Aucune scène disponible'),
-            );
+            if (isBoardsLoading) {
+              return const SizedBox.shrink();
+            }
+            return const Center(child: Text('Aucune scène disponible'));
           }
           if (state.isLoading && state.pads.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+            return const SizedBox.shrink();
           }
           if (state.error != null && state.pads.isEmpty) {
             return Center(
@@ -1733,6 +1710,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
             unawaited(_notifier.fadeOutCurrentMusic(duration)),
         onTransitionToNext: (duration) =>
             unawaited(_notifier.crossfadeToNextMusic(duration)),
+        onSeekMusic: (position) =>
+            unawaited(_notifier.seekPausedMusic(position)),
         onOccupiedHeightChanged: context.prefersDesktopUi
             ? null
             : (height) {
@@ -1787,10 +1766,17 @@ class _SamplerScreenState extends State<SamplerScreen> {
                   _AddPadIntent(),
               SingleActivator(LogicalKeyboardKey.keyZ, control: true):
                   _UndoPadIntent(),
-              SingleActivator(LogicalKeyboardKey.keyK, control: true):
+              SingleActivator(LogicalKeyboardKey.keyF, control: true):
                   _QuickSearchIntent(),
-              SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+              SingleActivator(LogicalKeyboardKey.keyF, meta: true):
                   _QuickSearchIntent(),
+              SingleActivator(LogicalKeyboardKey.escape): _StopAllIntent(),
+              SingleActivator(LogicalKeyboardKey.keyG, control: true):
+                  _QuickSearchFilteredIntent(SoundType.soundEffect),
+              SingleActivator(LogicalKeyboardKey.keyH, control: true):
+                  _QuickSearchFilteredIntent(SoundType.music),
+              SingleActivator(LogicalKeyboardKey.keyJ, control: true):
+                  _QuickSearchFilteredIntent(SoundType.ambiance),
             }
           : const <ShortcutActivator, Intent>{},
       child: Actions(
@@ -1813,6 +1799,21 @@ class _SamplerScreenState extends State<SamplerScreen> {
               return null;
             },
           ),
+          _StopAllIntent: CallbackAction<_StopAllIntent>(
+            onInvoke: (intent) {
+              if (_notifier.hasNonMusicSoundsPlaying) {
+                unawaited(HapticFeedback.heavyImpact());
+                unawaited(_notifier.stopAllNonMusicSounds());
+              }
+              return null;
+            },
+          ),
+          _QuickSearchFilteredIntent: CallbackAction<_QuickSearchFilteredIntent>(
+            onInvoke: (intent) {
+              unawaited(_openQuickSearch(typeFilter: intent.type));
+              return null;
+            },
+          ),
         },
         child: Focus(
           autofocus: true,
@@ -1831,10 +1832,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onOpenLibrary: _openLibrary,
                     onOpenSettings: _openSettings,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
-                    syncStatus: _SyncStatusPill(
-                      syncController: widget.services.syncController,
-                      onTap: _openDriveSettings,
-                    ),
                     stopAllButton: _StopAllButton(notifier: _notifier),
                   )
                 : _SamplerAppBar(
@@ -1843,10 +1840,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
                     onTogglePerformanceMode: _togglePerformanceMode,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
-                    syncStatus: _SyncStatusPill(
-                      syncController: widget.services.syncController,
-                      onTap: _openDriveSettings,
-                    ),
                     stopAllButton: _StopAllButton(notifier: _notifier),
                   ),
             drawer: prefersDesktopUi
@@ -1892,121 +1885,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
   }
 }
 
-// ---------- Pastille de synchronisation (ambiante) ----------
-
-/// Indicateur de synchro Drive permanent et non bloquant dans l'AppBar.
-///
-/// Caché tant que la synchro est `idle` (aucun bruit pour un usage 100 % local) ;
-/// dès qu'une bibliothèque Drive est en jeu, il rend l'état d'un coup d'œil
-/// (couleur + libellé court) et ouvre Paramètres (section Drive) au tap.
-class _SyncStatusPill extends StatelessWidget {
-  final SyncController syncController;
-  final VoidCallback onTap;
-
-  const _SyncStatusPill({required this.syncController, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: syncController,
-      builder: (context, _) {
-        final status = syncController.state.status;
-        if (status == SyncStatus.idle) return const SizedBox.shrink();
-
-        final scheme = Theme.of(context).colorScheme;
-        final (color, label, icon, spinning) = _visuals(
-          status,
-          scheme,
-        );
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: Tooltip(
-            message: 'Synchronisation Drive',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: onTap,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (spinning)
-                      SizedBox(
-                        width: 13,
-                        height: 13,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: color,
-                        ),
-                      )
-                    else
-                      Icon(icon, size: 15, color: color),
-                    const SizedBox(width: 6),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: color,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  (Color, String, IconData, bool) _visuals(
-    SyncStatus status,
-    ColorScheme scheme,
-  ) {
-    return switch (status) {
-      SyncStatus.syncing => (
-        scheme.primary,
-        'Synchro…',
-        Icons.sync_rounded,
-        true,
-      ),
-      SyncStatus.synced => (
-        scheme.primary,
-        'À jour',
-        Icons.cloud_done_outlined,
-        false,
-      ),
-      // Hors-ligne : neutre, jamais alarmiste — le travail local est normal.
-      SyncStatus.offline => (
-        scheme.onSurfaceVariant,
-        'Hors-ligne',
-        Icons.cloud_off_outlined,
-        false,
-      ),
-      SyncStatus.conflict => (
-        scheme.error,
-        'Conflit',
-        Icons.merge_type_rounded,
-        false,
-      ),
-      SyncStatus.error => (
-        scheme.error,
-        'Erreur sync',
-        Icons.error_outline_rounded,
-        false,
-      ),
-      SyncStatus.idle => (
-        scheme.onSurfaceVariant,
-        '',
-        Icons.cloud_outlined,
-        false,
-      ),
-    };
-  }
-}
-
 // ---------- AppBar (mobile/tablette) ----------
 
 class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -2015,7 +1893,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenMenu;
   final VoidCallback onTogglePerformanceMode;
   final VoidCallback onQuickSearch;
-  final Widget syncStatus;
   final Widget stopAllButton;
 
   const _SamplerAppBar({
@@ -2024,7 +1901,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onOpenMenu,
     required this.onTogglePerformanceMode,
     required this.onQuickSearch,
-    required this.syncStatus,
     required this.stopAllButton,
   });
 
@@ -2058,7 +1934,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'Recherche rapide',
           onPressed: onQuickSearch,
         ),
-        if (!isPerformanceMode) syncStatus,
         _LiveModeButton(
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
@@ -2089,7 +1964,9 @@ class _StopAllButton extends StatelessWidget {
         final active = notifier.hasNonMusicSoundsPlaying;
         return IconButton(
           icon: const Icon(Icons.stop_circle_rounded),
-          tooltip: 'Tout arrêter',
+          tooltip: isNativeDesktopPlatform()
+              ? 'Tout arrêter (Échap)'
+              : 'Tout arrêter',
           color: active ? scheme.error : null,
           onPressed: active
               ? () {
@@ -2256,10 +2133,7 @@ class _BoardsList extends StatelessWidget {
             padding: EdgeInsets.zero,
             children: [
               if (isBoardsLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: CircularProgressIndicator()),
-                )
+                const _BoardsListSkeleton()
               else if (boards.isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -2363,7 +2237,6 @@ class _SamplerDesktopAppBar extends StatelessWidget
   final Future<void> Function() onOpenLibrary;
   final Future<void> Function() onOpenSettings;
   final VoidCallback onQuickSearch;
-  final Widget syncStatus;
   final Widget stopAllButton;
 
   const _SamplerDesktopAppBar({
@@ -2378,7 +2251,6 @@ class _SamplerDesktopAppBar extends StatelessWidget
     required this.onOpenLibrary,
     required this.onOpenSettings,
     required this.onQuickSearch,
-    required this.syncStatus,
     required this.stopAllButton,
   });
 
@@ -2403,26 +2275,28 @@ class _SamplerDesktopAppBar extends StatelessWidget
         ),
       ),
       actions: [
-        const Center(child: AudioVuMeter()),
-        stopAllButton,
-        IconButton(
-          icon: const Icon(Icons.search_rounded),
-          tooltip: 'Recherche rapide (Ctrl+K)',
-          onPressed: onQuickSearch,
-        ),
         if (!isPerformanceMode) ...[
-          syncStatus,
-          IconButton(
-            icon: const Icon(Icons.library_books_rounded),
-            tooltip: 'Gérer la bibliothèque',
-            onPressed: () => unawaited(onOpenLibrary()),
-          ),
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: 'Paramètres',
             onPressed: () => unawaited(onOpenSettings()),
           ),
+          IconButton(
+            icon: const Icon(Icons.library_books_rounded),
+            tooltip: 'Gérer la bibliothèque',
+            onPressed: () => unawaited(onOpenLibrary()),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: VerticalDivider(width: 24),
+          ),
         ],
+        stopAllButton,
+        IconButton(
+          icon: const Icon(Icons.search_rounded),
+          tooltip: 'Recherche rapide (Ctrl+F)',
+          onPressed: onQuickSearch,
+        ),
         _LiveModeButton(
           isPerformanceMode: isPerformanceMode,
           onToggle: onTogglePerformanceMode,
@@ -2475,11 +2349,17 @@ class _BoardSceneSelector extends StatelessWidget {
           if (isBoardsLoading)
             const PopupMenuItem<Object>(
               enabled: false,
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+              child: Skeleton(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SkeletonLine(widthFactor: 0.7),
+                    SizedBox(height: 14),
+                    SkeletonLine(widthFactor: 0.5),
+                    SizedBox(height: 14),
+                    SkeletonLine(widthFactor: 0.6),
+                  ],
                 ),
               ),
             )
@@ -2743,6 +2623,43 @@ class _BoardTileIcon extends StatelessWidget {
       decoration: BoxDecoration(
         color: Color(color),
         borderRadius: BorderRadius.circular(AppRadius.xs),
+      ),
+    );
+  }
+}
+
+// ---------- Placeholders de chargement ----------
+
+/// Liste de scènes factices pour le tiroir latéral pendant le chargement.
+class _BoardsListSkeleton extends StatelessWidget {
+  const _BoardsListSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Skeleton(
+      child: Column(
+        children: [
+          for (int i = 0; i < 5; i++)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              child: Row(
+                children: [
+                  const SkeletonBox(
+                    width: 18,
+                    height: 18,
+                    borderRadius: AppRadius.radiusXs,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: SkeletonLine(widthFactor: i.isEven ? 0.6 : 0.45),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

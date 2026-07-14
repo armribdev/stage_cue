@@ -10,6 +10,36 @@ class DriveAccountProfile {
     this.photoUrl,
   });
 
+  /// Sérialisation pour la persistance locale (affichage immédiat au lancement,
+  /// avant tout appel réseau).
+  Map<String, dynamic> toJson() => {
+        'email': email,
+        if (displayName != null) 'display_name': displayName,
+        if (photoUrl != null) 'photo_url': photoUrl,
+      };
+
+  static DriveAccountProfile? fromJson(Map<String, dynamic> json) {
+    final email = json['email'];
+    if (email is! String || email.isEmpty) {
+      return null;
+    }
+    return DriveAccountProfile(
+      email: email,
+      displayName: json['display_name'] as String?,
+      photoUrl: json['photo_url'] as String?,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is DriveAccountProfile &&
+      other.email == email &&
+      other.displayName == displayName &&
+      other.photoUrl == photoUrl;
+
+  @override
+  int get hashCode => Object.hash(email, displayName, photoUrl);
+
   String get label => displayName?.trim().isNotEmpty == true
       ? displayName!.trim()
       : email;

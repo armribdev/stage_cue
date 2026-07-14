@@ -14,6 +14,7 @@ import '../../../../core/utils/file_utils.dart'
 import '../../../../core/audio/soloud_file_loader.dart';
 import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/audio_file_validation.dart';
+import '../../../../core/audio/waveform_extractor.dart';
 import '../models/sound_model.dart';
 import '../models/sound_board_model.dart';
 import '../models/watched_path_model.dart';
@@ -32,15 +33,34 @@ class LocalSoundDataSource {
 
   /// Résout les métadonnées d'un fichier audio local.
   /// Retourne `type: null` si le fichier est absent ou si le probe de durée échoue.
-  Future<({db_sounds.SoundType? type, String? contentHash})>
-      _resolveMetadataForFile(File file) async {
+  /// La waveform n'est calculée que pour les musiques (seul type affiché en régie).
+  Future<
+      ({
+        db_sounds.SoundType? type,
+        String? contentHash,
+        Uint8List? waveform,
+        int? waveformProbeGeneration,
+      })> _resolveMetadataForFile(File file) async {
     if (!await file.exists() || await file.length() <= 0) {
-      return (type: null, contentHash: null);
+      return (
+        type: null,
+        contentHash: null,
+        waveform: null,
+        waveformProbeGeneration: null,
+      );
     }
     final probeType = await _probeSoundTypeFromDuration(file);
     final contentHash =
         probeType != null ? await computeQuickHash(file) : null;
-    return (type: probeType, contentHash: contentHash);
+    final probe = probeType == db_sounds.SoundType.music
+        ? await extractWaveform(file.path)
+        : null;
+    return (
+      type: probeType,
+      contentHash: contentHash,
+      waveform: probe?.waveformValue,
+      waveformProbeGeneration: probe?.generationValue,
+    );
   }
 
   /// Probe de type par durée SoLoud. Retourne null si le fichier est invalide
@@ -229,7 +249,7 @@ class LocalSoundDataSource {
     )..where((s) => s.id.equals(id))).go();
   }
 
-  /// Met à jour les réglages d'un son (couleur, volume)
+  /// Met à jour les réglages d'un son (couleur, volume, point d'entrée)
   Future<void> updateSoundSettings({
     required int id,
     int? colorValue,
@@ -237,6 +257,7 @@ class LocalSoundDataSource {
     String? displayName,
     bool updateDisplayName = false,
     double? volume,
+    int? startOffsetMs,
   }) async {
     final companion = db.SoundsCompanion(
       color: updateColor ? Value(colorValue) : const Value.absent(),
@@ -244,6 +265,8 @@ class LocalSoundDataSource {
           ? Value(displayName)
           : const Value.absent(),
       volume: volume != null ? Value(volume) : const Value.absent(),
+      startOffsetMs:
+          startOffsetMs != null ? Value(startOffsetMs) : const Value.absent(),
     );
     await (_database.update(
       _database.sounds,
@@ -259,6 +282,18 @@ class LocalSoundDataSource {
     };
     await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
         .write(db.SoundsCompanion(type: Value(dbType)));
+  }
+
+  /// Persiste l'issue d'une extraction waveform (régie musique) : l'enveloppe en
+  /// cas de succès, ou le marqueur de génération d'échec pour un `unsupported`.
+  /// Un échec `transient` (moteur non prêt) n'écrit rien — on retentera.
+  Future<void> persistWaveformProbe(int id, WaveformProbe probe) async {
+    if (probe.status == WaveformProbeStatus.transient) return;
+    await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
+        .write(db.SoundsCompanion(
+      waveform: Value(probe.waveformValue),
+      waveformProbeGeneration: Value(probe.generationValue),
+    ));
   }
 
   /// Marque ou démarque un son comme favori (accès rapide en recherche).
@@ -353,6 +388,8 @@ class LocalSoundDataSource {
               filePath: file.path,
               type: Value(metadata.type),
               contentHash: Value(metadata.contentHash),
+              waveform: Value(metadata.waveform),
+              waveformProbeGeneration: Value(metadata.waveformProbeGeneration),
             ),
           );
     } catch (e) {
@@ -392,6 +429,7 @@ class LocalSoundDataSource {
             libraryId: Value(libraryId),
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
+            waveform: Value(metadata.waveform),
           ),
         );
     return true;
@@ -414,22 +452,48 @@ class LocalSoundDataSource {
       final contentHash = probeType != null
           ? await computeQuickHash(file)
           : existing.contentHash;
+      final probe = probeType == db_sounds.SoundType.music
+          ? await extractWaveform(file.path)
+          : null;
       await (_database.update(_database.sounds)
             ..where((s) => s.id.equals(soundId)))
           .write(
         db.SoundsCompanion(
           type: Value(probeType),
           contentHash: Value(contentHash),
+          waveform: Value(probe?.waveformValue),
+          waveformProbeGeneration: Value(probe?.generationValue),
         ),
       );
       return;
     }
 
-    if (existing.contentHash != null) return;
-    final contentHash = await computeQuickHash(file);
+    // Type déjà connu : compléter le hash et/ou la waveform s'ils manquent.
+    // La waveform n'est re-sondée que si la génération d'échec est dépassée.
+    final needsHash = existing.contentHash == null;
+    final needsWaveform = existing.type == db_sounds.SoundType.music &&
+        existing.waveform == null &&
+        waveformNeedsProbe(existing.waveformProbeGeneration);
+    if (!needsHash && !needsWaveform) return;
+
+    final probe = needsWaveform ? await extractWaveform(file.path) : null;
+    // Un échec transitoire (moteur non prêt) ne doit rien écrire : on retentera.
+    final persistProbe =
+        probe != null && probe.status != WaveformProbeStatus.transient;
     await (_database.update(_database.sounds)
           ..where((s) => s.id.equals(soundId)))
-        .write(db.SoundsCompanion(contentHash: Value(contentHash)));
+        .write(
+      db.SoundsCompanion(
+        contentHash: needsHash
+            ? Value(await computeQuickHash(file))
+            : const Value.absent(),
+        waveform:
+            persistProbe ? Value(probe.waveformValue) : const Value.absent(),
+        waveformProbeGeneration: persistProbe
+            ? Value(probe.generationValue)
+            : const Value.absent(),
+      ),
+    );
   }
 
   /// true si un son `(libraryId, relativePath)` existe déjà en base.
@@ -490,12 +554,18 @@ class LocalSoundDataSource {
   ///    (backfill des sons indexés avant l'identité forte) ;
   /// 3. sinon nouveau son.
   ///
-  /// Retourne `true` si un nouveau son a été créé.
-  Future<bool> syncLibrarySoundFromDriveIndex({
+  /// Retourne `created` (un nouveau son a été inséré) et `contentChanged` (le
+  /// fichier a été écrasé « en place » sur Drive — même `driveFileId`, marque de
+  /// révision [driveMd5] différente). Sur `contentChanged`, la waveform et le
+  /// contentHash sont réinitialisés ici (recalcul paresseux) ; l'appelant doit
+  /// évincer le fichier de cache local devenu périmé. Le `type` reste inchangé
+  /// (cf. audio.md : jamais recalculé hors `updateSoundType`).
+  Future<({bool created, bool contentChanged})> syncLibrarySoundFromDriveIndex({
     required int libraryId,
     required String relativePath,
     required String localPath,
     String? driveFileId,
+    String? driveMd5,
     int? folderId,
   }) async {
     // 1. Identité forte : le fichier est déjà connu par son ID Drive (global).
@@ -508,12 +578,23 @@ class LocalSoundDataSource {
         // Fichier possédé par une autre bibliothèque (lien imbriqué) : ne pas
         // dupliquer ni réécrire son cadre de chemins.
         if (row.libraryId != libraryId) {
-          return false;
+          return (created: false, contentChanged: false);
         }
-        // Corrige chemin ET dossier propriétaire si le fichier a bougé.
-        if (row.relativePath != relativePath ||
+
+        // Édition en place : contenu écrasé à ID constant. On l'affirme seulement
+        // si une marque était déjà connue (sinon c'est un simple backfill, pas un
+        // changement) ET qu'elle diffère de la marque distante courante.
+        final contentChanged = driveMd5 != null &&
+            row.driveMd5 != null &&
+            row.driveMd5 != driveMd5;
+
+        // Corrige chemin/dossier si le fichier a bougé, backfille/actualise la
+        // marque de révision, et invalide les dérivés de contenu si changement.
+        final needsWrite = row.relativePath != relativePath ||
             row.filePath != localPath ||
-            row.folderId != folderId) {
+            row.folderId != folderId ||
+            row.driveMd5 != driveMd5;
+        if (needsWrite) {
           await (_database.update(_database.sounds)
                 ..where((s) => s.id.equals(row.id)))
               .write(
@@ -521,10 +602,20 @@ class LocalSoundDataSource {
               relativePath: Value(relativePath),
               filePath: Value(localPath),
               folderId: Value(folderId),
+              // Ne jamais effacer une marque connue si Drive ne la renvoie pas.
+              driveMd5:
+                  driveMd5 != null ? Value(driveMd5) : const Value.absent(),
+              waveform: contentChanged ? const Value(null) : const Value.absent(),
+              // Contenu écrasé : on efface aussi le marqueur d'échec waveform
+              // pour re-sonder le nouveau contenu depuis zéro.
+              waveformProbeGeneration:
+                  contentChanged ? const Value(null) : const Value.absent(),
+              contentHash:
+                  contentChanged ? const Value(null) : const Value.absent(),
             ),
           );
         }
-        return false;
+        return (created: false, contentChanged: contentChanged);
       }
     }
 
@@ -545,10 +636,11 @@ class LocalSoundDataSource {
           filePath: Value(localPath),
           driveFileId:
               driveFileId != null ? Value(driveFileId) : const Value.absent(),
+          driveMd5: driveMd5 != null ? Value(driveMd5) : const Value.absent(),
           folderId: Value(folderId),
         ),
       );
-      return false;
+      return (created: false, contentChanged: false);
     }
 
     // 3. Nouveau son.
@@ -563,11 +655,13 @@ class LocalSoundDataSource {
             libraryId: Value(libraryId),
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
+            waveform: Value(metadata.waveform),
             driveFileId: Value(driveFileId),
+            driveMd5: Value(driveMd5),
             folderId: Value(folderId),
           ),
         );
-    return true;
+    return (created: true, contentChanged: false);
   }
 
   /// Indexe tous les fichiers audio d'un dossier
@@ -649,6 +743,8 @@ class LocalSoundDataSource {
                   filePath: file.path,
                   type: Value(metadata.type),
                   contentHash: Value(metadata.contentHash),
+                  waveform: Value(metadata.waveform),
+              waveformProbeGeneration: Value(metadata.waveformProbeGeneration),
                 ),
               );
           indexedCount++;
@@ -824,6 +920,7 @@ class LocalSoundDataSource {
         libraryId: row.libraryId,
         relativePath: row.relativePath,
         contentHash: row.contentHash,
+        waveform: row.waveform,
       );
     }).toList();
   }
@@ -867,6 +964,48 @@ class LocalSoundDataSource {
     await (_database.delete(
       _database.sounds,
     )..where((s) => s.libraryId.equals(libraryId))).go();
+  }
+
+  /// Élague les sons d'une bibliothèque dont le fichier a disparu de Drive :
+  /// identité forte (`driveFileId`) connue mais absente du dernier scan complet.
+  ///
+  /// Symétrique de l'ajout côté `syncLibrarySoundFromDriveIndex`, et aligné sur
+  /// l'élagage par snapshot (`LibrarySnapshotStore`). On épargne les sons sans
+  /// `driveFileId` (legacy / pas encore réconciliés) pour ne pas perdre de
+  /// données par erreur — ils sont réalignés par chemin, pas élagués.
+  ///
+  /// À n'appeler qu'après un scan Drive RÉUSSI et COMPLET : sur une liste
+  /// partielle (timeout, réseau), cet élagage supprimerait des sons encore
+  /// présents. Retourne les `relativePath` des sons supprimés (non nuls) — pour
+  /// que l'appelant évince aussi leurs fichiers du cache local.
+  Future<List<String>> pruneLibrarySoundsAbsentFromDrive({
+    required int libraryId,
+    required Set<String> keptDriveFileIds,
+  }) async {
+    return _database.transaction(() async {
+      final selectQuery = _database.select(_database.sounds)
+        ..where(
+          (s) => s.libraryId.equals(libraryId) & s.driveFileId.isNotNull(),
+        );
+      if (keptDriveFileIds.isNotEmpty) {
+        // `isNotIn([])` génère un SQL fragile selon les versions de Drift : on
+        // n'ajoute la clause que si la liste des survivants est non vide (sinon
+        // tous les fichiers ont disparu → on supprime tous les sons à identité).
+        selectQuery.where((s) => s.driveFileId.isNotIn(keptDriveFileIds.toList()));
+      }
+
+      final toPrune = await selectQuery.get();
+      if (toPrune.isEmpty) return const <String>[];
+
+      final ids = toPrune.map((s) => s.id).toList();
+      await (_database.delete(_database.sounds)..where((s) => s.id.isIn(ids)))
+          .go();
+
+      return [
+        for (final s in toPrune)
+          if (s.relativePath != null) s.relativePath!,
+      ];
+    });
   }
 
   /// Supprime les sons associés à un chemin surveillé.
@@ -1108,6 +1247,7 @@ class LocalPadDataSource {
       libraryId: row.read<int?>('library_id'),
       relativePath: row.read<String?>('relative_path'),
       contentHash: row.read<String?>('content_hash'),
+      waveform: row.read<Uint8List?>('waveform'),
     );
   }
 
@@ -1129,7 +1269,7 @@ class LocalPadDataSource {
         '''
         SELECT s.id, s.title, s.display_name, s.file_path, s.type,
                s.color, s.volume, s.created_at,
-               s.library_id, s.relative_path, s.content_hash,
+               s.library_id, s.relative_path, s.content_hash, s.waveform,
                ps.volume AS pad_sound_volume
         FROM pad_sounds ps
         INNER JOIN sounds s ON s.id = ps.sound_id

@@ -7,6 +7,8 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
 import '../widgets/app_form_dialog.dart';
 import '../widgets/sound_picker_overlay.dart';
+import '../widgets/sound_type_picker.dart';
+import '../widgets/start_offset_editor.dart';
 import '../widgets/tag_chips_editor.dart';
 import 'sound_details_screen.dart';
 
@@ -25,7 +27,7 @@ class SoundLibraryManageScreen {
       context,
       notifier: notifier,
       onTap: (ctx, sound, tagCatalog) =>
-          _openSoundEdit(ctx, sound, tagCatalog, repository),
+          _openSoundEdit(ctx, sound, tagCatalog, repository, notifier),
     );
   }
 
@@ -36,12 +38,13 @@ class SoundLibraryManageScreen {
     Sound sound,
     List<TagCategoryWithTags> tagCatalog,
     SoundRepository repository,
+    SamplerNotifier notifier,
   ) async {
     final width = MediaQuery.sizeOf(context).width;
     if (width < 600) {
-      await _openEditPage(context, sound, tagCatalog, repository);
+      await _openEditPage(context, sound, tagCatalog, repository, notifier);
     } else {
-      await _openEditDialog(context, sound, tagCatalog, repository);
+      await _openEditDialog(context, sound, tagCatalog, repository, notifier);
     }
   }
 
@@ -52,6 +55,7 @@ class SoundLibraryManageScreen {
     Sound sound,
     List<TagCategoryWithTags> tagCatalog,
     SoundRepository repository,
+    SamplerNotifier notifier,
   ) async {
     final initialTags = await repository.getTagsForSound(sound.id);
     if (!context.mounted) return;
@@ -62,6 +66,7 @@ class SoundLibraryManageScreen {
           tagCatalog: tagCatalog,
           initialTags: initialTags,
           repository: repository,
+          notifier: notifier,
         ),
       ),
     );
@@ -74,6 +79,7 @@ class SoundLibraryManageScreen {
     Sound sound,
     List<TagCategoryWithTags> tagCatalog,
     SoundRepository repository,
+    SamplerNotifier notifier,
   ) async {
     final initialTags = await repository.getTagsForSound(sound.id);
     if (!context.mounted) return;
@@ -82,6 +88,8 @@ class SoundLibraryManageScreen {
     var selectedColorValue = sound.colorValue;
     var selectedVolume = sound.volume.clamp(0.0, 1.0);
     var displayNameValue = sound.displayName ?? '';
+    var startOffsetMs = sound.startOffsetMs;
+    var selectedType = sound.type;
     final selectedTagIds = initialTags.map((t) => t.id).toSet();
 
     String? normalizedOrNull(String value) {
@@ -111,6 +119,11 @@ class SoundLibraryManageScreen {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Text(
+                        'Nom affiché',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
                       TextFormField(
                         initialValue: displayNameValue,
                         onChanged: (v) => displayNameValue = v,
@@ -121,6 +134,17 @@ class SoundLibraryManageScreen {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Type de son',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      SoundTypePicker(
+                        selected: selectedType,
+                        onChanged: (type) =>
+                            setDialogState(() => selectedType = type),
                       ),
                       const SizedBox(height: sectionSpacing),
                       Text(
@@ -168,6 +192,27 @@ class SoundLibraryManageScreen {
                         onChanged: (v) => setDialogState(
                             () => selectedVolume = v.clamp(0.0, 1.0)),
                       ),
+                      const SizedBox(height: sectionSpacing),
+                      Text(
+                        'Point d\'entrée',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'La lecture démarre à ce point au lieu du début du fichier.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      StartOffsetEditor(
+                        filePath: sound.filePath,
+                        waveform: sound.waveform,
+                        initialOffsetMs: startOffsetMs,
+                        onChanged: (ms) => startOffsetMs = ms,
+                      ),
                       const SizedBox(height: 8),
                       Text(
                         'Tags',
@@ -200,9 +245,14 @@ class SoundLibraryManageScreen {
                       displayName: normalizedOrNull(displayNameValue),
                       updateDisplayName: true,
                       volume: selectedVolume,
+                      startOffsetMs: startOffsetMs,
                     );
                     await repository.setTagsForSound(
                         sound.id, selectedTagIds.toList());
+                    if (selectedType != null && selectedType != sound.type) {
+                      await repository.updateSoundType(sound.id, selectedType!);
+                    }
+                    await notifier.refreshSoundMetadata(sound.id);
                     if (!dialogContext.mounted) return;
                     Navigator.of(dialogContext).pop(true);
                   },

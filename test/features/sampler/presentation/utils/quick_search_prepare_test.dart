@@ -93,6 +93,31 @@ void main() {
       expect(placement.insertionPositionInRow, 2);
       expect(placement.globalSortOrder, 4);
     });
+
+    test('forceNewRow → nouvelle ligne après la dernière existante', () {
+      final placement = computeLastRowAppendPlacement(
+        [
+          _pad(id: 1, rowIndex: 0, sortOrder: 0),
+          _pad(id: 2, rowIndex: 0, sortOrder: 1),
+        ],
+        forceNewRow: true,
+      );
+
+      expect(placement.rowIndex, 1);
+      expect(placement.insertionPositionInRow, 0);
+      expect(placement.globalSortOrder, 2);
+    });
+
+    test('forceNewRow sur plateau vide → ligne 0', () {
+      final placement = computeLastRowAppendPlacement(
+        const [],
+        forceNewRow: true,
+      );
+
+      expect(placement.rowIndex, 0);
+      expect(placement.insertionPositionInRow, 0);
+      expect(placement.globalSortOrder, 0);
+    });
   });
 
   group('prepareSfxOnBoard', () {
@@ -180,6 +205,29 @@ void main() {
       expect(captured?.rowIndex, 1);
       expect(captured?.insertionPositionInRow, 1);
       expect(captured?.globalSortOrder, 2);
+    });
+
+    test('forceNewRow → placement transmis au createPad', () async {
+      LastRowPadPlacement? captured;
+      await prepareSfxOnBoard(
+        soundId: 9,
+        padsOnBoard: [
+          (pad: _pad(id: 1, rowIndex: 0, sortOrder: 0, sounds: [_sound(1)]), isDraft: false),
+        ],
+        forceNewRow: true,
+        createPad: (placement) async {
+          captured = placement;
+          return 300;
+        },
+        reloadPads: () async => [
+          (pad: _pad(id: 1, rowIndex: 0, sortOrder: 0, sounds: [_sound(1)]), isDraft: false),
+          (pad: _pad(id: 300, rowIndex: 1, sortOrder: 1, sounds: [_sound(9)]), isDraft: false),
+        ],
+      );
+
+      expect(captured?.rowIndex, 1);
+      expect(captured?.insertionPositionInRow, 0);
+      expect(captured?.globalSortOrder, 1);
     });
 
     test('échec de rechargement → aucun highlight', () async {

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -10,6 +12,7 @@ import '../../domain/entities/tag_item.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/quick_search_prepare.dart';
 import '../utils/sound_type_ui.dart';
+import 'scrolling_text.dart';
 
 // ── Modes ─────────────────────────────────────────────────────────────────────
 
@@ -17,9 +20,12 @@ sealed class SoundPickerMode {
   const SoundPickerMode();
 }
 
-/// Recherche-éclair (Ctrl+K) : preview + préparer un bruitage/ambiance.
+/// Recherche-éclair (Ctrl+F) : preview + préparer un bruitage/ambiance.
 final class QuickSearchMode extends SoundPickerMode {
-  const QuickSearchMode();
+  /// Filtre de type pré-appliqué (Ctrl+G/H/J) — modifiable ensuite via les chips.
+  final SoundType? initialTypeFilter;
+
+  const QuickSearchMode({this.initialTypeFilter});
 }
 
 /// Sélecteur de musique : joue ou met en file d'attente.
@@ -63,11 +69,20 @@ final class ManageMode extends SoundPickerMode {
   ManageMode({required this.onTap});
 }
 
+/// Sélecteur de variante d'un multipad : choisir précisément quel son parmi
+/// ceux déjà assignés au pad va être joué. Liste courte et déjà connue → pas
+/// de recherche ni de filtres, contrairement aux autres modes.
+final class PadVariantMode extends SoundPickerMode {
+  final PadItem padItem;
+
+  const PadVariantMode({required this.padItem});
+}
+
 // ── Widget principal ──────────────────────────────────────────────────────────
 
 /// Overlay flottant unifié pour chercher et sélectionner un son.
 ///
-/// Remplace [QuickSearchMode] (Ctrl+K), [MusicPickerMode] (sélecteur musique),
+/// Remplace [QuickSearchMode] (Ctrl+F), [MusicPickerMode] (sélecteur musique),
 /// [PadPickerMode] (ajout/retrait sons d'un pad) et [LibraryMode] (ajout au plateau).
 ///
 /// Même UX partout : fuzzy search normalisé, filtres par type, navigation clavier.
@@ -85,14 +100,17 @@ class SoundPickerOverlay extends StatefulWidget {
   static bool _isMobile(BuildContext context) =>
       MediaQuery.sizeOf(context).width < 600;
 
-  /// Recherche-éclair (Ctrl+K) — renvoie le pad à surligner pour les bruitages.
+  /// Recherche-éclair (Ctrl+F) — renvoie le pad à surligner pour les bruitages.
   static Future<QuickSearchPrepareResult?> show(
     BuildContext context, {
     required SamplerNotifier notifier,
+    SoundType? initialTypeFilter,
   }) {
     final mobile = _isMobile(context);
     final w = SoundPickerOverlay._(
-        notifier: notifier, mode: const QuickSearchMode(), isFullPage: mobile);
+        notifier: notifier,
+        mode: QuickSearchMode(initialTypeFilter: initialTypeFilter),
+        isFullPage: mobile);
     return mobile
         ? _showPage<QuickSearchPrepareResult?>(context, w)
         : _showDialog<QuickSearchPrepareResult?>(context, w);
@@ -161,6 +179,22 @@ class SoundPickerOverlay extends StatefulWidget {
     return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
   }
 
+  /// Variante d'un multipad — liste ses sons déjà assignés, sans recherche
+  /// ni filtres, pour en déclencher un précisément.
+  static Future<void> showForPadVariant(
+    BuildContext context, {
+    required SamplerNotifier notifier,
+    required PadItem padItem,
+  }) {
+    final mobile = _isMobile(context);
+    final w = SoundPickerOverlay._(
+      notifier: notifier,
+      mode: PadVariantMode(padItem: padItem),
+      isFullPage: mobile,
+    );
+    return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
+  }
+
   static Future<T?> _showPage<T>(BuildContext context, SoundPickerOverlay child) =>
       Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => child));
 
@@ -212,7 +246,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   // Un Set<int> par token (ordre identique à _normalizedTokens).
   List<Set<int>> _tagMatchSetsPerToken = const [];
   String _tagToken = '';
-  Timer? _tagDebounce;
+  // Débounce partagé : retarde à la fois le scoring flou des titres (coûteux
+  // sur toute la bibliothèque) et la requête SQL de recherche par tag, pour
+  // ne recalculer qu'une fois l'utilisateur arrêté de taper.
+  Timer? _searchDebounce;
 
   // ── Tags des sons affichés ────────────────────────────────────────────────
   final Map<int, List<TagItem>> _soundTags = {};
@@ -230,6 +267,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   // ── Navigation clavier ────────────────────────────────────────────────────
   int _selectedIndex = 0;
+  int? _hoveredIndex;
 
   // ── État du sélecteur de pad ──────────────────────────────────────────────
   Set<int> _padSoundIds = const {};
@@ -243,6 +281,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   bool get _isPadPicker => widget.mode is PadPickerMode;
   bool get _isLibrary => widget.mode is LibraryMode;
   bool get _isManage => widget.mode is ManageMode;
+  bool get _isPadVariant => widget.mode is PadVariantMode;
 
   /// Bibliothèque du board actif : null = board local. Un board rattaché à une
   /// bibliothèque ne propose que les sons de celle-ci. Un board local (null)
@@ -269,6 +308,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   ManageMode? get _manageMode =>
       widget.mode is ManageMode ? widget.mode as ManageMode : null;
 
+  PadVariantMode? get _padVariantMode =>
+      widget.mode is PadVariantMode ? widget.mode as PadVariantMode : null;
+
   /// Type verrouillé pour le sélecteur de musique.
   SoundType? get _lockedTypeFilter => _isMusicPicker ? SoundType.music : null;
   SoundType? get _effectiveTypeFilter => _lockedTypeFilter ?? _typeFilter;
@@ -286,6 +328,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     QuickSearchMode() => 'Chercher un son…',
     MusicPickerMode() => 'Chercher une musique…',
     PadPickerMode() || LibraryMode() || ManageMode() => 'Chercher un son…',
+    PadVariantMode() => '',
   };
 
   String get _emptyMessage {
@@ -300,13 +343,14 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     QuickSearchMode() =>
       '↑↓ sélectionner    ↵ jouer    ⌘/Ctrl+↵ préparer    tap audition',
     MusicPickerMode() =>
-      '↑↓ sélectionner    ↵/tap jouer',
+      '↑↓ sélectionner    ↵/tap ajouter à la file',
     PadPickerMode() =>
       '↑↓ sélectionner    ↵ ajouter/retirer',
     LibraryMode() =>
       '↑↓ sélectionner    ↵/tap éditer',
     ManageMode() =>
-      '↑↓ sélectionner    ↵/tap éditer',
+      '↑↓ sélectionner    ↵/tap éditer    ▶ aperçu depuis le point d\'entrée',
+    PadVariantMode() => '↑↓ sélectionner    ↵/tap jouer',
   };
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -317,6 +361,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     _focusNode = FocusNode(onKeyEvent: _onSearchKey);
     widget.notifier.addListener(_onNotifierChanged);
     if (_isPadPicker) _typeFilter = SoundType.soundEffect;
+    if (_isQuickSearch) {
+      _typeFilter = (widget.mode as QuickSearchMode).initialTypeFilter;
+    }
     if (_isQuickSearch && widget.notifier.isLiveOfflineMode) {
       _localOnly = true;
     }
@@ -328,11 +375,25 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     setState(() {
       if (_isQuickSearch) _selectedIndex = 0;
       if (_isPadPicker) _syncPadSoundIds();
+      if (_padVariantMode case final mode?) _all = mode.padItem.pad.sounds;
     });
     _scheduleTagsLoad();
   }
 
   Future<void> _load() async {
+    // Variante d'un multipad : liste déjà connue (sons du pad), pas besoin
+    // de charger toute la bibliothèque ni le scope d'un board.
+    if (_padVariantMode case final mode?) {
+      final tagCatalog = await widget.notifier.loadTagCatalog();
+      if (!mounted) return;
+      setState(() {
+        _all = mode.padItem.pad.sounds;
+        _tagCatalog = tagCatalog;
+        _loading = false;
+      });
+      _scheduleTagsLoad();
+      return;
+    }
     final results = await Future.wait([
       widget.notifier.getAllSounds(),
       widget.notifier.loadTagCatalog(),
@@ -376,8 +437,12 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   @override
   void dispose() {
+    if (_isManage) {
+      // Pas de notify : évite setState sur SamplerScreen pendant le pop.
+      widget.notifier.stopLibraryPreview(notify: false);
+    }
     widget.notifier.removeListener(_onNotifierChanged);
-    _tagDebounce?.cancel();
+    _searchDebounce?.cancel();
     _tagsLoadDebounce?.cancel();
     _focusNode.dispose();
     _scrollController.dispose();
@@ -388,14 +453,31 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   // ── Recherche ─────────────────────────────────────────────────────────────
 
   void _onQueryChanged(String value) {
-    setState(() {
-      _query = value;
-      _selectedIndex = 0;
-    });
-    _tagDebounce?.cancel();
-    _tagDebounce = Timer(const Duration(milliseconds: 120), () {
+    // Le champ de texte gère son propre affichage via _controller : retarder
+    // la mise à jour de _query ne fait pas lagger la frappe, seulement le
+    // recalcul du scoring flou (sur toute la bibliothèque) et la recherche
+    // de tags — inutile de les relancer à chaque caractère tapé.
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 120), () {
+      if (!mounted) return;
+      setState(() {
+        _query = value;
+        _selectedIndex = 0;
+      });
       unawaited(_runTagSearch(value));
     });
+  }
+
+  /// Vide le champ de recherche — déclenché par la croix, donc immédiat
+  /// (pas de débounce à attendre).
+  void _clearQuery() {
+    _searchDebounce?.cancel();
+    _controller.clear();
+    setState(() {
+      _query = '';
+      _selectedIndex = 0;
+    });
+    unawaited(_runTagSearch(''));
     _scheduleTagsLoad();
   }
 
@@ -475,6 +557,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   DateTime _recencyKey(Sound s) => s.lastPlayedAt ?? s.createdAt;
 
   List<Sound> get _results {
+    // Variante d'un multipad : ordre figé sur les slots du pad (l'index doit
+    // rester aligné avec `pad.sounds` pour `playPadSoundAtIndex`) — jamais
+    // retrié par score/favori/récence.
+    if (_isPadVariant) return _all;
     final q = normalizeForSearch(_query);
     final tokens = _normalizedTokens;
     final scored = <(Sound, int)>[];
@@ -545,6 +631,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   static const _itemExtent = 72.0;
   static const _actionButtonSize = 30.0;
+  static const _overlayMaxWidth = 720.0;
   static const _maxVisibleTags = 3;
 
   void _moveSelection(int delta) {
@@ -602,6 +689,11 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       _moveSelection(-1);
       return KeyEventResult.handled;
     }
+    // Pas de champ de recherche pour intercepter Entrée dans ce mode.
+    if (_isPadVariant && event.logicalKey == LogicalKeyboardKey.enter) {
+      unawaited(_onSubmit());
+      return KeyEventResult.handled;
+    }
     return KeyEventResult.ignored;
   }
 
@@ -610,25 +702,39 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   Future<void> _onSubmit() async {
     final shown = _shownResults(_results);
     if (shown.isEmpty) return;
-    final sound = shown[_clampSelectedIndex(shown.length)];
+    final index = _clampSelectedIndex(shown.length);
+    final sound = shown[index];
     switch (widget.mode) {
       case QuickSearchMode():
         await widget.notifier.previewSound(sound.id);
         if (mounted) Navigator.of(context).pop();
       case MusicPickerMode():
-        await _playMusicNow(sound);
+        await _enqueueMusic(sound);
       case PadPickerMode():
         await _togglePadSound(sound);
       case LibraryMode():
         await _prepareAndClose(sound);
       case ManageMode():
         await _handleManageTap(sound);
+      case PadVariantMode(padItem: final padItem):
+        _playPadVariant(padItem, index);
     }
   }
 
   // QuickSearch
   Future<void> _previewSound(Sound sound) async {
     final ok = await widget.notifier.previewSound(sound.id);
+    if (!mounted || ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Son indisponible — vérifiez la connexion'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _toggleLibraryPreview(Sound sound) async {
+    final ok = await widget.notifier.toggleLibraryPreview(sound.id);
     if (!mounted || ok) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -650,12 +756,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   }
 
   // Music picker
-  Future<void> _playMusicNow(Sound sound) async {
-    final padItem = await widget.notifier.playMusicBySoundId(sound.id);
-    if (!mounted || padItem == null) return;
-    Navigator.of(context).pop();
-  }
-
   Future<void> _enqueueMusic(Sound sound) async {
     await widget.notifier.enqueueMusicBySoundId(sound.id);
   }
@@ -730,6 +830,12 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     mode.onPadUpdated?.call();
   }
 
+  // Pad variant picker
+  void _playPadVariant(PadItem padItem, int index) {
+    Navigator.of(context).pop();
+    unawaited(widget.notifier.playPadSoundAtIndex(padItem, index));
+  }
+
   // Manage
   Future<void> _handleManageTap(Sound sound) async {
     await _manageMode!.onTap(context, sound, _tagCatalog);
@@ -766,19 +872,30 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       },
     };
 
+    final results = _buildResultsFocusable(scheme, shown, selectedIndex);
+
+    // TextFieldTapRegion : couvre tout l'overlay pour qu'aucun tap interne
+    // (filtres, items, boutons) ne compte comme un tap "en dehors" du champ
+    // de recherche — ce qui le déconcentrerait automatiquement (comportement
+    // par défaut d'EditableText.onTapOutside). Le champ garde ainsi le focus
+    // en continu, quoi que l'utilisateur clique dans l'overlay.
     if (widget._isFullPage) {
       return CallbackShortcuts(
         bindings: shortcuts,
         child: Scaffold(
           body: SafeArea(
-            child: Column(
-              children: [
-                _buildSearchField(scheme),
-                _buildTypeFilters(scheme),
-                const Divider(height: 1),
-                Expanded(child: _buildResults(scheme, shown, selectedIndex)),
-                _buildHints(scheme, shown.isNotEmpty),
-              ],
+            child: TextFieldTapRegion(
+              child: Column(
+                children: [
+                  if (!_isPadVariant) ...[
+                    _buildSearchField(scheme),
+                    _buildTypeFilters(scheme),
+                    _buildFilterDivider(scheme),
+                  ],
+                  Expanded(child: results),
+                  _buildHints(scheme, shown.isNotEmpty),
+                ],
+              ),
             ),
           ),
         ),
@@ -798,7 +915,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: 560,
+              maxWidth: (mq.size.width - 24).clamp(320.0, _overlayMaxWidth),
               maxHeight: mq.size.height * 0.7,
             ),
             child: Material(
@@ -806,15 +923,19 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               elevation: 8,
               borderRadius: BorderRadius.circular(16),
               clipBehavior: Clip.antiAlias,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildSearchField(scheme),
-                  _buildTypeFilters(scheme),
-                  const Divider(height: 1),
-                  Flexible(child: _buildResults(scheme, shown, selectedIndex)),
-                  _buildHints(scheme, shown.isNotEmpty),
-                ],
+              child: TextFieldTapRegion(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!_isPadVariant) ...[
+                      _buildSearchField(scheme),
+                      _buildTypeFilters(scheme),
+                      _buildFilterDivider(scheme),
+                    ],
+                    Flexible(child: results),
+                    _buildHints(scheme, shown.isNotEmpty),
+                  ],
+                ),
               ),
             ),
           ),
@@ -823,16 +944,36 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     );
   }
 
+  /// Sans champ de recherche (variante de pad), on rattache [_focusNode] ici
+  /// pour garder la navigation clavier (↑↓, Entrée).
+  Widget _buildResultsFocusable(
+    ColorScheme scheme,
+    List<Sound> shown,
+    int selectedIndex,
+  ) {
+    final results = _buildResults(scheme, shown, selectedIndex);
+    if (!_isPadVariant) return results;
+    return Focus(focusNode: _focusNode, autofocus: true, child: results);
+  }
+
   Widget _buildSearchField(ColorScheme scheme) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
       child: Row(
         children: [
-          Icon(
-            _isMusicPicker ? SoundType.music.icon : Icons.search_rounded,
-            color: scheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 10),
+          // Page pleine (mobile) : flèche retour, seul moyen de fermer
+          // l'overlay puisqu'il n'y a pas de fond à taper.
+          if (widget._isFullPage) ...[
+            ExcludeFocus(
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.of(context).pop(),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
           Expanded(
             child: TextField(
               controller: _controller,
@@ -851,13 +992,24 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                 focusedErrorBorder: InputBorder.none,
                 hintText: _hintText,
                 isCollapsed: true,
+                suffixIcon: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, _) => _controller.text.isEmpty
+                      ? const SizedBox.shrink()
+                      : ExcludeFocus(
+                          child: IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            onPressed: _clearQuery,
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ),
+                ),
+                suffixIconConstraints: const BoxConstraints(maxHeight: 24, maxWidth: 24),
               ),
               style: const TextStyle(fontSize: 17),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close_rounded),
-            onPressed: () => Navigator.of(context).pop(),
           ),
         ],
       ),
@@ -868,89 +1020,163 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     // Musique : type verrouillé → pas de barre de filtres.
     if (_lockedTypeFilter != null) return const SizedBox.shrink();
 
-    Widget chip(String label, SoundType? type) {
+    // "Tous" uniquement pour QuickSearch, Library et Manage
+    final segments = <(String, SoundType?, IconData)>[
+      if (_isQuickSearch || _isLibrary || _isManage)
+        ('Tous', null, Icons.apps_rounded),
+      (SoundType.soundEffect.label, SoundType.soundEffect, SoundType.soundEffect.icon),
+      (SoundType.music.label, SoundType.music, SoundType.music.icon),
+      (SoundType.ambiance.label, SoundType.ambiance, SoundType.ambiance.icon),
+    ];
+
+    Widget segment(String label, SoundType? type, IconData icon, bool isLast) {
       final selected = _effectiveTypeFilter == type;
-      return Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: FilterChip(
-          label: Text(label),
-          selected: selected,
-          showCheckmark: false,
-          visualDensity: VisualDensity.compact,
-          onSelected: (_) {
+      final colors = type?.avatarColors(scheme) ??
+          (background: scheme.primaryContainer, foreground: scheme.onPrimaryContainer);
+      return InkWell(
+        canRequestFocus: false,
+        onTap: () {
+          setState(() {
+            _typeFilter = type;
+            _selectedIndex = 0;
+          });
+          _scheduleTagsLoad();
+        },
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? colors.background : Colors.transparent,
+            border: isLast
+                ? null
+                : Border(
+                    right: BorderSide(
+                      color: scheme.outlineVariant.withValues(alpha: 0.6),
+                    ),
+                  ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? colors.foreground : scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  color: selected ? colors.foreground : scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final segmentedControl = Material(
+      color: Colors.transparent,
+      child: Container(
+        height: 32,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: AppRadius.radiusMd,
+          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < segments.length; i++)
+              segment(segments[i].$1, segments[i].$2, segments[i].$3,
+                  i == segments.length - 1),
+          ],
+        ),
+      ),
+    );
+
+    final trailingActions = <Widget>[
+      if (_isQuickSearch) ...[
+        Container(
+          width: 1,
+          height: 22,
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          color: scheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+        _roundIconButton(
+          scheme: scheme,
+          icon: _favoritesOnly ? Icons.star_rounded : Icons.star_border_rounded,
+          iconColor: _favoritesOnly ? scheme.primary : scheme.onSurfaceVariant,
+          active: _favoritesOnly,
+          flat: true,
+          onPressed: () {
             setState(() {
-              _typeFilter = type;
+              _favoritesOnly = !_favoritesOnly;
               _selectedIndex = 0;
             });
             _scheduleTagsLoad();
           },
         ),
-      );
-    }
+        _roundIconButton(
+          scheme: scheme,
+          icon: Icons.offline_bolt_rounded,
+          iconColor: _effectiveLocalOnly ? scheme.primary : scheme.onSurfaceVariant,
+          active: _effectiveLocalOnly,
+          flat: true,
+          onPressed: () {
+            setState(() {
+              _localOnly = !_localOnly;
+              _selectedIndex = 0;
+            });
+            _scheduleTagsLoad();
+          },
+        ),
+      ],
+    ];
 
     return SizedBox(
-      height: 40,
+      height: 44,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
-        child: Row(
-          children: [
-            Expanded(
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  // "Tous" uniquement pour QuickSearch, Library et Manage
-                  if (_isQuickSearch || _isLibrary || _isManage) chip('Tous', null),
-                  chip('SFX', SoundType.soundEffect),
-                  chip('Musique', SoundType.music),
-                  chip('Ambiance', SoundType.ambiance),
-                ],
+        padding: const EdgeInsets.fromLTRB(12, 2, 8, 2),
+        // Groupe pilule + actions centré comme un seul bloc ; passe en scroll
+        // horizontal (démarrant à gauche) si la largeur manque. Le
+        // ConstrainedBox(minWidth) force le Row à occuper toute la largeur
+        // disponible quand le contenu est plus étroit, pour que le
+        // MainAxisAlignment.center ait un effet visible.
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [segmentedControl, ...trailingActions],
               ),
             ),
-            if (_isQuickSearch) ...[
-              _roundIconButton(
-                scheme: scheme,
-                icon: _favoritesOnly
-                    ? Icons.star_rounded
-                    : Icons.star_border_rounded,
-                iconColor: _favoritesOnly
-                    ? scheme.primary
-                    : scheme.onSurfaceVariant,
-                onPressed: () {
-                  setState(() {
-                    _favoritesOnly = !_favoritesOnly;
-                    _selectedIndex = 0;
-                  });
-                  _scheduleTagsLoad();
-                },
-              ),
-              const SizedBox(width: 4),
-              _roundIconButton(
-                scheme: scheme,
-                icon: Icons.offline_bolt_rounded,
-                iconColor: _effectiveLocalOnly
-                    ? scheme.primary
-                    : scheme.onSurfaceVariant,
-                onPressed: () {
-                  setState(() {
-                    _localOnly = !_localOnly;
-                    _selectedIndex = 0;
-                  });
-                  _scheduleTagsLoad();
-                },
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
   }
 
+  /// Ligne de séparation fine et atténuée sous la barre de filtres — un
+  /// `Divider` plein-largeur par défaut tranche trop avec les chips arrondis.
+  Widget _buildFilterDivider(ColorScheme scheme) {
+    return Container(
+      height: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      color: scheme.outlineVariant.withValues(alpha: 0.4),
+    );
+  }
+
   Widget _buildResults(ColorScheme scheme, List<Sound> shown, int selectedIndex) {
     if (_loading || _awaitingLocalIds) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return _buildLoadingSkeleton();
     }
 
     if (shown.isEmpty) {
@@ -998,15 +1224,66 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     );
   }
 
+  /// Placeholders animés qui épousent la forme des items de résultat
+  /// (icône + titre + sous-titre + bouton d'action) le temps du chargement.
+  Widget _buildLoadingSkeleton() {
+    return Skeleton(
+      child: ListView.builder(
+        itemExtent: _itemExtent,
+        padding: EdgeInsets.zero,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 7,
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              const SkeletonBox(width: 24, height: 24),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SkeletonLine(widthFactor: index.isEven ? 0.7 : 0.5),
+                    const SizedBox(height: 7),
+                    SkeletonLine(
+                      widthFactor: index.isEven ? 0.3 : 0.4,
+                      height: 10,
+                      intensity: 0.75,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const SkeletonBox(
+                width: _actionButtonSize,
+                height: _actionButtonSize,
+                shape: BoxShape.circle,
+                intensity: 0.8,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildItem(Sound sound, int index, bool isSelected, ColorScheme scheme) {
     final onAir = _isMusicPicker && _isMusicOnAir(sound);
     final queued = _isMusicPicker && _isMusicQueued(sound);
     final onPad = _isPadPicker && _padSoundIds.contains(sound.id);
     final inBoard = _isLibrary && _isMusicOnBoard(sound);
+    final variantMode = _padVariantMode;
+    // Polyphonie : plusieurs variantes du pad peuvent jouer en même temps, donc
+    // on regarde l'état du lecteur de CE slot plutôt que le seul index le plus
+    // récemment déclenché (`currentSoundIndex`, qui ne reflète que le dernier).
+    final isCurrentVariant = variantMode != null &&
+        index < variantMode.padItem.slots.length &&
+        (variantMode.padItem.slots[index].player?.isPlaying ?? false);
     final tags = _soundTags[sound.id] ?? const <TagItem>[];
 
     Color? bgColor;
-    if (onAir || queued) {
+    if (onAir || queued || isCurrentVariant) {
       bgColor = scheme.primaryContainer.withValues(alpha: isSelected ? 0.55 : 0.35);
     } else if (isSelected) {
       bgColor = scheme.primary.withValues(alpha: 0.10);
@@ -1016,19 +1293,22 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       key: _itemKey(sound.id),
       color: bgColor ?? Colors.transparent,
       child: InkWell(
+        canRequestFocus: false,
         onTap: () {
           setState(() => _selectedIndex = index);
           switch (widget.mode) {
             case QuickSearchMode():
               unawaited(_previewSound(sound));
             case MusicPickerMode():
-              unawaited(_playMusicNow(sound));
+              unawaited(_enqueueMusic(sound));
             case PadPickerMode():
               unawaited(_togglePadSound(sound));
             case LibraryMode():
               unawaited(_prepareAndClose(sound));
             case ManageMode():
               unawaited(_handleManageTap(sound));
+            case PadVariantMode(padItem: final padItem):
+              _playPadVariant(padItem, index);
           }
         },
         child: Padding(
@@ -1039,30 +1319,45 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               Icon(_typeIcon(sound.type), color: scheme.onSurfaceVariant),
               const SizedBox(width: 16),
               Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text.rich(
-                      buildHighlightedSpan(
-                        sound.displayName ?? sound.title,
-                        _highlightTokens,
+                child: MouseRegion(
+                  onEnter: (_) => setState(() => _hoveredIndex = index),
+                  onExit: (_) {
+                    if (_hoveredIndex == index) {
+                      setState(() => _hoveredIndex = null);
+                    }
+                  },
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ScrollingTextSpan(
+                        animate: isSelected || _hoveredIndex == index,
+                        span: buildHighlightedSpan(
+                          sound.displayName ?? sound.title,
+                          _highlightTokens,
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    _buildSubtitle(sound, scheme,
-                        onAir: onAir, queued: queued, inBoard: inBoard),
-                    if (tags.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      _buildTagRow(scheme, tags),
+                      _buildSubtitle(sound, scheme,
+                          onAir: onAir,
+                          queued: queued,
+                          inBoard: inBoard,
+                          isCurrentVariant: isCurrentVariant),
+                      if (tags.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        _buildTagRow(scheme, tags),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
               _buildTrailing(sound, scheme,
-                  onAir: onAir, queued: queued, onPad: onPad, inBoard: inBoard),
+                  onAir: onAir,
+                  queued: queued,
+                  onPad: onPad,
+                  inBoard: inBoard,
+                  isCurrentVariant: isCurrentVariant,
+                  index: index),
             ],
           ),
         ),
@@ -1076,6 +1371,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     required bool onAir,
     required bool queued,
     required bool inBoard,
+    required bool isCurrentVariant,
   }) {
     if (_isMusicPicker) {
       final onBoard = _isMusicOnBoard(sound);
@@ -1085,13 +1381,25 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           ? 'En file de passage'
           : onBoard
           ? 'Pad sur la scène'
-          : 'Lecture directe en régie';
+          : null;
+      if (label == null) return const SizedBox.shrink();
       return Text(
         label,
         style: TextStyle(
           fontSize: 12,
           color: onAir || queued ? scheme.primary : scheme.onSurfaceVariant,
           fontWeight: onAir || queued ? FontWeight.w600 : FontWeight.normal,
+        ),
+      );
+    }
+
+    if (isCurrentVariant) {
+      return Text(
+        'En cours de lecture',
+        style: TextStyle(
+          fontSize: 12,
+          color: scheme.primary,
+          fontWeight: FontWeight.w600,
         ),
       );
     }
@@ -1131,6 +1439,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     required bool queued,
     required bool onPad,
     required bool inBoard,
+    required bool isCurrentVariant,
+    required int index,
   }) {
     switch (widget.mode) {
       case QuickSearchMode():
@@ -1158,13 +1468,18 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         );
 
       case MusicPickerMode():
-        final canEnqueue = !onAir && !queued;
-        return _roundIconButton(
-          scheme: scheme,
-          icon: queued ? Icons.check_rounded : Icons.playlist_add_rounded,
-          iconColor: canEnqueue ? scheme.onSurfaceVariant : scheme.primary,
-          onPressed: canEnqueue ? () => unawaited(_enqueueMusic(sound)) : null,
-        );
+        if (onAir || queued) {
+          return SizedBox(
+            width: _actionButtonSize,
+            height: _actionButtonSize,
+            child: Icon(
+              onAir ? Icons.sensors_rounded : Icons.check_rounded,
+              size: 18,
+              color: scheme.primary,
+            ),
+          );
+        }
+        return const SizedBox.shrink();
 
       case PadPickerMode():
         final isAdding = _addingSoundIds.contains(sound.id);
@@ -1199,7 +1514,26 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         );
 
       case ManageMode():
-        return const SizedBox.shrink();
+        final isPlaying = widget.notifier.libraryPreviewIsPlaying(sound.id);
+        return Tooltip(
+          message: isPlaying
+              ? 'Pause'
+              : 'Aperçu depuis le point d\'entrée',
+          child: _roundIconButton(
+            scheme: scheme,
+            icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            iconColor: scheme.primary,
+            onPressed: () => unawaited(_toggleLibraryPreview(sound)),
+          ),
+        );
+
+      case PadVariantMode():
+        if (!isCurrentVariant) return const SizedBox.shrink();
+        return SizedBox(
+          width: _actionButtonSize,
+          height: _actionButtonSize,
+          child: Icon(Icons.graphic_eq_rounded, color: scheme.primary),
+        );
     }
   }
 
@@ -1274,42 +1608,46 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     required IconData icon,
     required VoidCallback? onPressed,
     required Color iconColor,
+    bool active = false,
+    // Désactive tout fond (actif ou survol) — seule la couleur d'icône
+    // porte l'état. Pour les toggles serrés type favoris/hors-ligne.
+    bool flat = false,
   }) {
-    return SizedBox(
-      width: _actionButtonSize,
-      height: _actionButtonSize,
-      child: IconButton(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 18),
-        padding: EdgeInsets.zero,
-        visualDensity: VisualDensity.compact,
-        style: IconButton.styleFrom(
-          shape: const CircleBorder(),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          backgroundColor: Colors.transparent,
-          disabledBackgroundColor: Colors.transparent,
-          hoverColor: scheme.onSurface.withValues(alpha: 0.08),
-          foregroundColor: iconColor,
-        ),
-        constraints: const BoxConstraints.tightFor(
-          width: _actionButtonSize,
-          height: _actionButtonSize,
+    // ExcludeFocus : empêche ce bouton de voler le focus au champ de
+    // recherche (sinon Flutter le regagnerait en sélectionnant tout le
+    // texte, comme un Tab desktop).
+    return ExcludeFocus(
+      child: SizedBox(
+        width: _actionButtonSize,
+        height: _actionButtonSize,
+        child: IconButton(
+          onPressed: onPressed,
+          icon: Icon(icon, size: 18),
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            shape: const CircleBorder(),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            backgroundColor: !flat && active
+                ? scheme.primary.withValues(alpha: 0.12)
+                : Colors.transparent,
+            disabledBackgroundColor: Colors.transparent,
+            hoverColor: flat
+                ? Colors.transparent
+                : scheme.onSurface.withValues(alpha: 0.08),
+            foregroundColor: iconColor,
+          ),
+          constraints: const BoxConstraints.tightFor(
+            width: _actionButtonSize,
+            height: _actionButtonSize,
+          ),
         ),
       ),
     );
   }
 
-  IconData _typeIcon(SoundType? type) => switch (type) {
-    SoundType.soundEffect => Icons.graphic_eq_rounded,
-    SoundType.music => Icons.music_note_rounded,
-    SoundType.ambiance => Icons.waves_rounded,
-    null => Icons.help_outline_rounded,
-  };
+  IconData _typeIcon(SoundType? type) =>
+      type?.icon ?? Icons.help_outline_rounded;
 
-  String _typeLabel(SoundType? type) => switch (type) {
-    SoundType.soundEffect => 'Effet',
-    SoundType.music => 'Musique',
-    SoundType.ambiance => 'Ambiance',
-    null => 'Non classé',
-  };
+  String _typeLabel(SoundType? type) => type?.label ?? 'Non classé';
 }
