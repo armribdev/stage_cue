@@ -3883,16 +3883,6 @@ class $PadsTable extends Pads with TableInfo<$PadsTable, Pad> {
         requiredDuringInsert: false,
         defaultValue: const Constant(0),
       ).withConverter<PadPlayMode>($PadsTable.$converterplayMode);
-  static const VerificationMeta _volumeMeta = const VerificationMeta('volume');
-  @override
-  late final GeneratedColumn<double> volume = GeneratedColumn<double>(
-    'volume',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(1.0),
-  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3914,7 +3904,6 @@ class $PadsTable extends Pads with TableInfo<$PadsTable, Pad> {
     sortOrder,
     rowIndex,
     playMode,
-    volume,
     createdAt,
   ];
   @override
@@ -3964,12 +3953,6 @@ class $PadsTable extends Pads with TableInfo<$PadsTable, Pad> {
         rowIndex.isAcceptableOrUnknown(data['row_index']!, _rowIndexMeta),
       );
     }
-    if (data.containsKey('volume')) {
-      context.handle(
-        _volumeMeta,
-        volume.isAcceptableOrUnknown(data['volume']!, _volumeMeta),
-      );
-    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -4015,10 +3998,6 @@ class $PadsTable extends Pads with TableInfo<$PadsTable, Pad> {
           data['${effectivePrefix}play_mode'],
         )!,
       ),
-      volume: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}volume'],
-      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -4043,7 +4022,6 @@ class Pad extends DataClass implements Insertable<Pad> {
   final int sortOrder;
   final int rowIndex;
   final PadPlayMode playMode;
-  final double volume;
   final DateTime createdAt;
   const Pad({
     required this.id,
@@ -4053,7 +4031,6 @@ class Pad extends DataClass implements Insertable<Pad> {
     required this.sortOrder,
     required this.rowIndex,
     required this.playMode,
-    required this.volume,
     required this.createdAt,
   });
   @override
@@ -4074,7 +4051,6 @@ class Pad extends DataClass implements Insertable<Pad> {
         $PadsTable.$converterplayMode.toSql(playMode),
       );
     }
-    map['volume'] = Variable<double>(volume);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -4090,7 +4066,6 @@ class Pad extends DataClass implements Insertable<Pad> {
       sortOrder: Value(sortOrder),
       rowIndex: Value(rowIndex),
       playMode: Value(playMode),
-      volume: Value(volume),
       createdAt: Value(createdAt),
     );
   }
@@ -4110,7 +4085,6 @@ class Pad extends DataClass implements Insertable<Pad> {
       playMode: $PadsTable.$converterplayMode.fromJson(
         serializer.fromJson<int>(json['playMode']),
       ),
-      volume: serializer.fromJson<double>(json['volume']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -4127,7 +4101,6 @@ class Pad extends DataClass implements Insertable<Pad> {
       'playMode': serializer.toJson<int>(
         $PadsTable.$converterplayMode.toJson(playMode),
       ),
-      'volume': serializer.toJson<double>(volume),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -4140,7 +4113,6 @@ class Pad extends DataClass implements Insertable<Pad> {
     int? sortOrder,
     int? rowIndex,
     PadPlayMode? playMode,
-    double? volume,
     DateTime? createdAt,
   }) => Pad(
     id: id ?? this.id,
@@ -4150,7 +4122,6 @@ class Pad extends DataClass implements Insertable<Pad> {
     sortOrder: sortOrder ?? this.sortOrder,
     rowIndex: rowIndex ?? this.rowIndex,
     playMode: playMode ?? this.playMode,
-    volume: volume ?? this.volume,
     createdAt: createdAt ?? this.createdAt,
   );
   Pad copyWithCompanion(PadsCompanion data) {
@@ -4162,7 +4133,6 @@ class Pad extends DataClass implements Insertable<Pad> {
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       rowIndex: data.rowIndex.present ? data.rowIndex.value : this.rowIndex,
       playMode: data.playMode.present ? data.playMode.value : this.playMode,
-      volume: data.volume.present ? data.volume.value : this.volume,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -4177,7 +4147,6 @@ class Pad extends DataClass implements Insertable<Pad> {
           ..write('sortOrder: $sortOrder, ')
           ..write('rowIndex: $rowIndex, ')
           ..write('playMode: $playMode, ')
-          ..write('volume: $volume, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -4192,7 +4161,6 @@ class Pad extends DataClass implements Insertable<Pad> {
     sortOrder,
     rowIndex,
     playMode,
-    volume,
     createdAt,
   );
   @override
@@ -4206,7 +4174,6 @@ class Pad extends DataClass implements Insertable<Pad> {
           other.sortOrder == this.sortOrder &&
           other.rowIndex == this.rowIndex &&
           other.playMode == this.playMode &&
-          other.volume == this.volume &&
           other.createdAt == this.createdAt);
 }
 
@@ -4218,7 +4185,6 @@ class PadsCompanion extends UpdateCompanion<Pad> {
   final Value<int> sortOrder;
   final Value<int> rowIndex;
   final Value<PadPlayMode> playMode;
-  final Value<double> volume;
   final Value<DateTime> createdAt;
   const PadsCompanion({
     this.id = const Value.absent(),
@@ -4228,7 +4194,6 @@ class PadsCompanion extends UpdateCompanion<Pad> {
     this.sortOrder = const Value.absent(),
     this.rowIndex = const Value.absent(),
     this.playMode = const Value.absent(),
-    this.volume = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   PadsCompanion.insert({
@@ -4239,7 +4204,6 @@ class PadsCompanion extends UpdateCompanion<Pad> {
     this.sortOrder = const Value.absent(),
     this.rowIndex = const Value.absent(),
     this.playMode = const Value.absent(),
-    this.volume = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : boardId = Value(boardId);
   static Insertable<Pad> custom({
@@ -4250,7 +4214,6 @@ class PadsCompanion extends UpdateCompanion<Pad> {
     Expression<int>? sortOrder,
     Expression<int>? rowIndex,
     Expression<int>? playMode,
-    Expression<double>? volume,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -4261,7 +4224,6 @@ class PadsCompanion extends UpdateCompanion<Pad> {
       if (sortOrder != null) 'sort_order': sortOrder,
       if (rowIndex != null) 'row_index': rowIndex,
       if (playMode != null) 'play_mode': playMode,
-      if (volume != null) 'volume': volume,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -4274,7 +4236,6 @@ class PadsCompanion extends UpdateCompanion<Pad> {
     Value<int>? sortOrder,
     Value<int>? rowIndex,
     Value<PadPlayMode>? playMode,
-    Value<double>? volume,
     Value<DateTime>? createdAt,
   }) {
     return PadsCompanion(
@@ -4285,7 +4246,6 @@ class PadsCompanion extends UpdateCompanion<Pad> {
       sortOrder: sortOrder ?? this.sortOrder,
       rowIndex: rowIndex ?? this.rowIndex,
       playMode: playMode ?? this.playMode,
-      volume: volume ?? this.volume,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -4316,9 +4276,6 @@ class PadsCompanion extends UpdateCompanion<Pad> {
         $PadsTable.$converterplayMode.toSql(playMode.value),
       );
     }
-    if (volume.present) {
-      map['volume'] = Variable<double>(volume.value);
-    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4335,7 +4292,6 @@ class PadsCompanion extends UpdateCompanion<Pad> {
           ..write('sortOrder: $sortOrder, ')
           ..write('rowIndex: $rowIndex, ')
           ..write('playMode: $playMode, ')
-          ..write('volume: $volume, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -4386,6 +4342,15 @@ class $PadSoundsTable extends PadSounds
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _volumeMeta = const VerificationMeta('volume');
+  @override
+  late final GeneratedColumn<double> volume = GeneratedColumn<double>(
+    'volume',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _addedAtMeta = const VerificationMeta(
     'addedAt',
   );
@@ -4399,7 +4364,13 @@ class $PadSoundsTable extends PadSounds
     defaultValue: currentDateAndTime,
   );
   @override
-  List<GeneratedColumn> get $columns => [padId, soundId, sortOrder, addedAt];
+  List<GeneratedColumn> get $columns => [
+    padId,
+    soundId,
+    sortOrder,
+    volume,
+    addedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -4434,6 +4405,12 @@ class $PadSoundsTable extends PadSounds
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
       );
     }
+    if (data.containsKey('volume')) {
+      context.handle(
+        _volumeMeta,
+        volume.isAcceptableOrUnknown(data['volume']!, _volumeMeta),
+      );
+    }
     if (data.containsKey('added_at')) {
       context.handle(
         _addedAtMeta,
@@ -4461,6 +4438,10 @@ class $PadSoundsTable extends PadSounds
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      volume: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}volume'],
+      ),
       addedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}added_at'],
@@ -4478,11 +4459,16 @@ class PadSound extends DataClass implements Insertable<PadSound> {
   final int padId;
   final int soundId;
   final int sortOrder;
+
+  /// Override de volume PROPRE à ce son dans CE pad. null = suivre le volume
+  /// par défaut du son (`sounds.volume`). Remplace l'ancien volume par pad.
+  final double? volume;
   final DateTime addedAt;
   const PadSound({
     required this.padId,
     required this.soundId,
     required this.sortOrder,
+    this.volume,
     required this.addedAt,
   });
   @override
@@ -4491,6 +4477,9 @@ class PadSound extends DataClass implements Insertable<PadSound> {
     map['pad_id'] = Variable<int>(padId);
     map['sound_id'] = Variable<int>(soundId);
     map['sort_order'] = Variable<int>(sortOrder);
+    if (!nullToAbsent || volume != null) {
+      map['volume'] = Variable<double>(volume);
+    }
     map['added_at'] = Variable<DateTime>(addedAt);
     return map;
   }
@@ -4500,6 +4489,9 @@ class PadSound extends DataClass implements Insertable<PadSound> {
       padId: Value(padId),
       soundId: Value(soundId),
       sortOrder: Value(sortOrder),
+      volume: volume == null && nullToAbsent
+          ? const Value.absent()
+          : Value(volume),
       addedAt: Value(addedAt),
     );
   }
@@ -4513,6 +4505,7 @@ class PadSound extends DataClass implements Insertable<PadSound> {
       padId: serializer.fromJson<int>(json['padId']),
       soundId: serializer.fromJson<int>(json['soundId']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      volume: serializer.fromJson<double?>(json['volume']),
       addedAt: serializer.fromJson<DateTime>(json['addedAt']),
     );
   }
@@ -4523,6 +4516,7 @@ class PadSound extends DataClass implements Insertable<PadSound> {
       'padId': serializer.toJson<int>(padId),
       'soundId': serializer.toJson<int>(soundId),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'volume': serializer.toJson<double?>(volume),
       'addedAt': serializer.toJson<DateTime>(addedAt),
     };
   }
@@ -4531,11 +4525,13 @@ class PadSound extends DataClass implements Insertable<PadSound> {
     int? padId,
     int? soundId,
     int? sortOrder,
+    Value<double?> volume = const Value.absent(),
     DateTime? addedAt,
   }) => PadSound(
     padId: padId ?? this.padId,
     soundId: soundId ?? this.soundId,
     sortOrder: sortOrder ?? this.sortOrder,
+    volume: volume.present ? volume.value : this.volume,
     addedAt: addedAt ?? this.addedAt,
   );
   PadSound copyWithCompanion(PadSoundsCompanion data) {
@@ -4543,6 +4539,7 @@ class PadSound extends DataClass implements Insertable<PadSound> {
       padId: data.padId.present ? data.padId.value : this.padId,
       soundId: data.soundId.present ? data.soundId.value : this.soundId,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      volume: data.volume.present ? data.volume.value : this.volume,
       addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
     );
   }
@@ -4553,13 +4550,14 @@ class PadSound extends DataClass implements Insertable<PadSound> {
           ..write('padId: $padId, ')
           ..write('soundId: $soundId, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('volume: $volume, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(padId, soundId, sortOrder, addedAt);
+  int get hashCode => Object.hash(padId, soundId, sortOrder, volume, addedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4567,6 +4565,7 @@ class PadSound extends DataClass implements Insertable<PadSound> {
           other.padId == this.padId &&
           other.soundId == this.soundId &&
           other.sortOrder == this.sortOrder &&
+          other.volume == this.volume &&
           other.addedAt == this.addedAt);
 }
 
@@ -4574,12 +4573,14 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
   final Value<int> padId;
   final Value<int> soundId;
   final Value<int> sortOrder;
+  final Value<double?> volume;
   final Value<DateTime> addedAt;
   final Value<int> rowid;
   const PadSoundsCompanion({
     this.padId = const Value.absent(),
     this.soundId = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.volume = const Value.absent(),
     this.addedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -4587,6 +4588,7 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
     required int padId,
     required int soundId,
     this.sortOrder = const Value.absent(),
+    this.volume = const Value.absent(),
     this.addedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : padId = Value(padId),
@@ -4595,6 +4597,7 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
     Expression<int>? padId,
     Expression<int>? soundId,
     Expression<int>? sortOrder,
+    Expression<double>? volume,
     Expression<DateTime>? addedAt,
     Expression<int>? rowid,
   }) {
@@ -4602,6 +4605,7 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
       if (padId != null) 'pad_id': padId,
       if (soundId != null) 'sound_id': soundId,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (volume != null) 'volume': volume,
       if (addedAt != null) 'added_at': addedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -4611,6 +4615,7 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
     Value<int>? padId,
     Value<int>? soundId,
     Value<int>? sortOrder,
+    Value<double?>? volume,
     Value<DateTime>? addedAt,
     Value<int>? rowid,
   }) {
@@ -4618,6 +4623,7 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
       padId: padId ?? this.padId,
       soundId: soundId ?? this.soundId,
       sortOrder: sortOrder ?? this.sortOrder,
+      volume: volume ?? this.volume,
       addedAt: addedAt ?? this.addedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -4635,6 +4641,9 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
+    if (volume.present) {
+      map['volume'] = Variable<double>(volume.value);
+    }
     if (addedAt.present) {
       map['added_at'] = Variable<DateTime>(addedAt.value);
     }
@@ -4650,6 +4659,7 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
           ..write('padId: $padId, ')
           ..write('soundId: $soundId, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('volume: $volume, ')
           ..write('addedAt: $addedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -9934,7 +9944,6 @@ typedef $$PadsTableCreateCompanionBuilder =
       Value<int> sortOrder,
       Value<int> rowIndex,
       Value<PadPlayMode> playMode,
-      Value<double> volume,
       Value<DateTime> createdAt,
     });
 typedef $$PadsTableUpdateCompanionBuilder =
@@ -9946,7 +9955,6 @@ typedef $$PadsTableUpdateCompanionBuilder =
       Value<int> sortOrder,
       Value<int> rowIndex,
       Value<PadPlayMode> playMode,
-      Value<double> volume,
       Value<DateTime> createdAt,
     });
 
@@ -10028,11 +10036,6 @@ class $$PadsTableFilterComposer extends Composer<_$AppDatabase, $PadsTable> {
         column: $table.playMode,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
-
-  ColumnFilters<double> get volume => $composableBuilder(
-    column: $table.volume,
-    builder: (column) => ColumnFilters(column),
-  );
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
@@ -10126,11 +10129,6 @@ class $$PadsTableOrderingComposer extends Composer<_$AppDatabase, $PadsTable> {
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get volume => $composableBuilder(
-    column: $table.volume,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -10186,9 +10184,6 @@ class $$PadsTableAnnotationComposer
 
   GeneratedColumnWithTypeConverter<PadPlayMode, int> get playMode =>
       $composableBuilder(column: $table.playMode, builder: (column) => column);
-
-  GeneratedColumn<double> get volume =>
-      $composableBuilder(column: $table.volume, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -10277,7 +10272,6 @@ class $$PadsTableTableManager
                 Value<int> sortOrder = const Value.absent(),
                 Value<int> rowIndex = const Value.absent(),
                 Value<PadPlayMode> playMode = const Value.absent(),
-                Value<double> volume = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => PadsCompanion(
                 id: id,
@@ -10287,7 +10281,6 @@ class $$PadsTableTableManager
                 sortOrder: sortOrder,
                 rowIndex: rowIndex,
                 playMode: playMode,
-                volume: volume,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -10299,7 +10292,6 @@ class $$PadsTableTableManager
                 Value<int> sortOrder = const Value.absent(),
                 Value<int> rowIndex = const Value.absent(),
                 Value<PadPlayMode> playMode = const Value.absent(),
-                Value<double> volume = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => PadsCompanion.insert(
                 id: id,
@@ -10309,7 +10301,6 @@ class $$PadsTableTableManager
                 sortOrder: sortOrder,
                 rowIndex: rowIndex,
                 playMode: playMode,
-                volume: volume,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -10394,6 +10385,7 @@ typedef $$PadSoundsTableCreateCompanionBuilder =
       required int padId,
       required int soundId,
       Value<int> sortOrder,
+      Value<double?> volume,
       Value<DateTime> addedAt,
       Value<int> rowid,
     });
@@ -10402,6 +10394,7 @@ typedef $$PadSoundsTableUpdateCompanionBuilder =
       Value<int> padId,
       Value<int> soundId,
       Value<int> sortOrder,
+      Value<double?> volume,
       Value<DateTime> addedAt,
       Value<int> rowid,
     });
@@ -10457,6 +10450,11 @@ class $$PadSoundsTableFilterComposer
   });
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get volume => $composableBuilder(
+    column: $table.volume,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10526,6 +10524,11 @@ class $$PadSoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get volume => $composableBuilder(
+    column: $table.volume,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get addedAt => $composableBuilder(
     column: $table.addedAt,
     builder: (column) => ColumnOrderings(column),
@@ -10589,6 +10592,9 @@ class $$PadSoundsTableAnnotationComposer
   });
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<double> get volume =>
+      $composableBuilder(column: $table.volume, builder: (column) => column);
 
   GeneratedColumn<DateTime> get addedAt =>
       $composableBuilder(column: $table.addedAt, builder: (column) => column);
@@ -10671,12 +10677,14 @@ class $$PadSoundsTableTableManager
                 Value<int> padId = const Value.absent(),
                 Value<int> soundId = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<double?> volume = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PadSoundsCompanion(
                 padId: padId,
                 soundId: soundId,
                 sortOrder: sortOrder,
+                volume: volume,
                 addedAt: addedAt,
                 rowid: rowid,
               ),
@@ -10685,12 +10693,14 @@ class $$PadSoundsTableTableManager
                 required int padId,
                 required int soundId,
                 Value<int> sortOrder = const Value.absent(),
+                Value<double?> volume = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PadSoundsCompanion.insert(
                 padId: padId,
                 soundId: soundId,
                 sortOrder: sortOrder,
+                volume: volume,
                 addedAt: addedAt,
                 rowid: rowid,
               ),

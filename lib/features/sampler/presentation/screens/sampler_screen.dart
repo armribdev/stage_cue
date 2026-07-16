@@ -11,6 +11,7 @@ import '../widgets/dashed_slot_frame.dart';
 import '../widgets/music_preview_panel.dart';
 import '../widgets/music_picker_sheet.dart';
 import '../widgets/quick_search_overlay.dart';
+import '../widgets/audio_vu_meter.dart';
 import '../widgets/app_form_dialog.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
@@ -1924,6 +1925,9 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
+        // Vumètre de sortie : uniquement là où la barre a la place (tablette+).
+        if (context.deviceClass.isAtLeastTablet)
+          const Center(child: AudioVuMeter()),
         stopAllButton,
         IconButton(
           icon: const Icon(Icons.search_rounded),

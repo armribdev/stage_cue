@@ -46,7 +46,7 @@ class LibrarySnapshotStore {
       // pas voyager (le picker interdit d'en placer dans un board Drive).
       await _database.customStatement('''
         CREATE TABLE snap.pad_sounds AS
-        SELECT ps.pad_id, ps.sort_order, ps.added_at,
+        SELECT ps.pad_id, ps.sort_order, ps.added_at, ps.volume,
                s.drive_file_id, s.relative_path
         FROM pad_sounds ps
         INNER JOIN pads p ON p.id = ps.pad_id
@@ -180,7 +180,6 @@ class LibrarySnapshotStore {
               sortOrder: Value(row.read<int>('sort_order')),
               rowIndex: Value(row.read<int>('row_index')),
               playMode: Value(PadPlayMode.values[row.read<int>('play_mode')]),
-              volume: Value(row.read<double>('volume')),
               createdAt: Value(row.read<DateTime>('created_at')),
             ),
           );
@@ -189,6 +188,8 @@ class LibrarySnapshotStore {
 
     if (!await _snapHasTable('pad_sounds')) return;
 
+    // Override de volume par son : absent des snapshots antérieurs à v29.
+    final hasVolume = await _snapColumnExists('pad_sounds', 'volume');
     final padSoundRows =
         await _database.customSelect('SELECT * FROM snap.pad_sounds').get();
     for (final row in padSoundRows) {
@@ -228,6 +229,8 @@ class LibrarySnapshotStore {
               padId: localPadId,
               soundId: sound.id,
               sortOrder: Value(row.read<int>('sort_order')),
+              volume:
+                  hasVolume ? Value(row.read<double?>('volume')) : const Value.absent(),
               addedAt: Value(row.read<DateTime>('added_at')),
             ),
           );

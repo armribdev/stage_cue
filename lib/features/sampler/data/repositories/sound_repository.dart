@@ -234,7 +234,7 @@ class SoundRepository {
     required List<int> soundIds,
     String? name,
     int? colorValue,
-    double volume = 1.0,
+    List<double?>? soundVolumes,
     PadPlayMode playMode = PadPlayMode.random,
     int? sortOrder,
     int rowIndex = 0,
@@ -244,7 +244,7 @@ class SoundRepository {
       soundIds: soundIds,
       name: name,
       colorValue: colorValue,
-      volume: volume,
+      soundVolumes: soundVolumes,
       playMode: playMode,
       sortOrder: sortOrder,
       rowIndex: rowIndex,
@@ -280,7 +280,6 @@ class SoundRepository {
     bool updateName = false,
     int? colorValue,
     bool updateColor = false,
-    double? volume,
     PadPlayMode? playMode,
   }) async {
     await _padDataSource.updatePadSettings(
@@ -289,8 +288,20 @@ class SoundRepository {
       updateName: updateName,
       colorValue: colorValue,
       updateColor: updateColor,
-      volume: volume,
       playMode: playMode,
+    );
+  }
+
+  /// Override de volume d'un son dans un pad (null = volume par défaut du son).
+  Future<void> updatePadSoundVolume({
+    required int padId,
+    required int soundId,
+    required double? volume,
+  }) async {
+    await _padDataSource.updatePadSoundVolume(
+      padId: padId,
+      soundId: soundId,
+      volume: volume,
     );
   }
 
