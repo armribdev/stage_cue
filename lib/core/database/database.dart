@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 33;
+  int get schemaVersion => 35;
 
   @override
   MigrationStrategy get migration {
@@ -293,6 +293,44 @@ class AppDatabase extends _$AppDatabase {
           // fichiers auparavant en échec après un upgrade de flutter_soloud.
           await m.addColumn(sounds, sounds.waveformProbeGeneration);
         }
+        if (from < 34) {
+          // Le volume passe du pad au couple (pad, son) : chaque son d'un pad a
+          // désormais son propre volume (override), au lieu d'un volume unique
+          // pour tout le pad. Backfill : chaque pad_sound hérite du volume actuel
+          // de son pad pour préserver le rendu audio existant ; null = suivre le
+          // volume par défaut du son. On garde-fou les deux étapes car un upgrade
+          // depuis < 10 crée déjà les tables au schéma courant (colonne présente,
+          // volume du pad absent).
+          if (!await _columnExists('pad_sounds', 'volume')) {
+            await m.addColumn(
+              padSounds,
+              padSounds.volume as GeneratedColumn<Object>,
+            );
+          }
+          if (await _columnExists('pads', 'volume')) {
+            await customStatement(
+              'UPDATE pad_sounds SET volume = '
+              '(SELECT p.volume FROM pads p WHERE p.id = pad_sounds.pad_id)',
+            );
+            // Supprime la colonne volume de pads (recréation de table SQLite).
+            await m.alterTable(TableMigration(pads));
+          }
+        }
+        if (from < 35) {
+          // Rattrapage d'une collision de versions au merge : deux branches ont
+          // toutes deux utilisé le slot `from < 29` (l'une pour la waveform,
+          // l'autre pour le volume par pad_sound, depuis renuméroté en v34). Les
+          // bases migrées par la branche « volume » ont atteint user_version 29
+          // SANS la colonne `waveform` et sautent donc à jamais le `from < 29`.
+          // On ré-applique ici l'ajout, gardé par un test d'existence pour rester
+          // sans effet sur les bases déjà correctes (branche waveform ou fraîches).
+          if (!await _columnExists('sounds', 'waveform')) {
+            await m.addColumn(sounds, sounds.waveform);
+          }
+          if (!await _columnExists('sounds', 'waveform_probe_generation')) {
+            await m.addColumn(sounds, sounds.waveformProbeGeneration);
+          }
+        }
       },
       beforeOpen: (details) async {
         // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
@@ -327,6 +365,14 @@ class AppDatabase extends _$AppDatabase {
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_sound_boards_board_key '
       'ON sound_boards (board_key)',
     );
+  }
+
+  /// Vrai si la colonne [column] existe déjà sur la table [table] (PRAGMA).
+  /// Rend les migrations idempotentes face aux upgrades multi-versions où une
+  /// table a pu être (re)créée au schéma courant par une étape antérieure.
+  Future<bool> _columnExists(String table, String column) async {
+    final rows = await customSelect('PRAGMA table_info($table)').get();
+    return rows.any((r) => r.read<String>('name') == column);
   }
 
   Future<void> _ensureBoardSoundSettingsTableExists() async {
@@ -368,13 +414,14 @@ class AppDatabase extends _$AppDatabase {
           name: Value(row.read<String?>('display_name')),
           color: Value(row.read<int?>('color')),
           sortOrder: Value(row.read<int>('sort_order')),
-          volume: Value(row.read<double?>('volume') ?? 1.0),
         ),
       );
+      // Le volume vit désormais sur le couple (pad, son) et non sur le pad.
       await into(padSounds).insert(
         PadSoundsCompanion.insert(
           padId: padId,
           soundId: row.read<int>('sound_id'),
+          volume: Value(row.read<double?>('volume')),
         ),
       );
     }

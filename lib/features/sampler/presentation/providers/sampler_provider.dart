@@ -113,8 +113,10 @@ class SamplerNotifier extends ChangeNotifier {
   /// sur l'annotation @protected de ChangeNotifier.
   void _notify() => notifyListeners();
 
-  /// Volume effectif d'un pad : pads musique soumis au volume global.
-  double _effectiveVolume(PadItem padItem) => _music._effectiveVolume(padItem);
+  /// Volume effectif du son à [soundIndex] dans un pad (override du pad-son ou
+  /// volume par défaut du son) ; pads musique soumis au volume global.
+  double _effectiveVolume(PadItem padItem, {int? soundIndex}) =>
+      _music._effectiveVolume(padItem, soundIndex: soundIndex);
 
   /// Pad affiché sur le plateau en mode hors-ligne (au moins un son local).
   bool isPadVisibleInOfflineMode(PadItem padItem) {
@@ -1063,7 +1065,7 @@ class SamplerNotifier extends ChangeNotifier {
     }
     final startOffset = Duration(milliseconds: startOffsetMs);
     await player.playOverlapping(
-      volume: _effectiveVolume(resolved),
+      volume: _effectiveVolume(resolved, soundIndex: soundIndex),
       startOffset: startOffset,
     );
     // Ticket de progression : une barre superposée par voix, auto-supprimée à
@@ -1465,13 +1467,11 @@ class SamplerNotifier extends ChangeNotifier {
     bool updateColor = false,
     String? displayName,
     bool updateDisplayName = false,
-    double? volume,
     PadPlayMode? playMode,
   }) async {
     var hasChanged = false;
     String? nextName = padItem.pad.name;
     int? nextColor = padItem.pad.colorValue;
-    double nextVolume = padItem.pad.volume;
     PadPlayMode? nextPlayMode;
 
     if (updateColor) {
@@ -1482,19 +1482,6 @@ class SamplerNotifier extends ChangeNotifier {
       final trimmed = displayName?.trim();
       nextName = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
       if (nextName != padItem.pad.name) hasChanged = true;
-    }
-    if (volume != null) {
-      final clamped = volume.clamp(0.0, 1.0);
-      if (clamped != padItem.pad.volume) {
-        nextVolume = clamped;
-        hasChanged = true;
-        if (padItem.isPlaying) {
-          final effective = padItem.pad.isMusicPad
-              ? nextVolume * _music._musicVolume
-              : nextVolume;
-          padItem.currentPlayer?.setVolume(effective);
-        }
-      }
     }
     if (playMode != null && playMode != padItem.pad.playMode) {
       nextPlayMode = playMode;
@@ -1508,7 +1495,6 @@ class SamplerNotifier extends ChangeNotifier {
       clearName: updateDisplayName && nextName == null,
       colorValue: nextColor,
       clearColor: updateColor && nextColor == null,
-      volume: nextVolume,
       playMode: nextPlayMode,
     );
     notifyListeners();
@@ -1519,8 +1505,46 @@ class SamplerNotifier extends ChangeNotifier {
       updateName: updateDisplayName,
       colorValue: updateColor ? nextColor : null,
       updateColor: updateColor,
-      volume: volume != null ? nextVolume : null,
       playMode: nextPlayMode,
+    );
+  }
+
+  /// Met à jour le volume d'un son DANS un pad (override propre à ce pad).
+  /// [volume] null = suivre le volume par défaut du son. Applique le volume au
+  /// lecteur en cours si ce son joue actuellement.
+  Future<void> updatePadSoundVolume(
+    PadItem padItem,
+    int soundId,
+    double? volume,
+  ) async {
+    final index = padItem.pad.sounds.indexWhere((s) => s.id == soundId);
+    if (index < 0) return;
+
+    final clamped = volume?.clamp(0.0, 1.0);
+    final nextVolumes = List<double?>.filled(
+      padItem.pad.sounds.length,
+      null,
+    );
+    for (var i = 0; i < nextVolumes.length; i++) {
+      nextVolumes[i] = i < padItem.pad.soundVolumes.length
+          ? padItem.pad.soundVolumes[i]
+          : null;
+    }
+    nextVolumes[index] = clamped;
+
+    padItem.pad = padItem.pad.copyWith(soundVolumes: nextVolumes);
+
+    // Applique en direct si ce son précis est en cours de lecture.
+    if (padItem.isPlaying && padItem.currentSoundIndex == index) {
+      padItem.currentPlayer
+          ?.setVolume(_effectiveVolume(padItem, soundIndex: index));
+    }
+    notifyListeners();
+
+    await _repository.updatePadSoundVolume(
+      padId: padItem.pad.id,
+      soundId: soundId,
+      volume: clamped,
     );
   }
 
@@ -1686,7 +1710,12 @@ class SamplerNotifier extends ChangeNotifier {
         soundIds: snapshot.pad.sounds.map((s) => s.id).toList(),
         name: snapshot.pad.name,
         colorValue: snapshot.pad.colorValue,
-        volume: snapshot.pad.volume,
+        soundVolumes: [
+          for (var i = 0; i < snapshot.pad.sounds.length; i++)
+            i < snapshot.pad.soundVolumes.length
+                ? snapshot.pad.soundVolumes[i]
+                : null,
+        ],
         playMode: snapshot.pad.playMode,
         sortOrder: snapshot.index,
       );

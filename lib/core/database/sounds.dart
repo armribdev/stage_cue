@@ -190,7 +190,6 @@ class Pads extends Table {
   IntColumn get rowIndex => integer().withDefault(const Constant(0))();
   IntColumn get playMode =>
       intEnum<PadPlayMode>().withDefault(const Constant(0))();
-  RealColumn get volume => real().withDefault(const Constant(1.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -200,6 +199,9 @@ class PadSounds extends Table {
   IntColumn get soundId =>
       integer().references(Sounds, #id, onDelete: KeyAction.cascade)();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  /// Override de volume PROPRE à ce son dans CE pad. null = suivre le volume
+  /// par défaut du son (`sounds.volume`). Remplace l'ancien volume par pad.
+  RealColumn get volume => real().nullable()();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override

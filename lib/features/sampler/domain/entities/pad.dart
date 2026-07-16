@@ -10,9 +10,13 @@ class Pad {
   final int sortOrder;
   final int rowIndex;
   final PadPlayMode playMode;
-  final double volume;
   final DateTime createdAt;
   final List<Sound> sounds;
+
+  /// Override de volume par son, aligné par index sur [sounds]. Un élément null
+  /// (ou un index hors bornes) signifie « suivre le volume par défaut du son ».
+  /// Remplace l'ancien volume unique par pad.
+  final List<double?> soundVolumes;
 
   const Pad({
     required this.id,
@@ -22,10 +26,19 @@ class Pad {
     required this.sortOrder,
     this.rowIndex = 0,
     this.playMode = PadPlayMode.random,
-    this.volume = 1.0,
     required this.createdAt,
     this.sounds = const [],
+    this.soundVolumes = const [],
   });
+
+  /// Volume effectif du son à [index] : l'override du pad s'il existe, sinon le
+  /// volume par défaut du son. Défensif face aux listes désalignées (brouillons).
+  double effectiveVolume(int index) {
+    if (index < 0 || index >= sounds.length) return 1.0;
+    final override =
+        index < soundVolumes.length ? soundVolumes[index] : null;
+    return override ?? sounds[index].volume;
+  }
 
   /// Numéros 1-based des multipads dans l'ordre d'affichage du plateau.
   static Map<int, int> multipadNumbersFor(Iterable<Pad> padsInBoardOrder) {
@@ -67,8 +80,8 @@ class Pad {
     int? sortOrder,
     int? rowIndex,
     PadPlayMode? playMode,
-    double? volume,
     List<Sound>? sounds,
+    List<double?>? soundVolumes,
   }) {
     return Pad(
       id: id,
@@ -78,9 +91,9 @@ class Pad {
       sortOrder: sortOrder ?? this.sortOrder,
       rowIndex: rowIndex ?? this.rowIndex,
       playMode: playMode ?? this.playMode,
-      volume: volume ?? this.volume,
       createdAt: createdAt,
       sounds: sounds ?? this.sounds,
+      soundVolumes: soundVolumes ?? this.soundVolumes,
     );
   }
 }
