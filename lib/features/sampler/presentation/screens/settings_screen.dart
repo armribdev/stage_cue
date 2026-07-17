@@ -109,12 +109,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// re-téléchargement à chaque ouverture des réglages).
   final DriveAvatarCache _avatarCache = DriveAvatarCache();
 
-  /// Futures d'avatar mémorisés par URL : évite de relancer un `resolve` (et de
-  /// faire clignoter l'avatar) à chaque reconstruction du header.
+  /// Taille canonique de l'avatar mis en cache : découplée du `radius` des
+  /// widgets pour qu'un seul fichier serve tous les affichages (Image.file
+  /// redimensionne via `BoxFit.cover`), sans re-télécharger par taille.
+  static const int _kAvatarCacheSizePx = 128;
+
+  /// Futures d'avatar mémorisés par identité (e-mail) : évite de relancer un
+  /// `resolve` (et de faire clignoter l'avatar) à chaque reconstruction du
+  /// header.
   final Map<String, Future<File?>> _avatarFutures = {};
 
-  Future<File?> _resolveAvatar(String url) =>
-      _avatarFutures.putIfAbsent(url, () => _avatarCache.resolve(url));
+  Future<File?> _resolveAvatar(DriveAccountProfile account) {
+    final url = account.photoUrlForDisplay(sizePx: _kAvatarCacheSizePx);
+    if (url == null) return Future.value(null);
+    return _avatarFutures.putIfAbsent(
+      account.email,
+      () => _avatarCache.resolve(identity: account.email, url: url),
+    );
+  }
 
   @override
   void initState() {
@@ -451,7 +463,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     DriveAccountProfile account, {
     double radius = 22,
   }) {
-    final photoUrl = account.photoUrlForDisplay(sizePx: (radius * 2).round());
     final size = radius * 2;
 
     Widget initialsAvatar() {
@@ -464,7 +475,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
 
-    if (photoUrl == null || photoUrl.isEmpty) {
+    if (account.photoUrl == null || account.photoUrl!.isEmpty) {
       return initialsAvatar();
     }
 
@@ -473,7 +484,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // cas d'échec réseau, on retombe sur les initiales — jamais de spinner
     // clignotant ni de trou visuel.
     return FutureBuilder<File?>(
-      future: _resolveAvatar(photoUrl),
+      future: _resolveAvatar(account),
       builder: (context, snapshot) {
         final file = snapshot.data;
         if (file == null) {
