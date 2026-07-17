@@ -43,6 +43,12 @@ class DriveProfileStore {
 /// Cache disque de la photo de profil : évite de re-télécharger l'avatar à
 /// chaque lancement et permet son affichage hors-ligne (`Image.network` ne
 /// dispose que d'un cache mémoire, perdu à la fermeture de l'app).
+///
+/// Le cache est indexé sur l'**identité du compte** (e-mail), pas sur l'URL :
+/// un même compte n'a qu'un seul fichier, réutilisé quelle que soit la variante
+/// d'URL fournie par Google (userinfo vs id_token, tailles différentes). On
+/// évite ainsi l'accumulation de fichiers et le clignotement quand l'URL change
+/// entre deux lancements alors que la photo, elle, est la même.
 class DriveAvatarCache {
   DriveAvatarCache({http.Client? httpClient})
       : _http = httpClient ?? http.Client();
@@ -61,44 +67,101 @@ class DriveAvatarCache {
     return _cachedDir = dir;
   }
 
-  /// Nom de fichier stable et déterministe pour [url] (FNV-1a 32 bits) :
+  /// Clé stable et déterministe pour [value] (FNV-1a 32 bits) :
   /// `String.hashCode` est semé aléatoirement par isolate et changerait entre
   /// deux lancements, invalidant le cache.
-  static String _keyFor(String url) {
+  static String _keyFor(String value) {
     var hash = 0x811c9dc5;
-    for (final unit in url.codeUnits) {
+    for (final unit in value.codeUnits) {
       hash = (hash ^ unit) & 0xFFFFFFFF;
       hash = (hash * 0x01000193) & 0xFFFFFFFF;
     }
     return hash.toRadixString(16);
   }
 
-  Future<File> _fileFor(String url) async {
-    final dir = await _dir();
-    return File(p.join(dir.path, 'avatar_${_keyFor(url)}.img'));
-  }
-
-  /// Renvoie le fichier local de l'avatar : depuis le cache s'il existe, sinon
-  /// après téléchargement. Null si indisponible (hors-ligne sans cache).
-  Future<File?> resolve(String url) async {
-    final file = await _fileFor(url);
-    if (await file.exists()) {
-      return file;
+  /// Extension d'image réelle déduite du `Content-Type`. Surtout, on n'utilise
+  /// jamais `.img` : sous Windows cette extension est associée aux images
+  /// disque, et l'explorateur affiche alors l'avatar comme un fichier disque.
+  static String _extForContentType(String? contentType) {
+    switch (contentType?.split(';').first.trim().toLowerCase()) {
+      case 'image/png':
+        return 'png';
+      case 'image/webp':
+        return 'webp';
+      case 'image/gif':
+        return 'gif';
+      case 'image/jpeg':
+      default:
+        return 'jpg';
     }
-    return _download(url, file);
   }
 
-  Future<File?> _download(String url, File file) async {
+  /// Fichier en cache pour [identity], quelle que soit son extension.
+  Future<File?> _existingFileFor(String identity) async {
+    final dir = await _dir();
+    final prefix = 'avatar_${_keyFor(identity)}.';
+    await for (final entity in dir.list()) {
+      if (entity is File && p.basename(entity.path).startsWith(prefix)) {
+        return entity;
+      }
+    }
+    return null;
+  }
+
+  /// Renvoie le fichier local de l'avatar de [identity] (l'e-mail du compte),
+  /// téléchargé depuis [url]. Le fichier existant est renvoyé immédiatement s'il
+  /// est présent ; on ne re-télécharge que s'il manque ou que la source a
+  /// changé. En cas d'échec réseau on retombe sur le fichier existant (photo
+  /// éventuellement un peu périmée, mais jamais de trou visuel). Null si aucune
+  /// photo n'est disponible.
+  Future<File?> resolve({required String identity, required String url}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final srcKey = 'drive_avatar_src_${_keyFor(identity)}';
+    final existing = await _existingFileFor(identity);
+    if (existing != null && prefs.getString(srcKey) == url) {
+      return existing;
+    }
+
+    final downloaded = await _download(identity, url);
+    if (downloaded != null) {
+      await prefs.setString(srcKey, url);
+      return downloaded;
+    }
+    // Hors-ligne ou URL périmée : on garde l'ancienne photo si on en a une.
+    return existing;
+  }
+
+  Future<File?> _download(String identity, String url) async {
     try {
       final response = await _http.get(Uri.parse(url));
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        final dir = await _dir();
+        final ext = _extForContentType(response.headers['content-type']);
+        final file =
+            File(p.join(dir.path, 'avatar_${_keyFor(identity)}.$ext'));
         await file.writeAsBytes(response.bodyBytes, flush: true);
+        await _pruneExcept(file);
         return file;
       }
     } catch (_) {
-      // Hors-ligne ou URL périmée : pas d'avatar à afficher cette fois-ci.
+      // Hors-ligne ou URL périmée : pas d'avatar frais à écrire cette fois-ci.
     }
     return null;
+  }
+
+  /// Supprime tout fichier du dossier autre que [keep] : purge les anciennes
+  /// variantes d'URL et les fichiers `.img` hérités des versions précédentes.
+  Future<void> _pruneExcept(File keep) async {
+    try {
+      final dir = await _dir();
+      await for (final entity in dir.list()) {
+        if (entity is File && !p.equals(entity.path, keep.path)) {
+          await entity.delete();
+        }
+      }
+    } catch (_) {
+      // Best-effort : un fichier résiduel n'est pas bloquant.
+    }
   }
 
   /// Supprime toutes les photos mises en cache (déconnexion).
