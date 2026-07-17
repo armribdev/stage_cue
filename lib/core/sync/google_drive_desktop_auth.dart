@@ -16,6 +16,65 @@ const String _kTokenKey = 'token';
 const String _kExpiresAtKey = 'expires_at';
 const Duration _kDefaultAccessTokenLifetime = Duration(minutes: 55);
 
+/// Page affichée dans le navigateur après un consentement OAuth réussi.
+/// Auto-suffisante (aucune ressource externe : CSP navigateur + hors-ligne),
+/// adaptée au thème clair/sombre, et invite l'utilisateur à revenir dans
+/// l'app. On ne tente pas `window.close()` : les navigateurs le bloquent pour
+/// un onglet ouvert par le système, ça n'aboutirait qu'à un échec silencieux.
+const String _kPostAuthPageHtml = '''
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage Cue — Connexion réussie</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex;
+    align-items: center; justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f5f7; color: #1d1d1f;
+  }
+  .card {
+    max-width: 420px; margin: 24px; padding: 40px 32px; text-align: center;
+    background: #ffffff; border-radius: 16px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.08);
+  }
+  .badge {
+    width: 64px; height: 64px; margin: 0 auto 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #e8f5e9;
+  }
+  .badge svg { width: 34px; height: 34px; stroke: #2e7d32; }
+  h1 { margin: 0 0 10px; font-size: 20px; font-weight: 600; }
+  p { margin: 0; font-size: 15px; line-height: 1.5; opacity: 0.7; }
+  .hint { margin-top: 18px; font-size: 13px; opacity: 0.5; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1c1c1e; color: #f5f5f7; }
+    .card { background: #2c2c2e; box-shadow: 0 8px 40px rgba(0,0,0,0.4); }
+    .badge { background: rgba(46,125,50,0.22); }
+    .badge svg { stroke: #81c784; }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 6 9 17l-5-5"></path>
+      </svg>
+    </div>
+    <h1>Connexion réussie</h1>
+    <p>Votre compte Google est maintenant relié à Stage Cue.</p>
+    <p class="hint">Vous pouvez fermer cet onglet et revenir à l'application.</p>
+  </div>
+</body>
+</html>
+''';
+
 const List<String> _kDriveScopes = [
   'openid',
   drive.DriveApi.driveScope,
@@ -51,6 +110,7 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
         retrieveAccessToken: _readStoredToken,
         deleteAccessToken: _deleteStoredToken,
         scopes: _kDriveScopes,
+        customPostAuthPage: _kPostAuthPageHtml,
       ),
     );
   }
