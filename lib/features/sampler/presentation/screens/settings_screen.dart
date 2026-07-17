@@ -8,6 +8,7 @@ import 'package:drift/drift.dart' show OrderingTerm;
 import '../../../../core/audio/cue_audio_service.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/settings/app_preferences.dart';
+import '../../../../core/theme/skeleton.dart';
 import '../../../../core/platform/saf_directory_bridge.dart';
 import '../../../../core/sync/drive_account_profile.dart';
 import '../../../../core/sync/drive_profile_cache.dart';
@@ -119,13 +120,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// header.
   final Map<String, Future<File?>> _avatarFutures = {};
 
+  /// Fichiers déjà résolus, conservés de façon synchrone : sert d'`initialData`
+  /// au `FutureBuilder` pour un affichage immédiat aux reconstructions
+  /// suivantes, sans repasser par l'état `waiting` (donc sans re-clignotement).
+  final Map<String, File> _resolvedAvatars = {};
+
   Future<File?> _resolveAvatar(DriveAccountProfile account) {
     final url = account.photoUrlForDisplay(sizePx: _kAvatarCacheSizePx);
     if (url == null) return Future.value(null);
-    return _avatarFutures.putIfAbsent(
-      account.email,
-      () => _avatarCache.resolve(identity: account.email, url: url),
-    );
+    return _avatarFutures.putIfAbsent(account.email, () async {
+      final file = await _avatarCache.resolve(identity: account.email, url: url);
+      if (file != null) {
+        _resolvedAvatars[account.email] = file;
+      }
+      return file;
+    });
   }
 
   @override
@@ -480,24 +489,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     // La photo est servie depuis un cache disque : affichage immédiat aux
-    // lancements suivants et hors-ligne. En attente (1er téléchargement) ou en
-    // cas d'échec réseau, on retombe sur les initiales — jamais de spinner
-    // clignotant ni de trou visuel.
+    // lancements suivants et hors-ligne. Pendant la 1re résolution (lecture
+    // disque / téléchargement) on affiche un skeleton pulsé plutôt que les
+    // initiales, pour éviter le clignotement « initiales → photo ». On ne
+    // retombe sur les initiales qu'une fois la résolution terminée sans photo
+    // (échec réseau sans cache).
     return FutureBuilder<File?>(
+      initialData: _resolvedAvatars[account.email],
       future: _resolveAvatar(account),
       builder: (context, snapshot) {
         final file = snapshot.data;
-        if (file == null) {
+        if (file != null) {
+          return ClipOval(
+            child: Image.file(
+              file,
+              key: ValueKey(file.path),
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => initialsAvatar(),
+            ),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.done) {
           return initialsAvatar();
         }
-        return ClipOval(
-          child: Image.file(
-            file,
-            key: ValueKey(file.path),
+        return Skeleton(
+          child: SkeletonBox(
             width: size,
             height: size,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => initialsAvatar(),
+            shape: BoxShape.circle,
           ),
         );
       },
