@@ -1,4 +1,4 @@
-package com.example.stage_cue
+package io.github.armribdev.stage_cue
 
 import android.accounts.AccountManager
 import android.app.Activity
