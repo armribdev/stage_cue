@@ -104,7 +104,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   List<CueDevice> _cueDevices = const [];
   bool _isLoadingCueDevices = false;
   bool _shouldScrollToDriveSection = false;
-  final GlobalKey _driveSectionKey = GlobalKey();
+
+  /// Contexte de la section Drive pour le défilement ([Scrollable.ensureVisible]).
+  /// Ancre sans [GlobalKey] : la section vit sous un [AnimatedSwitcher] qui
+  /// empile brièvement l'ancien enfant (`previousChildren`) — une GlobalKey
+  /// partagée pourrait alors apparaître deux fois dans l'arbre.
+  BuildContext? _driveSectionContext;
 
   /// Cache disque de la photo de profil Google (affichage hors-ligne + pas de
   /// re-téléchargement à chaque ouverture des réglages).
@@ -209,8 +214,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _scrollToDriveSection() {
-    final sectionContext = _driveSectionKey.currentContext;
-    if (sectionContext == null) return;
+    final sectionContext = _driveSectionContext;
+    if (sectionContext == null || !sectionContext.mounted) return;
     Scrollable.ensureVisible(
       sectionContext,
       duration: const Duration(milliseconds: 300),
@@ -2043,8 +2048,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildDriveSection() {
-    return KeyedSubtree(
-      key: _driveSectionKey,
+    return _DriveSectionAnchor(
+      onAttached: (ctx) => _driveSectionContext = ctx,
+      onDetached: (ctx) {
+        if (identical(_driveSectionContext, ctx)) {
+          _driveSectionContext = null;
+        }
+      },
       child: ListenableBuilder(
         listenable: Listenable.merge([
           widget.libraryRepository,
@@ -2724,4 +2734,50 @@ class _SettingsLoadingViewState extends State<_SettingsLoadingView>
       },
     );
   }
+}
+
+/// Capture le [BuildContext] de la section Drive pour le défilement, sans
+/// [GlobalKey] : la section vit sous un [AnimatedSwitcher] qui conserve
+/// brièvement l'ancien enfant, ce qui dupliquerait une GlobalKey partagée.
+class _DriveSectionAnchor extends StatefulWidget {
+  const _DriveSectionAnchor({
+    required this.onAttached,
+    required this.onDetached,
+    required this.child,
+  });
+
+  final ValueChanged<BuildContext> onAttached;
+  final ValueChanged<BuildContext> onDetached;
+  final Widget child;
+
+  @override
+  State<_DriveSectionAnchor> createState() => _DriveSectionAnchorState();
+}
+
+class _DriveSectionAnchorState extends State<_DriveSectionAnchor> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(_register);
+  }
+
+  @override
+  void didUpdateWidget(covariant _DriveSectionAnchor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback(_register);
+  }
+
+  void _register(Duration _) {
+    if (!mounted) return;
+    widget.onAttached(context);
+  }
+
+  @override
+  void dispose() {
+    widget.onDetached(context);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
