@@ -699,6 +699,15 @@ class SamplerNotifier extends ChangeNotifier {
     // être disposé par le rechargement du plateau.
     await stopAllNonMusicSounds();
     _music._detachPlayingMusicToOffStage();
+    // Annule les téléchargements encore EN FILE des pads qui quittent la scène
+    // (bande passante Drive inutile pour un plateau qu'on abandonne). Les tâches
+    // déjà démarrées finissent en cache ; le pad musique détaché hors-scène
+    // (tapis sonore) est exclu pour poursuivre son éventuel téléchargement.
+    final leavingPadIds = _state.pads
+        .map((item) => item.pad.id)
+        .where((id) => !_music._isKeptOffStage(id))
+        .toSet();
+    _downloadQueue.cancelQueued((key, _) => leavingPadIds.contains(key));
     _lastRemovedPad = null;
     _music.cleanupOffStagePads();
     _state = _state.copyWith(selectedBoard: board);
