@@ -1,5 +1,6 @@
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:path/path.dart' as p;
 
@@ -18,6 +19,18 @@ class AudioLoadLog {
   }
 
   static String _shortPath(String path) => p.basename(path);
+
+  /// Traces de diagnostic à **haute fréquence** (chargement de pad, listeners de
+  /// lecture, sélection de variante). Muettes par défaut — sinon elles polluent
+  /// la console en debug/profile (le listener de lecture émet à chaque
+  /// changement d'état). Activer pour investiguer :
+  /// `--dart-define=STAGE_CUE_AUDIO_TRACE=true`.
+  static const bool traceEnabled =
+      bool.fromEnvironment('STAGE_CUE_AUDIO_TRACE');
+
+  static void trace(String message) {
+    if (traceEnabled) debugPrint(message);
+  }
 
   static void info(String message) => _emit(message);
 

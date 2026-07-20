@@ -539,7 +539,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   Future<void> _loadPlayersForPad(PadItem padItem, Pad pad) async {
     final alreadyReady = padItem.slots.where((s) => s.isReady).length;
-    debugPrint(
+    AudioLoadLog.trace(
       '[LOAD-PAD] pad="${pad.displayName}" id=${pad.id} '
       'sounds=${pad.sounds.length} slotsReady=$alreadyReady',
     );
@@ -557,7 +557,7 @@ class SamplerNotifier extends ChangeNotifier {
 
     _finalizePadAvailability(padItem);
     _attachPlayerListeners(padItem);
-    debugPrint(
+    AudioLoadLog.trace(
       '[LOAD-PAD] done pad="${pad.displayName}" '
       'isPlayable=${padItem.isPlayable} unavailabilityReason=${padItem.unavailabilityReason}',
     );
@@ -571,7 +571,7 @@ class SamplerNotifier extends ChangeNotifier {
       // attachListener annule toute subscription précédente — exactement un
       // listener actif par player, même si appelé plusieurs fois sur le même pad.
       slot.attachListener((playing) {
-        debugPrint(
+        AudioLoadLog.trace(
           '[LISTENER] pad="${padItem.pad.displayName}" slot=$idx playing=$playing '
           'currentPlayerIndex=${padItem._currentPlayerIndex} isPlaying=${padItem.isPlaying}',
         );
@@ -592,7 +592,7 @@ class SamplerNotifier extends ChangeNotifier {
             padItem._currentPlayerIndex = null;
             _music._handleMusicPlaybackEnded(padItem);
           } else {
-            debugPrint(
+            AudioLoadLog.trace(
               '[LISTENER] ↩ false ignored: currentPlayerIndex=${padItem._currentPlayerIndex} != slot=$idx',
             );
           }
@@ -609,7 +609,7 @@ class SamplerNotifier extends ChangeNotifier {
             if (!anyPlaying) padItem._currentPlayerIndex = null;
           }
         }
-        debugPrint(
+        AudioLoadLog.trace(
           '[LISTENER] after: isPlaying=${padItem.isPlaying} '
           'currentPlayerIndex=${padItem._currentPlayerIndex}',
         );
@@ -617,7 +617,7 @@ class SamplerNotifier extends ChangeNotifier {
       });
       if (slot.player != null) attachedCount++;
     }
-    debugPrint(
+    AudioLoadLog.trace(
       '[ATTACH] pad="${padItem.pad.displayName}" attached $attachedCount listeners '
       '(total slots=${padItem.slots.length})',
     );
@@ -1026,7 +1026,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   Future<void> toggleSound(PadItem padItem) async {
     final resolved = _resolveBoardPadItem(padItem);
-    debugPrint(
+    AudioLoadLog.trace(
       '[TOGGLE] pad="${resolved.pad.displayName}" id=${resolved.pad.id} '
       'isPlayable=${resolved.isPlayable} isPlaying=${resolved.isPlaying} '
       'isMusicPad=${resolved.pad.isMusicPad} '
@@ -1034,7 +1034,7 @@ class SamplerNotifier extends ChangeNotifier {
       '_currentPlayerIndex=${resolved._currentPlayerIndex}',
     );
     if (!resolved.isPlayable) {
-      debugPrint('[TOGGLE] ↩ not playable, ignoring');
+      AudioLoadLog.trace('[TOGGLE] ↩ not playable, ignoring');
       return;
     }
     if (resolved.pad.isMusicPad) {
@@ -1075,7 +1075,7 @@ class SamplerNotifier extends ChangeNotifier {
     int soundIndex,
   ) async {
     final player = resolved.slots[soundIndex].player;
-    debugPrint(
+    AudioLoadLog.trace(
       '[TOGGLE] → play overlapping soundIndex=$soundIndex '
       'playerNull=${player == null} '
       '_nextSoundIndex=${resolved._nextSoundIndex}',
@@ -1414,7 +1414,7 @@ class SamplerNotifier extends ChangeNotifier {
       for (var i = 0; i < padItem.slots.length; i++)
         if (_slotEligibleForPlayback(padItem, i)) i,
     ];
-    debugPrint(
+    AudioLoadLog.trace(
       '[PICK] pad="${padItem.pad.displayName}" '
       'slots=${padItem.slots.length} readyIndices=$readyIndices '
       '_nextSoundIndex=${padItem._nextSoundIndex} '
@@ -1449,7 +1449,7 @@ class SamplerNotifier extends ChangeNotifier {
           return readyIndices.first;
         }(),
     };
-    debugPrint('[PICK] → chosen=$chosen _nextSoundIndex(after)=${padItem._nextSoundIndex}');
+    AudioLoadLog.trace('[PICK] → chosen=$chosen _nextSoundIndex(after)=${padItem._nextSoundIndex}');
     return chosen;
   }
 
