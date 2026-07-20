@@ -77,7 +77,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
   /// true après la 1re frame de drag — évite de reconstruire l'arbre pendant
   /// l'accrochage du geste (sinon le Draggable est démonté et le pad reste bloqué).
   bool _editDragUiReady = false;
-  final _editGridKey = GlobalKey();
+  /// Contexte de la grille éditable (hit-test drop). Pas de [GlobalKey] :
+  /// [AnimatedSwitcher] garde l'ancien enfant au changement de board, ce qui
+  /// dupliquerait une GlobalKey partagée.
+  BuildContext? _editGridContext;
   double _lastGridWidth = 0;
   int? _recentlyRestoredSoundId;
   int? _highlightedPadId;
@@ -537,7 +540,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     required int slotsPerRow,
     int? excludePadId,
   }) {
-    final box = _editGridKey.currentContext?.findRenderObject() as RenderBox?;
+    final box = _editGridContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return null;
 
     final draggedId = excludePadId ?? _draggingPadId;
@@ -1148,74 +1151,81 @@ class _SamplerScreenState extends State<SamplerScreen> {
           key: const ValueKey('pads_editable_rows'),
           controller: _normalGridScrollController,
           padding: _padsGridScrollPadding(context),
-          child: Stack(
-            key: _editGridKey,
-            clipBehavior: Clip.none,
-            children: [
-              // Grille interactive (invisible pendant la prévisualisation).
-              // IgnorePointer pendant le drag : sinon le calque masqué continue
-              // de capter le survol souris et affiche le tooltip du slot « + ».
-              IgnorePointer(
-                ignoring: showDragPreview,
-                child: Opacity(
-                  opacity: showDragPreview ? 0 : 1,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (int i = 0; i < displayRowIndices.length; i++) ...[
-                        if (i > 0) const SizedBox(height: _editRowGap),
-                        Wrap(
-                          spacing: _editRowGap,
-                          runSpacing: _editRowGap,
-                          children: _buildRowCells(
-                            context: context,
-                            state: state,
-                            board: selectedBoard,
-                            rowIndex: displayRowIndices[i],
-                            rowPads: rowMap[displayRowIndices[i]] ?? const [],
-                            cellWidth: cellWidth,
-                            cellHeight: cellHeight,
-                            editable: true,
-                            buildCommittedCell: buildDraggablePadCell,
+          child: _EditGridAnchor(
+            onAttached: (ctx) => _editGridContext = ctx,
+            onDetached: (ctx) {
+              if (identical(_editGridContext, ctx)) {
+                _editGridContext = null;
+              }
+            },
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // Grille interactive (invisible pendant la prévisualisation).
+                // IgnorePointer pendant le drag : sinon le calque masqué continue
+                // de capter le survol souris et affiche le tooltip du slot « + ».
+                IgnorePointer(
+                  ignoring: showDragPreview,
+                  child: Opacity(
+                    opacity: showDragPreview ? 0 : 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (int i = 0; i < displayRowIndices.length; i++) ...[
+                          if (i > 0) const SizedBox(height: _editRowGap),
+                          Wrap(
+                            spacing: _editRowGap,
+                            runSpacing: _editRowGap,
+                            children: _buildRowCells(
+                              context: context,
+                              state: state,
+                              board: selectedBoard,
+                              rowIndex: displayRowIndices[i],
+                              rowPads: rowMap[displayRowIndices[i]] ?? const [],
+                              cellWidth: cellWidth,
+                              cellHeight: cellHeight,
+                              editable: true,
+                              buildCommittedCell: buildDraggablePadCell,
+                            ),
                           ),
-                        ),
-                      ],
-                      if (newRowIndex != null) ...[
-                        const SizedBox(height: _editRowGap),
-                        Wrap(
-                          spacing: _editRowGap,
-                          runSpacing: _editRowGap,
-                          children: _buildRowCells(
-                            context: context,
-                            state: state,
-                            board: selectedBoard,
-                            rowIndex: newRowIndex,
-                            rowPads: const [],
-                            cellWidth: cellWidth,
-                            cellHeight: cellHeight,
-                            editable: true,
-                            buildCommittedCell: buildDraggablePadCell,
+                        ],
+                        if (newRowIndex != null) ...[
+                          const SizedBox(height: _editRowGap),
+                          Wrap(
+                            spacing: _editRowGap,
+                            runSpacing: _editRowGap,
+                            children: _buildRowCells(
+                              context: context,
+                              state: state,
+                              board: selectedBoard,
+                              rowIndex: newRowIndex,
+                              rowPads: const [],
+                              cellWidth: cellWidth,
+                              cellHeight: cellHeight,
+                              editable: true,
+                              buildCommittedCell: buildDraggablePadCell,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-              // Zone de hit-test stable (layout courant, pas la prévisualisation).
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: hitTestHeight,
-                child: const IgnorePointer(child: SizedBox.expand()),
-              ),
-              // Prévisualisation par-dessus (les événements passent au Draggable).
-              if (showDragPreview)
-                Positioned.fill(
-                  child: IgnorePointer(child: buildPreviewColumn()),
+                // Zone de hit-test stable (layout courant, pas la prévisualisation).
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: hitTestHeight,
+                  child: const IgnorePointer(child: SizedBox.expand()),
                 ),
-            ],
+                // Prévisualisation par-dessus (les événements passent au Draggable).
+                if (showDragPreview)
+                  Positioned.fill(
+                    child: IgnorePointer(child: buildPreviewColumn()),
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -1489,14 +1499,16 @@ class _SamplerScreenState extends State<SamplerScreen> {
         );
       },
       child: Builder(
+        // Inclut l'id du board : sinon le switcher ne remonte pas la grille
+        // au changement de scène (et une GlobalKey partagée plantait ici).
         key: ValueKey<String>(
           selectedBoard == null
               ? (isBoardsLoading ? 'boards_loading' : 'boards_empty')
               : state.isLoading && state.pads.isEmpty
-              ? 'sounds_loading'
+              ? 'sounds_loading_${selectedBoard.id}'
               : state.error != null && state.pads.isEmpty
-              ? 'sounds_error'
-              : 'sounds_grid',
+              ? 'sounds_error_${selectedBoard.id}'
+              : 'sounds_grid_${selectedBoard.id}',
         ),
         builder: (context) {
           if (selectedBoard == null) {
@@ -2663,4 +2675,49 @@ class _BoardsListSkeleton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Ancre la grille pour le hit-test de drop sans [GlobalKey] (sécurise
+/// [AnimatedSwitcher] qui conserve brièvement l'ancien enfant).
+class _EditGridAnchor extends StatefulWidget {
+  const _EditGridAnchor({
+    required this.onAttached,
+    required this.onDetached,
+    required this.child,
+  });
+
+  final ValueChanged<BuildContext> onAttached;
+  final ValueChanged<BuildContext> onDetached;
+  final Widget child;
+
+  @override
+  State<_EditGridAnchor> createState() => _EditGridAnchorState();
+}
+
+class _EditGridAnchorState extends State<_EditGridAnchor> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(_register);
+  }
+
+  @override
+  void didUpdateWidget(covariant _EditGridAnchor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback(_register);
+  }
+
+  void _register(Duration _) {
+    if (!mounted) return;
+    widget.onAttached(context);
+  }
+
+  @override
+  void dispose() {
+    widget.onDetached(context);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

@@ -532,6 +532,25 @@ class MusicController {
     );
   }
 
+  /// Détache le pad musique en cours de lecture vers la réserve hors-scène afin
+  /// qu'il survive à un changement de plateau (tapis sonore continu) : il n'est
+  /// pas disposé par le rechargement et reste piloté par la régie. Idempotent si
+  /// le pad courant est déjà hors-scène.
+  void _detachPlayingMusicToOffStage() {
+    final current = _o._state.currentMusicPad;
+    if (current == null || !current.isPlaying) return;
+    _offStageMusicPads[current.pad.id] = current;
+  }
+
+  /// Ré-adopte un pad musique précédemment détaché hors-scène quand on revient
+  /// sur son plateau d'origine (le retire de la réserve pour le remettre en
+  /// scène), évitant la création d'un second lecteur pour un son déjà en cours.
+  PadItem? _reclaimOffStagePad(int padId) => _offStageMusicPads.remove(padId);
+
+  /// true si [padId] correspond à un pad conservé hors-scène (à ne pas disposer
+  /// lors du rechargement du plateau).
+  bool _isKeptOffStage(int padId) => _offStageMusicPads.containsKey(padId);
+
   /// Supprime les pads hors-scène qui ne jouent plus (appelé au changement de plateau).
   void cleanupOffStagePads() {
     final toRemove = _offStageMusicPads.entries
