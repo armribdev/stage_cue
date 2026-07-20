@@ -875,8 +875,13 @@ class SamplerNotifier extends ChangeNotifier {
 
       final padItems = <PadItem>[];
       final padsToPreload = <PadItem>[];
-      final draftPads =
-          previousItems.where((item) => item.isDraft).toList(growable: false);
+      // Ne conserver que les drafts du plateau courant : un draft porte le
+      // boardId sur lequel il a été ouvert (voir beginDraftPad). Ceux d'un autre
+      // plateau ne sont pas ré-ajoutés ici, donc absents de keptIds → disposés
+      // via removedItems (évite qu'un draft « traverse » vers une autre scène).
+      final draftPads = previousItems
+          .where((item) => item.isDraft && item.pad.boardId == currentBoardId)
+          .toList(growable: false);
 
       for (final pad in pads) {
         // Ré-adopte un pad musique détaché hors-scène (tapis sonore) si l'on
