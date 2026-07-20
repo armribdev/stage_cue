@@ -693,7 +693,12 @@ class SamplerNotifier extends ChangeNotifier {
   Future<void> selectBoard(SoundBoard board) async {
     if (_state.selectedBoard?.id == board.id) return;
 
-    await stopAllSounds();
+    // Tapis sonore : la musique en cours survit au changement de scène et reste
+    // pilotable depuis la régie. On ne coupe que les bruitages (SFX) et les
+    // pré-écoutes ; le pad musique qui joue est détaché hors-scène pour ne pas
+    // être disposé par le rechargement du plateau.
+    await stopAllNonMusicSounds();
+    _music._detachPlayingMusicToOffStage();
     _lastRemovedPad = null;
     _music.cleanupOffStagePads();
     _state = _state.copyWith(selectedBoard: board);
@@ -874,7 +879,11 @@ class SamplerNotifier extends ChangeNotifier {
           previousItems.where((item) => item.isDraft).toList(growable: false);
 
       for (final pad in pads) {
-        final existing = previousItemsById[pad.id];
+        // Ré-adopte un pad musique détaché hors-scène (tapis sonore) si l'on
+        // revient sur son plateau d'origine : évite un second lecteur pour un
+        // son déjà en cours de lecture.
+        final existing =
+            previousItemsById[pad.id] ?? _music._reclaimOffStagePad(pad.id);
         if (existing != null) {
           final soundsChanged = _padSoundsChanged(existing, pad);
           existing.pad = pad;
@@ -913,8 +922,13 @@ class SamplerNotifier extends ChangeNotifier {
       _syncMultipadNumbers(_padsForMultipadNumbering());
       _state = _state.copyWith(pads: padItems, isLoading: false, error: null);
       final keptIds = padItems.map((item) => item.pad.id).toSet();
-      final removedItems =
-          previousItems.where((item) => !keptIds.contains(item.pad.id)).toList();
+      // Ne pas disposer un pad musique conservé hors-scène : il continue de
+      // jouer en tapis sonore et reste piloté par la régie.
+      final removedItems = previousItems
+          .where((item) =>
+              !keptIds.contains(item.pad.id) &&
+              !_music._isKeptOffStage(item.pad.id))
+          .toList();
       _disposePadItems(removedItems);
       _music._syncMusicStateWithPads();
 

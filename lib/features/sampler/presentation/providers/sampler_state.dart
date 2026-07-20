@@ -152,8 +152,15 @@ class PadItem {
   /// disponibilité). Permet un rebuild ciblé du seul PadButton via un
   /// [ListenableBuilder], sans reconstruire toute la grille (refonte UX P2).
   final ValueNotifier<int> _revision = ValueNotifier<int>(0);
+  bool _disposed = false;
   Listenable get revision => _revision;
-  void bumpRevision() => _revision.value++;
+  // Un download ou un preload encore en vol peut rappeler bumpRevision après que
+  // le pad a été disposé lors d'un changement de plateau : on ignore alors, le
+  // notifier n'a plus d'auditeur.
+  void bumpRevision() {
+    if (_disposed) return;
+    _revision.value++;
+  }
 
   PadItem({
     required this.pad,
@@ -282,6 +289,8 @@ class PadItem {
   /// Libère le pad définitivement (slots + notifier de révision). À appeler
   /// quand le pad disparaît de l'état (changement de plateau, suppression).
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     clearPlaybackTickets();
     disposeAllSlots();
     _revision.dispose();
