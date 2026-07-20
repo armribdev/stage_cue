@@ -229,6 +229,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   final _controller = TextEditingController();
   late final FocusNode _focusNode;
   final _scrollController = ScrollController();
+  // Clé par INDICE de liste (jamais par sound.id) : un multipad peut référencer
+  // le même son dans plusieurs variantes, et deux items partageant la même clé
+  // déclencheraient « Duplicate GlobalKey ». L'indice est unique dans la liste.
   final _itemKeys = <int, GlobalKey>{};
 
   // ── Données ───────────────────────────────────────────────────────────────
@@ -640,11 +643,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     final next = (_selectedIndex + delta).clamp(0, shown.length - 1);
     if (next == _selectedIndex) return;
 
-    final soundId = shown[next].id;
     final policy = delta < 0
         ? ScrollPositionAlignmentPolicy.keepVisibleAtStart
         : ScrollPositionAlignmentPolicy.keepVisibleAtEnd;
-    final ctx = _itemKey(soundId).currentContext;
+    final ctx = _itemKey(next).currentContext;
 
     if (ctx != null) {
       Scrollable.ensureVisible(ctx, duration: Duration.zero, alignmentPolicy: policy);
@@ -655,14 +657,14 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     _preScrollToIndex(next, delta);
     setState(() => _selectedIndex = next);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final lateCtx = _itemKey(soundId).currentContext;
+      final lateCtx = _itemKey(next).currentContext;
       if (lateCtx == null) return;
       Scrollable.ensureVisible(lateCtx, duration: Duration.zero, alignmentPolicy: policy);
     });
   }
 
-  GlobalKey _itemKey(int soundId) =>
-      _itemKeys.putIfAbsent(soundId, GlobalKey.new);
+  GlobalKey _itemKey(int index) =>
+      _itemKeys.putIfAbsent(index, GlobalKey.new);
 
   void _preScrollToIndex(int index, int delta) {
     if (!_scrollController.hasClients) return;
@@ -1290,7 +1292,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     }
 
     return Material(
-      key: _itemKey(sound.id),
+      key: _itemKey(index),
       color: bgColor ?? Colors.transparent,
       child: InkWell(
         canRequestFocus: false,
