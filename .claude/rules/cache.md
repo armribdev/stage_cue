@@ -1,0 +1,6 @@
+# Cache audio & file de téléchargement
+
+- Toute clé de l'index LRU (`.cache_access.json`) passe par `_indexKey` (canonicalisation `normalizeRelativePath`) — jamais d'écriture ou de test d'appartenance avec un chemin brut, y compris les chemins venant tels quels de la base ([0009](../../docs/decisions/0009-integrite-de-l-index-lru.md))
+- Les sauvegardes de l'index sont sérialisées par racine de cache (`_saveChains`), écriture JSON en temp + rename — ne pas supprimer le `catchError` de la chaîne, une sauvegarde en échec bloquerait les suivantes ([0009](../../docs/decisions/0009-integrite-de-l-index-lru.md))
+- Le callback `pinnedPaths` d'`AudioCacheManager` doit toujours retourner favoris **et** sons du plateau actif. Sans ce callback branché à la construction du `LibraryRepository`, l'éviction redevient purement LRU sans avertissement — c'est le mode de régression le plus probable ([0010](../../docs/decisions/0010-epinglage-lru-favoris-et-plateau-actif.md))
+- Avant d'enfiler dans `DownloadQueue` une opération sous une clé de pad déjà utilisée par une portée plus étroite, attendre via `DownloadQueue.inFlight(key)` plutôt que compter sur la déduplication par clé — une portée large ne doit jamais être satisfaite par le future d'une portée étroite ([0011](../../docs/decisions/0011-deduplication-de-la-file-de-telechargement.md))
