@@ -170,6 +170,65 @@ void main() {
       expect((outcome as PushConflict).remote.revision, 5);
       verifyNever(() => store.exportLibrarySnapshot(any(), any()));
     });
+
+    test('deux push concurrents téléversent chacun LEUR snapshot', () async {
+      when(() => client.findInFolder(parentId: 'lib', name: '.stagecue'))
+          .thenAnswer((_) async => folder('stage', '.stagecue'));
+      when(() => client.findInFolder(
+              parentId: 'stage', name: 'boards-manifest.json'))
+          .thenAnswer((_) async => null);
+      when(() => client.findInFolder(parentId: 'stage', name: 'boards.db'))
+          .thenAnswer((_) async => null);
+
+      // L'export écrit un contenu propre à la bibliothèque ; la pause force
+      // l'entrelacement des deux push (cas réel : le coordinateur planifie un
+      // push par bibliothèque connectée, les anti-rebonds échoient ensemble).
+      when(() => store.exportLibrarySnapshot(any(), any()))
+          .thenAnswer((invocation) async {
+        final libraryId = invocation.positionalArguments[0] as int;
+        final path = invocation.positionalArguments[1] as String;
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        final content = 'snapshot-$libraryId';
+        await File(path).writeAsString(content);
+        return content.length;
+      });
+
+      // Capture le contenu RÉELLEMENT téléversé pour chaque boards.db.
+      final uploaded = <String>[];
+      when(() => client.uploadFile(
+            name: any(named: 'name'),
+            parentId: any(named: 'parentId'),
+            data: any(named: 'data'),
+            length: any(named: 'length'),
+            mimeType: any(named: 'mimeType'),
+          )).thenAnswer((invocation) async {
+        if (invocation.namedArguments[#name] == 'boards.db') {
+          final data = invocation.namedArguments[#data] as Stream<List<int>>;
+          uploaded.add(utf8.decode(await data.expand((c) => c).toList()));
+        }
+        return file('new', 'new');
+      });
+
+      await Future.wait([
+        service.push(
+          client: client,
+          libraryId: 1,
+          libraryFolderId: 'lib',
+          knownRevision: 0,
+        ),
+        service.push(
+          client: client,
+          libraryId: 2,
+          libraryFolderId: 'lib',
+          knownRevision: 0,
+        ),
+      ]);
+
+      // Avec un nom de fichier temporaire fixe, le second export écrasait le
+      // premier : les deux push téléversaient le même contenu (ou échouaient
+      // sur un fichier supprimé par le `finally` de l'autre).
+      expect(uploaded, unorderedEquals(['snapshot-1', 'snapshot-2']));
+    });
   });
 
   group('pull', () {

@@ -8,6 +8,7 @@ import '../widgets/pad_button.dart' show padSoundAvailabilityIcon;
 import '../models/pad_sound_slot.dart';
 import '../widgets/pad_item.dart' show PadCard;
 import '../widgets/dashed_slot_frame.dart';
+import '../widgets/threshold_draggable.dart';
 import '../widgets/music_preview_panel.dart';
 import '../widgets/music_picker_sheet.dart';
 import '../widgets/quick_search_overlay.dart';
@@ -1064,7 +1065,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
           final child = _buildPadWidget(context, state, padItem);
 
           final Widget draggable = context.prefersDesktopUi
-              ? Draggable<int>(
+              ? ThresholdDraggable<int>(
                   key: dragKey,
                   data: padItem.pad.id,
                   dragAnchorStrategy: anchorStrategy,

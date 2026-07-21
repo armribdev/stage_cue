@@ -402,11 +402,6 @@ class PadButton extends StatelessWidget {
                 ),
               ),
             ),
-            Positioned(
-              top: 6,
-              right: 6,
-              child: Icon(icon, size: 14, color: accent.withValues(alpha: 0.8)),
-            ),
           ],
         ),
       ),
