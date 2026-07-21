@@ -72,6 +72,18 @@ class DownloadQueue {
     return queued.completer.future.then((value) => value as T);
   }
 
+  /// Future de la tâche en file ou en cours pour [key] — `null` si aucune.
+  ///
+  /// Permet à un appelant de portée plus LARGE d'attendre une tâche plus étroite
+  /// avant d'enfiler la sienne. Sans cela, la déduplication lui renverrait le
+  /// résultat de la tâche étroite sans que le reste de sa portée soit jamais
+  /// traité (cf. un pad entier tombant sur le téléchargement d'un seul slot).
+  Future<void>? inFlight(Object key) {
+    final task = _byKey[key];
+    if (task == null) return null;
+    return task.completer.future.then((_) {});
+  }
+
   /// Annule les tâches **en attente** dont (clé, priorité) satisfont [test].
   /// Les tâches déjà démarrées ne sont pas interrompues. Les futures annulés
   /// échouent avec [DownloadCancelledException].

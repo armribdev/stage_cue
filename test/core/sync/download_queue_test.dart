@@ -101,6 +101,55 @@ void main() {
       expect(await f2, 42); // dédup : la 2e tâche n'a pas tourné
     });
 
+    test('inFlight : null si aucune tâche pour la clé', () {
+      final queue = DownloadQueue();
+      expect(queue.inFlight('absente'), isNull);
+    });
+
+    test('inFlight : suit une tâche en cours jusqu\'à son achèvement', () async {
+      final queue = DownloadQueue();
+      final gate = _Gate();
+      unawaited(queue.enqueue(key: 'pad-1', priority: 0, task: gate.run));
+
+      final pending = queue.inFlight('pad-1');
+      expect(pending, isNotNull);
+
+      var done = false;
+      unawaited(pending!.then((_) => done = true));
+      await Future<void>.delayed(Duration.zero);
+      expect(done, isFalse);
+
+      gate.release();
+      await Future<void>.delayed(Duration.zero);
+      expect(done, isTrue);
+      // Achevée : la clé est libérée, une portée plus large peut enfiler.
+      expect(queue.inFlight('pad-1'), isNull);
+    });
+
+    test('inFlight : une tâche annulée libère quand même l\'attente', () async {
+      final queue = DownloadQueue(maxConcurrent: 1);
+      final blocking = _Gate();
+      unawaited(queue.enqueue(key: 'autre', priority: 0, task: blocking.run));
+      // Reste EN ATTENTE derrière la précédente, donc annulable.
+      unawaited(
+        queue.enqueue(key: 'pad-1', priority: 0, task: () async => 1)
+            .catchError((_) => 0),
+      );
+
+      final pending = queue.inFlight('pad-1');
+      expect(pending, isNotNull);
+
+      Object? error;
+      unawaited(pending!.catchError((Object e) => error = e));
+      queue.cancelQueued((key, _) => key == 'pad-1');
+      await Future<void>.delayed(Duration.zero);
+
+      // L'attente se dénoue par une erreur, que l'appelant neutralise pour
+      // reprendre : elle ne doit jamais rester pendante.
+      expect(error, isA<DownloadCancelledException>());
+      blocking.release();
+    });
+
     test('cancelQueued retire les tâches en attente selon (clé, priorité)',
         () async {
       final queue = DownloadQueue(maxConcurrent: 1);
