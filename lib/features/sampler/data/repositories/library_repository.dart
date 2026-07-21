@@ -656,6 +656,9 @@ class LibraryRepository extends ChangeNotifier {
   }) async {
     {
       var staged = false;
+      // Révision réellement atteinte par le pull (et non celle d'avant), pour
+      // que l'appelant ne reçoive pas une valeur périmée.
+      var stagedRevision = library.lastSyncedRevision;
 
       // 1. Nœuds dossier (sons). Les nœuds locaux proviennent de l'indexation ;
       //    un appareil vierge les crée via indexDriveFolder avant que ceci ne
@@ -670,6 +673,7 @@ class LibraryRepository extends ChangeNotifier {
         );
         if (outcome is PullStaged) {
           staged = true;
+          stagedRevision = outcome.revision;
           await _dataSource.updateFolderSyncState(
             id: folder.id,
             lastSyncedRevision: outcome.revision,
@@ -687,6 +691,7 @@ class LibraryRepository extends ChangeNotifier {
       );
       if (rootOutcome is PullStaged) {
         staged = true;
+        stagedRevision = rootOutcome.revision;
         await _dataSource.updateSyncState(
           id: library.id,
           lastSyncedRevision: rootOutcome.revision,
@@ -694,8 +699,12 @@ class LibraryRepository extends ChangeNotifier {
         );
       }
 
-      return staged
-          ? PullStaged(library.lastSyncedRevision)
+      if (staged) return PullStaged(stagedRevision);
+      // Rien n'a été fusionné : c'est le snapshot RACINE (les boards) qui fait
+      // foi pour dire si le distant est à jour ou simplement vide. Les nœuds
+      // dossier, eux, peuvent légitimement n'avoir jamais été poussés.
+      return rootOutcome is PullNoRemoteSnapshot
+          ? const PullNoRemoteSnapshot()
           : const PullUpToDate();
     }
   }

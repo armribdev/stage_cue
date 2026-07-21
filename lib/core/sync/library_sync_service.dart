@@ -46,9 +46,20 @@ sealed class PullOutcome {
   const PullOutcome();
 }
 
-/// Rien de plus récent côté distant : la base locale est déjà à jour.
+/// Rien de plus récent côté distant : la base locale est déjà à jour. Un
+/// snapshot distant EXISTE et sa révision a bien été comparée.
 class PullUpToDate extends PullOutcome {
   const PullUpToDate();
+}
+
+/// Aucun snapshot n'est publié côté distant : pas de `.stagecue`, pas de
+/// manifest, ou le snapshot que le manifest désigne est introuvable.
+///
+/// À ne surtout pas confondre avec [PullUpToDate] : ici la synchro n'a rien pu
+/// comparer. L'annoncer comme « Synchronisé » ferait croire à une sauvegarde
+/// distante là où le dossier a été vidé ou n'a jamais rien reçu.
+class PullNoRemoteSnapshot extends PullOutcome {
+  const PullNoRemoteSnapshot();
 }
 
 /// Un snapshot plus récent a été téléchargé et fusionné en-place dans la base.
@@ -288,10 +299,11 @@ class LibrarySyncService {
     required Future<void> Function(String path) mergeSnapshot,
   }) async {
     final stage = await _findInFolder(client, remoteFolderId, _stageFolderName);
-    if (stage == null) return const PullUpToDate();
+    if (stage == null) return const PullNoRemoteSnapshot();
 
     final remoteManifest = await _readManifest(client, stage.id, manifestFileName);
-    if (remoteManifest == null || remoteManifest.revision <= knownRevision) {
+    if (remoteManifest == null) return const PullNoRemoteSnapshot();
+    if (remoteManifest.revision <= knownRevision) {
       return const PullUpToDate();
     }
 
@@ -301,7 +313,9 @@ class LibrarySyncService {
       parentId: stage.id,
       name: remoteManifest.dbFileName ?? dbFileName,
     );
-    if (dbFile == null) return const PullUpToDate();
+    // Le manifest annonce une révision mais son snapshot est absent : distant
+    // incohérent, surtout pas « à jour ».
+    if (dbFile == null) return const PullNoRemoteSnapshot();
 
     final tempDir = await _resolveTempDir();
     final downloadPath = _uniqueTempPath(tempDir, 'library-pull');
