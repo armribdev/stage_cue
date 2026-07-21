@@ -437,6 +437,23 @@ class SamplerNotifier extends ChangeNotifier {
     if (probe.status == WaveformProbeStatus.success) notifyListeners();
   }
 
+  /// Force une nouvelle extraction de l'enveloppe waveform d'un son, même si
+  /// une enveloppe existe déjà — contrairement à [_ensureWaveformForSound],
+  /// paresseux et gaté sur `waveform == null`. Action explicite demandée par
+  /// l'opérateur depuis l'écran d'édition d'un son : télécharge le fichier si
+  /// nécessaire (bibliothèque Drive non encore mise en cache).
+  ///
+  /// Peut lever [SoundNotAvailableLocallyException] ou [StateError] si le
+  /// fichier est introuvable/hors ligne — laissé à l'appelant pour affichage.
+  Future<WaveformProbeStatus> regenerateWaveform(Sound sound) async {
+    final path = await _resolvePlayablePath(sound, downloadIfNeeded: true);
+    final probe = await extractWaveform(path);
+    if (probe.status != WaveformProbeStatus.transient) {
+      await _repository.persistWaveformProbe(sound.id, probe);
+    }
+    return probe.status;
+  }
+
   Future<void> _loadSlotAtIndex(
     PadItem padItem,
     int index, {

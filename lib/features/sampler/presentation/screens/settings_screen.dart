@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart' show OrderingTerm;
 import '../../../../core/audio/cue_audio_service.dart';
+import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/theme/skeleton.dart';
@@ -25,6 +26,7 @@ import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../data/models/indexing_progress.dart';
 import '../../domain/entities/library.dart' as domain;
+import '../../domain/entities/sound.dart' show SoundType;
 import '../../domain/entities/watched_path.dart' as domain;
 import '../providers/sync_controller.dart';
 import '../widgets/compact_switch.dart';
@@ -99,6 +101,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isInitialLoad = true;
   bool _isSyncBusy = false;
   bool _isDriveAuthBusy = false;
+  bool _isRegeneratingWaveforms = false;
+  int _waveformRegenDone = 0;
+  int _waveformRegenTotal = 0;
 
   /// Périphériques de sortie de pré-écoute (cue) — desktop uniquement.
   List<CueDevice> _cueDevices = const [];
@@ -1426,6 +1431,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Régénère l'enveloppe waveform de tous les sons musique déjà en cache
+  /// local (aucun téléchargement Drive forcé — un son non encore mis en
+  /// cache est simplement ignoré). Utile après une amélioration de
+  /// l'algorithme d'extraction (cf. `kWaveformOversample`) : les enveloppes
+  /// déjà stockées ne sont jamais re-calculées automatiquement, seuls les
+  /// nouveaux imports en bénéficient sans action explicite.
+  Future<void> _regenerateCachedWaveforms() async {
+    if (_isRegeneratingWaveforms) return;
+
+    final musicSounds = (await _repository.getAllSounds())
+        .where((sound) => sound.type == SoundType.music)
+        .toList();
+    if (musicSounds.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Aucun son musique dans la bibliothèque')),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isRegeneratingWaveforms = true;
+      _waveformRegenDone = 0;
+      _waveformRegenTotal = musicSounds.length;
+    });
+
+    var regenerated = 0;
+    var skipped = 0;
+    var failed = 0;
+    var aborted = false;
+
+    for (final sound in musicSounds) {
+      if (!mounted) return;
+      try {
+        final path = await widget.libraryRepository.resolvePlayablePath(
+          sound,
+          downloadIfNeeded: false,
+        );
+        final probe = await extractWaveform(path);
+        switch (probe.status) {
+          case WaveformProbeStatus.success:
+            await _repository.persistWaveformProbe(sound.id, probe);
+            regenerated++;
+          case WaveformProbeStatus.unsupported:
+            await _repository.persistWaveformProbe(sound.id, probe);
+            failed++;
+          case WaveformProbeStatus.transient:
+            // Moteur audio non initialisé : tous les sons suivants
+            // échoueraient pareil, inutile de continuer la passe.
+            aborted = true;
+        }
+      } catch (_) {
+        // Hors cache local (ou fichier illisible) : ignoré sans mémoriser
+        // d'échec « format » — on ne force pas de téléchargement Drive ici.
+        skipped++;
+      }
+      if (aborted) break;
+      if (mounted) setState(() => _waveformRegenDone++);
+    }
+
+    if (!mounted) return;
+    setState(() => _isRegeneratingWaveforms = false);
+    final summary = aborted
+        ? 'Moteur audio non prêt — $regenerated régénérée(s) avant interruption.'
+        : '$regenerated régénérée(s), $skipped ignorée(s) (hors cache), '
+            '$failed échec(s) de format.';
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(summary)));
+  }
+
   Future<void> _resolveSyncConflict(domain.Library library) async {
     setState(() => _isSyncBusy = true);
     try {
@@ -2322,10 +2398,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 16),
                     ],
                     _buildIndexedFoldersCard(),
+                    const SizedBox(height: 16),
+                    _buildMaintenanceCard(),
                   ],
                 ),
               ),
             ),
+    );
+  }
+
+  /// Carte « Maintenance » : actions ponctuelles sur les données déjà
+  /// indexées, distinctes du scan de nouveaux dossiers (`_buildIndexedFoldersCard`).
+  Widget _buildMaintenanceCard() {
+    final scheme = Theme.of(context).colorScheme;
+    return _buildSettingsSectionCard(
+      title: _buildSectionTitleRow(
+        icon: Icons.build_outlined,
+        title: 'Maintenance',
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Régénérer les waveforms des sons musique déjà en cache local, '
+            'avec l\'algorithme d\'extraction courant. N\'affecte pas les sons '
+            'non encore téléchargés.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+          ),
+          if (_isRegeneratingWaveforms) ...[
+            const SizedBox(height: 8),
+            Text(
+              'En cours… $_waveformRegenDone / $_waveformRegenTotal',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed:
+                _isRegeneratingWaveforms ? null : _regenerateCachedWaveforms,
+            icon: _isRegeneratingWaveforms
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh, size: 18),
+            label: const Text('Régénérer les waveforms en cache'),
+          ),
+        ],
+      ),
     );
   }
 

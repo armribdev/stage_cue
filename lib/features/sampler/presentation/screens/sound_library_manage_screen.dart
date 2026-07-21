@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/database/database.dart' as db;
+import '../../../../core/utils/copyable_snackbar.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -90,6 +92,8 @@ class SoundLibraryManageScreen {
     var displayNameValue = sound.displayName ?? '';
     var startOffsetMs = sound.startOffsetMs;
     var selectedType = sound.type;
+    var waveform = sound.waveform;
+    var isRegeneratingWaveform = false;
     final selectedTagIds = initialTags.map((t) => t.id).toSet();
 
     String? normalizedOrNull(String value) {
@@ -103,6 +107,38 @@ class SoundLibraryManageScreen {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             const sectionSpacing = 16.0;
+
+            Future<void> regenerateWaveform() async {
+              if (isRegeneratingWaveform) return;
+              setDialogState(() => isRegeneratingWaveform = true);
+              try {
+                final status = await notifier.regenerateWaveform(sound);
+                final updated = await repository.getSoundById(sound.id);
+                if (!dialogContext.mounted) return;
+                switch (status) {
+                  case WaveformProbeStatus.success:
+                    setDialogState(() => waveform = updated?.waveform ?? waveform);
+                    showCopyableSnackBar(dialogContext, 'Waveform régénérée.');
+                  case WaveformProbeStatus.unsupported:
+                    showCopyableSnackBar(
+                      dialogContext,
+                      'Format non pris en charge pour l\'extraction de waveform.',
+                    );
+                  case WaveformProbeStatus.transient:
+                    showCopyableSnackBar(
+                      dialogContext,
+                      'Moteur audio non prêt — réessayez dans un instant.',
+                    );
+                }
+              } catch (error) {
+                if (!dialogContext.mounted) return;
+                showCopyableSnackBar(dialogContext, 'Échec de la régénération : $error');
+              } finally {
+                if (dialogContext.mounted) {
+                  setDialogState(() => isRegeneratingWaveform = false);
+                }
+              }
+            }
 
             return AppFormDialog(
               title: 'Modifier "${sound.title}"',
@@ -193,9 +229,29 @@ class SoundLibraryManageScreen {
                             () => selectedVolume = v.clamp(0.0, 1.0)),
                       ),
                       const SizedBox(height: sectionSpacing),
-                      Text(
-                        'Point d\'entrée',
-                        style: Theme.of(context).textTheme.bodyMedium,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Point d\'entrée',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: isRegeneratingWaveform
+                                ? null
+                                : regenerateWaveform,
+                            icon: isRegeneratingWaveform
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.refresh, size: 18),
+                            label: const Text('Régénérer la waveform'),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -209,7 +265,7 @@ class SoundLibraryManageScreen {
                       const SizedBox(height: 8),
                       StartOffsetEditor(
                         filePath: sound.filePath,
-                        waveform: sound.waveform,
+                        waveform: waveform,
                         initialOffsetMs: startOffsetMs,
                         onChanged: (ms) => startOffsetMs = ms,
                       ),

@@ -7,6 +7,16 @@ import 'soloud_file_loader.dart';
 /// 480 offre un rendu fin même sur écran large, pour ~480 octets en base.
 const int kWaveformBars = 480;
 
+/// Facteur de sur-échantillonnage RMS avant réduction par PIC vers
+/// [kWaveformBars]. Demander directement 480 fenêtres RMS à SoLoud sur un
+/// morceau de plusieurs minutes lisse les transitoires courts (chaque barre
+/// moyenne ~300-500ms) : le rendu « bâton » perd en précision. En sondant
+/// [kWaveformOversample] fois plus de fenêtres RMS fines puis en gardant le PIC
+/// de chaque groupe de barres, on préserve les crêtes courtes tout en gardant la
+/// même taille stockée (coût quasi nul : SoLoud décode le fichier une seule
+/// fois quel que soit le nombre de fenêtres demandées).
+const int kWaveformOversample = 8;
+
 /// Génération de la CAPACITÉ d'extraction waveform. À INCRÉMENTER à chaque
 /// montée de version de flutter_soloud (ou changement de logique d'extraction)
 /// susceptible de faire réussir des fichiers auparavant en échec.
@@ -85,14 +95,17 @@ Future<WaveformProbe> extractWaveform(
 
   try {
     // `average: true` → chaque valeur retournée est la RMS des échantillons de
-    // sa barre (toujours positive) : exactement l'enveloppe visuelle voulue.
-    // Sérialisé sur la file de `loadMem` : évite un accès natif concurrent au
-    // moteur SoLoud (isolate `compute`) pendant le préchargement d'un board.
+    // sa fenêtre (toujours positive). On sonde `bars * kWaveformOversample`
+    // fenêtres fines puis on réduit par PIC vers `bars` (voir `_poolPeaks`) :
+    // les transitoires courts ne sont plus noyés dans la moyenne d'une grande
+    // fenêtre. Sérialisé sur la file de `loadMem` : évite un accès natif
+    // concurrent au moteur SoLoud (isolate `compute`) pendant le préchargement
+    // d'un board.
     final samples = await enqueueSoLoudFileTask(
       // ignore: experimental_member_use — API waveform de flutter_soloud (stable en pratique).
       () => SoLoud.instance.readSamplesFromFile(
         filePath,
-        bars,
+        bars * kWaveformOversample,
         average: true,
       ),
     );
@@ -104,10 +117,11 @@ Future<WaveformProbe> extractWaveform(
       return const WaveformProbe.unsupported();
     }
 
+    final pooled = _poolPeaks(samples, bars);
+
     var peak = 0.0;
-    for (final s in samples) {
-      final a = s.abs();
-      if (a > peak) peak = a;
+    for (final s in pooled) {
+      if (s > peak) peak = s;
     }
     if (peak <= 0) {
       debugPrint(
@@ -117,9 +131,9 @@ Future<WaveformProbe> extractWaveform(
       return const WaveformProbe.unsupported();
     }
 
-    final out = Uint8List(samples.length);
-    for (var i = 0; i < samples.length; i++) {
-      out[i] = ((samples[i].abs() / peak) * 255).round().clamp(0, 255);
+    final out = Uint8List(pooled.length);
+    for (var i = 0; i < pooled.length; i++) {
+      out[i] = ((pooled[i] / peak) * 255).round().clamp(0, 255);
     }
     return WaveformProbe.success(out);
   } catch (e) {
@@ -129,6 +143,31 @@ Future<WaveformProbe> extractWaveform(
     );
     return const WaveformProbe.unsupported();
   }
+}
+
+/// Réduit [src] (fenêtres RMS fines, valeurs toujours positives) vers au plus
+/// [target] valeurs en gardant le PIC de chaque groupe — préserve les
+/// transitoires courts au lieu de les lisser. Si [src] compte déjà moins de
+/// [target] valeurs (fichier très court), renvoyé tel quel sans dupliquer.
+List<double> _poolPeaks(Float32List src, int target) {
+  if (target <= 0 || src.isEmpty) return const [];
+  if (src.length <= target) {
+    return [for (final s in src) s.abs()];
+  }
+  final out = List<double>.filled(target, 0);
+  for (var t = 0; t < target; t++) {
+    final start = (t * src.length) ~/ target;
+    var end = ((t + 1) * src.length) ~/ target;
+    if (end <= start) end = start + 1;
+    if (end > src.length) end = src.length;
+    var peak = 0.0;
+    for (var j = start; j < end; j++) {
+      final a = src[j].abs();
+      if (a > peak) peak = a;
+    }
+    out[t] = peak;
+  }
+  return out;
 }
 
 /// Message lisible pour les échecs du backend de sampling. Le cas le plus
