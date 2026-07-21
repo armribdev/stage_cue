@@ -1190,8 +1190,33 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Tâche de téléchargement éventuellement en vol pour ce pad — `null` si
+  /// aucune, auquel cas l'appelant enfile **sans suspension** (le prefetch
+  /// s'appuie sur l'ordre d'enqueue, cf. [_prefetchActiveBoard]).
+  ///
+  /// La file déduplique par `pad.id`, et c'est voulu : deux tâches concurrentes
+  /// muteraient le même [PadItem] (slots, compteurs) sans verrou. Mais une
+  /// demande de portée large (pad entier) tombant sur une tâche étroite (un
+  /// slot) recevrait son future sans que les autres slots soient téléchargés.
+  /// L'appelant attend donc la tâche en cours, puis reprend sur un état frais.
+  ///
+  /// Une seule attente, jamais de boucle : si un nouveau tap s'intercale entre
+  /// l'attente et l'enfilage, on retombe sur la déduplication — fenêtre étroite,
+  /// et sans conséquence pire que le comportement d'avant.
+  Future<void>? _inFlightPadDownload(PadItem padItem) {
+    final pending = _downloadQueue.inFlight(_resolveBoardPadItem(padItem).pad.id);
+    // L'échec ou l'annulation de la tâche en cours ne doit pas empêcher la
+    // reprise : on ne consomme que son achèvement.
+    return pending?.catchError((_) {});
+  }
+
   Future<bool> downloadPadSoundAtIndex(PadItem padItem, int index) async {
     if (!allowsSoundDownload) return false;
+    // Sans cette attente, la dédup renverrait la disponibilité du PAD ENTIER
+    // pour une question portant sur un slot précis.
+    final pending = _inFlightPadDownload(padItem);
+    if (pending != null) await pending;
+
     final resolved = _resolveBoardPadItem(padItem);
     if (index < 0 || index >= resolved.slots.length) return false;
     final slot = resolved.slots[index];
@@ -1274,6 +1299,11 @@ class SamplerNotifier extends ChangeNotifier {
     int priority = _downloadPriorityTap,
   }) async {
     if (isLiveOfflineMode) return _resolveBoardPadItem(padItem).isPlayable;
+    // Une tâche « un seul slot » peut être en vol : l'attendre, sinon la dédup
+    // renverrait son résultat et les autres slots ne seraient jamais chargés.
+    final pending = _inFlightPadDownload(padItem);
+    if (pending != null) await pending;
+
     final resolved = _resolveBoardPadItem(padItem);
     try {
       return await _downloadQueue.enqueue<bool>(
