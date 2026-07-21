@@ -135,7 +135,7 @@ class LibrarySyncService {
     }
 
     final tempDir = await _resolveTempDir();
-    final snapshotPath = p.join(tempDir.path, 'library-push.db');
+    final snapshotPath = _uniqueTempPath(tempDir, 'library-push');
     final length = await exportSnapshot(snapshotPath);
 
     try {
@@ -246,7 +246,7 @@ class LibrarySyncService {
     if (dbFile == null) return const PullUpToDate();
 
     final tempDir = await _resolveTempDir();
-    final downloadPath = p.join(tempDir.path, 'library-pull.db');
+    final downloadPath = _uniqueTempPath(tempDir, 'library-pull');
     try {
       await client.downloadToFile(
         fileId: dbFile.id,
@@ -343,6 +343,17 @@ class LibrarySyncService {
       );
     }
   }
+
+  /// Chemin temporaire UNIQUE par opération de synchro.
+  ///
+  /// Un nom fixe serait partagé par deux synchros concurrentes : le coordinateur
+  /// planifie un push PAR bibliothèque connectée, et leurs anti-rebonds arrivent
+  /// à échéance au même instant. La seconde écrasait alors le snapshot exporté
+  /// par la première, qui téléversait le contenu de l'autre bibliothèque — et le
+  /// nettoyage `finally` de l'une supprimait le fichier de l'autre en plein
+  /// téléversement.
+  String _uniqueTempPath(Directory dir, String prefix) =>
+      p.join(dir.path, '$prefix-${const Uuid().v4()}.db');
 
   Future<Directory> _resolveTempDir() async {
     if (_tempDirOverride != null) return _tempDirOverride;

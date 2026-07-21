@@ -206,32 +206,34 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    // Boutons edit/close : uniquement affichés en mode édition sur PC (souris),
+    // pas de contrainte de taille tactile nécessaire → icônes plus rapprochées.
     final deleteButton = widget.isEditable && widget.onRemove != null
         ? Positioned(
-            top: 6,
-            right: 6,
+            top: 4,
+            right: 4,
             child: IconButton(
-              icon: const Icon(Icons.close, size: 18),
+              icon: const Icon(Icons.close, size: 16),
               onPressed: _handleRemoveTap,
               color: Colors.grey.shade600,
-              splashRadius: 16,
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              splashRadius: 12,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
             ),
           )
         : null;
 
     final editButton = widget.isEditable && widget.onEdit != null
         ? Positioned(
-            top: 6,
-            left: 6,
+            top: 4,
+            right: 26,
             child: IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 16),
+              icon: const Icon(Icons.edit_outlined, size: 14),
               onPressed: widget.onEdit,
               color: Colors.grey.shade600,
-              splashRadius: 16,
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              splashRadius: 12,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
             ),
           )
         : null;
