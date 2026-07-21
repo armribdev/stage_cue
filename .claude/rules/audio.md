@@ -1,6 +1,8 @@
 # flutter_soloud
 
 - Toujours preloader les sons avec `LoadMode.memory` avant la lecture (réduit la latence)
+- Ne jamais appeler `SoLoud.instance.loadMem` directement — passer par `loadAudioSourceFromFile` / `enqueueSoLoudFileTask`, qui sérialisent tout décodage natif sur une file unique globale (deux accès natifs concurrents plantent sous Windows) ([décision 0001](../../docs/decisions/0001-chargement-audio-soloud.md))
+- Les octets sont copiés en mémoire avant lecture : supprimer un fichier du cache disque ne coupe pas une lecture en cours — l'éviction LRU affecte la disponibilité future, pas le son en train de jouer ([décision 0001](../../docs/decisions/0001-chargement-audio-soloud.md))
 - Classifier le type **uniquement à l'insertion** via SoLoud (`getLength`) sur le fichier local ; sans fichier téléchargé → `type = null` (colonne nullable depuis v23) ; le type en base ne change jamais sauf via `updateSoundType`
 - Valider `soundHandle.isValid()` avant toute opération sur un handle (volume, stop)
 - Appeler `soloud.disposeSource(audioSource)` quand un son est supprimé — éviter les fuites
