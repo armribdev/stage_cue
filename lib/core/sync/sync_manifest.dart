@@ -10,11 +10,23 @@ class SyncManifest {
   final DateTime updatedAt;
   final int schemaVersion;
 
+  /// Nom du fichier snapshot que cette révision désigne.
+  ///
+  /// Chaque push écrit son snapshot sous un nom UNIQUE, puis publie ce nom ici :
+  /// deux appareils qui poussent en même temps ne peuvent donc plus écraser le
+  /// snapshot l'un de l'autre. Le manifest devient le seul point de bascule, et
+  /// le perdant de la course abandonne sans avoir rien détruit.
+  ///
+  /// `null` pour les manifests écrits avant ce schéma : l'appelant retombe alors
+  /// sur le nom historique (`boards.db` / `library.db`).
+  final String? dbFileName;
+
   const SyncManifest({
     required this.revision,
     required this.deviceId,
     required this.updatedAt,
     required this.schemaVersion,
+    this.dbFileName,
   });
 
   Map<String, dynamic> toJson() => {
@@ -22,6 +34,7 @@ class SyncManifest {
         'deviceId': deviceId,
         'updatedAt': updatedAt.toUtc().toIso8601String(),
         'schemaVersion': schemaVersion,
+        if (dbFileName != null) 'dbFileName': dbFileName,
       };
 
   factory SyncManifest.fromJson(Map<String, dynamic> json) => SyncManifest(
@@ -29,6 +42,7 @@ class SyncManifest {
         deviceId: json['deviceId'] as String,
         updatedAt: DateTime.parse(json['updatedAt'] as String),
         schemaVersion: json['schemaVersion'] as int,
+        dbFileName: json['dbFileName'] as String?,
       );
 
   String encode() => jsonEncode(toJson());

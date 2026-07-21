@@ -29,6 +29,15 @@ void main() {
     tempDir = Directory.systemTemp.createTempSync('sync_test');
     service = LibrarySyncService(store, deviceId: 'device-1', tempDir: tempDir);
 
+    // Défaut : tout fichier non explicitement stubé est absent. Les snapshots
+    // portent désormais un nom unique (uuid) qu'un test ne peut pas prédire ;
+    // les stubs spécifiques des tests, enregistrés après, restent prioritaires.
+    when(() => client.findInFolder(
+          parentId: any(named: 'parentId'),
+          name: any(named: 'name'),
+        )).thenAnswer((_) async => null);
+    when(() => client.deleteFile(any())).thenAnswer((_) async {});
+
     when(() => store.schemaVersion).thenReturn(11);
     when(() => store.exportLibrarySnapshot(any(), any()))
         .thenAnswer((_) async => 1024);
@@ -93,7 +102,8 @@ void main() {
       verify(() => store.exportLibrarySnapshot(1, any())).called(1);
       // Snapshot RACINE : boards.db, distinct de library.db (snapshot dossier).
       verify(() => client.uploadFile(
-            name: 'boards.db',
+            // Nom unique par push (`boards-<uuid>.db`) : plus jamais écrasable.
+            name: any(named: 'name', that: startsWith('boards-')),
             parentId: 'stage',
             data: any(named: 'data'),
             length: 1024,
@@ -135,13 +145,82 @@ void main() {
 
       expect(outcome, isA<PushSuccess>());
       expect((outcome as PushSuccess).revision, 4);
-      // db existant -> updateFileContent, pas un upload neuf
-      verify(() => client.updateFileContent(
-            fileId: 'db',
+      // Le snapshot n'est PLUS jamais écrasé : chaque push crée son propre blob
+      // et seul le manifest est mis à jour en place.
+      verify(() => client.uploadFile(
+            name: any(named: 'name', that: startsWith('boards-')),
+            parentId: 'stage',
             data: any(named: 'data'),
             length: 1024,
             mimeType: any(named: 'mimeType'),
           )).called(1);
+      verifyNever(() => client.updateFileContent(
+            fileId: 'db',
+            data: any(named: 'data'),
+            length: any(named: 'length'),
+            mimeType: any(named: 'mimeType'),
+          ));
+    });
+
+    test('publication concurrente pendant l\'upload : conflit détecté, '
+        'snapshot du gagnant intact', () async {
+      when(() => client.findInFolder(parentId: 'lib', name: '.stagecue'))
+          .thenAnswer((_) async => folder('stage', '.stagecue'));
+      when(() => client.findInFolder(
+              parentId: 'stage', name: 'boards-manifest.json'))
+          .thenAnswer((_) async => file('m', 'boards-manifest.json'));
+
+      SyncManifest at(int revision) => SyncManifest(
+            revision: revision,
+            deviceId: 'other',
+            updatedAt: DateTime(2026),
+            schemaVersion: 11,
+          );
+
+      // 1re lecture : révision 3, la garde passe. 2e lecture (juste avant
+      // publication) : un autre appareil a publié la 4 pendant notre upload.
+      var reads = 0;
+      when(() => client.downloadBytes('m')).thenAnswer((_) async {
+        reads++;
+        return utf8.encode(at(reads == 1 ? 3 : 4).encode());
+      });
+      stubUpload();
+
+      var blobLookups = 0;
+      when(() => client.findInFolder(
+            parentId: 'stage',
+            name: any(
+              named: 'name',
+              that: allOf(startsWith('boards-'), endsWith('.db')),
+            ),
+          )).thenAnswer((invocation) async {
+        // 1er appel : _putFile constate que le blob est neuf. 2e : nettoyage de
+        // notre orphelin une fois le conflit détecté.
+        blobLookups++;
+        return blobLookups == 1
+            ? null
+            : file('orphan', invocation.namedArguments[#name] as String);
+      });
+
+      final outcome = await service.push(
+        client: client,
+        libraryId: 1,
+        libraryFolderId: 'lib',
+        knownRevision: 3,
+      );
+
+      expect(outcome, isA<PushConflict>());
+      expect((outcome as PushConflict).remote.revision, 4);
+      // Le manifest n'est PAS republié : la révision 4 du gagnant reste en place
+      // et son snapshot n'a jamais pu être écrasé (nom distinct du nôtre).
+      verifyNever(() => client.updateFileContent(
+            fileId: 'm',
+            data: any(named: 'data'),
+            length: any(named: 'length'),
+            mimeType: any(named: 'mimeType'),
+          ));
+      // Notre snapshot, que plus rien ne référence, est nettoyé.
+      verify(() => client.deleteFile('orphan')).called(1);
     });
 
     test('révision distante différente : conflit, pas d\'export', () async {
@@ -202,7 +281,8 @@ void main() {
             length: any(named: 'length'),
             mimeType: any(named: 'mimeType'),
           )).thenAnswer((invocation) async {
-        if (invocation.namedArguments[#name] == 'boards.db') {
+        final name = invocation.namedArguments[#name] as String;
+        if (name.startsWith('boards-') && name.endsWith('.db')) {
           final data = invocation.namedArguments[#data] as Stream<List<int>>;
           uploaded.add(utf8.decode(await data.expand((c) => c).toList()));
         }
@@ -316,6 +396,51 @@ void main() {
         ),
       ).called(1);
     });
+
+    test('le manifest désigne son snapshot : c\'est CE blob qui est tiré',
+        () async {
+      final remote = SyncManifest(
+        revision: 7,
+        deviceId: 'other',
+        updatedAt: DateTime.now().toUtc(),
+        schemaVersion: 11,
+        dbFileName: 'boards-abc.db',
+      );
+      when(() => client.findInFolder(parentId: 'lib', name: '.stagecue'))
+          .thenAnswer((_) async => folder('stage', '.stagecue'));
+      when(() => client.findInFolder(
+              parentId: 'stage', name: 'boards-manifest.json'))
+          .thenAnswer((_) async => file('m', 'boards-manifest.json'));
+      when(() => client.downloadBytes('m'))
+          .thenAnswer((_) async => utf8.encode(remote.encode()));
+      when(() => client.findInFolder(parentId: 'stage', name: 'boards-abc.db'))
+          .thenAnswer((_) async => file('blob-7', 'boards-abc.db'));
+      // Le nom historique traîne encore (dossier poussé par une version
+      // antérieure) : il ne doit PAS être tiré à la place du blob désigné.
+      when(() => client.findInFolder(parentId: 'stage', name: 'boards.db'))
+          .thenAnswer((_) async => file('legacy', 'boards.db'));
+      when(() => client.downloadToFile(
+            fileId: any(named: 'fileId'),
+            destinationPath: any(named: 'destinationPath'),
+          )).thenAnswer((_) async {});
+
+      final outcome = await service.pull(
+        client: client,
+        libraryId: 1,
+        libraryFolderId: 'lib',
+        knownRevision: 2,
+      );
+
+      expect(outcome, isA<PullStaged>());
+      verify(() => client.downloadToFile(
+            fileId: 'blob-7',
+            destinationPath: any(named: 'destinationPath'),
+          )).called(1);
+      verifyNever(() => client.downloadToFile(
+            fileId: 'legacy',
+            destinationPath: any(named: 'destinationPath'),
+          ));
+    });
   });
 
   group('pushFolder / pullFolder (par-dossier)', () {
@@ -340,7 +465,7 @@ void main() {
       verify(() => store.exportFolderSnapshot(42, any())).called(1);
       verifyNever(() => store.exportLibrarySnapshot(any(), any()));
       verify(() => client.uploadFile(
-            name: 'library.db',
+            name: any(named: 'name', that: startsWith('library-')),
             parentId: 'stage',
             data: any(named: 'data'),
             length: 2048,

@@ -138,27 +138,80 @@ class LibrarySyncService {
     final snapshotPath = _uniqueTempPath(tempDir, 'library-push');
     final length = await exportSnapshot(snapshotPath);
 
+    // Nom UNIQUE : cet upload ne peut écraser le snapshot d'aucun autre
+    // appareil. Tant que le manifest ne le désigne pas, ce blob n'est vu par
+    // personne — la publication reste donc une bascule en un seul point.
+    final snapshotName = _uniqueSnapshotName(dbFileName);
+
     try {
       await _putFile(
         client: client,
         parentId: stageId,
-        name: dbFileName,
+        name: snapshotName,
         data: File(snapshotPath).openRead(),
         length: length,
         mimeType: _sqliteMimeType,
       );
 
-      final newRevision = (remoteManifest?.revision ?? knownRevision) + 1;
+      // Re-lecture juste avant publication. L'export puis l'upload durent
+      // plusieurs secondes : le manifest lu AVANT ne dit plus rien de l'état
+      // courant. Drive n'expose aucune écriture conditionnelle (pas d'ETag sur
+      // `files.update`), donc la séquence ne peut pas être rendue atomique. On
+      // réduit la fenêtre de course à un aller-retour API, et surtout le
+      // perdant abandonne SANS avoir détruit le snapshot du gagnant.
+      final current = await _readManifest(client, stageId, manifestFileName);
+      if (!force &&
+          current != null &&
+          current.revision != remoteManifest?.revision) {
+        await _deleteFileIfExists(client, stageId, snapshotName);
+        return PushConflict(current);
+      }
+
+      // On se base sur la révision RELUE : en mode `force` (« garder le
+      // local »), cela garantit de superséder ce qui est réellement distant au
+      // lieu de republier une révision déjà prise.
+      final baseRevision =
+          current?.revision ?? remoteManifest?.revision ?? knownRevision;
+      final newRevision = baseRevision + 1;
       final manifest = SyncManifest(
         revision: newRevision,
         deviceId: await _resolveDeviceId(),
         updatedAt: DateTime.now().toUtc(),
         schemaVersion: _snapshotStore.schemaVersion,
+        dbFileName: snapshotName,
       );
       await _writeManifest(client, stageId, manifestFileName, manifest);
+
+      // Le snapshot précédent n'est plus référencé : on le retire pour que
+      // `.stagecue` ne grossisse pas à chaque push. Best-effort — un résidu ne
+      // compromet rien.
+      final previous = current?.dbFileName ?? remoteManifest?.dbFileName;
+      if (previous != null && previous != snapshotName) {
+        await _deleteFileIfExists(client, stageId, previous);
+      }
       return PushSuccess(newRevision);
     } finally {
       await _safeDelete(snapshotPath);
+    }
+  }
+
+  /// `boards.db` → `boards-<uuid>.db`.
+  String _uniqueSnapshotName(String dbFileName) {
+    final base = p.basenameWithoutExtension(dbFileName);
+    final ext = p.extension(dbFileName);
+    return '$base-${const Uuid().v4()}$ext';
+  }
+
+  Future<void> _deleteFileIfExists(
+    DriveClient client,
+    String parentId,
+    String name,
+  ) async {
+    try {
+      final file = await client.findInFolder(parentId: parentId, name: name);
+      if (file != null) await client.deleteFile(file.id);
+    } catch (_) {
+      // Ménage best-effort : un blob résiduel ne compromet pas la synchro.
     }
   }
 
@@ -170,16 +223,19 @@ class LibrarySyncService {
   }) async {
     final stage = await _findInFolder(client, libraryFolderId, _stageFolderName);
     if (stage == null) return false;
-    final folderDb = await client.findInFolder(
-      parentId: stage.id,
-      name: _folderDbFileName,
-    );
-    if (folderDb != null) return true;
-    final boardsDb = await client.findInFolder(
-      parentId: stage.id,
-      name: _boardsDbFileName,
-    );
-    return boardsDb != null;
+    // Les snapshots portant désormais un nom unique, c'est la présence d'un
+    // MANIFEST qui atteste qu'un snapshot a été publié. Les noms historiques
+    // restent testés pour les dossiers poussés par une version antérieure.
+    for (final name in const [
+      _folderManifestFileName,
+      _boardsManifestFileName,
+      _folderDbFileName,
+      _boardsDbFileName,
+    ]) {
+      final found = await client.findInFolder(parentId: stage.id, name: name);
+      if (found != null) return true;
+    }
+    return false;
   }
 
   /// Télécharge le snapshot distant s'il est plus récent et le fusionne
@@ -239,9 +295,11 @@ class LibrarySyncService {
       return const PullUpToDate();
     }
 
+    // Le manifest désigne son snapshot par son nom unique. À défaut (manifest
+    // écrit par une version antérieure), on retombe sur le nom historique.
     final dbFile = await client.findInFolder(
       parentId: stage.id,
-      name: dbFileName,
+      name: remoteManifest.dbFileName ?? dbFileName,
     );
     if (dbFile == null) return const PullUpToDate();
 
