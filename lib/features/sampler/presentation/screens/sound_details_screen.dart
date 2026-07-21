@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/utils/copyable_snackbar.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
@@ -38,7 +41,9 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
   late int _startOffsetMs;
   late Set<int> _selectedTagIds;
   late SoundType? _selectedType;
+  late Uint8List? _waveform;
   bool _isSaving = false;
+  bool _isRegeneratingWaveform = false;
 
   static const List<Color> _defaultColorChoices = <Color>[
     Colors.blue,
@@ -60,6 +65,39 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
     _startOffsetMs = widget.sound.startOffsetMs;
     _selectedTagIds = widget.initialTags.map((t) => t.id).toSet();
     _selectedType = widget.sound.type;
+    _waveform = widget.sound.waveform;
+  }
+
+  Future<void> _regenerateWaveform() async {
+    if (_isRegeneratingWaveform) return;
+    final notifier = widget.notifier;
+    if (notifier == null) return;
+    setState(() => _isRegeneratingWaveform = true);
+    try {
+      final status = await notifier.regenerateWaveform(widget.sound);
+      final updated = await widget.repository.getSoundById(widget.sound.id);
+      if (!mounted) return;
+      switch (status) {
+        case WaveformProbeStatus.success:
+          setState(() => _waveform = updated?.waveform ?? _waveform);
+          showCopyableSnackBar(context, 'Waveform régénérée.');
+        case WaveformProbeStatus.unsupported:
+          showCopyableSnackBar(
+            context,
+            'Format non pris en charge pour l\'extraction de waveform.',
+          );
+        case WaveformProbeStatus.transient:
+          showCopyableSnackBar(
+            context,
+            'Moteur audio non prêt — réessayez dans un instant.',
+          );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      showCopyableSnackBar(context, 'Échec de la régénération : $error');
+    } finally {
+      if (mounted) setState(() => _isRegeneratingWaveform = false);
+    }
   }
 
   String? _normalizedDisplayNameOrNull(String value) {
@@ -199,9 +237,28 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
                   setState(() => _selectedVolume = value.clamp(0.0, 1.0)),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Point d\'entrée',
-              style: Theme.of(context).textTheme.bodyMedium,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Point d\'entrée',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                if (widget.notifier != null)
+                  TextButton.icon(
+                    onPressed:
+                        _isRegeneratingWaveform ? null : _regenerateWaveform,
+                    icon: _isRegeneratingWaveform
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh, size: 18),
+                    label: const Text('Régénérer la waveform'),
+                  ),
+              ],
             ),
             const SizedBox(height: 4),
             Text(
@@ -213,7 +270,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
             const SizedBox(height: 8),
             StartOffsetEditor(
               filePath: widget.sound.filePath,
-              waveform: widget.sound.waveform,
+              waveform: _waveform,
               initialOffsetMs: _startOffsetMs,
               onChanged: (ms) => setState(() => _startOffsetMs = ms),
             ),
