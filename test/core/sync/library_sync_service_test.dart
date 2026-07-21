@@ -312,7 +312,8 @@ void main() {
   });
 
   group('pull', () {
-    test('pas de dossier .stagecue : à jour', () async {
+    test('pas de dossier .stagecue : AUCUN snapshot distant, pas « à jour »',
+        () async {
       when(() => client.findInFolder(parentId: 'lib', name: '.stagecue'))
           .thenAnswer((_) async => null);
 
@@ -323,7 +324,9 @@ void main() {
         knownRevision: 0,
       );
 
-      expect(outcome, isA<PullUpToDate>());
+      // Rien n'a pu être comparé : confondre ce cas avec PullUpToDate faisait
+      // afficher « Synchronisé » sur un dossier distant vide.
+      expect(outcome, isA<PullNoRemoteSnapshot>());
       verifyNever(
         () => store.mergeLibrarySnapshot(any(), any(), driveFolderId: any(named: 'driveFolderId')),
       );

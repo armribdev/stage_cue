@@ -238,7 +238,75 @@ void main() {
     });
   });
 
+  group('pas de snapshot distant', () {
+    test('bibliothèque déjà poussée -> erreur, jamais « synchronisé »',
+        () async {
+      when(() => repo.pullLibrary(any()))
+          .thenAnswer((_) async => const PullNoRemoteSnapshot());
+      final controller = SyncController(repo);
+
+      // lastSyncedRevision = 2 : le .stagecue a donc été vidé ou supprimé.
+      await controller.pullForLaunch(library);
+
+      expect(controller.state.status, SyncStatus.error);
+      expect(controller.state.message, contains('introuvable'));
+      // Le piège d'origine : annoncer « Synchronisé » avec un horodatage frais
+      // alors que rien n'est sauvegardé à distance.
+      expect(controller.state.lastSyncedAt, isNull);
+    });
+
+    test('bibliothèque jamais poussée -> idle, rien à signaler', () async {
+      when(() => repo.pullLibrary(any()))
+          .thenAnswer((_) async => const PullNoRemoteSnapshot());
+      final controller = SyncController(repo);
+
+      await controller.pullForLaunch(
+        Library(
+          id: 2,
+          name: 'Neuve',
+          localRootPath: '/tmp/neuve',
+          driveFolderId: 'folder',
+          createdAt: DateTime(2026),
+        ),
+      );
+
+      expect(controller.state.status, SyncStatus.idle);
+    });
+  });
+
   group('Mode Spectacle (pause auto-sync)', () {
+    test('deux bibliothèques différées -> les DEUX sont rejouées', () async {
+      when(() => repo.pushLibrary(any(),
+              overrideKnownRevision: any(named: 'overrideKnownRevision')))
+          .thenAnswer((_) async => const PushSuccess(3));
+      final other = Library(
+        id: 2,
+        name: 'Lib 2',
+        localRootPath: '/tmp/lib2',
+        driveFolderId: 'folder-2',
+        lastSyncedRevision: 5,
+        createdAt: DateTime(2026),
+      );
+      final controller =
+          SyncController(repo, debounce: const Duration(milliseconds: 20));
+
+      controller.pauseAutoSync();
+      controller.schedulePush(library);
+      controller.schedulePush(other);
+
+      controller.resumeAutoSync();
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      // Un slot unique ne retenait que la dernière : l'autre bibliothèque
+      // n'était jamais poussée.
+      verify(() => repo.pushLibrary(
+            any(that: isA<Library>().having((l) => l.id, 'id', 1)),
+          )).called(1);
+      verify(() => repo.pushLibrary(
+            any(that: isA<Library>().having((l) => l.id, 'id', 2)),
+          )).called(1);
+    });
+
     test('schedulePush en pause -> aucun push, rejoué à la reprise', () async {
       when(() => repo.pushLibrary(any(),
               overrideKnownRevision: any(named: 'overrideKnownRevision')))

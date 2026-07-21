@@ -101,9 +101,11 @@ class SyncController extends ChangeNotifier {
   /// (export `VACUUM INTO` + upload) pendant les déclenchements live.
   bool _autoSyncPaused = false;
 
-  /// Dernière bibliothèque dont un push a été supprimé pendant la pause, à
-  /// rejouer à la reprise.
-  Library? _deferredPushLibrary;
+  /// Bibliothèques dont un push a été supprimé pendant la pause, à rejouer à la
+  /// reprise. Indexé par `library.id` : un slot unique perdait tous les push
+  /// sauf le dernier dès qu'il y avait plus d'une bibliothèque connectée, et
+  /// les autres attendaient une prochaine mutation qui pouvait ne jamais venir.
+  final Map<int, Library> _deferredPushLibraries = {};
 
   /// Bibliothèque en cours de push (pour mémoriser l'origine d'un conflit).
   Library? _pushInFlightLibrary;
@@ -151,7 +153,7 @@ class SyncController extends ChangeNotifier {
     _autoSyncPaused = true;
     for (final entry in _debounceTimers.values) {
       entry.$1.cancel();
-      _deferredPushLibrary = entry.$2; // à rejouer à la reprise
+      _deferredPushLibraries[entry.$2.id] = entry.$2; // à rejouer à la reprise
     }
     _debounceTimers.clear();
   }
@@ -161,9 +163,11 @@ class SyncController extends ChangeNotifier {
   void resumeAutoSync() {
     if (!_autoSyncPaused) return;
     _autoSyncPaused = false;
-    final deferred = _deferredPushLibrary;
-    _deferredPushLibrary = null;
-    if (deferred != null) schedulePush(deferred);
+    final deferred = List<Library>.from(_deferredPushLibraries.values);
+    _deferredPushLibraries.clear();
+    for (final library in deferred) {
+      schedulePush(library);
+    }
   }
 
   /// Planifie un push après une période d'inactivité (anti-rebond). Appelé à
@@ -171,7 +175,7 @@ class SyncController extends ChangeNotifier {
   void schedulePush(Library library) {
     // En Mode Spectacle : on mémorise le besoin de push sans rien lancer.
     if (_autoSyncPaused) {
-      _deferredPushLibrary = library;
+      _deferredPushLibraries[library.id] = library;
       return;
     }
     _debounceTimers[library.id]?.$1.cancel();
@@ -257,6 +261,8 @@ class SyncController extends ChangeNotifier {
             status: SyncStatus.synced,
             lastSyncedAt: DateTime.now(),
           ));
+        case PullNoRemoteSnapshot():
+          _applyNoRemoteSnapshot(library);
       }
     } on DriveAuthException {
       await _onAuthError();
@@ -306,12 +312,39 @@ class SyncController extends ChangeNotifier {
             lastSyncedAt: DateTime.now(),
             clearConflict: true,
           ));
+        case PullNoRemoteSnapshot():
+          // Résolution de conflit « prendre le distant » alors qu'il n'y a rien
+          // à prendre : incohérent, on le signale au lieu de clore le conflit.
+          _set(_state.copyWith(
+            status: SyncStatus.error,
+            message: 'Sauvegarde distante introuvable : impossible de prendre '
+                'la version distante.',
+          ));
       }
     } on DriveAuthException {
       await _onAuthError();
     } catch (e) {
       _set(_state.copyWith(status: SyncStatus.error, message: e.toString()));
     }
+  }
+
+  /// Aucun snapshot distant à comparer.
+  ///
+  /// Jamais « Synchronisé » : ce statut ferait croire à une sauvegarde distante.
+  /// Une bibliothèque encore jamais poussée n'a simplement rien à tirer (idle) ;
+  /// une bibliothèque qui porte déjà une révision a vu son `.stagecue` vidé ou
+  /// supprimé — l'utilisateur doit le savoir, ses scènes ne vivent plus qu'en
+  /// local.
+  void _applyNoRemoteSnapshot(Library library) {
+    if (library.lastSyncedRevision <= 0) {
+      _set(_state.copyWith(status: SyncStatus.idle, clearMessage: true));
+      return;
+    }
+    _set(_state.copyWith(
+      status: SyncStatus.error,
+      message: 'Sauvegarde distante introuvable — vos scènes ne sont plus '
+          'que locales. Lancez une synchro pour la recréer.',
+    ));
   }
 
   void _applyPushOutcome(PushOutcome outcome) {
