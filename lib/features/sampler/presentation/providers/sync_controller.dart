@@ -108,6 +108,12 @@ class SyncController extends ChangeNotifier {
   /// Bibliothèque en cours de push (pour mémoriser l'origine d'un conflit).
   Library? _pushInFlightLibrary;
 
+  /// Vrai après [dispose]. Un push/pull dure plusieurs secondes (export
+  /// `VACUUM INTO` + upload) et n'est pas annulable : sans cette garde, son
+  /// retour notifie un ChangeNotifier déjà détruit (fermeture de l'écran ou de
+  /// l'app en pleine synchro).
+  bool _disposed = false;
+
   /// Appelé après chaque merge de snapshot Drive réussi (PullStaged).
   /// Permet au sampler de recharger ses boards sans redémarrage.
   VoidCallback? onLibraryMerged;
@@ -120,6 +126,7 @@ class SyncController extends ChangeNotifier {
   SyncState get state => _state;
 
   void _set(SyncState next) {
+    if (_disposed) return;
     _syncedDisplayTimer?.cancel();
     _syncedDisplayTimer = null;
     _state = next;
@@ -355,6 +362,7 @@ class SyncController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _syncedDisplayTimer?.cancel();
     for (final entry in _debounceTimers.values) {
       entry.$1.cancel();

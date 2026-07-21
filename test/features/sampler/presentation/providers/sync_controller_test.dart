@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:stage_cue/core/sync/library_sync_service.dart';
@@ -53,6 +55,24 @@ void main() {
 
       expect(controller.state.status, SyncStatus.synced);
       expect(controller.state.lastSyncedAt, isNotNull);
+    });
+
+    test('dispose pendant un push en vol -> pas de notification post-dispose',
+        () async {
+      // Un push dure plusieurs secondes (export + upload) et n'est pas
+      // annulable : la fermeture de l'écran pendant ce temps ne doit pas
+      // notifier un ChangeNotifier détruit.
+      final completer = Completer<PushOutcome>();
+      when(() => repo.pushLibrary(any(),
+              overrideKnownRevision: any(named: 'overrideKnownRevision')))
+          .thenAnswer((_) => completer.future);
+      final controller = SyncController(repo);
+
+      final inFlight = controller.syncNow(library);
+      controller.dispose();
+      completer.complete(const PushSuccess(3));
+
+      await expectLater(inFlight, completes);
     });
 
     test('push en conflit -> fusion auto (pull + repush) -> synced', () async {

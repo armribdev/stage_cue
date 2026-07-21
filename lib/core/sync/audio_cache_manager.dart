@@ -36,6 +36,9 @@ class AudioCacheManager {
   /// Index LRU chargé paresseusement, indexé par racine de cache.
   final Map<String, _AccessIndex> _indices = {};
 
+  /// Dernière sauvegarde d'index en vol, par racine de cache (cf. [_saveIndex]).
+  final Map<String, Future<void>> _saveChains = {};
+
   static const String _accessIndexFileName = '.cache_access.json';
 
   AudioCacheManager({
@@ -361,20 +364,34 @@ class AudioCacheManager {
       // Best-effort : un fichier non supprimable ne doit pas bloquer l'index.
     }
     final index = await _indexFor(library.localRootPath);
-    // L'entrée LRU peut avoir été inscrite sous la forme normalisée (ensureCached)
-    // ou brute (importFile) : on retire les deux clés par précaution.
+    // Les entrées sont désormais toujours normalisées (cf. [_indexKey]) ; on
+    // retire aussi la forme brute pour purger les index écrits par les versions
+    // antérieures, qui pouvaient contenir les deux.
     final removed = index.entries.remove(normalized) != null;
     final removedRaw = index.entries.remove(relativePath) != null;
-    if (removed || removedRaw) await index.save();
+    if (removed || removedRaw) {
+      await _saveIndex(library.localRootPath, index);
+    }
   }
+
+  /// Toutes les entrées de l'index LRU sont indexées sous la forme NORMALISÉE.
+  ///
+  /// Les appelants fournissent des formes hétérogènes : chemin déjà normalisé
+  /// ([ensureCached]), nom brut issu du listing Drive (repli par nom), ou chemin
+  /// d'origine avec préfixe `sounds/` legacy ([importFile]). Sans ce passage
+  /// obligé, un même fichier obtenait DEUX entrées : sa taille était comptée
+  /// deux fois et l'éviction se déclenchait bien avant [maxCacheBytes].
+  String _indexKey(String relativePath) =>
+      LibrarySoundPaths.normalizeRelativePath(relativePath);
 
   Future<void> _touch(Library library, String relativePath, int size) async {
     final index = await _indexFor(library.localRootPath);
-    index.entries[relativePath] = _AccessEntry(_clock(), size);
-    await index.save();
+    index.entries[_indexKey(relativePath)] = _AccessEntry(_clock(), size);
+    await _saveIndex(library.localRootPath, index);
   }
 
   Future<void> _evictIfNeeded(Library library, {String? protect}) async {
+    final protectedKey = protect != null ? _indexKey(protect) : null;
     final index = await _indexFor(library.localRootPath);
     var total =
         index.entries.values.fold<int>(0, (sum, e) => sum + e.size);
@@ -388,7 +405,7 @@ class AudioCacheManager {
 
     for (final entry in ordered) {
       if (total <= maxCacheBytes) break;
-      if (entry.key == protect) continue;
+      if (entry.key == protectedKey) continue;
       if (pinned.contains(entry.key)) continue; // épinglé : jamais évincé
       final fileToDelete = File(localPathFor(library, entry.key));
       try {
@@ -399,7 +416,24 @@ class AudioCacheManager {
       index.entries.remove(entry.key);
       total -= entry.value.size;
     }
-    await index.save();
+    await _saveIndex(library.localRootPath, index);
+  }
+
+  /// Sérialise les sauvegardes de l'index par racine de cache.
+  ///
+  /// [DownloadQueue] autorise deux téléchargements simultanés : leurs `_touch`
+  /// terminent quasi ensemble et sauvegardaient l'index en parallèle, sur le
+  /// même fichier. L'écriture n'étant pas atomique, un JSON tronqué était
+  /// possible — et au rechargement l'index repart à vide (catch de
+  /// [_AccessIndex.load]), donc `total = 0` : plus aucune éviction tant que
+  /// l'index ne s'est pas reconstitué.
+  Future<void> _saveIndex(String rootPath, _AccessIndex index) {
+    final previous = _saveChains[rootPath] ?? Future<void>.value();
+    final next = previous.then((_) => index.save());
+    // La chaîne ne doit pas mourir sur un échec ; l'erreur reste visible pour
+    // l'appelant via le future retourné.
+    _saveChains[rootPath] = next.catchError((_) {});
+    return next;
   }
 
   Future<_AccessIndex> _indexFor(String rootPath) async {
@@ -489,6 +523,11 @@ class _AccessIndex {
         (key, e) => MapEntry(key, {'a': e.accessedAt, 's': e.size}),
       ),
     };
-    await file.writeAsString(jsonEncode(json));
+    // Écriture atomique (temp + renommage) : une interruption en pleine écriture
+    // laisserait un JSON tronqué, rechargé en index VIDE — donc un budget LRU
+    // remis à zéro et un cache qui grossit sans borne.
+    final tmp = File('${file.path}.tmp');
+    await tmp.writeAsString(jsonEncode(json));
+    await tmp.rename(file.path);
   }
 }
