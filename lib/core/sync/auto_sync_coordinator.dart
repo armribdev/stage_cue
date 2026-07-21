@@ -39,6 +39,10 @@ class AutoSyncCoordinator {
   void start() {
     _appPreferences.addListener(_onConnectivityModeChanged);
     _subscription = _database.tableUpdates().listen(_onTablesUpdated);
+    // Ménage des téléchargements interrompus (app tuée, coupure) : hors du pull
+    // initial, qui ne tourne qu'en mode connecté — ces résidus occupent le
+    // disque même en usage 100 % local.
+    unawaited(_repository.cleanupPartialDownloads());
     unawaited(_initialPull());
   }
 

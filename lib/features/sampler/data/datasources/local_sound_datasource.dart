@@ -959,6 +959,23 @@ class LocalSoundDataSource {
     };
   }
 
+  /// Chemins relatifs des sons posés sur les pads d'un plateau.
+  ///
+  /// Sert à épingler le plateau actif dans le cache audio : ses sons ne doivent
+  /// pas être évincés par une passe de téléchargement massif qui rebat l'ordre
+  /// LRU en pleine représentation.
+  Future<Set<String>> getBoardRelativePaths(int boardId) async {
+    final rows = await _database.customSelect(
+      'SELECT DISTINCT s.relative_path AS path FROM sounds s '
+      'INNER JOIN pad_sounds ps ON ps.sound_id = s.id '
+      'INNER JOIN pads p ON p.id = ps.pad_id '
+      'WHERE p.board_id = ?1 AND s.relative_path IS NOT NULL',
+      variables: [Variable<int>(boardId)],
+      readsFrom: {_database.sounds, _database.padSounds, _database.pads},
+    ).get();
+    return {for (final row in rows) row.read<String>('path')};
+  }
+
   /// Supprime tous les sons d'une bibliothèque Drive.
   Future<void> deleteSoundsByLibraryId(int libraryId) async {
     await (_database.delete(

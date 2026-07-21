@@ -308,6 +308,71 @@ void main() {
     expect(await File(manager.localPathFor(library, 'c.wav')).exists(), isTrue);
   });
 
+  test('éviction LRU : un épinglé au chemin BRUT est reconnu (préfixe legacy)',
+      () async {
+    var tick = 0;
+    final manager = AudioCacheManager(
+      maxCacheBytes: 100,
+      clock: () => ++tick,
+      // La base rend les chemins bruts : préfixe `sounds/` legacy, forme NFD…
+      // L'index, lui, est normalisé. Sans conversion des deux côtés, cet
+      // épinglage ne correspondrait à rien et le favori serait évincé.
+      pinnedPaths: (_) async => {'sounds/a.wav'},
+    );
+    when(() => client.findInFolder(
+          parentId: any(named: 'parentId'),
+          name: any(named: 'name'),
+        )).thenAnswer((_) async => file('remote', 'x'));
+    stubDownloadWriting(80);
+
+    // Trois fichiers : le dernier est protégé en tant que fichier courant, donc
+    // seul b.wav est évinçable — sauf si l'épinglage de a.wav est perdu.
+    await manager.ensureCached(
+        client: client, library: library, relativePath: 'a.wav');
+    await manager.ensureCached(
+        client: client, library: library, relativePath: 'b.wav');
+    await manager.ensureCached(
+        client: client, library: library, relativePath: 'c.wav');
+
+    expect(await File(manager.localPathFor(library, 'a.wav')).exists(), isTrue);
+    expect(await File(manager.localPathFor(library, 'b.wav')).exists(), isFalse);
+    expect(await File(manager.localPathFor(library, 'c.wav')).exists(), isTrue);
+  });
+
+  test('cleanupPartialDownloads : purge les .part, épargne les fichiers audio',
+      () async {
+    final manager = AudioCacheManager();
+    // Résidus d'un process tué en plein téléchargement : jamais renommés, donc
+    // absents de l'index LRU et jamais évincés.
+    final orphan = File(p.join(rootDir.path, 'a.wav.part'));
+    await orphan.writeAsBytes(List.filled(40, 1));
+    final nested = File(p.join(rootDir.path, 'sfx', 'b.wav.part'));
+    await nested.parent.create(recursive: true);
+    await nested.writeAsBytes(List.filled(60, 1));
+    final keep = File(p.join(rootDir.path, 'c.wav'));
+    await keep.writeAsBytes(List.filled(10, 1));
+
+    final reclaimed = await manager.cleanupPartialDownloads(library);
+
+    expect(reclaimed, 100);
+    expect(await orphan.exists(), isFalse);
+    expect(await nested.exists(), isFalse); // y compris en sous-dossier
+    expect(await keep.exists(), isTrue);
+  });
+
+  test('cleanupPartialDownloads : racine absente -> ne lève pas', () async {
+    final manager = AudioCacheManager();
+    final missing = Library(
+      id: 9,
+      name: 'Absente',
+      localRootPath: p.join(rootDir.path, 'nexiste_pas'),
+      driveFolderId: 'folder-x',
+      createdAt: DateTime.now(),
+    );
+
+    expect(await manager.cleanupPartialDownloads(missing), 0);
+  });
+
   test('evictCachedFile : supprime le fichier et libère le budget LRU',
       () async {
     final manager = AudioCacheManager(maxCacheBytes: 100, clock: () => 1);

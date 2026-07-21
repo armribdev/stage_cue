@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart' as gsi;
@@ -65,7 +67,74 @@ class GoogleDriveClient implements DriveClient {
         message.contains('invalid_client');
   }
 
-  /// Exécute [fn] et convertit toute erreur d'auth en [DriveAuthException].
+  /// Vrai si l'erreur se résoudra probablement d'elle-même : quota momentané,
+  /// incident Google, réseau instable.
+  ///
+  /// Le 403 est ambigu chez Drive : il sert à la fois au dépassement de quota
+  /// (retentable) et au refus de droits (définitif). Seul le motif tranche.
+  static bool _isTransient(Object error) {
+    if (error is drive.DetailedApiRequestError) {
+      final status = error.status;
+      if (status == null) return false;
+      if (status == 429 || (status >= 500 && status < 600)) return true;
+      if (status == 403) return _isRateLimited(error);
+      return false;
+    }
+    return error is SocketException ||
+        error is http.ClientException ||
+        error is TimeoutException;
+  }
+
+  static bool _isRateLimited(drive.DetailedApiRequestError error) {
+    final reasons = [
+      ...error.errors.map((e) => e.reason?.toLowerCase() ?? ''),
+      error.message?.toLowerCase() ?? '',
+    ];
+    return reasons.any(
+      (r) => r.contains('ratelimit') || r.contains('quota'),
+    );
+  }
+
+  /// Traduit une erreur d'API en message présentable.
+  static Object _describe(Object error) {
+    if (error is drive.DetailedApiRequestError) {
+      final status = error.status;
+      if (status == 429 || (status == 403 && _isRateLimited(error))) {
+        return const DriveRequestException.quota();
+      }
+      if (status == 403) return const DriveRequestException.denied();
+      if (status != null && status >= 500) {
+        return const DriveRequestException.unavailable();
+      }
+      return error;
+    }
+    if (error is SocketException ||
+        error is http.ClientException ||
+        error is TimeoutException) {
+      return const DriveRequestException.offline();
+    }
+    return error;
+  }
+
+  /// Attente avant nouvelle tentative : exponentielle, avec un bruit aléatoire
+  /// pour ne pas resynchroniser plusieurs appareils sur le même créneau.
+  static Duration _backoff(int attempt) {
+    final base = 500 * (1 << (attempt - 1)); // 500ms, 1s, 2s…
+    return Duration(milliseconds: base + _random.nextInt(250));
+  }
+
+  static final math.Random _random = math.Random();
+
+  /// Nombre total de tentatives pour les appels rejouables.
+  static const int _maxAttempts = 4;
+
+  /// Exécute [fn] et convertit toute erreur d'auth en [DriveAuthException],
+  /// les autres en [DriveRequestException] quand elles sont descriptibles.
+  ///
+  /// **Sans réessai** : réservé aux appels NON rejouables — ceux qui consomment
+  /// un `Stream` (upload) ou qui créent une ressource. Rejouer un upload
+  /// enverrait un flux déjà épuisé ; rejouer une création dupliquerait le
+  /// dossier si seule la réponse s'est perdue.
   Future<T> _guard<T>(Future<T> Function() fn) async {
     try {
       return await fn();
@@ -73,13 +142,33 @@ class GoogleDriveClient implements DriveClient {
       if (_isAuthError(e) || _isOAuthClientConfigurationError(e)) {
         throw const DriveAuthException();
       }
-      rethrow;
+      throw _describe(e);
+    }
+  }
+
+  /// Comme [_guard], avec réessai exponentiel sur erreur transitoire.
+  /// Réservé aux appels IDEMPOTENTS (lecture, listing, téléchargement).
+  Future<T> _guardRetry<T>(Future<T> Function() fn) async {
+    var attempt = 0;
+    while (true) {
+      try {
+        return await fn();
+      } catch (e) {
+        if (_isAuthError(e) || _isOAuthClientConfigurationError(e)) {
+          throw const DriveAuthException();
+        }
+        attempt++;
+        if (attempt >= _maxAttempts || !_isTransient(e)) {
+          throw _describe(e);
+        }
+        await Future<void>.delayed(_backoff(attempt));
+      }
     }
   }
 
   @override
   Future<List<DriveSharedDrive>> listSharedDrives() {
-    return _guard(() async {
+    return _guardRetry(() async {
       final results = <DriveSharedDrive>[];
       String? pageToken;
       do {
@@ -130,7 +219,7 @@ class GoogleDriveClient implements DriveClient {
     String? sharedDriveId,
     int pageSize = 200,
   }) {
-    return _guard(() async {
+    return _guardRetry(() async {
       final results = <DriveFile>[];
       String? pageToken;
       do {
@@ -160,7 +249,7 @@ class GoogleDriveClient implements DriveClient {
     required String name,
     String? sharedDriveId,
   }) async {
-    return _guard(() async {
+    return _guardRetry(() async {
       final fileList = await _api.files.list(
         q: "'${_escape(parentId)}' in parents and "
             "name = '${_escape(name)}' and trashed = false",
@@ -265,7 +354,7 @@ class GoogleDriveClient implements DriveClient {
 
   @override
   Future<List<int>> downloadBytes(String fileId) {
-    return _guard(() async {
+    return _guardRetry(() async {
       final media = await _api.files.get(
         fileId,
         downloadOptions: drive.DownloadOptions.fullMedia,
@@ -284,7 +373,7 @@ class GoogleDriveClient implements DriveClient {
     required String fileId,
     required String destinationPath,
   }) {
-    return _guard(() async {
+    return _guardRetry(() async {
       final media = await _api.files.get(
         fileId,
         downloadOptions: drive.DownloadOptions.fullMedia,
