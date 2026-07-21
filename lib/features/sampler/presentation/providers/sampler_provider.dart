@@ -41,7 +41,18 @@ class SamplerNotifier extends ChangeNotifier {
 
   final AppPreferences? _appPreferences;
 
-  int? _activeBoardId;
+  int? _activeBoardIdValue;
+
+  int? get _activeBoardId => _activeBoardIdValue;
+
+  /// Propage le plateau actif au cache audio, qui épingle ses sons contre
+  /// l'éviction LRU. Sans ça, une passe de téléchargement massif rebat la
+  /// récence et peut supprimer sous les pieds du régisseur des sons du plateau
+  /// qu'il est en train de jouer (ils ne sont protégés que s'ils sont favoris).
+  set _activeBoardId(int? value) {
+    _activeBoardIdValue = value;
+    _libraryRepository?.activeBoardId = value;
+  }
   _RemovedPadSnapshot? _lastRemovedPad;
 
   /// Réinitialisé à chaque entrée en mode live (Mode Spectacle) : force le

@@ -161,6 +161,38 @@ class AudioCacheManager {
     return ImportedAudio(relativePath: relativePath, driveFileId: uploaded.id);
   }
 
+  /// Supprime les téléchargements interrompus (`*.part`) de la racine de cache.
+  ///
+  /// [DriveClient.downloadToFile] écrit dans un `.part` puis renomme : un échec
+  /// réseau nettoie derrière lui, mais pas un process tué (OS, coupure). Ces
+  /// résidus ne sont jamais renommés, donc jamais inscrits dans l'index LRU,
+  /// donc jamais évincés — ils occupent le disque en pure perte, hors du budget
+  /// [maxCacheBytes]. À appeler au lancement.
+  ///
+  /// Best-effort : une racine absente ou un fichier verrouillé n'est pas une
+  /// erreur. Retourne le nombre d'octets récupérés.
+  Future<int> cleanupPartialDownloads(Library library) async {
+    final root = Directory(library.localRootPath);
+    if (!await root.exists()) return 0;
+
+    var reclaimed = 0;
+    try {
+      await for (final entity in root.list(recursive: true, followLinks: false)) {
+        if (entity is! File || !entity.path.endsWith('.part')) continue;
+        try {
+          final size = await entity.length();
+          await entity.delete();
+          reclaimed += size;
+        } catch (_) {
+          // Fichier verrouillé ou déjà disparu : on passe au suivant.
+        }
+      }
+    } catch (_) {
+      // Racine illisible : le ménage n'est pas critique.
+    }
+    return reclaimed;
+  }
+
   /// Indique si un chemin relatif est déjà présent dans le cache local.
   Future<bool> isCached(Library library, String relativePath) async {
     final localPath = localPathFor(library, relativePath);
@@ -397,8 +429,14 @@ class AudioCacheManager {
         index.entries.values.fold<int>(0, (sum, e) => sum + e.size);
     if (total <= maxCacheBytes) return;
 
-    // Favoris épinglés : exclus de l'éviction, même peu récents.
-    final pinned = await _pinnedPaths?.call(library) ?? const <String>{};
+    // Chemins épinglés : exclus de l'éviction, même peu récents.
+    //
+    // Ils viennent de la base sous leur forme BRUTE, alors que l'index est
+    // normalisé (cf. [_indexKey]) : sans cette conversion, un favori au préfixe
+    // `sounds/` legacy ou en NFD ne serait jamais reconnu comme épinglé, donc
+    // évincé malgré la protection.
+    final pinnedRaw = await _pinnedPaths?.call(library) ?? const <String>{};
+    final pinned = pinnedRaw.map(_indexKey).toSet();
 
     final ordered = index.entries.entries.toList()
       ..sort((a, b) => a.value.accessedAt.compareTo(b.value.accessedAt));

@@ -106,3 +106,41 @@ class DriveAuthException implements Exception {
   String toString() =>
       'DriveAuthException: ${message ?? "token révoqué ou expiré"}';
 }
+
+/// Échec d'un appel Drive, formulé pour l'utilisateur.
+///
+/// La pastille de synchro affiche `toString()` de l'erreur remontée : sans ce
+/// type, elle exposait des messages d'API bruts du genre
+/// `DetailedApiRequestError(status: 403, message: User rate limit exceeded)`.
+/// [transient] distingue ce qui se résoudra tout seul (quota, incident, réseau)
+/// de ce qui demande une action.
+class DriveRequestException implements Exception {
+  final String message;
+  final bool transient;
+
+  const DriveRequestException(this.message, {this.transient = false});
+
+  /// Réseau injoignable — cas le plus courant en tournée.
+  const DriveRequestException.offline()
+      : message = 'Pas de connexion — vos modifications restent locales et '
+            'seront synchronisées au retour du réseau.',
+        transient = true;
+
+  const DriveRequestException.quota()
+      : message = 'Quota Google Drive atteint — la synchronisation reprendra '
+            'dans quelques minutes.',
+        transient = true;
+
+  const DriveRequestException.unavailable()
+      : message = 'Google Drive est momentanément indisponible — nouvelle '
+            'tentative plus tard.',
+        transient = true;
+
+  const DriveRequestException.denied()
+      : message = 'Accès refusé par Google Drive — vérifiez les droits du '
+            'dossier partagé.',
+        transient = false;
+
+  @override
+  String toString() => message;
+}

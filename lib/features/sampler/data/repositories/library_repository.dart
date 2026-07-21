@@ -121,6 +121,11 @@ class LibraryRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Plateau actuellement affiché, renseigné par le `SamplerNotifier` à chaque
+  /// changement de scène. Ses sons sont épinglés dans le cache audio : ils ne
+  /// doivent jamais être évincés pendant qu'on joue dessus.
+  int? activeBoardId;
+
   LibraryRepository(
     this._dataSource,
     this._authenticator,
@@ -132,17 +137,33 @@ class LibraryRepository extends ChangeNotifier {
   /// Assemble le repository avec ses dépendances Drive par défaut.
   factory LibraryRepository.fromDatabase(db.AppDatabase database) {
     final soundDataSource = LocalSoundDataSource(database);
-    return LibraryRepository(
+    // Le plateau actif n'est connu qu'à l'exécution : la closure le relit à
+    // chaque éviction, ce qui évite au cache de connaître le repository
+    // autrement que par cette référence différée.
+    late final LibraryRepository repository;
+    repository = LibraryRepository(
       LocalLibraryDataSource(database),
       GoogleDriveAuthenticator(),
       LibrarySyncService(DriftSnapshotStore(database)),
       AudioCacheManager(
-        // Épingle les favoris : jamais évincés du cache, même peu lus.
-        pinnedPaths: (library) =>
-            soundDataSource.getFavoriteRelativePaths(library.id),
+        // Épinglés, donc jamais évincés : les favoris (peu lus mais voulus sous
+        // la main) ET les sons du plateau actif. La « protection implicite par
+        // récence » ne suffit pas — un téléchargement massif rebat l'ordre LRU
+        // et rend les sons de la scène en cours plus anciens que le reste.
+        pinnedPaths: (library) async {
+          final favorites =
+              await soundDataSource.getFavoriteRelativePaths(library.id);
+          final boardId = repository.activeBoardId;
+          if (boardId == null) return favorites;
+          return {
+            ...favorites,
+            ...await soundDataSource.getBoardRelativePaths(boardId),
+          };
+        },
       ),
       soundDataSource,
     );
+    return repository;
   }
 
   DriveClient? get activeClient => _activeClient;
@@ -706,6 +727,17 @@ class LibraryRepository extends ChangeNotifier {
       return rootOutcome is PullNoRemoteSnapshot
           ? const PullNoRemoteSnapshot()
           : const PullUpToDate();
+    }
+  }
+
+  /// Nettoie les téléchargements interrompus de toutes les bibliothèques.
+  ///
+  /// À appeler au lancement, indépendamment du réseau : ces résidus sont un
+  /// problème d'espace disque local, pas de synchro.
+  Future<void> cleanupPartialDownloads() async {
+    final libraries = await getLibraries();
+    for (final library in libraries) {
+      await _cacheManager.cleanupPartialDownloads(library);
     }
   }
 
