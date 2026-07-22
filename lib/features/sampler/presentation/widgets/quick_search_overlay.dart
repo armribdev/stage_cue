@@ -16,10 +16,12 @@ class QuickSearchOverlay {
     BuildContext context, {
     required SamplerNotifier notifier,
     SoundType? initialTypeFilter,
+    VoidCallback? onReconnect,
   }) =>
       SoundPickerOverlay.show(
         context,
         notifier: notifier,
         initialTypeFilter: initialTypeFilter,
+        onReconnect: onReconnect,
       );
 }

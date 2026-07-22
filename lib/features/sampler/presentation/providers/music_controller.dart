@@ -36,6 +36,10 @@ class MusicController {
 
   double get musicVolume => _musicVolume;
 
+  /// Erreur de lecture en attente sans la consommer — permet à l'UI de décider
+  /// si elle doit l'afficher (route active) avant de la retirer.
+  bool get hasPendingPlaybackError => _lastPlaybackError != null;
+
   String? consumeLastPlaybackError() {
     final msg = _lastPlaybackError;
     _lastPlaybackError = null;
@@ -838,12 +842,22 @@ class MusicController {
   }
 
   void _setMusicLoadError([PadItem? padItem]) {
-    _lastPlaybackError = switch (padItem?.unavailabilityReason) {
-      PadUnavailabilityReason.offline => 'Son indisponible hors-ligne.',
-      PadUnavailabilityReason.missingFile => 'Fichier audio introuvable.',
-      PadUnavailabilityReason.unsupportedFormat => 'Format audio non supporté.',
-      _ => 'Fichier audio introuvable ou indisponible hors-ligne.',
-    };
+    final reason = padItem?.unavailabilityReason;
+    // Un token révoqué remonte en `offline` (cf. correction du classement dans
+    // `resolvePlayablePath`) : distinguer « session expirée » d'un vrai hors-ligne
+    // pour ne pas envoyer l'opérateur vérifier une connexion pourtant active.
+    if ((reason == PadUnavailabilityReason.offline || reason == null) &&
+        _o.driveSessionExpired) {
+      _lastPlaybackError =
+          'Session Google expirée — touchez « Reconnecter ».';
+    } else {
+      _lastPlaybackError = switch (reason) {
+        PadUnavailabilityReason.offline => 'Son indisponible hors-ligne.',
+        PadUnavailabilityReason.missingFile => 'Fichier audio introuvable.',
+        PadUnavailabilityReason.unsupportedFormat => 'Format audio non supporté.',
+        _ => 'Fichier audio introuvable ou indisponible hors-ligne.',
+      };
+    }
     _o._notify();
   }
 

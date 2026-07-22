@@ -103,6 +103,14 @@ class SamplerNotifier extends ChangeNotifier {
       _appPreferences?.isLiveOfflineMode ?? false;
   bool get allowsSoundDownload =>
       _appPreferences?.allowsSoundDownload ?? true;
+
+  /// Session Google révoquée/expirée : un OAuth interactif est requis. Permet à
+  /// l'UI de distinguer un échec « token mort » d'un simple « hors-ligne » quand
+  /// une lecture/aperçu échoue, et de proposer une reconnexion plutôt que
+  /// « vérifiez la connexion ».
+  bool get driveSessionExpired =>
+      _libraryRepository?.requiresInteractiveReconnect ?? false;
+
   double get musicVolume => _music.musicVolume;
 
   bool get canUndoLastRemoval =>
@@ -1513,6 +1521,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   // ── Délégués musique (API publique) ───────────────────────────────────────
 
+  bool get hasPendingMusicPlaybackError => _music.hasPendingPlaybackError;
   String? consumeLastMusicPlaybackError() => _music.consumeLastPlaybackError();
 
   void enqueueMusicPad(PadItem p) => _music.enqueueMusicPad(p);

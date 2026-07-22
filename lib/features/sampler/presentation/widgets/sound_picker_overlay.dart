@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
+import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -91,10 +92,16 @@ class SoundPickerOverlay extends StatefulWidget {
   final SoundPickerMode mode;
   final bool _isFullPage;
 
+  /// Ouvre les réglages sur la section Drive pour renouveler une session Google
+  /// expirée. `null` si l'appelant n'a pas de route vers les réglages (l'échec
+  /// s'affiche alors sans bouton « Reconnecter »).
+  final VoidCallback? onReconnect;
+
   const SoundPickerOverlay._({
     required this.notifier,
     required this.mode,
     bool isFullPage = false,
+    this.onReconnect,
   }) : _isFullPage = isFullPage;
 
   static bool _isMobile(BuildContext context) =>
@@ -105,12 +112,14 @@ class SoundPickerOverlay extends StatefulWidget {
     BuildContext context, {
     required SamplerNotifier notifier,
     SoundType? initialTypeFilter,
+    VoidCallback? onReconnect,
   }) {
     final mobile = _isMobile(context);
     final w = SoundPickerOverlay._(
         notifier: notifier,
         mode: QuickSearchMode(initialTypeFilter: initialTypeFilter),
-        isFullPage: mobile);
+        isFullPage: mobile,
+        onReconnect: onReconnect);
     return mobile
         ? _showPage<QuickSearchPrepareResult?>(context, w)
         : _showDialog<QuickSearchPrepareResult?>(context, w);
@@ -154,10 +163,14 @@ class SoundPickerOverlay extends StatefulWidget {
   static Future<QuickSearchPrepareResult?> showForLibrary(
     BuildContext context, {
     required SamplerNotifier notifier,
+    VoidCallback? onReconnect,
   }) {
     final mobile = _isMobile(context);
     final w = SoundPickerOverlay._(
-        notifier: notifier, mode: const LibraryMode(), isFullPage: mobile);
+        notifier: notifier,
+        mode: const LibraryMode(),
+        isFullPage: mobile,
+        onReconnect: onReconnect);
     return mobile
         ? _showPage<QuickSearchPrepareResult?>(context, w)
         : _showDialog<QuickSearchPrepareResult?>(context, w);
@@ -172,10 +185,14 @@ class SoundPickerOverlay extends StatefulWidget {
       Sound sound,
       List<TagCategoryWithTags> tagCatalog,
     ) onTap,
+    VoidCallback? onReconnect,
   }) {
     final mobile = _isMobile(context);
     final w = SoundPickerOverlay._(
-        notifier: notifier, mode: ManageMode(onTap: onTap), isFullPage: mobile);
+        notifier: notifier,
+        mode: ManageMode(onTap: onTap),
+        isFullPage: mobile,
+        onReconnect: onReconnect);
     return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
   }
 
@@ -229,6 +246,12 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   final _controller = TextEditingController();
   late final FocusNode _focusNode;
   final _scrollController = ScrollController();
+
+  // Messenger local : en mode dialog l'overlay n'est pas sous le Scaffold de
+  // l'écran, donc un snackbar affiché sur le messenger racine serait rendu
+  // derrière la barrière modale et ne se fermerait pas proprement. Ce messenger
+  // dédié affiche les snackbars au-dessus de l'overlay et les auto-dismisse.
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   // Clé par INDICE de liste (jamais par sound.id) : un multipad peut référencer
   // le même son dans plusieurs variantes, et deux items partageant la même clé
   // déclencheraient « Duplicate GlobalKey ». L'indice est unique dans la liste.
@@ -727,22 +750,43 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   Future<void> _previewSound(Sound sound) async {
     final ok = await widget.notifier.previewSound(sound.id);
     if (!mounted || ok) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Son indisponible — vérifiez la connexion'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    _showPreviewFailureSnackBar();
   }
 
   Future<void> _toggleLibraryPreview(Sound sound) async {
     final ok = await widget.notifier.toggleLibraryPreview(sound.id);
     if (!mounted || ok) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Son indisponible — vérifiez la connexion'),
-        behavior: SnackBarBehavior.floating,
-      ),
+    _showPreviewFailureSnackBar();
+  }
+
+  /// Échec de pré-écoute/mise en file. Consomme d'abord l'erreur musique
+  /// spécifique (format, introuvable…) si elle existe — l'overlay est la route
+  /// active, donc [SamplerScreen] la laisse pour lui plutôt que de l'afficher
+  /// derrière la barrière modale. À défaut, message générique distinguant token
+  /// expiré et simple indisponibilité réseau.
+  void _showPreviewFailureSnackBar() {
+    final expired = widget.notifier.driveSessionExpired;
+    final specific = widget.notifier.consumeLastMusicPlaybackError();
+    final message = specific ??
+        (expired
+            ? 'Session Google expirée — touchez « Reconnecter »'
+            : 'Son indisponible — vérifiez la connexion');
+    _showLocalSnackBar(message, withReconnect: expired);
+  }
+
+  /// Affiche sur le messenger **local** (au-dessus du dialog) plutôt que via
+  /// `.of(context)`, qui remonterait au messenger racine rendu derrière la
+  /// barrière modale — d'où un snackbar qui « reste » sans se fermer. Remplace
+  /// le courant plutôt que d'empiler.
+  void _showLocalSnackBar(String message, {bool withReconnect = false}) {
+    final onReconnect = widget.onReconnect;
+    final messenger = _messengerKey.currentState ?? ScaffoldMessenger.of(context);
+    AppSnackBar.showOn(
+      messenger,
+      message,
+      action: (withReconnect && onReconnect != null)
+          ? SnackBarAction(label: 'Reconnecter', onPressed: onReconnect)
+          : null,
     );
   }
 
@@ -759,7 +803,11 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   // Music picker
   Future<void> _enqueueMusic(Sound sound) async {
-    await widget.notifier.enqueueMusicBySoundId(sound.id);
+    final padItem = await widget.notifier.enqueueMusicBySoundId(sound.id);
+    if (!mounted || padItem != null) return;
+    // Échec : surfacer le message ici (route active) plutôt que de le laisser à
+    // [SamplerScreen], qui le dessinerait derrière l'overlay sans le fermer.
+    _showPreviewFailureSnackBar();
   }
 
   bool _isMusicOnAir(Sound sound) {
@@ -882,21 +930,24 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     // par défaut d'EditableText.onTapOutside). Le champ garde ainsi le focus
     // en continu, quoi que l'utilisateur clique dans l'overlay.
     if (widget._isFullPage) {
-      return CallbackShortcuts(
-        bindings: shortcuts,
-        child: Scaffold(
-          body: SafeArea(
-            child: TextFieldTapRegion(
-              child: Column(
-                children: [
-                  if (!_isPadVariant) ...[
-                    _buildSearchField(scheme),
-                    _buildTypeFilters(scheme),
-                    _buildFilterDivider(scheme),
+      return ScaffoldMessenger(
+        key: _messengerKey,
+        child: CallbackShortcuts(
+          bindings: shortcuts,
+          child: Scaffold(
+            body: SafeArea(
+              child: TextFieldTapRegion(
+                child: Column(
+                  children: [
+                    if (!_isPadVariant) ...[
+                      _buildSearchField(scheme),
+                      _buildTypeFilters(scheme),
+                      _buildFilterDivider(scheme),
+                    ],
+                    Expanded(child: results),
+                    _buildHints(scheme, shown.isNotEmpty),
                   ],
-                  Expanded(child: results),
-                  _buildHints(scheme, shown.isNotEmpty),
-                ],
+                ),
               ),
             ),
           ),
@@ -904,42 +955,74 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       );
     }
 
-    return CallbackShortcuts(
-      bindings: shortcuts,
-      child: Align(
-        alignment: Alignment.center,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            12,
-            mq.padding.top + 12,
-            12,
-            mq.padding.bottom + 12,
-          ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: (mq.size.width - 24).clamp(320.0, _overlayMaxWidth),
-              maxHeight: mq.size.height * 0.7,
-            ),
-            child: Material(
-              color: scheme.surface,
-              elevation: 8,
-              borderRadius: BorderRadius.circular(16),
-              clipBehavior: Clip.antiAlias,
-              child: TextFieldTapRegion(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (!_isPadVariant) ...[
-                      _buildSearchField(scheme),
-                      _buildTypeFilters(scheme),
-                      _buildFilterDivider(scheme),
-                    ],
-                    Flexible(child: results),
-                    _buildHints(scheme, shown.isNotEmpty),
-                  ],
+    // Scaffold transparent : support de rendu pour les snackbars du messenger
+    // local, sans masquer la barrière modale (fond transparent, zone autour de
+    // la carte non hit-testable).
+    return ScaffoldMessenger(
+      key: _messengerKey,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: CallbackShortcuts(
+          bindings: shortcuts,
+          child: Stack(
+            children: [
+              // Le Scaffold transparent (support du messenger local) recouvre la
+              // barrière modale de showGeneralDialog, qui ne reçoit donc plus les
+              // taps : on rétablit ici « tap en dehors de la carte = fermer ».
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.of(context).pop(),
                 ),
               ),
-            ),
+              Align(
+                alignment: Alignment.center,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    12,
+                    mq.padding.top + 12,
+                    12,
+                    mq.padding.bottom + 12,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth:
+                          (mq.size.width - 24).clamp(320.0, _overlayMaxWidth),
+                      maxHeight: mq.size.height * 0.7,
+                    ),
+                    // Absorbe les taps sur la carte pour qu'ils n'atteignent pas
+                    // le détecteur de fermeture en dessous. Les enfants
+                    // interactifs (champ, boutons) gagnent leur tap normalement
+                    // (recognizers ajoutés depuis les feuilles → prioritaires) ;
+                    // seuls les taps sur zone vide de la carte sont absorbés.
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {},
+                      child: Material(
+                        color: scheme.surface,
+                        elevation: 8,
+                        borderRadius: BorderRadius.circular(16),
+                        clipBehavior: Clip.antiAlias,
+                        child: TextFieldTapRegion(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!_isPadVariant) ...[
+                                _buildSearchField(scheme),
+                                _buildTypeFilters(scheme),
+                                _buildFilterDivider(scheme),
+                              ],
+                              Flexible(child: results),
+                              _buildHints(scheme, shown.isNotEmpty),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

@@ -993,47 +993,56 @@ class LibraryRepository extends ChangeNotifier {
       // Identité forte : si l'ID Drive est connu, on télécharge directement par
       // ID (robuste aux accents/renommages) sans réconciliation par nom.
       final driveFileId = sound.driveFileId;
-      final reconciledPath = driveFileId != null
-          ? relativePath
-          : await _reconcileSoundRelativePathFromDrive(
-              client: client,
-              library: library,
-              sound: sound,
-              relativePath: relativePath,
-            );
+      try {
+        final reconciledPath = driveFileId != null
+            ? relativePath
+            : await _reconcileSoundRelativePathFromDrive(
+                client: client,
+                library: library,
+                sound: sound,
+                relativePath: relativePath,
+              );
 
-      final resolvedLocalPath = await _cacheManager.ensureCached(
-        client: client,
-        library: library,
-        relativePath: reconciledPath,
-        driveFileId: driveFileId,
-      );
-      final downloaded = File(resolvedLocalPath);
-      if (!await downloaded.exists() ||
-          !await isPlausibleAudioFile(downloaded)) {
-        throw SoundNotAvailableLocallyException(isOffline: false);
-      }
-      final effectiveRelative = p
-          .relative(
-            p.normalize(resolvedLocalPath),
-            from: p.normalize(library.localRootPath),
-          )
-          .replaceAll('\\', '/');
-      if (effectiveRelative != relativePath) {
-        await _soundDataSource.updateSoundRelativePath(
-          soundId: sound.id,
-          relativePath: effectiveRelative,
-          localPath: resolvedLocalPath,
+        final resolvedLocalPath = await _cacheManager.ensureCached(
+          client: client,
+          library: library,
+          relativePath: reconciledPath,
+          driveFileId: driveFileId,
         );
-      } else {
-        await _soundDataSource.syncLibrarySoundLocalPath(
-          sound.id,
-          resolvedLocalPath,
-        );
+        final downloaded = File(resolvedLocalPath);
+        if (!await downloaded.exists() ||
+            !await isPlausibleAudioFile(downloaded)) {
+          throw SoundNotAvailableLocallyException(isOffline: false);
+        }
+        final effectiveRelative = p
+            .relative(
+              p.normalize(resolvedLocalPath),
+              from: p.normalize(library.localRootPath),
+            )
+            .replaceAll('\\', '/');
+        if (effectiveRelative != relativePath) {
+          await _soundDataSource.updateSoundRelativePath(
+            soundId: sound.id,
+            relativePath: effectiveRelative,
+            localPath: resolvedLocalPath,
+          );
+        } else {
+          await _soundDataSource.syncLibrarySoundLocalPath(
+            sound.id,
+            resolvedLocalPath,
+          );
+        }
+        await _materializeSoundFileMetadataIfNeeded(sound, downloaded);
+        clearUnloadablePath(resolvedLocalPath);
+        return p.normalize(downloaded.absolute.path);
+      } on DriveAuthException {
+        // Token révoqué/expiré : libère la session (force un OAuth interactif au
+        // prochain accès) et signale une indisponibilité, jamais un `missingFile`
+        // — ce dernier passerait par `_blockSoundDriveRetry` côté sampler et
+        // bloquerait le son *définitivement*, même après reconnexion.
+        await invalidateAuthSession();
+        throw SoundNotAvailableLocallyException(isOffline: true);
       }
-      await _materializeSoundFileMetadataIfNeeded(sound, downloaded);
-      clearUnloadablePath(resolvedLocalPath);
-      return p.normalize(downloaded.absolute.path);
     }
 
     final legacyPath =
@@ -1209,7 +1218,7 @@ class LibraryRepository extends ChangeNotifier {
           total: total,
           isComplete: true,
           error: authExpired
-              ? 'Session Google expirée — reconnectez-vous dans les réglages.'
+              ? 'Session Google expirée — reconnexion requise.'
               : (failed > 0 ? '$failed fichier(s) ignoré(s)' : null),
         ),
       );
