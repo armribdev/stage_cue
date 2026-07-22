@@ -63,6 +63,14 @@ class FakeAudioPlayerService implements AudioPlayerService {
   void fadeVolumeTo(double to, Duration duration) {}
 
   @override
+  Future<void> fadeEnvelope(
+    double level,
+    Duration duration, {
+    required bool fadeIn,
+    FadeCurve curve = FadeCurve.cubic,
+  }) async {}
+
+  @override
   Future<void> fadeOutAndStop(Duration duration) async {}
 }
 

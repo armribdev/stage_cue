@@ -70,11 +70,27 @@ class MusicController {
 
   /// Volume effectif du son à [soundIndex] (défaut : le son courant du pad, ou
   /// le premier). Base = override du pad-son ou volume par défaut du son ; les
-  /// pads musique sont en plus soumis au volume global.
+  /// pads musique sont en plus soumis au volume global (courbé, voir
+  /// [_perceptualGain]).
   double _effectiveVolume(PadItem padItem, {int? soundIndex}) {
     final index = soundIndex ?? padItem.currentSoundIndex ?? 0;
     final base = padItem.pad.effectiveVolume(index);
-    return padItem.pad.isMusicPad ? base * _musicVolume : base;
+    return padItem.pad.isMusicPad
+        ? base * _perceptualGain(_musicVolume)
+        : base;
+  }
+
+  /// Convertit la position du fader de régie (0→1, linéaire, telle qu'affichée
+  /// en %) en gain audio via une loi cubique. L'oreille perçoit le volume de
+  /// façon logarithmique : un fader linéaire concentre toute la variation
+  /// audible dans le bas de course (coupure quasi sèche près du silence, quasi
+  /// rien en haut). Le cube étale la sensation régulièrement sur toute la
+  /// course et atteint zéro proprement, sans plancher à gérer. Ne s'applique
+  /// qu'au gain envoyé au moteur — `_musicVolume`, le mute et le ramp du fader
+  /// restent en espace « position » linéaire.
+  double _perceptualGain(double position) {
+    final p = position.clamp(0.0, 1.0);
+    return p * p * p;
   }
 
   // ── File d'attente ────────────────────────────────────────────────────────
@@ -360,8 +376,12 @@ class MusicController {
 
     _musicAdvanceLockCount++;
     try {
-      player.fadeVolumeTo(0, duration);
-      await Future<void>.delayed(duration);
+      await player.fadeEnvelope(
+        _effectiveVolume(current),
+        duration,
+        fadeIn: false,
+        curve: FadeCurve.cubic,
+      );
       _capturePausedPlayback(current);
       await player.stop();
       current.isPlaying = false;
@@ -416,10 +436,22 @@ class MusicController {
       next._currentPlayerIndex = soundIndex;
       next.isPlaying = true;
 
-      currentPlayer.fadeVolumeTo(0, duration);
-      nextPlayer.fadeVolumeTo(targetVolume, duration);
-
-      await Future<void>.delayed(duration);
+      // Équi-puissance : les deux voix se croisent à loudness constante, sans
+      // creux au milieu (contrairement à un croisement cubique).
+      await Future.wait([
+        currentPlayer.fadeEnvelope(
+          _effectiveVolume(current),
+          duration,
+          fadeIn: false,
+          curve: FadeCurve.equalPower,
+        ),
+        nextPlayer.fadeEnvelope(
+          targetVolume,
+          duration,
+          fadeIn: true,
+          curve: FadeCurve.equalPower,
+        ),
+      ]);
 
       if (currentPlayer.isPlaying) {
         await currentPlayer.stop();
@@ -711,8 +743,12 @@ class MusicController {
 
     _musicAdvanceLockCount++;
     try {
-      player.fadeVolumeTo(0, duration);
-      await Future<void>.delayed(duration);
+      await player.fadeEnvelope(
+        _effectiveVolume(padItem),
+        duration,
+        fadeIn: false,
+        curve: FadeCurve.cubic,
+      );
     } finally {
       if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
     }
@@ -898,9 +934,12 @@ class MusicController {
       );
       next._currentPlayerIndex = soundIndex;
       next.isPlaying = true;
-      nextPlayer.fadeVolumeTo(targetVolume, duration);
-
-      await Future<void>.delayed(duration);
+      await nextPlayer.fadeEnvelope(
+        targetVolume,
+        duration,
+        fadeIn: true,
+        curve: FadeCurve.equalPower,
+      );
 
       if (previous != null && previous.pad.id != next.pad.id) {
         await previous.currentPlayer?.stop();
