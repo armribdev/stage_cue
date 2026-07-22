@@ -1314,7 +1314,7 @@ class _GroupedPlaybackControls extends StatelessWidget {
 /// pendant le drag (position toujours exacte, gérée par Flutter).
 ///
 /// En lecture (`isPlaying`), un appui ne saute plus directement au point
-/// touché : le volume rampe progressivement (≈ 3 s pour tout le parcours) vers
+/// touché : le volume rampe progressivement (5 s pour tout le parcours) vers
 /// l'endroit maintenu, et s'arrête net au relâchement — fondu manuel de régie.
 ///
 /// Sur desktop (`keyboardEnabled`), les flèches ↑/↓ du clavier maintenues
@@ -1358,8 +1358,9 @@ class _CompactVolumeSliderState extends State<_CompactVolumeSlider>
   /// Marge horizontale du rail (rayon du pouce) pour convertir x → fraction.
   static const _trackInset = 8.0;
 
-  /// Vitesse du ramp : parcours complet 0→100 % en ≈ 3 s.
-  static const _rampUnitsPerSecond = 1 / 3;
+  /// Vitesse du ramp : parcours complet 0→100 % en 5 s. La position balayée est
+  /// linéaire ; c'est le taper de la régie qui la courbe ensuite en gain.
+  static const _rampUnitsPerSecond = 1 / 5;
 
   double get _displayValue => _localValue ?? widget.value;
 

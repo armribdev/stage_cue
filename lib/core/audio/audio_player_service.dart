@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
@@ -8,6 +9,20 @@ import 'audio_file_validation.dart';
 import 'preview_playback.dart';
 import 'soloud_file_loader.dart';
 import 'audio_load_log.dart';
+
+/// Forme d'un fondu manuel de régie ([AudioPlayerService.fadeEnvelope]).
+/// SoLoud ne sait interpoler le volume que linéairement en gain ; ces courbes
+/// sont appliquées à la main pour un ressenti régulier.
+enum FadeCurve {
+  /// Cubique (gain = niveau × position³) — sensation de tiré de fader, cohérent
+  /// avec le taper de la régie. Pour un fondu vers/depuis le silence.
+  cubic,
+
+  /// Équi-puissance (gain = niveau × sin(position·π/2)) — maintient une loudness
+  /// constante au croisement. Pour les deux voix d'un fondu enchaîné (pas de
+  /// creux de volume au milieu).
+  equalPower,
+}
 
 /// Service de gestion des lecteurs audio (basé sur flutter_soloud)
 /// Préchargement des sources pour une latence minimale au déclenchement.
@@ -246,6 +261,50 @@ class AudioPlayerService implements PreviewPlayback {
   void fadeVolumeTo(double to, Duration duration) {
     if (!_hasActiveHandle) return;
     SoLoud.instance.fadeVolume(_currentHandle!, to.clamp(0.0, 1.0), duration);
+  }
+
+  /// Fondu manuel de la voix courante suivant une enveloppe non-linéaire, à la
+  /// place du fondu linéaire-en-gain natif de SoLoud (`fadeVolume`, cf.
+  /// [fadeVolumeTo]) : SoLoud n'offre pas de courbe. Balaie une position 0→1
+  /// (ou 1→0 selon [fadeIn]) et applique [curve] pour obtenir
+  /// `gain = level × forme(position)`, piloté par [setVolume] à ~60 fps.
+  /// L'appel se termine quand le fondu est fini (≈ [duration]) — remplace le
+  /// couple `fadeVolumeTo` + `Future.delayed`. Sort tôt si la voix se termine
+  /// en cours de route (plus de handle valide).
+  Future<void> fadeEnvelope(
+    double level,
+    Duration duration, {
+    required bool fadeIn,
+    FadeCurve curve = FadeCurve.cubic,
+  }) async {
+    if (!_hasActiveHandle) return;
+    final totalMs = duration.inMilliseconds;
+    if (totalMs <= 0) {
+      setVolume(fadeIn ? level : 0.0);
+      return;
+    }
+    // ~60 fps : automation de volume assez fine pour être inaudible.
+    const stepMs = 16;
+    final stopwatch = Stopwatch()..start();
+    while (true) {
+      if (!_hasActiveHandle) return;
+      final elapsed = stopwatch.elapsed.inMilliseconds;
+      if (elapsed >= totalMs) break;
+      final position = fadeIn ? elapsed / totalMs : 1 - elapsed / totalMs;
+      setVolume(level * _fadeShape(position, curve));
+      await Future<void>.delayed(const Duration(milliseconds: stepMs));
+    }
+    setVolume(fadeIn ? level : 0.0);
+  }
+
+  double _fadeShape(double position, FadeCurve curve) {
+    final p = position.clamp(0.0, 1.0);
+    switch (curve) {
+      case FadeCurve.cubic:
+        return p * p * p;
+      case FadeCurve.equalPower:
+        return math.sin(p * math.pi / 2);
+    }
   }
 
   /// Fondu sortant puis arrêt du lecteur.
