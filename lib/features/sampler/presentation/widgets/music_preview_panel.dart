@@ -14,6 +14,7 @@ import '../../../../core/utils/sound_color_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
+import 'waveform_envelope.dart';
 
 enum _MusicTransitionKind { fadeOut, crossfade }
 
@@ -2222,21 +2223,17 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
   }
 }
 
-/// Waveform de régie : barres de largeur FIXE (indépendante de la taille du
-/// widget et de la durée du morceau). Le nombre de barres découle de la largeur
-/// disponible ; l'enveloppe stockée est rééchantillonnée par PIC (max) pour ne
-/// pas écraser les crêtes. La portion jouée (gauche) est colorée [playedColor].
+/// Waveform de régie : enveloppe continue remplie (miroir autour de l'axe),
+/// tracée à la densité de pixels disponible et hugant les crêtes point par
+/// point — plus précise que l'ancien rendu « bâton ». L'enveloppe stockée est
+/// rééchantillonnée par PIC (max) pour ne pas écraser les crêtes. La portion
+/// jouée (gauche) est colorée [playedColor].
 class _WaveformProgress extends StatelessWidget {
   final List<double> bars;
   final double progress;
   final double height;
   final Color playedColor;
   final Color remainingColor;
-
-  /// Largeur et espacement d'une barre, en pixels logiques (entiers → tracé net).
-  static const double _barWidth = 2.0;
-  static const double _barGap = 2.0;
-  static const double _slot = _barWidth + _barGap;
 
   const _WaveformProgress({
     required this.bars,
@@ -2246,32 +2243,6 @@ class _WaveformProgress extends StatelessWidget {
     required this.remainingColor,
   });
 
-  /// Rééchantillonne [src] (0..1) vers [target] barres en prenant le pic (max)
-  /// de chaque groupe — préserve les crêtes quelle que soit la densité.
-  static List<double> _resamplePeaks(List<double> src, int target) {
-    if (src.isEmpty || target <= 0) return const [];
-    if (target >= src.length) {
-      // Plus de barres que d'échantillons : on répète le plus proche.
-      return [
-        for (var i = 0; i < target; i++)
-          src[((i * src.length) ~/ target).clamp(0, src.length - 1)],
-      ];
-    }
-    final out = List<double>.filled(target, 0);
-    for (var t = 0; t < target; t++) {
-      final start = (t * src.length) ~/ target;
-      var end = ((t + 1) * src.length) ~/ target;
-      if (end <= start) end = start + 1;
-      if (end > src.length) end = src.length;
-      var peak = 0.0;
-      for (var j = start; j < end; j++) {
-        if (src[j] > peak) peak = src[j];
-      }
-      out[t] = peak;
-    }
-    return out;
-  }
-
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -2280,20 +2251,15 @@ class _WaveformProgress extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
-          final count = (width / _slot).floor();
+          final count = WaveformEnvelope.pointCountFor(width);
           if (count <= 0 || bars.isEmpty) {
             return const SizedBox.shrink();
           }
-          final peaks = _resamplePeaks(bars, count);
-          // Centre le bloc de barres : reste réparti en marge gauche/droite.
-          final offset = (width - count * _slot) / 2;
+          final amps = WaveformEnvelope.resample(bars, count);
           return CustomPaint(
             size: Size(width, height),
             painter: _WaveformPainter(
-              peaks: peaks,
-              barWidth: _barWidth,
-              slot: _slot,
-              offset: offset,
+              amps: amps,
               progress: progress.clamp(0.0, 1.0),
               playedColor: playedColor,
               remainingColor: remainingColor,
@@ -2306,19 +2272,13 @@ class _WaveformProgress extends StatelessWidget {
 }
 
 class _WaveformPainter extends CustomPainter {
-  final List<double> peaks;
-  final double barWidth;
-  final double slot;
-  final double offset;
+  final List<double> amps;
   final double progress;
   final Color playedColor;
   final Color remainingColor;
 
   _WaveformPainter({
-    required this.peaks,
-    required this.barWidth,
-    required this.slot,
-    required this.offset,
+    required this.amps,
     required this.progress,
     required this.playedColor,
     required this.remainingColor,
@@ -2326,38 +2286,28 @@ class _WaveformPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (peaks.isEmpty || size.width <= 0) return;
+    if (amps.isEmpty || size.width <= 0) return;
 
-    final centerY = size.height / 2;
-    final maxHalf = size.height / 2;
-    final radius = Radius.circular(barWidth / 2);
+    final path = WaveformEnvelope.buildPath(amps, size);
     final playedX = size.width * progress;
 
-    final playedPaint = Paint()..color = playedColor;
-    final remainingPaint = Paint()..color = remainingColor;
+    // Même enveloppe remplie deux fois, découpée au point de lecture : jouée à
+    // gauche, restante à droite.
+    canvas.save();
+    canvas.clipRect(Rect.fromLTRB(0, 0, playedX, size.height));
+    canvas.drawPath(path, Paint()..color = playedColor);
+    canvas.restore();
 
-    for (var i = 0; i < peaks.length; i++) {
-      // Position arrondie au pixel entier → toutes les barres ont la même
-      // largeur visuelle (pas d'écrasement sous-pixel par l'anti-aliasing).
-      final x = (offset + i * slot).roundToDouble();
-      // Plancher visuel : même un silence reste une fine ligne médiane.
-      final half = (peaks[i] * maxHalf).clamp(1.0, maxHalf);
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromLTRB(x, centerY - half, x + barWidth, centerY + half),
-        radius,
-      );
-      canvas.drawRRect(
-        rect,
-        x + barWidth / 2 <= playedX ? playedPaint : remainingPaint,
-      );
-    }
+    canvas.save();
+    canvas.clipRect(Rect.fromLTRB(playedX, 0, size.width, size.height));
+    canvas.drawPath(path, Paint()..color = remainingColor);
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(_WaveformPainter old) =>
       old.progress != progress ||
-      old.peaks != peaks ||
-      old.offset != offset ||
+      old.amps != amps ||
       old.playedColor != playedColor ||
       old.remainingColor != remainingColor;
 }
