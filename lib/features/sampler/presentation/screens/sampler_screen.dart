@@ -112,8 +112,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
     super.initState();
     _database = widget.services.database;
     _initializeNotifier();
-    _notifier.loadBoards();
+    // Câbler les relances de chargement AVANT le premier `loadBoards` : si le
+    // pull de lancement se règle très tôt, `initialSyncSettled` (persistant)
+    // couvre la fenêtre ; sinon ces callbacks relancent le chargement mis en
+    // attente par la garde anti « Scène 1 » fantôme.
     widget.services.syncController.onLibraryMerged = _onLibraryMerged;
+    widget.services.autoSyncCoordinator.onInitialPullSettled = _onLibraryMerged;
+    _notifier.loadBoards();
   }
 
   void _initializeNotifier() {
@@ -1812,6 +1817,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   @override
   void dispose() {
     widget.services.syncController.onLibraryMerged = null;
+    widget.services.autoSyncCoordinator.onInitialPullSettled = null;
     _normalGridScrollController.dispose();
     _notifier.removeListener(_onStateChanged);
     _notifier.dispose();

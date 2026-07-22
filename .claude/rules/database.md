@@ -22,3 +22,4 @@ Ne jamais sauter d'étape. La DB des utilisateurs existants sera corrompue sinon
 - Opérations multi-étapes → `database.transaction()`
 - Les settings par board sont dans `board_sound_settings` (override), pas dans `board_sounds` (join)
 - La table `tag_aliases` permet la recherche normalisée (accents supprimés)
+- Ouvrir la base via `NativeDatabase(file)` (isolate principal), **jamais** `createInBackground` : ce dernier bloque la 1re requête au cold start Windows et laisse les boards jamais chargés jusqu'à un hot restart ([0013](../../docs/decisions/0013-ouverture-db-isolate-principal.md))

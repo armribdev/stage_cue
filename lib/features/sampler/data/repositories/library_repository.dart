@@ -89,6 +89,13 @@ class LibraryRepository extends ChangeNotifier {
   /// interactif réussi (sinon [connectSilently] recrée un client périmé).
   bool _requiresInteractiveReconnect = false;
 
+  /// Vrai une fois le pull de lancement terminé (quel que soit son issue :
+  /// succès, hors-ligne, aucune bibliothèque). Tant qu'il est faux, un plateau
+  /// vide peut n'être que transitoire — la synchro de démarrage n'a pas encore
+  /// fini de fusionner les boards distants — donc on n'auto-crée pas de « Scène
+  /// 1 » fantôme. Posé par [AutoSyncCoordinator], jamais remis à false.
+  bool _initialSyncSettled = false;
+
   /// Bibliothèques dont une passe de téléchargement est en cours : garantit
   /// qu'une seule tourne à la fois par bibliothèque (le bouton manuel « Tout
   /// télécharger » et le pré-téléchargement auto partagent [downloadAllLibraryAudio]).
@@ -179,6 +186,13 @@ class LibraryRepository extends ChangeNotifier {
 
   /// OAuth interactif requis (token révoqué ou expiré).
   bool get requiresInteractiveReconnect => _requiresInteractiveReconnect;
+
+  /// Le pull de lancement a-t-il fini sa passe (voir [_initialSyncSettled]) ?
+  bool get initialSyncSettled => _initialSyncSettled;
+
+  /// Signale la fin du pull de lancement — appelé par [AutoSyncCoordinator]
+  /// sur tous les chemins de sortie (succès, hors-ligne, erreur, usage local).
+  void markInitialSyncSettled() => _initialSyncSettled = true;
 
   void _notifyDriveSessionChanged() => notifyListeners();
 

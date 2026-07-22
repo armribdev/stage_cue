@@ -24,6 +24,11 @@ class AutoSyncCoordinator {
 
   StreamSubscription<Set<TableUpdate>>? _subscription;
 
+  /// Appelé quand le pull de lancement a fini sa passe (quel que soit l'issue).
+  /// Permet à l'UI de relancer un chargement des boards resté en attente le
+  /// temps que la synchro décide s'il y a des boards distants à fusionner.
+  void Function()? onInitialPullSettled;
+
   // Vrai pendant _initialPull : supprime les schedulePush déclenchés par le
   // merge en-place (le contenu vient du distant, pas d'une édition locale).
   bool _ignoreUpdates = false;
@@ -67,6 +72,18 @@ class AutoSyncCoordinator {
   }
 
   Future<void> _initialPull() async {
+    try {
+      await _runInitialPull();
+    } finally {
+      // Sur TOUS les chemins (retour anticipé, succès, erreur) : signaler que la
+      // passe de lancement est terminée. Débloque un chargement de boards mis en
+      // attente (cf. garde anti « Scène 1 » fantôme dans `loadBoards`).
+      _repository.markInitialSyncSettled();
+      onInitialPullSettled?.call();
+    }
+  }
+
+  Future<void> _runInitialPull() async {
     if (!_appPreferences.allowsNetworkSync) return;
     try {
       final reconnected = await _repository.reconnectSilently();
