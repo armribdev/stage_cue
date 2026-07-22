@@ -7,6 +7,7 @@ import '../../../../core/audio/preview_playback.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/layout_utils.dart';
+import 'waveform_envelope.dart';
 
 /// Zone cliquable autour de la poignée sur desktop (souris).
 const _kHandleHitHalfWidthDesktop = 14.0;
@@ -360,10 +361,11 @@ class _NudgeButton extends StatelessWidget {
   }
 }
 
-/// Waveform de l'éditeur : barres grisées avant le point d'entrée, colorées
-/// après ; trait vertical de poignée au point d'entrée ; tête de lecture
-/// optionnelle pendant l'aperçu. Barres de largeur fixe rééchantillonnées par
-/// pic pour préserver les crêtes.
+/// Waveform de l'éditeur : enveloppe continue remplie (miroir autour de l'axe),
+/// grisée avant le point d'entrée, colorée après ; trait vertical de poignée au
+/// point d'entrée ; tête de lecture optionnelle pendant l'aperçu. Rendu par
+/// enveloppe (plus précis que l'ancien « bâton »), rééchantillonné par pic pour
+/// préserver les crêtes.
 class _OffsetWaveformPainter extends CustomPainter {
   final List<double> bars;
   final double offsetFraction;
@@ -374,10 +376,6 @@ class _OffsetWaveformPainter extends CustomPainter {
   final Color playheadColor;
   final bool handleHovered;
   final double handleHitHalfWidth;
-
-  static const double _barWidth = 2.0;
-  static const double _barGap = 2.0;
-  static const double _slot = _barWidth + _barGap;
 
   _OffsetWaveformPainter({
     required this.bars,
@@ -391,56 +389,28 @@ class _OffsetWaveformPainter extends CustomPainter {
     this.handleHitHalfWidth = _kHandleHitHalfWidthDesktop,
   });
 
-  static List<double> _resamplePeaks(List<double> src, int target) {
-    if (src.isEmpty || target <= 0) return const [];
-    if (target >= src.length) {
-      return [
-        for (var i = 0; i < target; i++)
-          src[((i * src.length) ~/ target).clamp(0, src.length - 1)],
-      ];
-    }
-    final out = List<double>.filled(target, 0);
-    for (var t = 0; t < target; t++) {
-      final start = (t * src.length) ~/ target;
-      var end = ((t + 1) * src.length) ~/ target;
-      if (end <= start) end = start + 1;
-      if (end > src.length) end = src.length;
-      var peak = 0.0;
-      for (var j = start; j < end; j++) {
-        if (src[j] > peak) peak = src[j];
-      }
-      out[t] = peak;
-    }
-    return out;
-  }
-
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0) return;
     final centerY = size.height / 2;
-    final maxHalf = size.height / 2;
     final offsetX = size.width * offsetFraction;
 
     if (bars.isNotEmpty) {
-      final count = (size.width / _slot).floor();
+      final count = WaveformEnvelope.pointCountFor(size.width);
       if (count > 0) {
-        final peaks = _resamplePeaks(bars, count);
-        final marginX = (size.width - count * _slot) / 2;
-        final radius = Radius.circular(_barWidth / 2);
-        final skippedPaint = Paint()..color = skippedColor;
-        final keptPaint = Paint()..color = keptColor;
-        for (var i = 0; i < peaks.length; i++) {
-          final x = (marginX + i * _slot).roundToDouble();
-          final half = (peaks[i] * maxHalf).clamp(1.0, maxHalf);
-          final rect = RRect.fromRectAndRadius(
-            Rect.fromLTRB(x, centerY - half, x + _barWidth, centerY + half),
-            radius,
-          );
-          canvas.drawRRect(
-            rect,
-            x + _barWidth / 2 < offsetX ? skippedPaint : keptPaint,
-          );
-        }
+        final amps = WaveformEnvelope.resample(bars, count);
+        final path = WaveformEnvelope.buildPath(amps, size);
+        // Même enveloppe remplie deux fois, découpée au point d'entrée : grisée
+        // avant (sautée à la lecture), colorée après.
+        canvas.save();
+        canvas.clipRect(Rect.fromLTRB(0, 0, offsetX, size.height));
+        canvas.drawPath(path, Paint()..color = skippedColor);
+        canvas.restore();
+
+        canvas.save();
+        canvas.clipRect(Rect.fromLTRB(offsetX, 0, size.width, size.height));
+        canvas.drawPath(path, Paint()..color = keptColor);
+        canvas.restore();
       }
     } else {
       // Pas de waveform : ligne médiane, grisée avant le point d'entrée.
