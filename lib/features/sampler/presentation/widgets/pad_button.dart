@@ -177,36 +177,11 @@ class PadButton extends StatelessWidget {
     ColorScheme scheme, {
     required bool hasCustomColor,
   }) {
-    return TweenAnimationBuilder<double>(
-      key: ValueKey(
-        'progress_${padItem.pad.id}_${padItem.isPlaying}'
-        '_${padItem.currentSoundIndex}',
-      ),
-      tween: Tween(begin: 0.0, end: padItem.isPlaying ? 1.0 : 0.0),
-      duration: padItem.isPlaying
-          ? (padItem.currentPlayer?.duration ?? const Duration(seconds: 1))
-          : const Duration(milliseconds: 200),
-      curve: Curves.linear,
-      builder: (context, value, child) {
-        if (!padItem.isPlaying && value == 0.0) {
-          return const SizedBox.shrink();
-        }
-        return Positioned.fill(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: LinearProgressIndicator(
-              value: value,
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                hasCustomColor
-                    ? scheme.primary.withValues(alpha: 0.22)
-                    : scheme.onSurfaceVariant.withValues(alpha: 0.22),
-              ),
-              minHeight: double.infinity,
-            ),
-          ),
-        );
-      },
+    return _MusicProgressBar(
+      padItem: padItem,
+      color: hasCustomColor
+          ? scheme.primary.withValues(alpha: 0.22)
+          : scheme.onSurfaceVariant.withValues(alpha: 0.22),
     );
   }
 
@@ -448,6 +423,106 @@ class PadButton extends StatelessWidget {
       onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(14),
       child: child,
+    );
+  }
+}
+
+/// Barre de progression de lecture d'un pad musique, synchronisée sur la
+/// position **réelle** du lecteur. Contrairement à une simple animation 0→1
+/// relancée à chaque `play`, elle se ré-aligne à chaque rebuild sur
+/// `player.position` (ou sur la position mémorisée en pause) : une reprise après
+/// pause repart de l'endroit où le son a été suspendu, jamais de zéro.
+class _MusicProgressBar extends StatefulWidget {
+  final PadItem padItem;
+  final Color color;
+
+  const _MusicProgressBar({
+    required this.padItem,
+    required this.color,
+  });
+
+  @override
+  State<_MusicProgressBar> createState() => _MusicProgressBarState();
+}
+
+class _MusicProgressBarState extends State<_MusicProgressBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    );
+    _syncToPlayback();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MusicProgressBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Le grid se reconstruit à chaque `_notify()` du notifier : on en profite
+    // pour recaler la barre sur la position réelle (corrige aussi la dérive).
+    _syncToPlayback();
+  }
+
+  /// Ré-aligne la barre sur l'état de lecture courant du pad :
+  /// - en lecture : anime depuis la position réelle jusqu'à la fin, sur le temps
+  ///   restant — l'`AnimationController` de durée = durée totale interpole
+  ///   linéairement le reste depuis `value` (`forward()` prend `durée × (1 −
+  ///   value)`) ;
+  /// - en pause : fige à la position mémorisée d'où la reprise repartira ;
+  /// - arrêté : ramène à zéro (barre masquée).
+  void _syncToPlayback() {
+    final pad = widget.padItem;
+    final totalMs = (pad.progressPlayer?.duration ?? Duration.zero).inMilliseconds;
+
+    if (pad.isPlaying && totalMs > 0) {
+      final posMs =
+          (pad.progressPlayer?.position.inMilliseconds ?? 0).clamp(0, totalMs);
+      _controller.duration = Duration(milliseconds: totalMs);
+      _controller.value = posMs / totalMs;
+      _controller.forward();
+    } else if (pad.isPaused && totalMs > 0) {
+      final posMs =
+          (pad.pausedPlaybackPosition?.inMilliseconds ?? 0).clamp(0, totalMs);
+      _controller.stop();
+      _controller.value = posMs / totalMs;
+    } else {
+      _controller.stop();
+      _controller.value = 0.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final value = _controller.value;
+        // Rien à afficher tant que le pad est arrêté et la barre vide.
+        if (!widget.padItem.isPlaying && value <= 0.0) {
+          return const SizedBox.shrink();
+        }
+        return Positioned.fill(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: LinearProgressIndicator(
+              value: value,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(widget.color),
+              minHeight: double.infinity,
+            ),
+          ),
+        );
+      },
     );
   }
 }
