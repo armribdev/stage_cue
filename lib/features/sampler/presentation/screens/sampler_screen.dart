@@ -823,8 +823,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
     if (_isPerformanceMode) {
       syncController.pauseAutoSync();
       _notifier.markPerformanceModeEntered();
+      _notifier.startLiveSession();
     } else {
       syncController.resumeAutoSync();
+      _notifier.endLiveSession();
     }
   }
 

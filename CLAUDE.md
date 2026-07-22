@@ -7,7 +7,7 @@ Soundboard Flutter pour déclenchement audio en live (théâtre, streaming, JDR)
 - **Flutter** — multi-plateforme, cibles primaires iOS/Android
 - **Audio** — flutter_soloud (low-latency, preloading mémoire)
 - **DB** — Drift ORM sur SQLite, schéma v23, migrations incrémentales
-- **State** — ChangeNotifier custom (`SamplerNotifier` + `SamplerState.copyWith()`)
+- **State** — ChangeNotifier custom (`SamplerNotifier` + `SamplerState.copyWith()`) ; quelques drapeaux/compteurs de session (Mode Spectacle) vivent en champs privés mutables directs sur `SamplerNotifier`, hors `copyWith` (ex. `_isLiveSessionActive`, `_sessionPlayCounts`)
 - **Codegen** — drift_dev + build_runner (requis après tout changement de schéma)
 
 ## Architecture

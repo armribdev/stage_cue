@@ -62,6 +62,18 @@ class SamplerNotifier extends ChangeNotifier {
   int _draftPadIdSeq = -1;
   final _random = Random();
 
+  /// Session live (Mode Spectacle) en cours : tant qu'elle est active, chaque
+  /// lecture réelle (hors pré-écoute) incrémente [_sessionPlayCounts], et le
+  /// choix automatique d'un multipad favorise les sons les moins joués de la
+  /// session plutôt que l'algorithme habituel (aléatoire sans répétition ou
+  /// séquentiel) — voir décision 0014.
+  bool _isLiveSessionActive = false;
+
+  /// Compteur de lectures réelles par son (soundId → nombre de lectures) pour
+  /// la durée de la session live courante. Gelé (non remis à zéro) à la
+  /// sortie du Mode Spectacle ; remis à zéro seulement à la prochaine entrée.
+  final Map<int, int> _sessionPlayCounts = {};
+
   /// Lecteurs dédiés à la pré-écoute (recherche-éclair) : indépendants des pads,
   /// du master musique et de la file. Plusieurs bruitages/ambiances peuvent
   /// jouer simultanément ; chacun se libère seul à la fin de sa lecture.
@@ -1214,7 +1226,11 @@ class SamplerNotifier extends ChangeNotifier {
 
   void _markPlayedAt(PadItem padItem, int soundIndex) {
     if (soundIndex < 0 || soundIndex >= padItem.pad.sounds.length) return;
-    _markPlayed(padItem.pad.sounds[soundIndex].id);
+    final soundId = padItem.pad.sounds[soundIndex].id;
+    _markPlayed(soundId);
+    if (_isLiveSessionActive) {
+      _sessionPlayCounts[soundId] = (_sessionPlayCounts[soundId] ?? 0) + 1;
+    }
   }
 
   Future<void> updateSoundType(int soundId, SoundType type) async {
@@ -1501,6 +1517,12 @@ class SamplerNotifier extends ChangeNotifier {
     if (readyIndices.isEmpty) return 0;
     if (readyIndices.length == 1) return readyIndices.first;
 
+    if (_isLiveSessionActive) {
+      final chosen = _pickLowestSessionCountIndex(padItem, readyIndices);
+      AudioLoadLog.trace('[PICK] → chosen(live)=$chosen');
+      return chosen;
+    }
+
     final chosen = switch (padItem.pad.playMode) {
       PadPlayMode.random => () {
           var available = readyIndices
@@ -1528,6 +1550,24 @@ class SamplerNotifier extends ChangeNotifier {
     };
     AudioLoadLog.trace('[PICK] → chosen=$chosen _nextSoundIndex(after)=${padItem._nextSoundIndex}');
     return chosen;
+  }
+
+  /// Mode live : ignore `playMode`, pioche parmi les sons du multipad au
+  /// compte de lecture de session le plus bas (égalité → tirage aléatoire
+  /// parmi les ex-æquo). Ne mute volontairement PAS `_playedSoundIndices`/
+  /// `_nextSoundIndex` : l'algorithme habituel doit reprendre sainement une
+  /// fois la session terminée (voir décision 0014).
+  int _pickLowestSessionCountIndex(PadItem padItem, List<int> readyIndices) {
+    var minCount = 1 << 31;
+    for (final i in readyIndices) {
+      final count = sessionPlayCountFor(padItem.pad.sounds[i].id);
+      if (count < minCount) minCount = count;
+    }
+    final lowest = [
+      for (final i in readyIndices)
+        if (sessionPlayCountFor(padItem.pad.sounds[i].id) == minCount) i,
+    ];
+    return lowest[_random.nextInt(lowest.length)];
   }
 
   // ── Délégués musique (API publique) ───────────────────────────────────────
@@ -2118,6 +2158,49 @@ class SamplerNotifier extends ChangeNotifier {
   void markPerformanceModeEntered() {
     _forceNewRowOnNextQuickAdd = true;
   }
+
+  bool get isLiveSessionActive => _isLiveSessionActive;
+
+  int sessionPlayCountFor(int soundId) => _sessionPlayCounts[soundId] ?? 0;
+
+  bool hasPlayedInSession(int soundId) => sessionPlayCountFor(soundId) > 0;
+
+  /// Démarre une session live : remet à zéro les compteurs de lecture par
+  /// son et active le suivi. `notifyListeners()` rafraîchit un éventuel
+  /// `SoundPickerOverlay` déjà ouvert.
+  void startLiveSession() {
+    _sessionPlayCounts.clear();
+    _isLiveSessionActive = true;
+    notifyListeners();
+  }
+
+  /// Termine la session live : gèle les compteurs (ni effacés, ni remis à
+  /// zéro) — seule la prochaine [startLiveSession] repart propre.
+  void endLiveSession() {
+    _isLiveSessionActive = false;
+    notifyListeners();
+  }
+
+  /// Expose `_markPlayedAt` pour les tests unitaires (simule une lecture
+  /// réelle sans passer par un lecteur audio natif).
+  @visibleForTesting
+  void debugMarkPlayedAt(PadItem padItem, int soundIndex) =>
+      _markPlayedAt(padItem, soundIndex);
+
+  /// Expose `_markPlayed` seul (chemin pré-écoute) pour vérifier qu'il
+  /// n'incrémente jamais le compteur de session.
+  @visibleForTesting
+  void debugMarkPlayedPreviewOnly(int soundId) => _markPlayed(soundId);
+
+  /// Expose la logique pure de sélection « compteur le plus bas » sans
+  /// dépendre d'un `PadSoundSlot` jouable (évite de fabriquer un
+  /// `AudioPlayerService` natif en test).
+  @visibleForTesting
+  int debugPickLowestSessionCountIndex(
+    PadItem padItem,
+    List<int> readyIndices,
+  ) =>
+      _pickLowestSessionCountIndex(padItem, readyIndices);
 
   Future<QuickSearchPrepareResult> prepareSoundFromQuickSearch(
     int soundId,

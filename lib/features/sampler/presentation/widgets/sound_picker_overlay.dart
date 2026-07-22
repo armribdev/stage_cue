@@ -1530,6 +1530,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     switch (widget.mode) {
       case QuickSearchMode():
         final fav = sound.isFavorite;
+        final playedInSession = widget.notifier.hasPlayedInSession(sound.id);
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1538,6 +1539,22 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                 width: _actionButtonSize,
                 height: _actionButtonSize,
                 child: Icon(Icons.star_rounded, size: 18, color: scheme.primary),
+              ),
+              const SizedBox(width: 4),
+            ],
+            if (playedInSession) ...[
+              Tooltip(
+                message: 'Joué ${widget.notifier.sessionPlayCountFor(sound.id)} '
+                    'fois cette session',
+                child: SizedBox(
+                  width: _actionButtonSize,
+                  height: _actionButtonSize,
+                  child: Icon(
+                    Icons.check_circle_rounded,
+                    size: 16,
+                    color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  ),
+                ),
               ),
               const SizedBox(width: 4),
             ],
@@ -1613,12 +1630,28 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         );
 
       case PadVariantMode():
-        if (!isCurrentVariant) return const SizedBox.shrink();
-        return SizedBox(
-          width: _actionButtonSize,
-          height: _actionButtonSize,
-          child: Icon(Icons.graphic_eq_rounded, color: scheme.primary),
-        );
+        if (isCurrentVariant) {
+          return SizedBox(
+            width: _actionButtonSize,
+            height: _actionButtonSize,
+            child: Icon(Icons.graphic_eq_rounded, color: scheme.primary),
+          );
+        }
+        if (widget.notifier.hasPlayedInSession(sound.id)) {
+          return Tooltip(
+            message: 'Déjà joué cette session',
+            child: SizedBox(
+              width: _actionButtonSize,
+              height: _actionButtonSize,
+              child: Icon(
+                Icons.check_circle_rounded,
+                size: 16,
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+            ),
+          );
+        }
+        return const SizedBox.shrink();
     }
   }
 
