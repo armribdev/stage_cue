@@ -1943,9 +1943,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     boards: boards,
                     selectedBoard: selectedBoard,
                     isBoardsLoading: isBoardsLoading,
+                    isPerformanceMode: _isPerformanceMode,
                     onSelectBoard: _selectBoard,
                     onCreateBoard: _createBoard,
                     onBoardLongPress: _showBoardActions,
+                    onTogglePerformanceMode: () {
+                      Navigator.pop(context);
+                      _togglePerformanceMode();
+                    },
                     onOpenLibrary: () async {
                       Navigator.pop(context);
                       await _openLibrary();
@@ -2004,8 +2009,11 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     final scheme = Theme.of(context).colorScheme;
     return AppBar(
       automaticallyImplyLeading: false,
+      // En session live : la bascule étant la seule action du menu, le hamburger
+      // cède la place à un bouton de sortie direct (un clic). Hors session, le
+      // hamburger ouvre le tiroir (mode live / bibliothèque / paramètres).
       leading: isPerformanceMode
-          ? null
+          ? _LiveExitButton(onExit: onTogglePerformanceMode)
           : IconButton(
               icon: const Icon(Icons.menu_rounded),
               tooltip: 'Menu',
@@ -2029,10 +2037,6 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'Recherche rapide',
           onPressed: onQuickSearch,
         ),
-        _LiveModeButton(
-          isPerformanceMode: isPerformanceMode,
-          onToggle: onTogglePerformanceMode,
-        ),
       ],
     );
   }
@@ -2044,7 +2048,7 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
 // ---------- Bouton « Tout arrêter » (bruitages) ----------
 
 /// Bouton panique : coupe d'un coup tous les pads non-musique en cours, sans
-/// toucher au tapis musical. Actif uniquement quand au moins un bruitage joue.
+/// toucher au tapis musical. Absent tant qu'aucun bruitage ne joue.
 class _StopAllButton extends StatelessWidget {
   final SamplerNotifier notifier;
 
@@ -2056,56 +2060,34 @@ class _StopAllButton extends StatelessWidget {
     return ListenableBuilder(
       listenable: notifier,
       builder: (context, _) {
-        final active = notifier.hasNonMusicSoundsPlaying;
+        // Rien à arrêter → bouton retiré de la barre (plutôt que grisé).
+        if (!notifier.hasNonMusicSoundsPlaying) {
+          return const SizedBox.shrink();
+        }
         return IconButton(
-          icon: const Icon(Icons.stop_circle_rounded),
+          icon: const Icon(Icons.stop_rounded),
           tooltip: isNativeDesktopPlatform()
               ? 'Tout arrêter (Échap)'
               : 'Tout arrêter',
-          color: active ? scheme.error : null,
-          onPressed: active
-              ? () {
-                  unawaited(HapticFeedback.heavyImpact());
-                  unawaited(notifier.stopAllNonMusicSounds());
-                }
-              : null,
+          color: scheme.error,
+          onPressed: () {
+            unawaited(HapticFeedback.heavyImpact());
+            unawaited(notifier.stopAllNonMusicSounds());
+          },
         );
       },
     );
   }
 }
 
-// ---------- Bouton mode live ----------
+// ---------- Icône « en direct » (voyant live pulsé) ----------
 
-/// Bascule du mode live : verrouille l'édition et suspend la sync auto
-/// pour un spectacle sans modif accidentelle ni jank (refonte UX P2).
-class _LiveModeButton extends StatelessWidget {
-  final bool isPerformanceMode;
-  final VoidCallback onToggle;
-
-  const _LiveModeButton({
-    required this.isPerformanceMode,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return IconButton(
-      tooltip: isPerformanceMode
-          ? 'Quitter le mode live'
-          : 'Mode live',
-      onPressed: onToggle,
-      icon: isPerformanceMode
-          ? const _LiveModeActiveIcon()
-          : Icon(Icons.theater_comedy_outlined, color: scheme.onSurfaceVariant),
-    );
-  }
-}
-
-/// Masque théâtre + voyant rouge pulsé — même langage visuel que le badge ON AIR.
+/// Icône + voyant rouge pulsé — même langage visuel que le badge ON AIR.
+/// [baseIcon] permet de réutiliser le voyant sur différentes icônes (menu, masque).
 class _LiveModeActiveIcon extends StatefulWidget {
-  const _LiveModeActiveIcon();
+  final IconData baseIcon;
+
+  const _LiveModeActiveIcon({this.baseIcon = Icons.theater_comedy_rounded});
 
   @override
   State<_LiveModeActiveIcon> createState() => _LiveModeActiveIconState();
@@ -2156,7 +2138,7 @@ class _LiveModeActiveIconState extends State<_LiveModeActiveIcon>
         clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
-          Icon(Icons.theater_comedy_rounded, color: scheme.error),
+          Icon(widget.baseIcon, color: scheme.error),
           Positioned(
             right: -2,
             top: -2,
@@ -2185,9 +2167,11 @@ class _BoardsList extends StatelessWidget {
   final List<SoundBoard> boards;
   final SoundBoard? selectedBoard;
   final bool isBoardsLoading;
+  final bool isPerformanceMode;
   final Future<void> Function(SoundBoard board) onSelectBoard;
   final Future<void> Function() onCreateBoard;
   final Future<void> Function(SoundBoard board)? onBoardLongPress;
+  final VoidCallback onTogglePerformanceMode;
   final Future<void> Function()? onOpenLibrary;
   final Future<void> Function() onOpenSettings;
 
@@ -2195,9 +2179,11 @@ class _BoardsList extends StatelessWidget {
     required this.boards,
     required this.selectedBoard,
     required this.isBoardsLoading,
+    required this.isPerformanceMode,
     required this.onSelectBoard,
     required this.onCreateBoard,
     this.onBoardLongPress,
+    required this.onTogglePerformanceMode,
     required this.onOpenLibrary,
     required this.onOpenSettings,
   });
@@ -2205,6 +2191,33 @@ class _BoardsList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+
+    final liveTile = ListTile(
+      leading: Icon(
+        isPerformanceMode
+            ? Icons.power_settings_new_rounded
+            : Icons.play_arrow_rounded,
+        color: isPerformanceMode ? scheme.error : null,
+      ),
+      title: Text(
+        isPerformanceMode
+            ? 'Quitter la session live'
+            : 'Démarrer une session live',
+        style: isPerformanceMode
+            ? TextStyle(color: scheme.error, fontWeight: FontWeight.w600)
+            : null,
+      ),
+      onTap: onTogglePerformanceMode,
+    );
+
+    // Mode Spectacle : le tiroir ne propose que la sortie du mode. Rien
+    // d'éditable ni de navigable — on préserve le verrouillage anti-modif du
+    // live, tout en gardant l'unique porte de sortie accessible.
+    if (isPerformanceMode) {
+      return Column(
+        children: [const SizedBox(height: 8), liveTile],
+      );
+    }
 
     return Column(
       children: [
@@ -2259,6 +2272,8 @@ class _BoardsList extends StatelessWidget {
           ),
         ),
         const Divider(height: 1),
+        // Ordre demandé : mode live, puis bibliothèque, puis paramètres.
+        liveTile,
         ListTile(
           leading: const Icon(Icons.library_books_rounded),
           title: const Text('Gérer la bibliothèque'),
@@ -2280,9 +2295,11 @@ class _BoardsDrawer extends StatelessWidget {
   final List<SoundBoard> boards;
   final SoundBoard? selectedBoard;
   final bool isBoardsLoading;
+  final bool isPerformanceMode;
   final Future<void> Function(SoundBoard board) onSelectBoard;
   final Future<void> Function() onCreateBoard;
   final Future<void> Function(SoundBoard board) onBoardLongPress;
+  final VoidCallback onTogglePerformanceMode;
   final Future<void> Function()? onOpenLibrary;
   final Future<void> Function() onOpenSettings;
 
@@ -2290,9 +2307,11 @@ class _BoardsDrawer extends StatelessWidget {
     required this.boards,
     required this.selectedBoard,
     required this.isBoardsLoading,
+    required this.isPerformanceMode,
     required this.onSelectBoard,
     required this.onCreateBoard,
     required this.onBoardLongPress,
+    required this.onTogglePerformanceMode,
     required this.onOpenLibrary,
     required this.onOpenSettings,
   });
@@ -2305,9 +2324,11 @@ class _BoardsDrawer extends StatelessWidget {
           boards: boards,
           selectedBoard: selectedBoard,
           isBoardsLoading: isBoardsLoading,
+          isPerformanceMode: isPerformanceMode,
           onSelectBoard: onSelectBoard,
           onCreateBoard: onCreateBoard,
           onBoardLongPress: onBoardLongPress,
+          onTogglePerformanceMode: onTogglePerformanceMode,
           onOpenLibrary: onOpenLibrary,
           onOpenSettings: onOpenSettings,
         ),
@@ -2354,6 +2375,14 @@ class _SamplerDesktopAppBar extends StatelessWidget
     final scheme = Theme.of(context).colorScheme;
     return AppBar(
       automaticallyImplyLeading: false,
+      // Menu hamburger : regroupe mode live / bibliothèque / paramètres. Toujours
+      // accessible — c'est la seule porte de sortie du Mode Spectacle.
+      leading: _SamplerDesktopMenuButton(
+        isPerformanceMode: isPerformanceMode,
+        onTogglePerformanceMode: onTogglePerformanceMode,
+        onOpenLibrary: onOpenLibrary,
+        onOpenSettings: onOpenSettings,
+      ),
       title: _BoardSceneSelector(
         boards: boards,
         selectedBoard: selectedBoard,
@@ -2370,31 +2399,11 @@ class _SamplerDesktopAppBar extends StatelessWidget
         ),
       ),
       actions: [
-        if (!isPerformanceMode) ...[
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Paramètres',
-            onPressed: () => unawaited(onOpenSettings()),
-          ),
-          IconButton(
-            icon: const Icon(Icons.library_books_rounded),
-            tooltip: 'Gérer la bibliothèque',
-            onPressed: () => unawaited(onOpenLibrary()),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: VerticalDivider(width: 24),
-          ),
-        ],
         stopAllButton,
         IconButton(
           icon: const Icon(Icons.search_rounded),
           tooltip: 'Recherche rapide (Ctrl+F)',
           onPressed: onQuickSearch,
-        ),
-        _LiveModeButton(
-          isPerformanceMode: isPerformanceMode,
-          onToggle: onTogglePerformanceMode,
         ),
       ],
     );
@@ -2402,6 +2411,112 @@ class _SamplerDesktopAppBar extends StatelessWidget
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+}
+
+// ---------- Menu hamburger (desktop) ----------
+
+/// Menu déroulant desktop regroupant, dans l'ordre : bascule du mode live,
+/// gestion de bibliothèque, paramètres. En Mode Spectacle, seul « Quitter le
+/// mode live » reste proposé (préserve le verrouillage anti-modif du live) et
+/// l'icône reprend le voyant rouge pulsé « en direct ».
+class _SamplerDesktopMenuButton extends StatelessWidget {
+  final bool isPerformanceMode;
+  final VoidCallback onTogglePerformanceMode;
+  final Future<void> Function() onOpenLibrary;
+  final Future<void> Function() onOpenSettings;
+
+  const _SamplerDesktopMenuButton({
+    required this.isPerformanceMode,
+    required this.onTogglePerformanceMode,
+    required this.onOpenLibrary,
+    required this.onOpenSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    // En session live : la bascule étant la seule action disponible, on remplace
+    // le menu par un bouton de sortie direct (un clic).
+    if (isPerformanceMode) {
+      return _LiveExitButton(onExit: onTogglePerformanceMode);
+    }
+
+    return PopupMenuButton<String>(
+      tooltip: 'Menu',
+      icon: const Icon(Icons.menu_rounded),
+      offset: const Offset(0, 48),
+      onSelected: (value) {
+        switch (value) {
+          case 'live':
+            onTogglePerformanceMode();
+          case 'library':
+            unawaited(onOpenLibrary());
+          case 'settings':
+            unawaited(onOpenSettings());
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<String>(
+          value: 'live',
+          child: Row(
+            children: [
+              Icon(
+                Icons.play_arrow_rounded,
+                size: 18,
+                color: scheme.onSurface,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              const Text('Démarrer une session live'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'library',
+          child: Row(
+            children: [
+              Icon(
+                Icons.library_books_rounded,
+                size: 18,
+                color: scheme.onSurface,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              const Text('Gérer la bibliothèque'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'settings',
+          child: Row(
+            children: [
+              Icon(Icons.settings, size: 18, color: scheme.onSurface),
+              const SizedBox(width: AppSpacing.sm),
+              const Text('Paramètres'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Bouton de sortie de session live : voyant rouge pulsé « en direct » sur une
+/// icône de sortie, action en un clic. Remplace le menu quand la session est
+/// active (la sortie est alors la seule action pertinente).
+class _LiveExitButton extends StatelessWidget {
+  final VoidCallback onExit;
+
+  const _LiveExitButton({required this.onExit});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const _LiveModeActiveIcon(baseIcon: Icons.power_settings_new_rounded),
+      tooltip: 'Quitter la session live',
+      onPressed: onExit,
+    );
+  }
 }
 
 // ---------- Sélecteur de scène (desktop) ----------
