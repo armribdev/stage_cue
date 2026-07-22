@@ -204,8 +204,42 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
     return (_highlightBreathController.value - 0.5).abs() * 2.0;
   }
 
+  /// Couleur des icônes flottantes (edit/fermer/sons) contrastée avec le fond
+  /// réel du pad — un gris fixe devient illisible sur un pad rouge ou sombre.
+  /// On reproduit l'alpha appliqué par [PadButton] selon l'état (lecture,
+  /// pause) puis on compose sur la surface pour estimer la couleur perçue.
+  Color _iconColor(ColorScheme scheme) {
+    final colorValue = widget.padItem.pad.colorValue;
+    if (colorValue == null) return Colors.grey.shade600;
+
+    final customColor = Color(colorValue);
+    final alpha = widget.padItem.isPlaying
+        ? 0.75
+        : widget.padItem.isPaused
+            ? 0.35
+            : 1.0;
+    final effective = Color.alphaBlend(
+      customColor.withValues(alpha: alpha),
+      scheme.surface,
+    );
+    final isDarkBackground =
+        ThemeData.estimateBrightnessForColor(effective) == Brightness.dark;
+
+    // Teinte du pad conservée (désaturée) mais luminosité poussée à l'extrême
+    // opposé du fond — l'icône se fond dans la couleur du pad tout en
+    // restant lisible, plutôt qu'un noir/blanc brut déconnecté.
+    final hsl = HSLColor.fromColor(customColor);
+    final tinted = hsl
+        .withSaturation((hsl.saturation * 0.6).clamp(0.0, 1.0))
+        .withLightness(isDarkBackground ? 0.88 : 0.16)
+        .toColor();
+    return tinted.withValues(alpha: isDarkBackground ? 0.9 : 0.75);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final iconColor = _iconColor(Theme.of(context).colorScheme);
+
     // Boutons edit/close : uniquement affichés en mode édition sur PC (souris),
     // pas de contrainte de taille tactile nécessaire → icônes plus rapprochées.
     final deleteButton = widget.isEditable && widget.onRemove != null
@@ -215,7 +249,7 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
             child: IconButton(
               icon: const Icon(Icons.close, size: 16),
               onPressed: _handleRemoveTap,
-              color: Colors.grey.shade600,
+              color: iconColor,
               splashRadius: 12,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
@@ -230,7 +264,7 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
             child: IconButton(
               icon: const Icon(Icons.edit_outlined, size: 14),
               onPressed: widget.onEdit,
-              color: Colors.grey.shade600,
+              color: iconColor,
               splashRadius: 12,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
@@ -255,7 +289,7 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
             child: IconButton(
               icon: const Icon(Icons.queue_music_rounded, size: 14),
               onPressed: widget.onShowSounds,
-              color: Colors.grey.shade600,
+              color: iconColor,
               splashRadius: 12,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
