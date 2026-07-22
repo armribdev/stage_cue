@@ -691,6 +691,17 @@ class SamplerNotifier extends ChangeNotifier {
     try {
       var boards = await _repository.getSoundBoards();
       if (boards.isEmpty) {
+        // Plateau vide : ne pas créer de « Scène 1 » par défaut tant que le pull
+        // de lancement peut encore fusionner des boards distants. Sinon une
+        // lecture transitoirement vide (race avec la synchro de démarrage) crée
+        // une scène fantôme qui pollue les vrais boards. On laisse le skeleton
+        // affiché (isBoardsLoading reste true) : la fin du pull relance
+        // `loadBoards` (via onInitialPullSettled/onLibraryMerged). Exception :
+        // aucune bibliothèque connectée → usage local, rien à attendre.
+        final settled = _libraryRepository?.initialSyncSettled ?? true;
+        if (!settled && (await getConnectedLibraries()).isNotEmpty) {
+          return; // en attente de la fin du pull, skeleton conservé
+        }
         final libraryId = await _libraryRepository?.singleConnectedLibraryId();
         final newBoardId = await _repository.createSoundBoard(
           'Scène 1',

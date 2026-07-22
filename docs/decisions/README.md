@@ -33,5 +33,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0010](0010-epinglage-lru-favoris-et-plateau-actif.md) | Épinglage LRU : favoris **et** sons du plateau actif | acceptée |
 | [0011](0011-deduplication-de-la-file-de-telechargement.md) | Déduplication par clé de pad et attente explicite pour les portées imbriquées | acceptée |
 | [0012](0012-retry-drive-limite-aux-appels-idempotents.md) | Réessai Drive réservé aux appels idempotents | acceptée |
+| [0013](0013-ouverture-db-isolate-principal.md) | Ouverture de la base sur l'isolate principal, pas en isolate de fond | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.
