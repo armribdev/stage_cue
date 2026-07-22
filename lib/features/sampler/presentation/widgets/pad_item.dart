@@ -238,18 +238,27 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
           )
         : null;
 
+    // Décalage dynamique : le bouton sons se recale à droite quand
+    // éditer/fermer sont masqués (mode live), au lieu de laisser un trou.
+    final hasDeleteButton = deleteButton != null;
+    final hasEditButton = editButton != null;
+    final showSoundsRight =
+        4.0 +
+        (hasDeleteButton ? 22.0 : 0.0) +
+        (hasEditButton ? 22.0 : 0.0);
+
     final showSoundsButton =
         widget.padItem.totalSoundCount > 1 && widget.onShowSounds != null
         ? Positioned(
-            bottom: 6,
-            right: 6,
+            top: 4,
+            right: showSoundsRight,
             child: IconButton(
-              icon: const Icon(Icons.queue_music_rounded, size: 18),
+              icon: const Icon(Icons.queue_music_rounded, size: 14),
               onPressed: widget.onShowSounds,
               color: Colors.grey.shade600,
-              splashRadius: 16,
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              splashRadius: 12,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
             ),
           )
         : null;
