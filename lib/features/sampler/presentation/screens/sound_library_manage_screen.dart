@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/database/database.dart' as db;
-import '../../../../core/utils/copyable_snackbar.dart';
+import '../../../../core/utils/app_snackbar.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -23,11 +23,13 @@ class SoundLibraryManageScreen {
     BuildContext context, {
     required SamplerNotifier notifier,
     required db.AppDatabase database,
+    VoidCallback? onReconnect,
   }) {
     final repository = SoundRepository.fromDatabase(database);
     return SoundPickerOverlay.showForManage(
       context,
       notifier: notifier,
+      onReconnect: onReconnect,
       onTap: (ctx, sound, tagCatalog) =>
           _openSoundEdit(ctx, sound, tagCatalog, repository, notifier),
     );

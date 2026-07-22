@@ -17,7 +17,9 @@ import '../widgets/app_form_dialog.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
-import '../../../../core/utils/copyable_snackbar.dart';
+import '../../../../core/sync/google_oauth_config.dart';
+import '../../../../core/sync/google_oauth_setup_dialog.dart';
+import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
@@ -75,6 +77,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
   ({int rowIndex, int position})? _dropTarget;
   Offset? _lastDragGlobalOffset;
 
+  /// Reconnexion Drive inline en cours — évite qu'un double-tap sur l'action
+  /// « Reconnecter » d'un snackbar lance deux flux OAuth concurrents.
+  bool _driveReconnectInFlight = false;
+
   /// true après la 1re frame de drag — évite de reconstruire l'arbre pendant
   /// l'accrochage du geste (sinon le Draggable est démonté et le pad reste bloqué).
   bool _editDragUiReady = false;
@@ -130,13 +136,23 @@ class _SamplerScreenState extends State<SamplerScreen> {
   void _onStateChanged() {
     if (!mounted) return;
 
-    final musicError = _notifier.consumeLastMusicPlaybackError();
-    if (musicError != null) {
+    // Peek non-destructif : la décision d'afficher (et la consommation) est
+    // différée au post-frame — `ModalRoute.of` dépend d'un InheritedWidget et
+    // ne peut être lu pendant `initState` (ce listener tourne dès `loadBoards`).
+    if (_notifier.hasPendingMusicPlaybackError) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
+        // Un overlay/dialog au-dessus (route non courante) possède le message et
+        // l'affiche sur son propre messenger — le nôtre le dessinerait derrière
+        // la barrière modale, sans se fermer. On le lui laisse (pas de consume).
+        if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+        final musicError = _notifier.consumeLastMusicPlaybackError();
+        if (musicError == null) return;
+        AppSnackBar.show(
           context,
-        ).showSnackBar(SnackBar(content: Text(musicError)));
+          musicError,
+          action: _reconnectSnackBarAction(),
+        );
       });
     }
 
@@ -402,13 +418,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
       context,
       notifier: _notifier,
       database: _database,
+      onReconnect: () => unawaited(_reconnectDriveInline()),
     );
     if (!mounted) return;
     await _notifier.loadSounds();
   }
 
   /// Ouvre les paramètres sans fermer de drawer (base method).
-  Future<void> _openSettings() async {
+  Future<void> _openSettings({bool scrollToDriveSection = false}) async {
     if (!mounted) return;
     await SettingsScreen.open(
       context,
@@ -416,9 +433,67 @@ class _SamplerScreenState extends State<SamplerScreen> {
       libraryRepository: widget.services.libraryRepository,
       syncController: widget.services.syncController,
       appPreferences: widget.services.appPreferences,
+      scrollToDriveSection: scrollToDriveSection,
     );
     if (!mounted) return;
     await _notifier.loadSounds();
+  }
+
+  /// Action « Reconnecter » pour les snackbars d'échec dus à une session Google
+  /// expirée — relance l'OAuth interactif **en place** (sans ouvrir les
+  /// réglages). Renvoie `null` si la session est valide (l'échec a une autre
+  /// cause).
+  SnackBarAction? _reconnectSnackBarAction() {
+    if (!_notifier.driveSessionExpired) return null;
+    return SnackBarAction(
+      label: 'Reconnecter',
+      onPressed: () => unawaited(_reconnectDriveInline()),
+    );
+  }
+
+  /// Reconnexion Drive déclenchée depuis un snackbar, sans quitter l'écran.
+  ///
+  /// Le refresh silencieux du token a déjà été tenté (et a échoué) avant que
+  /// « Session Google expirée » ne s'affiche — inutile de le rejouer ici :
+  /// [ensureDriveConnected] enchaîne directement sur l'OAuth interactif quand
+  /// [requiresInteractiveReconnect] est levé. Au succès, on efface la bannière
+  /// hors-ligne et on recharge les sons pour lever les indisponibilités.
+  Future<void> _reconnectDriveInline() async {
+    if (_driveReconnectInFlight) return;
+    final repo = widget.services.libraryRepository;
+    final sync = widget.services.syncController;
+    if (!await ensureGoogleOAuthConfigured(context)) return;
+    if (!mounted) return;
+
+    setState(() => _driveReconnectInFlight = true);
+    try {
+      final connected = await repo.ensureDriveConnected();
+      if (!mounted) return;
+      if (!connected) return; // l'utilisateur a annulé le sélecteur de compte
+      sync.clearAuthOfflineState();
+      await repo.refreshConnectedAccountProfile();
+      await _notifier.loadSounds();
+      if (mounted) AppSnackBar.show(context, 'Session Google renouvelée');
+    } on GoogleOAuthNotConfiguredException catch (e) {
+      if (mounted) {
+        AppSnackBar.show(context, e.message,
+            duration: const Duration(seconds: 8));
+      }
+    } catch (e) {
+      if (mounted) {
+        AppSnackBar.show(
+          context,
+          'Reconnexion impossible — réessayez depuis les réglages.',
+          action: SnackBarAction(
+            label: 'Réglages',
+            onPressed: () =>
+                unawaited(_openSettings(scrollToDriveSection: true)),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _driveReconnectInFlight = false);
+    }
   }
 
   /// Ouvre la recherche-éclair (overlay) ; met en évidence le pad dédié préparé.
@@ -428,6 +503,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       context,
       notifier: _notifier,
       initialTypeFilter: typeFilter,
+      onReconnect: () => unawaited(_reconnectDriveInline()),
     );
     if (!mounted) return;
     // Les pré-écoutes (bruitages/ambiances) jouent jusqu'à la fin et se libèrent
@@ -1343,6 +1419,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
   ) {
     if (!mounted) return;
     final text = switch (reason) {
+      PadUnavailabilityReason.offline when _notifier.driveSessionExpired =>
+        'Session Google expirée — touchez « Reconnecter »',
       PadUnavailabilityReason.offline =>
         '« ${padItem.displayName} » indisponible hors-ligne',
       PadUnavailabilityReason.missingFile =>
@@ -1351,18 +1429,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
         'Format audio non supporté pour « ${padItem.displayName} »',
       _ => '« ${padItem.displayName} » non téléchargé',
     };
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(text),
-          behavior: SnackBarBehavior.floating,
-          action: SnackBarAction(
-            label: 'Détails',
-            onPressed: () => _showPadUnavailableSheet(context, padItem),
-          ),
-        ),
-      );
+    // Session expirée : proposer la reconnexion plutôt que le détail du pad,
+    // qui ne dirait rien de la vraie cause.
+    final action = _reconnectSnackBarAction() ??
+        SnackBarAction(
+          label: 'Détails',
+          onPressed: () => _showPadUnavailableSheet(context, padItem),
+        );
+    AppSnackBar.show(context, text, action: action);
   }
 
   void _showPadUnavailableSheet(BuildContext context, PadItem padItem) {

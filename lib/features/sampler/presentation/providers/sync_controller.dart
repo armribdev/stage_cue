@@ -123,9 +123,31 @@ class SyncController extends ChangeNotifier {
   SyncController(
     this._repository, {
     Duration debounce = const Duration(seconds: 5),
-  }) : _debounce = debounce;
+  }) : _debounce = debounce {
+    // Toute invalidation de session hors-sync (ex. échec d'auth pendant une
+    // lecture de pad, qui appelle `invalidateAuthSession` directement sur le
+    // repository) doit remonter le flag `authExpired` — sinon le header Drive
+    // reste sur « Session à renouveler » sans message proactif.
+    _repository.addListener(_onRepositorySessionChanged);
+  }
 
   SyncState get state => _state;
+
+  /// Le repository a notifié un changement de session Drive. On ne fait que
+  /// *lever* `authExpired` (jamais l'effacer — c'est le rôle des flux de
+  /// reconnexion explicites via [clearAuthOfflineState]), et une seule fois
+  /// tant que le flag est déjà posé.
+  void _onRepositorySessionChanged() {
+    if (_disposed) return;
+    if (_repository.requiresInteractiveReconnect && !_state.authExpired) {
+      _set(_state.copyWith(
+        status: SyncStatus.offline,
+        clearConflict: true,
+        message: 'Session Google expirée — reconnexion requise.',
+        authExpired: true,
+      ));
+    }
+  }
 
   void _set(SyncState next) {
     if (_disposed) return;
@@ -388,7 +410,7 @@ class SyncController extends ChangeNotifier {
     _set(_state.copyWith(
       status: SyncStatus.offline,
       clearConflict: true,
-      message: 'Session Google expirée — reconnectez-vous dans les réglages.',
+      message: 'Session Google expirée — reconnexion requise.',
       authExpired: true,
     ));
   }
@@ -396,6 +418,7 @@ class SyncController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _repository.removeListener(_onRepositorySessionChanged);
     _syncedDisplayTimer?.cancel();
     for (final entry in _debounceTimers.values) {
       entry.$1.cancel();

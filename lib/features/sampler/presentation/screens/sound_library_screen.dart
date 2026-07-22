@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/theme/skeleton.dart';
-import '../../../../core/utils/copyable_snackbar.dart';
+import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../../../../core/utils/sound_display_paths.dart';
 import '../../../../core/utils/string_utils.dart';
@@ -161,9 +161,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
       final padId = _soundIdToPadId[sound.id];
       if (padId == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Pad introuvable pour ce son')),
-          );
+          AppSnackBar.show(context, 'Pad introuvable pour ce son');
         }
         return;
       }

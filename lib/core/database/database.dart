@@ -890,6 +890,11 @@ LazyDatabase _openConnection() {
     }
 
     final file = await resolveDatabaseFile();
-    return NativeDatabase.createInBackground(file);
+    // Ouverture sur l'isolate principal (et non `createInBackground`) : au cold
+    // start Windows, le spawn de l'isolate de fond se bloque avant que la 1re
+    // requête ne revienne (le natif sqlite3 n'y est pas prêt), laissant les
+    // boards jamais chargés jusqu'à un hot restart. Les requêtes de cette app
+    // sont légères → l'exécution sur l'isolate UI est sans impact perceptible.
+    return NativeDatabase(file);
   });
 }

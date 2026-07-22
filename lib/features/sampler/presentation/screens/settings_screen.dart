@@ -16,7 +16,7 @@ import '../../../../core/sync/drive_profile_cache.dart';
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
 import '../../../../core/sync/drive_client.dart';
-import '../../../../core/utils/copyable_snackbar.dart';
+import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../widgets/app_form_dialog.dart';
@@ -462,11 +462,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await widget.libraryRepository.disconnect();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Compte Google déconnecté'),
-            duration: Duration(seconds: 2),
-          ),
+        AppSnackBar.show(
+          context,
+          'Compte Google déconnecté',
+          duration: const Duration(seconds: 2),
         );
       }
     } catch (e) {
@@ -745,12 +744,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (!await widget.libraryRepository.ensureDriveConnected()) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Connexion Google Drive requise pour indexer un dossier Drive',
-            ),
-          ),
+        AppSnackBar.show(
+          context,
+          'Connexion Google Drive requise pour indexer un dossier Drive',
         );
       }
       return;
@@ -992,9 +988,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         if (existing.isNotEmpty) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Ce dossier est déjà surveillé')),
-            );
+            AppSnackBar.show(context, 'Ce dossier est déjà surveillé');
           }
           return;
         }
@@ -1054,11 +1048,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (n > 0) {
             await _offerAddNewSoundsToBoard(n);
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Dossier ajouté et indexé'),
-                duration: Duration(seconds: 2),
-              ),
+            AppSnackBar.show(
+              context,
+              'Dossier ajouté et indexé',
+              duration: const Duration(seconds: 2),
             );
           }
         }
@@ -1094,13 +1087,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
 
     if (boards.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '$newSoundCount son${newSoundCount > 1 ? 's' : ''} indexé${newSoundCount > 1 ? 's' : ''}',
-          ),
-          duration: const Duration(seconds: 3),
-        ),
+      AppSnackBar.show(
+        context,
+        '$newSoundCount son${newSoundCount > 1 ? 's' : ''} indexé${newSoundCount > 1 ? 's' : ''}',
+        duration: const Duration(seconds: 3),
       );
       return;
     }
@@ -1167,9 +1157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }) async {
     if (_libraries.any((library) => library.driveFolderId == driveFolderId)) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ce dossier Drive est déjà indexé')),
-        );
+        AppSnackBar.show(context, 'Ce dossier Drive est déjà indexé');
       }
       return;
     }
@@ -1298,11 +1286,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             duration: const Duration(seconds: 3),
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(message),
-              duration: const Duration(seconds: 3),
-            ),
+          AppSnackBar.show(
+            context,
+            message,
+            duration: const Duration(seconds: 3),
           );
         }
       }
@@ -1378,9 +1365,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         .toList();
     if (connected.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Aucun dossier Drive indexé')),
-        );
+        AppSnackBar.show(context, 'Aucun dossier Drive indexé');
       }
       return;
     }
@@ -1407,11 +1392,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _loadDatabaseInfo();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bibliothèque(s) Drive actualisée(s)'),
-            duration: Duration(seconds: 2),
-          ),
+        AppSnackBar.show(
+          context,
+          'Bibliothèque(s) Drive actualisée(s)',
+          duration: const Duration(seconds: 2),
         );
       }
     } on DriveAuthException {
@@ -1419,7 +1403,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         showCopyableSnackBar(
           context,
-          'Session Google expirée — reconnectez-vous via l\'icône compte.',
+          'Session Google expirée — utilisez « Renouveler » ci-dessus.',
         );
       }
     } catch (e) {
@@ -1445,9 +1429,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         .toList();
     if (musicSounds.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Aucun son musique dans la bibliothèque')),
-        );
+        AppSnackBar.show(context, 'Aucun son musique dans la bibliothèque');
       }
       return;
     }
@@ -1498,8 +1480,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ? 'Moteur audio non prêt — $regenerated régénérée(s) avant interruption.'
         : '$regenerated régénérée(s), $skipped ignorée(s) (hors cache), '
             '$failed échec(s) de format.';
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(summary)));
+    AppSnackBar.show(context, summary);
   }
 
   Future<void> _resolveSyncConflict(domain.Library library) async {
@@ -1742,11 +1723,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _indexingProgress.remove(_driveProgressKey(library.id));
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Dossier Drive retiré avec succès'),
-            duration: Duration(seconds: 2),
-          ),
+        AppSnackBar.show(
+          context,
+          'Dossier Drive retiré avec succès',
+          duration: const Duration(seconds: 2),
         );
       }
 
@@ -1772,11 +1752,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _indexingProgress.remove(_normalizeWatchedPath(watchedPath.path));
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Chemin retiré avec succès'),
-            duration: Duration(seconds: 2),
-          ),
+        AppSnackBar.show(
+          context,
+          'Chemin retiré avec succès',
+          duration: const Duration(seconds: 2),
         );
       }
 
@@ -2692,11 +2671,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: () async {
             await Clipboard.setData(ClipboardData(text: value));
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Chemin copié'),
-                duration: Duration(seconds: 2),
-              ),
+            AppSnackBar.show(
+              context,
+              'Chemin copié',
+              duration: const Duration(seconds: 2),
             );
           },
           child: Text(value, style: valueStyle),

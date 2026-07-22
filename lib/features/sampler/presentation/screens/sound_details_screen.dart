@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import '../../../../core/audio/waveform_extractor.dart';
-import '../../../../core/utils/copyable_snackbar.dart';
+import '../../../../core/utils/app_snackbar.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
