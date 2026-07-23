@@ -55,11 +55,13 @@ class AppPreferences extends ChangeNotifier {
       'auto_download_drive_by_default';
   static const _keyConnectivityMode = 'connectivity_mode';
   static const _keyCueOutputDeviceId = 'cue_output_device_id';
+  static const _keyWindowsFullScreen = 'windows_full_screen';
 
   bool _autoDownloadPadSounds = true;
   bool _autoDownloadDriveByDefault = true;
   ConnectivityMode _connectivityMode = ConnectivityMode.liveOffline;
   String? _cueOutputDeviceId;
+  bool _isWindowsFullScreen = false;
   bool _loaded = false;
 
   /// Télécharge automatiquement les sons ajoutés à un pad (si Drive connecté).
@@ -75,6 +77,10 @@ class AppPreferences extends ChangeNotifier {
   /// système ». Utilisé sur desktop pour router les auditions vers un casque
   /// séparé pendant que la sortie « salle » reste sur le device par défaut.
   String? get cueOutputDeviceId => _cueOutputDeviceId;
+
+  /// Dernier état plein écran connu de la fenêtre Windows — appliqué à la
+  /// réouverture de l'app (voir `SoundboardApp._toggleFullScreen`).
+  bool get isWindowsFullScreen => _isWindowsFullScreen;
 
   /// Synchro Drive automatique (push débouncé, pull au lancement).
   bool get allowsNetworkSync =>
@@ -106,6 +112,8 @@ class AppPreferences extends ChangeNotifier {
           data[_keyConnectivityMode] as String?,
         );
         _cueOutputDeviceId = data[_keyCueOutputDeviceId] as String?;
+        _isWindowsFullScreen =
+            (data[_keyWindowsFullScreen] as bool?) ?? false;
       } catch (_) {
         // Fichier corrompu : valeurs par défaut.
       }
@@ -142,6 +150,13 @@ class AppPreferences extends ChangeNotifier {
     await _save();
   }
 
+  /// Persiste l'état plein écran de la fenêtre Windows (F11).
+  Future<void> setWindowsFullScreen(bool value) async {
+    if (_isWindowsFullScreen == value) return;
+    _isWindowsFullScreen = value;
+    await _save();
+  }
+
   /// Bascule le mode sans persistance (tests unitaires).
   @visibleForTesting
   void debugSetConnectivityMode(ConnectivityMode value) {
@@ -167,6 +182,7 @@ class AppPreferences extends ChangeNotifier {
         _keyAutoDownloadDriveByDefault: _autoDownloadDriveByDefault,
         _keyConnectivityMode: _connectivityMode.storageKey,
         _keyCueOutputDeviceId: _cueOutputDeviceId,
+        _keyWindowsFullScreen: _isWindowsFullScreen,
       }),
     );
   }

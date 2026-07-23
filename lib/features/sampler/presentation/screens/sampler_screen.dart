@@ -54,7 +54,22 @@ class _QuickSearchFilteredIntent extends Intent {
 class SamplerScreen extends StatefulWidget {
   final AppServices services;
 
-  const SamplerScreen({super.key, required this.services});
+  /// État plein écran Windows courant — `null` si la fonctionnalité n'est
+  /// pas disponible sur cette plateforme (masque les entrées de menu).
+  final bool? isWindowsFullScreen;
+  final VoidCallback? onToggleWindowsFullScreen;
+
+  /// Ferme complètement l'application — proposé dans le menu uniquement en
+  /// plein écran, la fenêtre n'ayant alors plus de bouton de fermeture natif.
+  final VoidCallback? onQuitApp;
+
+  const SamplerScreen({
+    super.key,
+    required this.services,
+    this.isWindowsFullScreen,
+    this.onToggleWindowsFullScreen,
+    this.onQuitApp,
+  });
 
   @override
   State<SamplerScreen> createState() => _SamplerScreenState();
@@ -1928,6 +1943,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onOpenSettings: _openSettings,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
                     stopAllButton: _StopAllButton(notifier: _notifier),
+                    isWindowsFullScreen: widget.isWindowsFullScreen,
+                    onToggleWindowsFullScreen: widget.onToggleWindowsFullScreen,
+                    onQuitApp: widget.onQuitApp,
                   )
                 : _SamplerAppBar(
                     selectedBoard: selectedBoard,
@@ -2354,6 +2372,9 @@ class _SamplerDesktopAppBar extends StatelessWidget
   final Future<void> Function() onOpenSettings;
   final VoidCallback onQuickSearch;
   final Widget stopAllButton;
+  final bool? isWindowsFullScreen;
+  final VoidCallback? onToggleWindowsFullScreen;
+  final VoidCallback? onQuitApp;
 
   const _SamplerDesktopAppBar({
     required this.selectedBoard,
@@ -2368,6 +2389,9 @@ class _SamplerDesktopAppBar extends StatelessWidget
     required this.onOpenSettings,
     required this.onQuickSearch,
     required this.stopAllButton,
+    this.isWindowsFullScreen,
+    this.onToggleWindowsFullScreen,
+    this.onQuitApp,
   });
 
   @override
@@ -2382,6 +2406,9 @@ class _SamplerDesktopAppBar extends StatelessWidget
         onTogglePerformanceMode: onTogglePerformanceMode,
         onOpenLibrary: onOpenLibrary,
         onOpenSettings: onOpenSettings,
+        isWindowsFullScreen: isWindowsFullScreen,
+        onToggleWindowsFullScreen: onToggleWindowsFullScreen,
+        onQuitApp: onQuitApp,
       ),
       title: _BoardSceneSelector(
         boards: boards,
@@ -2424,17 +2451,26 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
   final VoidCallback onTogglePerformanceMode;
   final Future<void> Function() onOpenLibrary;
   final Future<void> Function() onOpenSettings;
+  final bool? isWindowsFullScreen;
+  final VoidCallback? onToggleWindowsFullScreen;
+  final VoidCallback? onQuitApp;
 
   const _SamplerDesktopMenuButton({
     required this.isPerformanceMode,
     required this.onTogglePerformanceMode,
     required this.onOpenLibrary,
     required this.onOpenSettings,
+    this.isWindowsFullScreen,
+    this.onToggleWindowsFullScreen,
+    this.onQuitApp,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final fullScreen = isWindowsFullScreen;
+    final toggleFullScreen = onToggleWindowsFullScreen;
+    final quitApp = onQuitApp;
 
     // En session live : la bascule étant la seule action disponible, on remplace
     // le menu par un bouton de sortie direct (un clic).
@@ -2454,6 +2490,10 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
             unawaited(onOpenLibrary());
           case 'settings':
             unawaited(onOpenSettings());
+          case 'fullscreen':
+            toggleFullScreen?.call();
+          case 'quit':
+            quitApp?.call();
         }
       },
       itemBuilder: (context) => [
@@ -2471,7 +2511,6 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
             ],
           ),
         ),
-        const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'library',
           child: Row(
@@ -2486,6 +2525,7 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
             ],
           ),
         ),
+        const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'settings',
           child: Row(
@@ -2496,6 +2536,44 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
             ],
           ),
         ),
+        if (toggleFullScreen != null)
+          PopupMenuItem<String>(
+            value: 'fullscreen',
+            child: Row(
+              children: [
+                Icon(
+                  fullScreen == true
+                      ? Icons.fullscreen_exit_rounded
+                      : Icons.fullscreen_rounded,
+                  size: 18,
+                  color: scheme.onSurface,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  fullScreen == true
+                      ? 'Quitter le plein écran'
+                      : 'Plein écran',
+                ),
+              ],
+            ),
+          ),
+        // Uniquement en plein écran : la fenêtre n'a alors plus de barre de
+        // titre ni de bouton de fermeture natif pour quitter l'app.
+        if (fullScreen == true && quitApp != null)
+          PopupMenuItem<String>(
+            value: 'quit',
+            child: Row(
+              children: [
+                Icon(
+                  Icons.exit_to_app_rounded,
+                  size: 18,
+                  color: scheme.onSurface,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                const Text('Quitter'),
+              ],
+            ),
+          ),
       ],
     );
   }

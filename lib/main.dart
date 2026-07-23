@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:window_manager/window_manager.dart';
 import 'core/app/app.dart';
 import 'core/app/app_services.dart';
 import 'core/audio/audio_load_log.dart';
@@ -19,6 +21,10 @@ void main() {
       // media_kit que là où la sortie cue est supportée (Windows).
       if (CueAudioService.isSupported) {
         MediaKit.ensureInitialized();
+      }
+
+      if (!kIsWeb && Platform.isWindows) {
+        await windowManager.ensureInitialized();
       }
 
       try {
