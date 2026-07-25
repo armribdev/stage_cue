@@ -2212,9 +2212,7 @@ class _BoardsList extends StatelessWidget {
 
     final liveTile = ListTile(
       leading: Icon(
-        isPerformanceMode
-            ? Icons.power_settings_new_rounded
-            : Icons.play_arrow_rounded,
+        Icons.theater_comedy_rounded,
         color: isPerformanceMode ? scheme.error : null,
       ),
       title: Text(
@@ -2502,7 +2500,7 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                Icons.play_arrow_rounded,
+                Icons.theater_comedy_rounded,
                 size: 18,
                 color: scheme.onSurface,
               ),
@@ -2579,8 +2577,8 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
   }
 }
 
-/// Bouton de sortie de session live : voyant rouge pulsé « en direct » sur une
-/// icône de sortie, action en un clic. Remplace le menu quand la session est
+/// Bouton de sortie de session live : voyant rouge pulsé « en direct » sur le
+/// masque de théâtre, action en un clic. Remplace le menu quand la session est
 /// active (la sortie est alors la seule action pertinente).
 class _LiveExitButton extends StatelessWidget {
   final VoidCallback onExit;
@@ -2590,7 +2588,7 @@ class _LiveExitButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: const _LiveModeActiveIcon(baseIcon: Icons.power_settings_new_rounded),
+      icon: const _LiveModeActiveIcon(),
       tooltip: 'Quitter la session live',
       onPressed: onExit,
     );
