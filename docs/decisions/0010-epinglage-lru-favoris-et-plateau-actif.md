@@ -22,5 +22,6 @@ Le callback `pinnedPaths` fourni à `AudioCacheManager` retourne les favoris **e
 - `AudioCacheManager` reste ignorant de la notion de plateau : il consomme un ensemble de chemins opaques. Ne pas y introduire de dépendance à la couche présentation.
 - Le callback est branché à la construction du `LibraryRepository` — s'il n'est pas fourni, l'éviction redevient purement LRU **sans avertissement**. C'est le mode de régression le plus probable de cette décision.
 - Les chemins retournés viennent de la base sous forme brute et sont canonicalisés côté cache (cf. [0009](0009-integrite-de-l-index-lru.md)).
-- Un plateau plus gros que `maxCacheBytes` rendrait l'éviction incapable de tenir sa borne. Le cas n'est pas traité aujourd'hui : à surveiller si la taille par défaut (2 Go) devient configurable à la baisse.
+- Un plateau plus gros que l'espace disque disponible rendrait l'éviction incapable de tenir sa borne. Le cas n'est pas traité aujourd'hui.
+- [0016](0016-cache-sans-plafond-garde-fou-disque.md) remplace le plafond fixe (`maxCacheBytes`) par un garde-fou fondé sur l'espace disque réel : cette politique d'épinglage (favoris + plateau actif) reste inchangée et continue de s'appliquer à chaque éviction, qu'elle soit déclenchée par le préchargement automatique ou par le bouton « Tout télécharger ».
 - Rappel : l'éviction ne peut pas couper une lecture en cours, les octets étant déjà en mémoire (cf. [0001](0001-chargement-audio-soloud.md)). Elle affecte la **disponibilité future**, pas le son qui joue.

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../utils/disk_space.dart' as disk_space;
 import '../utils/path_unicode.dart';
 import 'library_sound_paths.dart';
 import '../../features/sampler/domain/entities/library.dart';
@@ -19,13 +20,22 @@ class ImportedAudio {
 /// Gère le cache local des fichiers audio d'une bibliothèque portable :
 /// - matérialise les sons distants à la demande ([ensureCached]) ;
 /// - téléverse les fichiers ajoutés ([importFile]) ;
-/// - applique une éviction LRU quand le cache dépasse [maxCacheBytes].
+/// - applique une éviction LRU si l'espace disque disponible passe sous
+///   [minFreeDiskBytes]. Pas de plafond de taille arbitraire : le cache est
+///   un mirroir complet de la bibliothèque tant que le disque le permet — voir
+///   [0016](../../../docs/decisions/0016-cache-sans-plafond-garde-fou-disque.md).
 ///
 /// Indépendant du SDK Google (passe par [DriveClient]) et de la base : repose
 /// uniquement sur le système de fichiers, donc testable avec des mocks.
 class AudioCacheManager {
-  final int maxCacheBytes;
+  final int minFreeDiskBytes;
   final int Function() _clock;
+
+  /// Mesure l'espace disque disponible sur le volume contenant un chemin
+  /// donné ; `null` = mesure indisponible (jamais interprété comme disque
+  /// plein). Injectable pour les tests ; par défaut, [disk_space.availableDiskBytes]
+  /// (Win32 `GetDiskFreeSpaceEx` / `df` POSIX selon la plateforme).
+  final Future<int?> Function(String rootPath) _availableDiskBytes;
 
   /// Fournit les chemins relatifs « épinglés » d'une bibliothèque : ces fichiers
   /// (favoris) ne sont jamais évincés par le LRU, même rarement lus. La scène
@@ -42,11 +52,14 @@ class AudioCacheManager {
   static const String _accessIndexFileName = '.cache_access.json';
 
   AudioCacheManager({
-    this.maxCacheBytes = 2 * 1024 * 1024 * 1024, // 2 Go par défaut
+    this.minFreeDiskBytes = 2 * 1024 * 1024 * 1024, // garde-fou : 2 Go libres
     int Function()? clock,
     Future<Set<String>> Function(Library library)? pinnedPaths,
+    Future<int?> Function(String rootPath)? availableDiskBytes,
   })  : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _pinnedPaths = pinnedPaths;
+        _pinnedPaths = pinnedPaths,
+        _availableDiskBytes =
+            availableDiskBytes ?? disk_space.availableDiskBytes;
 
   /// Chemin local (dans le cache de la bibliothèque) d'un chemin relatif.
   /// Les chemins relatifs utilisent toujours `/` (portables) ; la conversion
@@ -166,8 +179,9 @@ class AudioCacheManager {
   /// [DriveClient.downloadToFile] écrit dans un `.part` puis renomme : un échec
   /// réseau nettoie derrière lui, mais pas un process tué (OS, coupure). Ces
   /// résidus ne sont jamais renommés, donc jamais inscrits dans l'index LRU,
-  /// donc jamais évincés — ils occupent le disque en pure perte, hors du budget
-  /// [maxCacheBytes]. À appeler au lancement.
+  /// donc jamais évincés — ils occupent le disque en pure perte, invisibles à
+  /// la mesure d'espace disponible qui déclenche l'éviction. À appeler au
+  /// lancement.
   ///
   /// Best-effort : une racine absente ou un fichier verrouillé n'est pas une
   /// erreur. Retourne le nombre d'octets récupérés.
@@ -411,8 +425,8 @@ class AudioCacheManager {
   /// Les appelants fournissent des formes hétérogènes : chemin déjà normalisé
   /// ([ensureCached]), nom brut issu du listing Drive (repli par nom), ou chemin
   /// d'origine avec préfixe `sounds/` legacy ([importFile]). Sans ce passage
-  /// obligé, un même fichier obtenait DEUX entrées : sa taille était comptée
-  /// deux fois et l'éviction se déclenchait bien avant [maxCacheBytes].
+  /// obligé, un même fichier obtenait DEUX entrées, faussant la taille suivie
+  /// par fichier (utile au calcul de l'espace libéré par une éviction).
   String _indexKey(String relativePath) =>
       LibrarySoundPaths.normalizeRelativePath(relativePath);
 
@@ -422,12 +436,18 @@ class AudioCacheManager {
     await _saveIndex(library.localRootPath, index);
   }
 
+  /// Déclenche l'éviction seulement si l'espace disque réel passe sous
+  /// [minFreeDiskBytes] — pas de plafond de taille de cache arbitraire (cf.
+  /// [0016](../../../docs/decisions/0016-cache-sans-plafond-garde-fou-disque.md)).
+  /// Une mesure indisponible (`null`, plateforme non supportée ou échec de
+  /// l'appel système) est traitée comme « espace suffisant » plutôt que
+  /// d'évincer à l'aveugle.
   Future<void> _evictIfNeeded(Library library, {String? protect}) async {
+    final free = await _availableDiskBytes(library.localRootPath);
+    if (free == null || free >= minFreeDiskBytes) return;
+
     final protectedKey = protect != null ? _indexKey(protect) : null;
     final index = await _indexFor(library.localRootPath);
-    var total =
-        index.entries.values.fold<int>(0, (sum, e) => sum + e.size);
-    if (total <= maxCacheBytes) return;
 
     // Chemins épinglés : exclus de l'éviction, même peu récents.
     //
@@ -441,8 +461,13 @@ class AudioCacheManager {
     final ordered = index.entries.entries.toList()
       ..sort((a, b) => a.value.accessedAt.compareTo(b.value.accessedAt));
 
+    // Chaque suppression libère réellement de l'espace disque ; on simule le
+    // gain cumulé plutôt que de rappeler l'OS après chaque fichier (un seul
+    // appel système par passe suffit, le reste est déjà connu via la taille
+    // trackée à l'écriture).
+    var freed = 0;
     for (final entry in ordered) {
-      if (total <= maxCacheBytes) break;
+      if (free + freed >= minFreeDiskBytes) break;
       if (entry.key == protectedKey) continue;
       if (pinned.contains(entry.key)) continue; // épinglé : jamais évincé
       final fileToDelete = File(localPathFor(library, entry.key));
@@ -452,7 +477,7 @@ class AudioCacheManager {
         // Best-effort : un fichier non supprimable ne doit pas bloquer.
       }
       index.entries.remove(entry.key);
-      total -= entry.value.size;
+      freed += entry.value.size;
     }
     await _saveIndex(library.localRootPath, index);
   }
