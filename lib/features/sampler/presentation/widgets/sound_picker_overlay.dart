@@ -11,6 +11,7 @@ import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../providers/sampler_provider.dart';
+import '../providers/sound_search_index.dart';
 import '../utils/quick_search_prepare.dart';
 import '../utils/sound_type_ui.dart';
 import 'scrolling_text.dart';
@@ -278,9 +279,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   Timer? _searchDebounce;
 
   // ── Tags des sons affichés ────────────────────────────────────────────────
-  final Map<int, List<TagItem>> _soundTags = {};
-  String _tagsLoadToken = '';
-  Timer? _tagsLoadDebounce;
+  // Chargés en bloc avec l'index de recherche : la liste peut compter des
+  // centaines de résultats, et une requête par son ferait ramer chaque frappe.
+  Map<int, List<TagItem>> _soundTags = const {};
 
   // ── Offline (QuickSearch uniquement) ─────────────────────────────────────
   Set<int>? _localIds;
@@ -403,48 +404,76 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       if (_isPadPicker) _syncPadSoundIds();
       if (_padVariantMode case final mode?) _all = mode.padItem.pad.sounds;
     });
-    _scheduleTagsLoad();
   }
 
-  Future<void> _load() async {
+  /// Ouverture : l'instantané de l'index est adopté SYNCHRONEMENT s'il existe,
+  /// puis rafraîchi en tâche de fond. Sur une bibliothèque d'un millier de sons,
+  /// c'est la différence entre un écran de chargement à chaque Ctrl+F et une
+  /// liste déjà là — ce qui compte surtout en spectacle.
+  void _load() {
     // Variante d'un multipad : liste déjà connue (sons du pad), pas besoin
     // de charger toute la bibliothèque ni le scope d'un board.
     if (_padVariantMode case final mode?) {
-      final tagCatalog = await widget.notifier.loadTagCatalog();
-      if (!mounted) return;
-      setState(() {
-        _all = mode.padItem.pad.sounds;
-        _tagCatalog = tagCatalog;
-        _loading = false;
-      });
-      _scheduleTagsLoad();
+      _all = mode.padItem.pad.sounds;
+      // Liste courte et déjà en main : jamais d'attente. Les tags et le
+      // catalogue viennent de l'index s'il est chaud, et se complètent après
+      // coup sinon — ils n'empêchent pas de déclencher une variante.
+      _loading = false;
+      final snapshot = widget.notifier.searchSnapshot;
+      if (snapshot != null) _adoptSnapshot(snapshot);
+      // `ensure` et non `refresh` : rien à revalider ici (les sons viennent du
+      // pad), et ce sélecteur s'ouvre en pleine représentation.
+      unawaited(_adoptRefreshedSnapshot(refresh: false));
       return;
     }
-    final results = await Future.wait([
-      widget.notifier.getAllSounds(),
-      widget.notifier.loadTagCatalog(),
-    ]);
+
+    final snapshot = widget.notifier.searchSnapshot;
+    if (snapshot != null) {
+      _adoptSnapshot(snapshot);
+      _loading = false;
+    }
+    if (_isPadPicker) _syncPadSoundIds();
+    unawaited(_adoptRefreshedSnapshot());
+    unawaited(_loadBoardScope());
+  }
+
+  Future<void> _adoptRefreshedSnapshot({bool refresh = true}) async {
+    final SoundSearchSnapshot snapshot;
+    try {
+      snapshot = refresh
+          ? await widget.notifier.refreshSearchIndex()
+          : await widget.notifier.ensureSearchIndex();
+    } catch (_) {
+      // L'instantané précédent (s'il existe) reste affiché ; sinon la liste
+      // vide et son message prennent le relais plutôt qu'un skeleton figé.
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
     if (!mounted) return;
     setState(() {
-      _all = results[0] as List<Sound>;
-      _tagCatalog = results[1] as List<TagCategoryWithTags>;
+      _adoptSnapshot(snapshot);
       _loading = false;
       if (_isPadPicker) _syncPadSoundIds();
     });
-    _scheduleTagsLoad();
-    // Scope d'un board Drive : sons visibles par sa bibliothèque (vue partagée).
+  }
+
+  /// Recopie l'instantané dans l'état local. Le mode variante garde sa propre
+  /// liste (les slots du pad), seuls les tags et le catalogue l'intéressent.
+  void _adoptSnapshot(SoundSearchSnapshot snapshot) {
+    if (!_isPadVariant) _all = snapshot.sounds;
+    _tagCatalog = snapshot.tagCatalog;
+    _soundTags = snapshot.tagsBySound;
+    if (_isQuickSearch) _localIds = snapshot.locallyAvailableSoundIds;
+  }
+
+  /// Scope d'un board Drive : sons visibles par sa bibliothèque (vue partagée).
+  Future<void> _loadBoardScope() async {
     final scopeLibraryId = _boardLibraryId;
-    if (scopeLibraryId != null && !_isManage) {
-      final scopeIds =
-          await widget.notifier.getSoundIdsVisibleToLibrary(scopeLibraryId);
-      if (!mounted) return;
-      setState(() => _scopeIds = scopeIds);
-    }
-    if (_isQuickSearch) {
-      final localIds = await widget.notifier.getLocallyAvailableSoundIds();
-      if (!mounted) return;
-      setState(() => _localIds = localIds);
-    }
+    if (scopeLibraryId == null || _isManage) return;
+    final scopeIds =
+        await widget.notifier.getSoundIdsVisibleToLibrary(scopeLibraryId);
+    if (!mounted) return;
+    setState(() => _scopeIds = scopeIds);
   }
 
   void _syncPadSoundIds() {
@@ -469,7 +498,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     }
     widget.notifier.removeListener(_onNotifierChanged);
     _searchDebounce?.cancel();
-    _tagsLoadDebounce?.cancel();
     _focusNode.dispose();
     _scrollController.dispose();
     _controller.dispose();
@@ -504,7 +532,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       _selectedIndex = 0;
     });
     unawaited(_runTagSearch(''));
-    _scheduleTagsLoad();
   }
 
   /// Tokens normalisés (≥ 2 chars) extraits de [_query].
@@ -545,37 +572,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     );
     if (!mounted || _tagToken != norm) return;
     setState(() => _tagMatchSetsPerToken = sets);
-    _scheduleTagsLoad();
-  }
-
-  void _scheduleTagsLoad() {
-    _tagsLoadDebounce?.cancel();
-    _tagsLoadDebounce = Timer(const Duration(milliseconds: 120), () {
-      unawaited(_loadTagsForShownResults());
-    });
-  }
-
-  Future<void> _loadTagsForShownResults() async {
-    final shown = _shownResults(_results);
-    if (shown.isEmpty) {
-      if (!mounted) return;
-      setState(() => _soundTags.clear());
-      return;
-    }
-    final token = shown.map((s) => s.id).join(',');
-    _tagsLoadToken = token;
-    final entries = await Future.wait(
-      shown.map((sound) async {
-        final tags = await widget.notifier.getTagsForSound(sound.id);
-        return MapEntry(sound.id, tags);
-      }),
-    );
-    if (!mounted || _tagsLoadToken != token) return;
-    setState(() {
-      _soundTags
-        ..clear()
-        ..addEntries(entries);
-    });
   }
 
   // ── Résultats ─────────────────────────────────────────────────────────────
@@ -890,14 +886,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   Future<void> _handleManageTap(Sound sound) async {
     await _manageMode!.onTap(context, sound, _tagCatalog);
     if (!mounted) return;
-    await _reloadSounds();
-  }
-
-  Future<void> _reloadSounds() async {
-    final sounds = await widget.notifier.getAllSounds();
-    if (!mounted) return;
-    setState(() => _all = sounds);
-    _scheduleTagsLoad();
+    // L'édition a pu changer le nom, le type ou les tags : on reconstruit
+    // l'index plutôt que de recharger la seule liste des sons.
+    await _adoptRefreshedSnapshot();
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -1125,7 +1116,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
             _typeFilter = type;
             _selectedIndex = 0;
           });
-          _scheduleTagsLoad();
         },
         child: Container(
           height: 32,
@@ -1203,7 +1193,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               _favoritesOnly = !_favoritesOnly;
               _selectedIndex = 0;
             });
-            _scheduleTagsLoad();
           },
         ),
         _roundIconButton(
@@ -1217,7 +1206,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               _localOnly = !_localOnly;
               _selectedIndex = 0;
             });
-            _scheduleTagsLoad();
           },
         ),
       ],

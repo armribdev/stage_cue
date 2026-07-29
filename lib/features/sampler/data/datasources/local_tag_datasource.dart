@@ -48,6 +48,31 @@ class LocalTagDataSource {
         .toList();
   }
 
+  /// Tags de TOUS les sons, en une seule requête.
+  ///
+  /// La recherche affiche les tags de chaque résultat : un aller-retour par son
+  /// ([getTagsForSound]) coûte des centaines de requêtes dès qu'une saisie large
+  /// matche la bibliothèque. Le volume total reste modeste (quelques tags par
+  /// son), donc on le charge d'un bloc pour le servir depuis la mémoire.
+  Future<Map<int, List<domain.TagItem>>> getTagsForAllSounds() async {
+    final query = _database.select(_database.soundTags).join([
+      innerJoin(
+        _database.tagItems,
+        _database.tagItems.id.equalsExp(_database.soundTags.tagId),
+      ),
+    ])
+      ..orderBy([OrderingTerm(expression: _database.tagItems.name)]);
+
+    final rows = await query.get();
+    final tagsBySound = <int, List<domain.TagItem>>{};
+    for (final row in rows) {
+      final soundId = row.readTable(_database.soundTags).soundId;
+      final tag = TagItemModel.toEntity(row.readTable(_database.tagItems));
+      (tagsBySound[soundId] ??= []).add(tag);
+    }
+    return tagsBySound;
+  }
+
   Future<void> setTagsForSound(int soundId, List<int> tagIds) async {
     await _database.transaction(() async {
       await (_database.delete(_database.soundTags)

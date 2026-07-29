@@ -25,6 +25,7 @@ import '../../domain/usecases/load_sounds_usecase.dart';
 import '../../domain/usecases/remove_sound_from_board_usecase.dart';
 import '../models/pad_sound_slot.dart';
 import '../utils/quick_search_prepare.dart';
+import 'sound_search_index.dart';
 
 part 'sampler_state.dart';
 part 'music_controller.dart';
@@ -107,6 +108,11 @@ class SamplerNotifier extends ChangeNotifier {
 
   /// Contrôleur musique : file, fondus, volume global musique.
   late final MusicController _music;
+
+  /// Index mémoire de la bibliothèque pour le sélecteur de sons : ouvrir la
+  /// recherche en spectacle ne doit pas attendre la base ni le disque.
+  late final SoundSearchIndex _searchIndex =
+      SoundSearchIndex(_repository, _libraryRepository);
 
   SamplerState _state = SamplerState(pads: []);
   SamplerState get state => _state;
@@ -1023,6 +1029,7 @@ class SamplerNotifier extends ChangeNotifier {
       _state = _state.copyWith(isLoading: false, error: null);
     }
     notifyListeners();
+    unawaited(_prewarmSearchIndex());
   }
 
   Future<void> _prefetchActiveBoard() async {
@@ -1222,6 +1229,15 @@ class SamplerNotifier extends ChangeNotifier {
 
   void _markPlayed(int soundId) {
     unawaited(_repository.markSoundPlayed(soundId));
+    // Patch de l'index plutôt qu'invalidation : en spectacle chaque
+    // déclenchement passe ici, et reconstruire l'index à chaque son ferait
+    // repartir la recherche sur la base au pire moment. Seul le tri par
+    // récence dépend de ce champ.
+    final playedAt = DateTime.now();
+    _searchIndex.patchSound(
+      soundId,
+      (sound) => sound.copyWith(lastPlayedAt: playedAt),
+    );
   }
 
   void _markPlayedAt(PadItem padItem, int soundIndex) {
@@ -1235,6 +1251,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   Future<void> updateSoundType(int soundId, SoundType type) async {
     await _repository.updateSoundType(soundId, type);
+    _searchIndex.patchSound(soundId, (sound) => sound.copyWith(type: type));
     await _music.refreshSoundMetadata(soundId);
   }
 
@@ -1243,6 +1260,7 @@ class SamplerNotifier extends ChangeNotifier {
     if (sound == null) return false;
     final next = !sound.isFavorite;
     await _repository.setSoundFavorite(soundId, next);
+    _searchIndex.patchSound(soundId, (s) => s.copyWith(isFavorite: next));
     return next;
   }
 
@@ -2003,20 +2021,40 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   Future<Set<int>> getLocallyAvailableSoundIds() async {
-    final sounds = await _repository.getAllSounds();
-    final available = <int>{};
-    for (final sound in sounds) {
-      if (await _isAvailableLocally(sound)) available.add(sound.id);
-    }
-    return available;
+    final snapshot = await _searchIndex.ensureLoaded();
+    return snapshot.locallyAvailableSoundIds;
   }
 
-  Future<bool> _isAvailableLocally(Sound sound) async {
+  // ── Index de recherche ────────────────────────────────────────────────────
+
+  /// Instantané de la bibliothèque disponible SANS attente — `null` avant le
+  /// premier chargement. Le sélecteur de sons s'en sert pour s'ouvrir sans
+  /// écran de chargement, puis appelle [refreshSearchIndex].
+  SoundSearchSnapshot? get searchSnapshot => _searchIndex.current;
+
+  /// Charge l'index s'il ne l'est pas encore, sinon rend l'instantané courant.
+  Future<SoundSearchSnapshot> ensureSearchIndex() => _searchIndex.ensureLoaded();
+
+  /// Reconstruit l'index (base + tags + disponibilité locale).
+  Future<SoundSearchSnapshot> refreshSearchIndex() => _searchIndex.refresh();
+
+  /// Jette l'instantané : à appeler quand la bibliothèque a changé en masse
+  /// (fusion d'un pull Drive, indexation d'un dossier). Le sélecteur repartira
+  /// de la base au lieu d'afficher brièvement l'ancienne liste.
+  void invalidateSearchIndex() => _searchIndex.invalidate();
+
+  /// Précharge l'index en tâche de fond pour que la toute première recherche
+  /// soit déjà instantanée. Les échecs sont avalés : c'est un confort, pas une
+  /// dépendance du chargement du plateau.
+  Future<void> _prewarmSearchIndex() async {
     try {
-      await _resolvePlayablePath(sound, downloadIfNeeded: false);
-      return true;
-    } catch (_) {
-      return false;
+      await _searchIndex.ensureLoaded();
+    } catch (e, stack) {
+      AudioLoadLog.severe(
+        'Préchargement de l\'index de recherche échoué',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 
@@ -2377,5 +2415,8 @@ class SamplerNotifier extends ChangeNotifier {
 
   Future<void> updateSoundTags(int soundId, Set<int> tagIds) async {
     await _repository.setTagsForSound(soundId, tagIds.toList());
+    // Les tags sont indexés en bloc : pas de patch ponctuel possible, on
+    // reconstruit (rare, jamais sur le chemin live).
+    unawaited(refreshSearchIndex());
   }
 }

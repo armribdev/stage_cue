@@ -64,6 +64,42 @@ class Sound {
     this.waveformProbeGeneration,
     this.startOffsetMs = 0,
   });
+
+  /// Copie avec champs remplacés. Les paramètres omis conservent leur valeur :
+  /// cette copie ne sait donc pas remettre un champ à `null` — elle sert à
+  /// rafraîchir en mémoire un son déjà chargé (favori, dernière lecture, type)
+  /// sans relire toute la bibliothèque.
+  Sound copyWith({
+    String? title,
+    String? displayName,
+    String? filePath,
+    SoundType? type,
+    int? colorValue,
+    double? volume,
+    bool? isFavorite,
+    DateTime? lastPlayedAt,
+    int? startOffsetMs,
+  }) {
+    return Sound(
+      id: id,
+      title: title ?? this.title,
+      displayName: displayName ?? this.displayName,
+      filePath: filePath ?? this.filePath,
+      type: type ?? this.type,
+      colorValue: colorValue ?? this.colorValue,
+      volume: volume ?? this.volume,
+      createdAt: createdAt,
+      libraryId: libraryId,
+      relativePath: relativePath,
+      driveFileId: driveFileId,
+      contentHash: contentHash,
+      isFavorite: isFavorite ?? this.isFavorite,
+      lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
+      waveform: waveform,
+      waveformProbeGeneration: waveformProbeGeneration,
+      startOffsetMs: startOffsetMs ?? this.startOffsetMs,
+    );
+  }
 }
 
 /// Type de son

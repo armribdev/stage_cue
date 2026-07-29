@@ -18,6 +18,7 @@ import '../../../../core/sync/google_drive_client.dart';
 import '../../../../core/sync/saf_drive_owner_resolver.dart';
 import '../../../../core/sync/library_sound_paths.dart';
 import '../../../../core/sync/library_sync_service.dart';
+import '../../../../core/sync/local_availability_probe.dart' as probe;
 import '../../../../core/sync/reconcile_path_matcher.dart';
 import '../../../../core/sync/snapshot_store.dart';
 import '../../../../core/utils/file_utils.dart' show isAudioFile;
@@ -315,6 +316,21 @@ class LibraryRepository extends ChangeNotifier {
   }
 
   Future<List<Library>> getLibraries() => _dataSource.getAllLibraries();
+
+  /// Ids des sons dont le fichier est déjà présent localement.
+  ///
+  /// Sonde de masse destinée à la recherche : voir
+  /// [probeLocallyAvailableSoundIds] pour pourquoi elle ne passe pas par
+  /// [resolvePlayablePath].
+  Future<Set<int>> probeLocallyAvailableSoundIds(Iterable<Sound> sounds) async {
+    final libraries = await getLibraries();
+    return probe.probeLocallyAvailableSoundIds(
+      sounds: sounds,
+      libraryRootPaths: {
+        for (final library in libraries) library.id: library.localRootPath,
+      },
+    );
+  }
 
   /// Bibliothèque Drive unique liée, si une seule est configurée.
   Future<int?> singleConnectedLibraryId() async {
