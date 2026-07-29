@@ -10,6 +10,32 @@ import 'package:stage_cue/features/sampler/domain/entities/library.dart';
 
 class MockDriveClient extends Mock implements DriveClient {}
 
+/// Octets réellement occupés par des fichiers audio sous [dir] (l'index LRU
+/// lui-même, `.cache_access.json`, est exclu : sa taille n'a rien à voir avec
+/// le budget testé ici).
+Future<int> _usedBytes(Directory dir) async {
+  if (!await dir.exists()) return 0;
+  var total = 0;
+  await for (final entity in dir.list(recursive: true, followLinks: false)) {
+    if (entity is File && p.basename(entity.path) != '.cache_access.json') {
+      total += await entity.length();
+    }
+  }
+  return total;
+}
+
+/// Simule un disque de taille [capacityBytes] : l'espace libre restant est
+/// déduit des octets audio réellement écrits sous la racine de cache. Permet
+/// de reproduire, sans toucher au vrai disque (immense dans un dossier temp),
+/// le déclenchement de l'éviction dès que [capacityBytes] - `budget` octets
+/// sont utilisés — `budget` étant la marge choisie par chaque test via
+/// `minFreeDiskBytes: capacityBytes - budget`.
+Future<int?> Function(String) simulatedDiskProbe(int capacityBytes) {
+  return (path) async => capacityBytes - await _usedBytes(Directory(path));
+}
+
+const _simulatedDiskCapacity = 1000000;
+
 void main() {
   late MockDriveClient client;
   late Directory rootDir;
@@ -256,7 +282,8 @@ void main() {
       () async {
     var tick = 0;
     final manager = AudioCacheManager(
-      maxCacheBytes: 100,
+      minFreeDiskBytes: _simulatedDiskCapacity - 100,
+      availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
       clock: () => ++tick, // horloge déterministe et croissante
     );
     when(() => client.findInFolder(
@@ -284,7 +311,8 @@ void main() {
   test('éviction LRU : un favori épinglé n\'est jamais évincé', () async {
     var tick = 0;
     final manager = AudioCacheManager(
-      maxCacheBytes: 100,
+      minFreeDiskBytes: _simulatedDiskCapacity - 100,
+      availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
       clock: () => ++tick,
       pinnedPaths: (_) async => {'a.wav'}, // a.wav = favori épinglé
     );
@@ -312,7 +340,8 @@ void main() {
       () async {
     var tick = 0;
     final manager = AudioCacheManager(
-      maxCacheBytes: 100,
+      minFreeDiskBytes: _simulatedDiskCapacity - 100,
+      availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
       clock: () => ++tick,
       // La base rend les chemins bruts : préfixe `sounds/` legacy, forme NFD…
       // L'index, lui, est normalisé. Sans conversion des deux côtés, cet
@@ -375,7 +404,7 @@ void main() {
 
   test('evictCachedFile : supprime le fichier et libère le budget LRU',
       () async {
-    final manager = AudioCacheManager(maxCacheBytes: 100, clock: () => 1);
+    final manager = AudioCacheManager(clock: () => 1);
     when(() => client.findInFolder(
           parentId: any(named: 'parentId'),
           name: any(named: 'name'),
