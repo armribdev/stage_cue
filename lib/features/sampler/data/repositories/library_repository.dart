@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -28,6 +29,11 @@ import '../../domain/entities/sound.dart';
 import '../datasources/local_library_datasource.dart';
 import '../datasources/local_sound_datasource.dart';
 import '../models/indexing_progress.dart';
+
+/// Nombre de fichiers reflétés en base par transaction lors de l'indexation
+/// Drive. Compromis entre le coût par commit (qui plaide pour un lot unique) et
+/// la fluidité de la progression affichée (qui plaide pour des lots courts).
+const int _indexBatchSize = 250;
 
 /// Levée quand un son de bibliothèque n'est pas accessible localement sans
 /// déclencher un téléchargement (utilisé pendant le chargement des pads).
@@ -1346,43 +1352,62 @@ class LibraryRepository extends ChangeNotifier {
         driveRelativePaths: audioFiles.map((e) => e.relativePath).toList(),
       );
 
-      for (final audio in audioFiles) {
-        processedCount++;
-        // Indexation = MÉTADONNÉES uniquement. On ne télécharge JAMAIS le fichier
-        // ici : sinon un gros dossier Drive (des milliers de sons) plafonne sur le
-        // timeout de lancement (cf. AutoSyncCoordinator) et seuls les premiers
-        // fichiers sont indexés. Le son est inséré avec `type = null` tant que le
-        // fichier n'est pas local ; le téléchargement (et le backfill du type via
-        // materializeSoundFileMetadata) est découplé, lancé en arrière-plan après
-        // la boucle pour les bibliothèques en téléchargement auto.
-        final localPath = _cacheManager.localPathFor(library, audio.relativePath);
+      // Nœuds dossier propriétaires (leurs fichiers directs) : unité
+      // d'appartenance et de snapshot par-dossier. Résolus en UNE fois pour tout
+      // le scan — ils se comptent en dizaines quand les fichiers se comptent en
+      // milliers.
+      final folderIds = await _dataSource.ensureFolders(
+        libraryId: library.id,
+        folders: [
+          for (final audio in audioFiles)
+            (
+              driveFolderId: audio.folderDriveId,
+              relativePath: audio.folderRelativePath,
+            ),
+        ],
+      );
 
-        // Nœud dossier propriétaire (ses fichiers directs) : c'est l'unité
-        // d'appartenance et, à terme, de snapshot par-dossier.
-        final folderId = await _dataSource.ensureFolder(
-          libraryId: library.id,
-          driveFolderId: audio.folderDriveId,
-          relativePath: audio.folderRelativePath,
-        );
+      // VUE PARTAGÉE : rattache CETTE bibliothèque aux nœuds, qu'elle en soit
+      // propriétaire ou simplement « invitée » (son lien recouvre un dossier
+      // possédé par une autre bibliothèque). Elle voit alors les sons partagés
+      // sans les dupliquer.
+      await _dataSource.ensureMemberships(
+        libraryId: library.id,
+        folderIds: folderIds.values,
+      );
 
-        // VUE PARTAGÉE : rattache CETTE bibliothèque au nœud, qu'elle en soit
-        // propriétaire ou simplement « invitée » (son lien recouvre un dossier
-        // possédé par une autre bibliothèque). Elle voit alors les sons partagés
-        // sans les dupliquer.
-        await _dataSource.ensureMembership(
-          libraryId: library.id,
-          folderId: folderId,
-        );
+      // Indexation = MÉTADONNÉES uniquement. On ne télécharge JAMAIS le fichier
+      // ici : sinon un gros dossier Drive (des milliers de sons) plafonne sur le
+      // timeout de lancement (cf. AutoSyncCoordinator) et seuls les premiers
+      // fichiers sont indexés. Le son est inséré avec `type = null` tant que le
+      // fichier n'est pas local ; le téléchargement (et le backfill du type via
+      // materializeSoundFileMetadata) est découplé, lancé en arrière-plan après
+      // la boucle pour les bibliothèques en téléchargement auto.
+      //
+      // Écriture par LOTS : un lot = une transaction. Le tout-en-un serait plus
+      // rapide encore, mais laisserait la progression figée sur une grosse
+      // bibliothèque, et le mode d'échec reste celui d'avant (un scan
+      // interrompu laisse un index partiel, que `AutoSyncCoordinator` traite
+      // déjà en sautant le pull — cf. décision 0005).
+      for (var start = 0; start < audioFiles.length; start += _indexBatchSize) {
+        final end = math.min(start + _indexBatchSize, audioFiles.length);
+        final chunk = audioFiles.sublist(start, end);
 
-        final result = await _soundDataSource.syncLibrarySoundFromDriveIndex(
+        final result = await _soundDataSource.syncLibrarySoundsFromDriveIndex(
           libraryId: library.id,
-          relativePath: audio.relativePath,
-          localPath: localPath,
-          driveFileId: audio.driveFileId,
-          driveMd5: audio.driveMd5,
-          folderId: folderId,
+          entries: [
+            for (final audio in chunk)
+              DriveIndexEntry(
+                relativePath: audio.relativePath,
+                localPath:
+                    _cacheManager.localPathFor(library, audio.relativePath),
+                driveFileId: audio.driveFileId,
+                driveMd5: audio.driveMd5,
+                folderId: folderIds[audio.folderDriveId],
+              ),
+          ],
         );
-        if (result.created) indexedCount++;
+        indexedCount += result.createdCount;
 
         // Édition « en place » sur Drive (contenu écrasé à ID constant) : le
         // fichier de cache local est périmé. La waveform et le contentHash ont
@@ -1390,10 +1415,11 @@ class LibraryRepository extends ChangeNotifier {
         // re-téléchargement. Celui-ci est découplé : il aura lieu en arrière-plan
         // (téléchargement auto ci-dessous, le fichier n'existant plus) ou à la
         // demande — jamais inline, pour ne pas plafonner l'indexation.
-        if (result.contentChanged) {
-          await _cacheManager.evictCachedFile(library, audio.relativePath);
+        for (final relativePath in result.contentChangedPaths) {
+          await _cacheManager.evictCachedFile(library, relativePath);
         }
 
+        processedCount = end;
         onProgress?.call(
           IndexingProgress(
             path: library.name,

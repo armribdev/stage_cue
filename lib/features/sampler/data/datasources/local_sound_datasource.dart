@@ -24,6 +24,25 @@ import '../../domain/entities/sound_board.dart' as domain;
 import '../../domain/entities/watched_path.dart' as domain;
 import '../../domain/entities/pad.dart' as domain_pad;
 
+/// Une ligne du scan Drive à refléter en base, telle que la produit
+/// l'indexation. Le `folderId` est le nœud dossier local déjà résolu (cf.
+/// `LocalLibraryDataSource.ensureFolders`).
+class DriveIndexEntry {
+  final String relativePath;
+  final String localPath;
+  final String? driveFileId;
+  final String? driveMd5;
+  final int? folderId;
+
+  const DriveIndexEntry({
+    required this.relativePath,
+    required this.localPath,
+    this.driveFileId,
+    this.driveMd5,
+    this.folderId,
+  });
+}
+
 /// Source de données locale pour les sons (base de données)
 class LocalSoundDataSource {
   final db.AppDatabase _database;
@@ -560,6 +579,13 @@ class LocalSoundDataSource {
   /// contentHash sont réinitialisés ici (recalcul paresseux) ; l'appelant doit
   /// évincer le fichier de cache local devenu périmé. Le `type` reste inchangé
   /// (cf. audio.md : jamais recalculé hors `updateSoundType`).
+  ///
+  /// **Réservée aux appels ponctuels.** Ce n'est qu'une façade à une entrée sur
+  /// [syncLibrarySoundsFromDriveIndex] : elle en paie donc le préchargement
+  /// complet à chaque appel. L'appeler en boucle sur un scan serait quadratique
+  /// — c'est la variante en masse qu'il faut. La façade existe pour qu'il n'y
+  /// ait qu'UNE implémentation de ces règles de rapprochement : les faire vivre
+  /// en double, c'est se garantir qu'elles divergeront.
   Future<({bool created, bool contentChanged})> syncLibrarySoundFromDriveIndex({
     required int libraryId,
     required String relativePath,
@@ -568,100 +594,187 @@ class LocalSoundDataSource {
     String? driveMd5,
     int? folderId,
   }) async {
-    // 1. Identité forte : le fichier est déjà connu par son ID Drive (global).
-    if (driveFileId != null) {
-      final byFileId = await (_database.select(_database.sounds)
-            ..where((s) => s.driveFileId.equals(driveFileId)))
-          .get();
-      if (byFileId.isNotEmpty) {
-        final row = byFileId.first;
-        // Fichier possédé par une autre bibliothèque (lien imbriqué) : ne pas
-        // dupliquer ni réécrire son cadre de chemins.
-        if (row.libraryId != libraryId) {
-          return (created: false, contentChanged: false);
-        }
+    final result = await syncLibrarySoundsFromDriveIndex(
+      libraryId: libraryId,
+      entries: [
+        DriveIndexEntry(
+          relativePath: relativePath,
+          localPath: localPath,
+          driveFileId: driveFileId,
+          driveMd5: driveMd5,
+          folderId: folderId,
+        ),
+      ],
+    );
+    return (
+      created: result.createdCount == 1,
+      contentChanged: result.contentChangedPaths.isNotEmpty,
+    );
+  }
 
-        // Édition en place : contenu écrasé à ID constant. On l'affirme seulement
-        // si une marque était déjà connue (sinon c'est un simple backfill, pas un
-        // changement) ET qu'elle diffère de la marque distante courante.
-        final contentChanged = driveMd5 != null &&
+  /// Variante en masse de [syncLibrarySoundFromDriveIndex] : reflète tout un lot
+  /// du scan Drive en DEUX requêtes de lecture + un batch d'écriture, au lieu de
+  /// 2 à 3 allers-retours par fichier.
+  ///
+  /// Comportement identique à la version unitaire, cas par cas — c'est la seule
+  /// chose qui compte ici, la régression serait silencieuse et destructrice
+  /// (l'indexation élague ensuite d'après ce qu'elle a vu). Les métadonnées des
+  /// nouveaux sons sont résolues AVANT le batch : elles font des I/O fichier
+  /// (probe SoLoud) qui n'ont pas leur place dans une transaction.
+  Future<({int createdCount, List<String> contentChangedPaths})>
+      syncLibrarySoundsFromDriveIndex({
+    required int libraryId,
+    required List<DriveIndexEntry> entries,
+  }) async {
+    if (entries.isEmpty) {
+      return (createdCount: 0, contentChangedPaths: const <String>[]);
+    }
+
+    // 1. Préchargement.
+    //    Identité forte : lookup GLOBAL (l'index d'unicité l'est), pour repérer
+    //    un fichier possédé par une AUTRE bibliothèque — à ne ni dupliquer ni
+    //    réécrire.
+    final withDriveId = await (_database.select(_database.sounds)
+          ..where((s) => s.driveFileId.isNotNull()))
+        .get();
+    final byDriveFileId = {
+      for (final row in withDriveId) row.driveFileId!: row,
+    };
+    //    Repli par chemin : limité à CETTE bibliothèque, comme l'étape 2 de la
+    //    version unitaire. `putIfAbsent` reproduit son `.first` sur doublons.
+    final ofLibrary = await (_database.select(_database.sounds)
+          ..where((s) => s.libraryId.equals(libraryId)))
+        .get();
+    final byRelativePath = <String, db.Sound>{};
+    for (final row in ofLibrary) {
+      final path = row.relativePath;
+      if (path != null) byRelativePath.putIfAbsent(path, () => row);
+    }
+
+    // 2. Classement en mémoire. Aucune interférence intra-lot possible : deux
+    //    fichiers d'un même scan ne peuvent partager ni un `driveFileId` (unique
+    //    chez Drive) ni un `relativePath` (unique dans un dossier).
+    final updates = <({int id, db.SoundsCompanion values})>[];
+    final adoptions = <({int id, db.SoundsCompanion values})>[];
+    final creations = <DriveIndexEntry>[];
+    final contentChangedPaths = <String>[];
+
+    for (final entry in entries) {
+      final driveFileId = entry.driveFileId;
+      final row = driveFileId != null ? byDriveFileId[driveFileId] : null;
+
+      if (row != null) {
+        // Fichier possédé par une autre bibliothèque (lien imbriqué).
+        if (row.libraryId != libraryId) continue;
+
+        // Édition en place : contenu écrasé à ID constant. Affirmé seulement si
+        // une marque était DÉJÀ connue (sinon simple backfill) et qu'elle
+        // diffère de la marque distante.
+        final contentChanged = entry.driveMd5 != null &&
             row.driveMd5 != null &&
-            row.driveMd5 != driveMd5;
+            row.driveMd5 != entry.driveMd5;
+        if (contentChanged) contentChangedPaths.add(entry.relativePath);
 
-        // Corrige chemin/dossier si le fichier a bougé, backfille/actualise la
-        // marque de révision, et invalide les dérivés de contenu si changement.
-        final needsWrite = row.relativePath != relativePath ||
-            row.filePath != localPath ||
-            row.folderId != folderId ||
-            row.driveMd5 != driveMd5;
+        final needsWrite = row.relativePath != entry.relativePath ||
+            row.filePath != entry.localPath ||
+            row.folderId != entry.folderId ||
+            row.driveMd5 != entry.driveMd5;
         if (needsWrite) {
-          await (_database.update(_database.sounds)
-                ..where((s) => s.id.equals(row.id)))
-              .write(
-            db.SoundsCompanion(
-              relativePath: Value(relativePath),
-              filePath: Value(localPath),
-              folderId: Value(folderId),
+          updates.add((
+            id: row.id,
+            values: db.SoundsCompanion(
+              relativePath: Value(entry.relativePath),
+              filePath: Value(entry.localPath),
+              folderId: Value(entry.folderId),
               // Ne jamais effacer une marque connue si Drive ne la renvoie pas.
-              driveMd5:
-                  driveMd5 != null ? Value(driveMd5) : const Value.absent(),
-              waveform: contentChanged ? const Value(null) : const Value.absent(),
-              // Contenu écrasé : on efface aussi le marqueur d'échec waveform
-              // pour re-sonder le nouveau contenu depuis zéro.
+              driveMd5: entry.driveMd5 != null
+                  ? Value(entry.driveMd5)
+                  : const Value.absent(),
+              waveform:
+                  contentChanged ? const Value(null) : const Value.absent(),
+              // Contenu écrasé : re-sonder le nouveau contenu depuis zéro.
               waveformProbeGeneration:
                   contentChanged ? const Value(null) : const Value.absent(),
               contentHash:
                   contentChanged ? const Value(null) : const Value.absent(),
             ),
-          );
+          ));
         }
-        return (created: false, contentChanged: contentChanged);
+        continue;
       }
+
+      // Legacy : son déjà indexé par chemin, sans identité forte → adoption.
+      final legacy = byRelativePath[entry.relativePath];
+      if (legacy != null && legacy.driveFileId == null) {
+        adoptions.add((
+          id: legacy.id,
+          values: db.SoundsCompanion(
+            filePath: Value(entry.localPath),
+            driveFileId: driveFileId != null
+                ? Value(driveFileId)
+                : const Value.absent(),
+            driveMd5: entry.driveMd5 != null
+                ? Value(entry.driveMd5)
+                : const Value.absent(),
+            folderId: Value(entry.folderId),
+          ),
+        ));
+        continue;
+      }
+
+      creations.add(entry);
     }
 
-    // 2. Legacy : son déjà indexé par chemin, sans identité forte → on l'adopte.
-    final byPath = await (_database.select(_database.sounds)
-          ..where(
-            (s) =>
-                s.libraryId.equals(libraryId) &
-                s.relativePath.equals(relativePath),
-          ))
-        .get();
-    if (byPath.isNotEmpty) {
-      final row = byPath.first;
-      await (_database.update(_database.sounds)
-            ..where((s) => s.id.equals(row.id)))
-          .write(
-        db.SoundsCompanion(
-          filePath: Value(localPath),
-          driveFileId:
-              driveFileId != null ? Value(driveFileId) : const Value.absent(),
-          driveMd5: driveMd5 != null ? Value(driveMd5) : const Value.absent(),
-          folderId: Value(folderId),
-        ),
+    // 3. Métadonnées des nouveaux sons, hors transaction. Court-circuit rapide
+    //    quand le fichier n'est pas encore en cache (cas normal : l'indexation
+    //    est métadonnées-only), donc pas de probe SoLoud dans ce cas.
+    final creationMetadata = <
+        ({
+          db_sounds.SoundType? type,
+          String? contentHash,
+          Uint8List? waveform,
+          int? waveformProbeGeneration,
+        })>[];
+    for (final entry in creations) {
+      creationMetadata.add(
+        await _resolveMetadataForFile(File(entry.localPath)),
       );
-      return (created: false, contentChanged: false);
     }
 
-    // 3. Nouveau son.
-    final title = p.basenameWithoutExtension(relativePath);
-    final metadata = await _resolveMetadataForFile(File(localPath));
-
-    await _database.into(_database.sounds).insert(
+    // 4. Écriture : un seul batch, donc une seule transaction.
+    await _database.batch((batch) {
+      for (final update in [...updates, ...adoptions]) {
+        batch.update(
+          _database.sounds,
+          update.values,
+          where: (s) => s.id.equals(update.id),
+        );
+      }
+      for (var i = 0; i < creations.length; i++) {
+        final entry = creations[i];
+        final metadata = creationMetadata[i];
+        batch.insert(
+          _database.sounds,
           db.SoundsCompanion.insert(
-            title: title,
-            filePath: localPath,
+            title: p.basenameWithoutExtension(entry.relativePath),
+            filePath: entry.localPath,
             type: Value(metadata.type),
             libraryId: Value(libraryId),
-            relativePath: Value(relativePath),
+            relativePath: Value(entry.relativePath),
             contentHash: Value(metadata.contentHash),
             waveform: Value(metadata.waveform),
-            driveFileId: Value(driveFileId),
-            driveMd5: Value(driveMd5),
-            folderId: Value(folderId),
+            driveFileId: Value(entry.driveFileId),
+            driveMd5: Value(entry.driveMd5),
+            folderId: Value(entry.folderId),
           ),
         );
-    return (created: true, contentChanged: false);
+      }
+    });
+
+    return (
+      createdCount: creations.length,
+      contentChangedPaths: contentChangedPaths,
+    );
   }
 
   /// Indexe tous les fichiers audio d'un dossier
