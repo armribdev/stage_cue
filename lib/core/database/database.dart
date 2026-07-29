@@ -333,6 +333,8 @@ class AppDatabase extends _$AppDatabase {
         }
       },
       beforeOpen: (details) async {
+        await _applyJournalPragmas();
+
         // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
         // encore migré — sans effet sur les bases v10+ (table inexistante).
         if (details.versionBefore != null && details.versionBefore! < 9) {
@@ -340,6 +342,33 @@ class AppDatabase extends _$AppDatabase {
         }
       },
     );
+  }
+
+  /// Réglages de journalisation, appliqués à chaque ouverture.
+  ///
+  /// Par défaut SQLite tourne en `journal_mode = delete` + `synchronous = full` :
+  /// chaque transaction crée puis supprime un journal de rollback et paie deux
+  /// fsync. L'indexation Drive écrit des milliers de lignes par petites
+  /// transactions implicites — c'est ce mode journal, et non le coût des
+  /// requêtes, qui domine son temps d'exécution.
+  ///
+  /// - **WAL** : les écritures s'ajoutent en fin de journal au lieu de réécrire
+  ///   les pages en place, et un lecteur ne bloque plus un écrivain (l'UI
+  ///   continue de lire les boards pendant qu'une indexation écrit). Le réglage
+  ///   est PERSISTANT (inscrit dans l'en-tête du fichier) : le rejouer à chaque
+  ///   ouverture est sans effet et sans coût.
+  /// - **synchronous = NORMAL** : compagnon usuel de WAL, à poser sur CHAQUE
+  ///   connexion (contrairement au mode journal, il n'est pas persistant). La
+  ///   base reste incorruptible en cas de crash ou de coupure ; seules les
+  ///   toutes dernières transactions non encore checkpointées peuvent être
+  ///   perdues.
+  ///
+  /// L'export de snapshot n'est pas concerné : il reconstruit une base neuve par
+  /// `ATTACH` + `CREATE TABLE AS SELECT` (cf. `LibrarySnapshotStore`), il ne
+  /// copie jamais le fichier brut — donc aucun risque de snapshot amputé du WAL.
+  Future<void> _applyJournalPragmas() async {
+    await customStatement('PRAGMA journal_mode = WAL');
+    await customStatement('PRAGMA synchronous = NORMAL');
   }
 
   /// Index d'unicité GLOBALE de l'identité forte Drive : un fichier Drive
