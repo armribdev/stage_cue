@@ -37,6 +37,17 @@ class _FakeDriveClient implements DriveClient {
   /// Ids de dossiers listés, dans l'ordre d'appel.
   final List<String> listedFolders = [];
 
+  /// Ids dont le listing doit échouer (simulation d'erreur réseau/quota).
+  final Set<String> failingFolders = {};
+
+  /// Latence simulée : sans elle, les futures se résolvent trop vite pour
+  /// qu'un chevauchement soit observable.
+  Duration latency = Duration.zero;
+
+  /// Plus grand nombre de listings simultanés observé.
+  int maxConcurrent = 0;
+  int _inFlight = 0;
+
   _FakeDriveClient(this.tree);
 
   @override
@@ -46,7 +57,17 @@ class _FakeDriveClient implements DriveClient {
   }) async {
     listFolderCalls++;
     listedFolders.add(folderId);
-    return tree[folderId] ?? const [];
+    _inFlight++;
+    if (_inFlight > maxConcurrent) maxConcurrent = _inFlight;
+    try {
+      if (latency > Duration.zero) await Future<void>.delayed(latency);
+      if (failingFolders.contains(folderId)) {
+        throw const DriveRequestException.offline();
+      }
+      return tree[folderId] ?? const [];
+    } finally {
+      _inFlight--;
+    }
   }
 
   @override
@@ -332,6 +353,57 @@ void main() {
       sounds.where((s) => s.driveFileId == null).single.title,
       'orphelin',
     );
+  });
+
+  group('parcours parallèle', () {
+    test('les dossiers d\'un même niveau sont listés en parallèle, sans '
+        'dépasser la borne de concurrence', () async {
+      // 20 dossiers frères : de quoi saturer la borne (5) si le parcours est
+      // bien parallèle, et la dépasser s'il ne l'est pas.
+      final tree = <String, List<DriveFile>>{
+        'root': [for (var i = 0; i < 20; i++) _folder('d$i', 'Dossier $i')],
+      };
+      for (var i = 0; i < 20; i++) {
+        tree['d$i'] = [_audio('f$i', 'son_$i.mp3')];
+      }
+      final client = _FakeDriveClient(tree)..latency =
+          const Duration(milliseconds: 5);
+      final repository = await repositoryFor(client);
+
+      await repository.indexDriveFolder(library: library);
+
+      expect(client.maxConcurrent, greaterThan(1),
+          reason: 'le parcours doit être parallèle');
+      expect(client.maxConcurrent, lessThanOrEqualTo(5),
+          reason: 'la borne de concurrence doit être respectée');
+      expect((await soundsOf(library.id)), hasLength(20));
+    });
+
+    test('COMPLET OU RIEN : l\'échec du listing d\'un seul dossier fait '
+        'échouer le scan et n\'élague RIEN', () async {
+      final client = _FakeDriveClient({
+        'root': [_folder('d1', 'Portes'), _folder('d2', 'SFX')],
+        'd1': [_audio('f1', 'knock.mp3')],
+        'd2': [_audio('f2', 'boom.mp3')],
+      });
+      final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
+      expect(await soundsOf(library.id), hasLength(2));
+
+      // Un dossier devient injoignable. Ses fichiers sont donc ABSENTS du scan :
+      // si l'erreur était avalée, l'élagage les prendrait pour des fichiers
+      // supprimés sur Drive et détruirait les sons ET leur cache.
+      client.failingFolders.add('d2');
+
+      await expectLater(
+        repository.indexDriveFolder(library: library),
+        throwsA(isA<DriveRequestException>()),
+      );
+
+      final sounds = await soundsOf(library.id);
+      expect(sounds, hasLength(2),
+          reason: 'aucun son ne doit être élagué sur un scan incomplet');
+    });
   });
 
   test('arborescence profonde : un seul listFolder par dossier, chemins '

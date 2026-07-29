@@ -35,6 +35,15 @@ import '../models/indexing_progress.dart';
 /// la fluidité de la progression affichée (qui plaide pour des lots courts).
 const int _indexBatchSize = 250;
 
+/// Listings Drive simultanés pendant le parcours de l'arborescence.
+///
+/// Volontairement modeste : au-delà, on ne gagne plus grand-chose (le parcours
+/// se fait niveau par niveau, la profondeur borne déjà le parallélisme utile) et
+/// on se rapproche des quotas Drive. Les 429 restent absorbés par le réessai
+/// exponentiel de `GoogleDriveClient._guardRetry`, mais mieux vaut ne pas les
+/// provoquer : chaque réessai coûte plus cher que la requête économisée.
+const int _driveListingConcurrency = 5;
+
 /// Levée quand un son de bibliothèque n'est pas accessible localement sans
 /// déclencher un téléchargement (utilisé pendant le chargement des pads).
 class SoundNotAvailableLocallyException implements Exception {
@@ -1513,6 +1522,22 @@ class LibraryRepository extends ChangeNotifier {
     }
   }
 
+  /// Parcourt l'arborescence Drive et retourne tous les fichiers audio.
+  ///
+  /// Parcours en LARGEUR, un niveau à la fois, avec au plus [_driveListingConcurrency]
+  /// listings en vol. La version antérieure descendait en profondeur d'abord et
+  /// attendait chaque dossier avant de passer au suivant : sur une bibliothèque
+  /// à quelques dizaines de dossiers, c'était autant d'allers-retours Drive mis
+  /// bout à bout, soit l'essentiel du budget de lancement passé à attendre le
+  /// réseau.
+  ///
+  /// **Complet ou rien.** Toute erreur de listing remonte et fait échouer le
+  /// scan entier — propriété dont dépend l'élagage : `_indexDriveFolder` déduit
+  /// « ce fichier n'existe plus sur Drive » de son absence du résultat, puis
+  /// supprime le son ET son fichier de cache. Un parcours qui avalerait l'échec
+  /// d'un dossier ne rendrait pas moins de sons : il en ferait supprimer. C'est
+  /// aussi ce qui permet à `AutoSyncCoordinator` de sauter le pull d'une
+  /// bibliothèque mal indexée (cf. décision 0005).
   Future<
       List<
           ({
@@ -1523,8 +1548,8 @@ class LibraryRepository extends ChangeNotifier {
             String folderRelativePath,
           })>> _collectDriveAudioFiles(
     DriveClient client,
-    String folderId,
-    String relativePrefix, {
+    String rootFolderId,
+    String rootPrefix, {
     String? sharedDriveId,
   }) async {
     final results = <({
@@ -1534,47 +1559,87 @@ class LibraryRepository extends ChangeNotifier {
       String folderDriveId,
       String folderRelativePath,
     })>[];
-    final children = await client.listFolder(
-      folderId,
-      sharedDriveId: sharedDriveId,
-    );
 
-    for (final child in children) {
-      // Normalise le nom en NFC dès la source : Drive peut renvoyer du NFD
-      // (fichiers créés sous macOS). On stocke toujours en NFC (titre,
-      // relative_path, dossier, chemin local restent cohérents — cf.
-      // LibrarySoundPaths).
-      final childName = PathUnicode.toNfc(child.name);
-      if (child.isFolder) {
-        if (childName == '.stagecue') continue;
-        final subPrefix = relativePrefix.isEmpty
-            ? childName
-            : '$relativePrefix/$childName';
-        results.addAll(
-          await _collectDriveAudioFiles(
-            client,
-            child.id,
-            subPrefix,
-            sharedDriveId: sharedDriveId,
-          ),
-        );
-      } else if (isAudioFile(childName)) {
-        final relativePath = relativePrefix.isEmpty
-            ? childName
-            : '$relativePrefix/$childName';
-        // On conserve l'ID Drive du fichier (identité forte) ET celui de son
-        // dossier parent direct (nœud propriétaire du modèle par-dossier).
-        results.add((
-          relativePath: relativePath,
-          driveFileId: child.id,
-          driveMd5: child.md5Checksum,
-          folderDriveId: folderId,
-          folderRelativePath: relativePrefix,
-        ));
+    var level = <({String id, String prefix})>[
+      (id: rootFolderId, prefix: rootPrefix),
+    ];
+
+    while (level.isNotEmpty) {
+      // Un listing par dossier du niveau, en parallèle borné. `listFolder` est
+      // idempotent : son réessai sur erreur transitoire est déjà assuré par
+      // `_guardRetry` côté client Drive (cf. décision 0012).
+      final listings = await _mapBounded(
+        level,
+        (folder) => client.listFolder(folder.id, sharedDriveId: sharedDriveId),
+      );
+
+      final next = <({String id, String prefix})>[];
+      for (var i = 0; i < level.length; i++) {
+        final folder = level[i];
+        for (final child in listings[i]) {
+          // Normalise le nom en NFC dès la source : Drive peut renvoyer du NFD
+          // (fichiers créés sous macOS). On stocke toujours en NFC (titre,
+          // relative_path, dossier, chemin local restent cohérents — cf.
+          // LibrarySoundPaths).
+          final childName = PathUnicode.toNfc(child.name);
+          final childPath = folder.prefix.isEmpty
+              ? childName
+              : '${folder.prefix}/$childName';
+
+          if (child.isFolder) {
+            if (childName == '.stagecue') continue;
+            next.add((id: child.id, prefix: childPath));
+          } else if (isAudioFile(childName)) {
+            // On conserve l'ID Drive du fichier (identité forte) ET celui de son
+            // dossier parent direct (nœud propriétaire du modèle par-dossier).
+            results.add((
+              relativePath: childPath,
+              driveFileId: child.id,
+              driveMd5: child.md5Checksum,
+              folderDriveId: folder.id,
+              folderRelativePath: folder.prefix,
+            ));
+          }
+        }
       }
+      level = next;
     }
 
     return results;
+  }
+
+  /// Applique [task] à chaque élément avec au plus [_driveListingConcurrency]
+  /// exécutions simultanées, en préservant l'ordre des résultats.
+  ///
+  /// La première erreur arrête l'alimentation des workers et remonte (les
+  /// requêtes déjà en vol sont attendues avant de propager, pour ne laisser
+  /// aucun appel orphelin derrière soi).
+  Future<List<R>> _mapBounded<T, R>(
+    List<T> items,
+    Future<R> Function(T item) task,
+  ) async {
+    if (items.isEmpty) return const [];
+
+    final results = List<R?>.filled(items.length, null);
+    var nextIndex = 0;
+    var failed = false;
+
+    Future<void> worker() async {
+      while (!failed) {
+        final index = nextIndex++;
+        if (index >= items.length) return;
+        try {
+          results[index] = await task(items[index]);
+        } catch (_) {
+          failed = true;
+          rethrow;
+        }
+      }
+    }
+
+    final workerCount = math.min(_driveListingConcurrency, items.length);
+    await Future.wait([for (var i = 0; i < workerCount; i++) worker()]);
+    return results.cast<R>();
   }
 
   /// Réaligne les chemins issus d'un snapshot sur les fichiers réellement
