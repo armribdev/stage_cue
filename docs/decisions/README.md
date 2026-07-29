@@ -38,5 +38,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0015](0015-plein-ecran-windows-manuel.md) | Plein écran Windows (F11) : implémentation manuelle plutôt que `window_manager.setFullScreen` | acceptée |
 | [0016](0016-cache-sans-plafond-garde-fou-disque.md) | Cache local sans plafond fixe, garde-fou par espace disque réel | acceptée |
 | [0017](0017-index-de-recherche-en-memoire.md) | Index de recherche en mémoire, servi périmé puis rafraîchi | acceptée |
+| [0018](0018-journalisation-wal-et-synchronous-normal.md) | Journalisation WAL et `synchronous = NORMAL` | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.
