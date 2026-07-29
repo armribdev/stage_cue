@@ -331,6 +331,11 @@ class SoundRepository {
     return await _tagDataSource.getTagsForSound(soundId);
   }
 
+  /// Tags de tous les sons en une requête (index de recherche).
+  Future<Map<int, List<TagItem>>> getTagsForAllSounds() async {
+    return await _tagDataSource.getTagsForAllSounds();
+  }
+
   Future<void> setTagsForSound(int soundId, List<int> tagIds) async {
     await _tagDataSource.setTagsForSound(soundId, tagIds);
   }

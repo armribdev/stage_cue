@@ -150,6 +150,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
 
   void _onLibraryMerged() {
     if (!mounted) return;
+    // Un merge peut ajouter/retirer des centaines de sons : l'index de recherche
+    // est jeté avant le rechargement, qui le reconstruira.
+    _notifier.invalidateSearchIndex();
     _notifier.loadBoards();
   }
 
