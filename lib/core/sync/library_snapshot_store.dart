@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../database/database.dart' as db;
 import '../database/sounds.dart' show PadPlayMode, SoundType;
 import 'library_sound_paths.dart';
+import 'sync_log.dart';
 
 /// Export et fusion de snapshots SQLite limités à une bibliothèque Drive
 /// (sons, scènes, pads, tags associés).
@@ -118,12 +119,43 @@ class LibrarySnapshotStore {
           : createdAt;
       final effectiveKey = snapKey ?? const Uuid().v4();
 
+      // Recherche GLOBALE, comme l'index d'unicité `board_key` : le scoper à la
+      // bibliothèque tirée laissait passer un board de même clé possédé
+      // ailleurs (deux liens Drive recouvrant la même racine) ou resté local
+      // (`library_id` null). La fusion prenait alors le chemin « inconnu »,
+      // tentait un INSERT et faisait échouer l'ajout du dossier Drive entier
+      // sur `UNIQUE constraint failed: sound_boards.board_key`.
       final local = snapKey == null
           ? null
           : await (_database.select(_database.soundBoards)
-                ..where((b) =>
-                    b.libraryId.equals(libraryId) & b.boardKey.equals(snapKey)))
+                ..where((b) => b.boardKey.equals(snapKey)))
               .getSingleOrNull();
+
+      // Board possédé par une AUTRE bibliothèque : on ne le duplique pas et on
+      // ne le confisque pas. Même arbitrage que pour les sons partagés entre
+      // liens imbriqués (cf. `syncLibrarySoundsFromDriveIndex`) : la vue de
+      // l'autre bibliothèque reste intacte, et surtout rien n'est détruit.
+      if (local != null &&
+          local.libraryId != null &&
+          local.libraryId != libraryId) {
+        SyncLog.trace(
+          'board ${row.read<String>('name')} possédé par la bibliothèque '
+          '${local.libraryId} : fusion ignorée pour $libraryId',
+        );
+        continue;
+      }
+
+      // Rattachement, décidé INDÉPENDAMMENT de la fraîcheur du contenu : un
+      // board sans propriétaire dont la clé est publiée par cette bibliothèque
+      // lui appartient, qu'il gagne ou perde l'arbitrage `updated_at`. Le
+      // laisser orphelin quand c'est le LOCAL qui gagne serait le pire cas :
+      // `exportLibrarySnapshot` filtre sur `library_id`, donc sa version plus
+      // récente ne serait jamais repoussée — perdue en silence.
+      if (local != null && local.libraryId == null) {
+        await (_database.update(_database.soundBoards)
+              ..where((b) => b.id.equals(local.id)))
+            .write(db.SoundBoardsCompanion(libraryId: Value(libraryId)));
+      }
 
       if (local == null) {
         // Board inconnu localement → insertion.

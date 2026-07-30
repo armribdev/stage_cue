@@ -215,7 +215,6 @@ class AudioCacheManager {
       SyncLog.warn(
         'Ménage des téléchargements partiels impossible '
         '(${library.localRootPath}) — $e',
-        error: e,
       );
     }
     if (reclaimed > 0) {
@@ -516,7 +515,6 @@ class AudioCacheManager {
         SyncLog.warn(
           'Éviction impossible (${fileToDelete.path}), entrée conservée pour '
           'la prochaine passe — $e',
-          error: e,
         );
         continue;
       }
@@ -621,7 +619,6 @@ class _AccessIndex {
         // d'accès et redevient arbitraire jusqu'à ce que l'index se reconstitue.
         SyncLog.warn(
           'Index LRU illisible ($indexPath), repart à vide — $e',
-          error: e,
         );
       }
     }

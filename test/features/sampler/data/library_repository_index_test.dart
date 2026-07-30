@@ -152,7 +152,9 @@ class _FakeDriveClient implements DriveClient {
 
 /// Authentificateur qui rend toujours le même client fake.
 class _FakeAuthenticator implements DriveAuthenticator {
-  final DriveClient client;
+  /// Mutable : permet de simuler le remplacement du client en cours de passe
+  /// (renouvellement de token) ou la perte définitive de session (`null`).
+  DriveClient? client;
   _FakeAuthenticator(this.client);
 
   @override
@@ -190,11 +192,16 @@ void main() {
   late Directory cacheRoot;
   late Library library;
 
+  /// Authentificateur du dernier repository construit : permet aux tests de
+  /// remplacer ou de retirer la session en cours de passe.
+  late _FakeAuthenticator authenticator;
+
   /// Construit le repository autour d'un client fake déjà « connecté ».
   Future<LibraryRepository> repositoryFor(_FakeDriveClient client) async {
+    authenticator = _FakeAuthenticator(client);
     final repository = LibraryRepository(
       libraryDataSource,
-      _FakeAuthenticator(client),
+      authenticator,
       LibrarySyncService(DriftSnapshotStore(database)),
       // Sonde disque simulée : la sonde réelle passe par le canal de plateforme,
       // indisponible en test unitaire — sans ça, chaque `ensureCached` échoue à
@@ -824,6 +831,58 @@ void main() {
 
       expect(client.downloadCalls, lessThan(40),
           reason: 'l\'annulation doit tarir la file');
+    });
+
+    test('client remplacé en cours de passe : la passe suit le NOUVEAU client',
+        () async {
+      final first = _FakeDriveClient({})
+        ..downloadLatency = const Duration(milliseconds: 5);
+      final repository = await indexedLibrary(first, 20);
+
+      final second = _FakeDriveClient({})
+        ..downloadLatency = const Duration(milliseconds: 5);
+
+      final pass = repository.downloadAllLibraryAudio(library: library);
+      // Ce que fait `reconnectSilently` sous les pieds d'une passe en cours :
+      // il pose un client frais et DISPOSE le précédent. Quand la passe
+      // capturait son client une fois pour toutes, tous les fichiers restants
+      // échouaient sur « Client is already closed » — traduit en « Pas de
+      // connexion », soit des centaines de lignes annonçant une panne réseau
+      // qui n'existait pas.
+      authenticator.client = second;
+      await repository.reconnectSilently();
+      await pass;
+
+      expect(second.downloadCalls, greaterThan(0),
+          reason: 'le client doit être relu à chaque fichier, jamais capturé');
+      expect(
+        first.downloadCalls + second.downloadCalls,
+        20,
+        reason: 'aucun fichier ne doit être perdu au changement de client',
+      );
+    });
+
+    test('session définitivement perdue : arrêt net, pas une rafale d\'échecs',
+        () async {
+      final client = _FakeDriveClient({})
+        ..downloadLatency = const Duration(milliseconds: 5);
+      final repository = await indexedLibrary(client, 40);
+
+      IndexingProgress? last;
+      final pass = repository.downloadAllLibraryAudio(
+        library: library,
+        onProgress: (p) => last = p,
+      );
+      // Plus aucune session à rétablir : continuer ferait échouer chacun des
+      // fichiers restants, un par un.
+      authenticator.client = null;
+      await repository.releaseDriveSession();
+      await pass;
+
+      expect(client.downloadCalls, lessThan(40),
+          reason: 'la passe doit s\'arrêter, pas échouer fichier par fichier');
+      expect(last?.error, contains('Connexion Drive interrompue'),
+          reason: 'à distinguer d\'une session expirée côté Google');
     });
 
     test('fichiers déjà en cache : aucun téléchargement', () async {
