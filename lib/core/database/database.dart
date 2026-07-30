@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 35;
+  int get schemaVersion => 36;
 
   @override
   MigrationStrategy get migration {
@@ -329,6 +329,16 @@ class AppDatabase extends _$AppDatabase {
           }
           if (!await _columnExists('sounds', 'waveform_probe_generation')) {
             await m.addColumn(sounds, sounds.waveformProbeGeneration);
+          }
+        }
+        if (from < 36) {
+          // Cache de sonde du pull par-dossier : jeton du manifest au dernier
+          // pull concluant. Backfill implicite à null → le premier pull après
+          // migration retélécharge chaque manifest une fois, puis les sauts
+          // s'installent. Gardé par un test d'existence : un upgrade depuis < 10
+          // recrée déjà les tables au schéma courant.
+          if (!await _columnExists('library_folders', 'manifest_probe_token')) {
+            await m.addColumn(libraryFolders, libraryFolders.manifestProbeToken);
           }
         }
       },

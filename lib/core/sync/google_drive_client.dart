@@ -19,6 +19,13 @@ import 'google_drive_desktop_auth.dart';
 const String _fileFields =
     'id, name, mimeType, modifiedTime, size, md5Checksum';
 
+/// Nombre de dossiers parents interrogés par requête dans [GoogleDriveClient.findInFolders].
+///
+/// La clause `q` de Drive a une longueur bornée : chaque parent y ajoute une
+/// quarantaine de caractères. 40 laisse une marge confortable, sachant qu'un lot
+/// trop large ferait échouer la requête entière au lieu de la ralentir.
+const int _findInFoldersChunk = 40;
+
 /// Implémentation [DriveClient] adossée à l'API Google Drive v3.
 ///
 /// Avec le scope `drive.file`, l'app ne voit que les fichiers qu'elle a créés
@@ -265,6 +272,57 @@ class GoogleDriveClient implements DriveClient {
       if (files == null || files.isEmpty) return null;
       return _toDriveFile(files.first);
     });
+  }
+
+  @override
+  Future<Map<String, DriveFile>> findInFolders({
+    required Iterable<String> parentIds,
+    required String name,
+    String? sharedDriveId,
+  }) async {
+    final parents = parentIds.toSet().toList();
+    if (parents.isEmpty) return const {};
+
+    final results = <String, DriveFile>{};
+    // Découpé : la clause `q` a une longueur bornée côté Drive, et un lot trop
+    // large ferait échouer la requête entière plutôt que de la ralentir.
+    for (var start = 0; start < parents.length; start += _findInFoldersChunk) {
+      final chunk = parents.sublist(
+        start,
+        math.min(start + _findInFoldersChunk, parents.length),
+      );
+      final parentClause =
+          chunk.map((id) => "'${_escape(id)}' in parents").join(' or ');
+
+      await _guardRetry(() async {
+        String? pageToken;
+        do {
+          final fileList = await _api.files.list(
+            q: "($parentClause) and name = '${_escape(name)}' "
+                'and trashed = false',
+            spaces: 'drive',
+            // `parents` en plus : c'est lui qui permet de rattacher chaque
+            // résultat à son dossier d'origine.
+            $fields: 'nextPageToken, files($_fileFields, parents)',
+            pageSize: 200,
+            pageToken: pageToken,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
+            driveId: sharedDriveId,
+            corpora: sharedDriveId != null ? 'drive' : null,
+          );
+          for (final f in fileList.files ?? const <drive.File>[]) {
+            for (final parent in f.parents ?? const <String>[]) {
+              // `putIfAbsent` : à parent égal, on garde le premier trouvé —
+              // même arbitrage que `findInFolder`, qui prend `files.first`.
+              results.putIfAbsent(parent, () => _toDriveFile(f));
+            }
+          }
+          pageToken = fileList.nextPageToken;
+        } while (pageToken != null);
+      });
+    }
+    return results;
   }
 
   @override

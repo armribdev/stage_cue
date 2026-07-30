@@ -36,6 +36,11 @@ void main() {
           parentId: any(named: 'parentId'),
           name: any(named: 'name'),
         )).thenAnswer((_) async => null);
+    // Même défaut pour la sonde groupée : rien trouvé nulle part.
+    when(() => client.findInFolders(
+          parentIds: any(named: 'parentIds'),
+          name: any(named: 'name'),
+        )).thenAnswer((_) async => const <String, DriveFile>{});
     when(() => client.deleteFile(any())).thenAnswer((_) async {});
 
     when(() => store.schemaVersion).thenReturn(11);
@@ -511,10 +516,14 @@ void main() {
         updatedAt: DateTime.now().toUtc(),
         schemaVersion: 11,
       );
-      when(() => client.findInFolder(parentId: 'yy', name: '.stagecue'))
-          .thenAnswer((_) async => folder('stage', '.stagecue'));
-      when(() => client.findInFolder(parentId: 'stage', name: 'manifest.json'))
-          .thenAnswer((_) async => file('m', 'manifest.json'));
+      when(() => client.findInFolders(
+            parentIds: any(named: 'parentIds'),
+            name: '.stagecue',
+          )).thenAnswer((_) async => {'yy': folder('stage', '.stagecue')});
+      when(() => client.findInFolders(
+            parentIds: any(named: 'parentIds'),
+            name: 'manifest.json',
+          )).thenAnswer((_) async => {'stage': file('m', 'manifest.json')});
       when(() => client.downloadBytes('m'))
           .thenAnswer((_) async => utf8.encode(remote.encode()));
       when(() => client.findInFolder(parentId: 'stage', name: 'library.db'))
@@ -541,6 +550,299 @@ void main() {
           driveFolderId: any(named: 'driveFolderId'),
         ),
       );
+    });
+  });
+
+  group('pullFolders (groupé)', () {
+    SyncManifest manifest(int revision) => SyncManifest(
+          revision: revision,
+          deviceId: 'other',
+          updatedAt: DateTime.now().toUtc(),
+          schemaVersion: 11,
+        );
+
+    test('les sondes .stagecue et manifest sont GROUPÉES : deux requêtes pour '
+        'trois dossiers, pas six', () async {
+      when(() => client.findInFolders(
+                parentIds: any(named: 'parentIds'),
+                name: '.stagecue',
+              ))
+          .thenAnswer((_) async => {
+                'da': folder('sa', '.stagecue'),
+                'db': folder('sb', '.stagecue'),
+                'dc': folder('sc', '.stagecue'),
+              });
+      when(() => client.findInFolders(
+                parentIds: any(named: 'parentIds'),
+                name: 'manifest.json',
+              ))
+          .thenAnswer((_) async => {
+                'sa': file('ma', 'manifest.json'),
+                'sb': file('mb', 'manifest.json'),
+                'sc': file('mc', 'manifest.json'),
+              });
+      // Tous à jour : aucun snapshot n'est tiré.
+      for (final id in ['ma', 'mb', 'mc']) {
+        when(() => client.downloadBytes(id))
+            .thenAnswer((_) async => utf8.encode(manifest(1).encode()));
+      }
+
+      final outcomes = await service.pullFolders(
+        client: client,
+        folders: const [
+          FolderPullTarget(folderId: 1, folderDriveId: 'da', knownRevision: 5),
+          FolderPullTarget(folderId: 2, folderDriveId: 'db', knownRevision: 5),
+          FolderPullTarget(folderId: 3, folderDriveId: 'dc', knownRevision: 5),
+        ],
+      );
+
+      expect(outcomes[1]?.outcome, isA<PullUpToDate>());
+      expect(outcomes[2]?.outcome, isA<PullUpToDate>());
+      expect(outcomes[3]?.outcome, isA<PullUpToDate>());
+
+      // Le cœur du gain : deux sondes au total, quel que soit le nombre de
+      // dossiers. La sonde unitaire n'est plus employée sur ce chemin.
+      verify(() => client.findInFolders(
+            parentIds: any(named: 'parentIds'),
+            name: any(named: 'name'),
+          )).called(2);
+      verifyNever(() => client.findInFolder(
+            parentId: any(named: 'parentId'),
+            name: any(named: 'name'),
+          ));
+    });
+
+    test('chaque dossier reçoit SON issue : sans .stagecue, sans manifest, '
+        'à jour, ou fusionné', () async {
+      when(() => client.findInFolders(
+                parentIds: any(named: 'parentIds'),
+                name: '.stagecue',
+              ))
+          .thenAnswer((_) async => {
+                // 'd1' absent : aucun `.stagecue`.
+                'd2': folder('s2', '.stagecue'),
+                'd3': folder('s3', '.stagecue'),
+                'd4': folder('s4', '.stagecue'),
+              });
+      when(() => client.findInFolders(
+                parentIds: any(named: 'parentIds'),
+                name: 'manifest.json',
+              ))
+          .thenAnswer((_) async => {
+                // 's2' absent : `.stagecue` présent mais rien publié dedans.
+                's3': file('m3', 'manifest.json'),
+                's4': file('m4', 'manifest.json'),
+              });
+      when(() => client.downloadBytes('m3'))
+          .thenAnswer((_) async => utf8.encode(manifest(2).encode()));
+      when(() => client.downloadBytes('m4'))
+          .thenAnswer((_) async => utf8.encode(manifest(9).encode()));
+      when(() => client.findInFolder(parentId: 's4', name: 'library.db'))
+          .thenAnswer((_) async => file('db4', 'library.db'));
+      when(() => client.downloadToFile(
+            fileId: any(named: 'fileId'),
+            destinationPath: any(named: 'destinationPath'),
+          )).thenAnswer((_) async {});
+
+      final outcomes = await service.pullFolders(
+        client: client,
+        folders: const [
+          FolderPullTarget(folderId: 1, folderDriveId: 'd1', knownRevision: 0),
+          FolderPullTarget(folderId: 2, folderDriveId: 'd2', knownRevision: 0),
+          FolderPullTarget(folderId: 3, folderDriveId: 'd3', knownRevision: 7),
+          FolderPullTarget(folderId: 4, folderDriveId: 'd4', knownRevision: 7),
+        ],
+      );
+
+      expect(outcomes[1]?.outcome, isA<PullNoRemoteSnapshot>());
+      expect(outcomes[2]?.outcome, isA<PullNoRemoteSnapshot>());
+      expect(outcomes[3]?.outcome, isA<PullUpToDate>());
+      expect(outcomes[4]?.outcome, isA<PullStaged>());
+      expect((outcomes[4]?.outcome as PullStaged).revision, 9);
+
+      // Seul le dossier réellement en retard est fusionné.
+      verify(() => store.mergeFolderSnapshot(4, any())).called(1);
+      verifyNever(() => store.mergeFolderSnapshot(3, any()));
+      verifyNever(() => store.mergeFolderSnapshot(2, any()));
+      verifyNever(() => store.mergeFolderSnapshot(1, any()));
+    });
+
+    test('les fusions restent SÉQUENTIELLES (ATTACH/DETACH partagé)', () async {
+      when(() => client.findInFolders(
+                parentIds: any(named: 'parentIds'),
+                name: '.stagecue',
+              ))
+          .thenAnswer((_) async => {
+                'da': folder('sa', '.stagecue'),
+                'db': folder('sb', '.stagecue'),
+              });
+      when(() => client.findInFolders(
+                parentIds: any(named: 'parentIds'),
+                name: 'manifest.json',
+              ))
+          .thenAnswer((_) async => {
+                'sa': file('ma', 'manifest.json'),
+                'sb': file('mb', 'manifest.json'),
+              });
+      for (final id in ['ma', 'mb']) {
+        when(() => client.downloadBytes(id))
+            .thenAnswer((_) async => utf8.encode(manifest(9).encode()));
+      }
+      when(() => client.findInFolder(
+            parentId: any(named: 'parentId'),
+            name: 'library.db',
+          )).thenAnswer((_) async => file('db', 'library.db'));
+      when(() => client.downloadToFile(
+            fileId: any(named: 'fileId'),
+            destinationPath: any(named: 'destinationPath'),
+          )).thenAnswer((_) async {});
+
+      var merging = 0;
+      var maxConcurrentMerges = 0;
+      when(() => store.mergeFolderSnapshot(any(), any()))
+          .thenAnswer((_) async {
+        merging++;
+        if (merging > maxConcurrentMerges) maxConcurrentMerges = merging;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        merging--;
+      });
+
+      await service.pullFolders(
+        client: client,
+        folders: const [
+          FolderPullTarget(folderId: 1, folderDriveId: 'da', knownRevision: 0),
+          FolderPullTarget(folderId: 2, folderDriveId: 'db', knownRevision: 0),
+        ],
+      );
+
+      expect(maxConcurrentMerges, 1,
+          reason: 'deux ATTACH concurrents sur la base partagée se '
+              'télescoperaient (cf. décision 0004)');
+    });
+  });
+
+  group('cache de sonde du manifest', () {
+    // Millisecondes NON nulles à dessein : le jeton doit les préserver. Une
+    // colonne `dateTime()` les perdrait (Drift stocke en secondes epoch) et le
+    // cache ne serait jamais touché.
+    final probedAt = DateTime.utc(2026, 7, 30, 12, 0, 0, 456);
+    final probedToken = probedAt.toIso8601String();
+
+    SyncManifest manifest(int revision) => SyncManifest(
+          revision: revision,
+          deviceId: 'other',
+          updatedAt: DateTime.now().toUtc(),
+          schemaVersion: 11,
+        );
+
+    /// Stubs communs : un dossier `da` avec `.stagecue` + manifest daté.
+    void stubProbe({required DateTime? modifiedTime}) {
+      when(() => client.findInFolders(
+                parentIds: any(named: 'parentIds'),
+                name: '.stagecue',
+              ))
+          .thenAnswer((_) async => {'da': folder('sa', '.stagecue')});
+      when(() => client.findInFolders(
+            parentIds: any(named: 'parentIds'),
+            name: 'manifest.json',
+          )).thenAnswer((_) async => {
+            'sa': DriveFile(
+              id: 'ma',
+              name: 'manifest.json',
+              modifiedTime: modifiedTime,
+            ),
+          });
+    }
+
+    test('manifest inchangé : AUCUN téléchargement, à jour', () async {
+      stubProbe(modifiedTime: probedAt);
+
+      final results = await service.pullFolders(
+        client: client,
+        folders: [
+          FolderPullTarget(
+            folderId: 1,
+            folderDriveId: 'da',
+            knownRevision: 3,
+            knownProbeToken: probedToken,
+          ),
+        ],
+      );
+
+      expect(results[1]?.outcome, isA<PullUpToDate>());
+      expect(results[1]?.probeToken, probedToken);
+      verifyNever(() => client.downloadBytes(any()));
+    });
+
+    test('manifest redaté : le téléchargement a bien lieu', () async {
+      stubProbe(modifiedTime: probedAt.add(const Duration(minutes: 1)));
+      when(() => client.downloadBytes('ma'))
+          .thenAnswer((_) async => utf8.encode(manifest(3).encode()));
+
+      final results = await service.pullFolders(
+        client: client,
+        folders: [
+          FolderPullTarget(
+            folderId: 1,
+            folderDriveId: 'da',
+            knownRevision: 3,
+            knownProbeToken: probedToken,
+          ),
+        ],
+      );
+
+      expect(results[1]?.outcome, isA<PullUpToDate>());
+      verify(() => client.downloadBytes('ma')).called(1);
+    });
+
+    test('Drive sans modifiedTime : on ne saute jamais la sonde', () async {
+      stubProbe(modifiedTime: null);
+      when(() => client.downloadBytes('ma'))
+          .thenAnswer((_) async => utf8.encode(manifest(3).encode()));
+
+      final results = await service.pullFolders(
+        client: client,
+        folders: [
+          FolderPullTarget(
+            folderId: 1,
+            folderDriveId: 'da',
+            knownRevision: 3,
+            knownProbeToken: probedToken,
+          ),
+        ],
+      );
+
+      expect(results[1]?.outcome, isA<PullUpToDate>());
+      expect(results[1]?.probeToken, isNull);
+      verify(() => client.downloadBytes('ma')).called(1);
+    });
+
+    test('fusion impossible (blob introuvable) : RIEN n\'est mémorisé, sinon '
+        'le nœud resterait figé sur une révision jamais fusionnée', () async {
+      stubProbe(modifiedTime: probedAt);
+      when(() => client.downloadBytes('ma'))
+          .thenAnswer((_) async => utf8.encode(manifest(9).encode()));
+      // Le manifest annonce la révision 9 mais son blob est absent.
+      when(() => client.findInFolder(
+            parentId: 'sa',
+            name: any(named: 'name'),
+          )).thenAnswer((_) async => null);
+
+      final results = await service.pullFolders(
+        client: client,
+        folders: [
+          FolderPullTarget(
+            folderId: 1,
+            folderDriveId: 'da',
+            knownRevision: 3,
+            knownProbeToken: null,
+          ),
+        ],
+      );
+
+      expect(results[1]?.outcome, isA<PullNoRemoteSnapshot>());
+      expect(results[1]?.probeToken, isNull,
+          reason: 'mémoriser ici ferait sauter la sonde au pull suivant');
     });
   });
 }

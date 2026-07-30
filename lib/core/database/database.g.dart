@@ -771,6 +771,17 @@ class $LibraryFoldersTable extends LibraryFolders
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _manifestProbeTokenMeta =
+      const VerificationMeta('manifestProbeToken');
+  @override
+  late final GeneratedColumn<String> manifestProbeToken =
+      GeneratedColumn<String>(
+        'manifest_probe_token',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -791,6 +802,7 @@ class $LibraryFoldersTable extends LibraryFolders
     relativePath,
     lastSyncedRevision,
     lastSyncedAt,
+    manifestProbeToken,
     createdAt,
   ];
   @override
@@ -854,6 +866,15 @@ class $LibraryFoldersTable extends LibraryFolders
         ),
       );
     }
+    if (data.containsKey('manifest_probe_token')) {
+      context.handle(
+        _manifestProbeTokenMeta,
+        manifestProbeToken.isAcceptableOrUnknown(
+          data['manifest_probe_token']!,
+          _manifestProbeTokenMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -897,6 +918,10 @@ class $LibraryFoldersTable extends LibraryFolders
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_synced_at'],
       ),
+      manifestProbeToken: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}manifest_probe_token'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -923,6 +948,20 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
   /// Révision de snapshot connue pour CE dossier (bookkeeping par-dossier).
   final int lastSyncedRevision;
   final DateTime? lastSyncedAt;
+
+  /// Jeton de sonde du manifest au dernier pull CONCLUANT de ce nœud (fusionné
+  /// ou constaté à jour) : le `modifiedTime` Drive sérialisé en ISO-8601 UTC.
+  /// Le pull s'en sert pour ne pas retélécharger un manifest inchangé — le
+  /// listing groupé ramène déjà ce champ gratuitement.
+  ///
+  /// **Texte et non `dateTime()` à dessein.** C'est une clé de cache opaque, que
+  /// l'on ne compare que par égalité, jamais par ordre. Une colonne `dateTime()`
+  /// serait un piège : Drift la stocke en secondes epoch (la précision
+  /// milliseconde de Drive serait perdue) et la relit en heure LOCALE, alors que
+  /// Drive émet de l'UTC — `==` sur `DateTime` distinguant les deux fuseaux, la
+  /// comparaison échouerait toujours et le cache ne servirait jamais, sans que
+  /// rien ne le signale. `null` = jamais sondé → on télécharge.
+  final String? manifestProbeToken;
   final DateTime createdAt;
   const LibraryFolder({
     required this.id,
@@ -931,6 +970,7 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
     required this.relativePath,
     required this.lastSyncedRevision,
     this.lastSyncedAt,
+    this.manifestProbeToken,
     required this.createdAt,
   });
   @override
@@ -943,6 +983,9 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
     map['last_synced_revision'] = Variable<int>(lastSyncedRevision);
     if (!nullToAbsent || lastSyncedAt != null) {
       map['last_synced_at'] = Variable<DateTime>(lastSyncedAt);
+    }
+    if (!nullToAbsent || manifestProbeToken != null) {
+      map['manifest_probe_token'] = Variable<String>(manifestProbeToken);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -958,6 +1001,9 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastSyncedAt),
+      manifestProbeToken: manifestProbeToken == null && nullToAbsent
+          ? const Value.absent()
+          : Value(manifestProbeToken),
       createdAt: Value(createdAt),
     );
   }
@@ -974,6 +1020,9 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
       relativePath: serializer.fromJson<String>(json['relativePath']),
       lastSyncedRevision: serializer.fromJson<int>(json['lastSyncedRevision']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
+      manifestProbeToken: serializer.fromJson<String?>(
+        json['manifestProbeToken'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -987,6 +1036,7 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
       'relativePath': serializer.toJson<String>(relativePath),
       'lastSyncedRevision': serializer.toJson<int>(lastSyncedRevision),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
+      'manifestProbeToken': serializer.toJson<String?>(manifestProbeToken),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -998,6 +1048,7 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
     String? relativePath,
     int? lastSyncedRevision,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
+    Value<String?> manifestProbeToken = const Value.absent(),
     DateTime? createdAt,
   }) => LibraryFolder(
     id: id ?? this.id,
@@ -1006,6 +1057,9 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
     relativePath: relativePath ?? this.relativePath,
     lastSyncedRevision: lastSyncedRevision ?? this.lastSyncedRevision,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
+    manifestProbeToken: manifestProbeToken.present
+        ? manifestProbeToken.value
+        : this.manifestProbeToken,
     createdAt: createdAt ?? this.createdAt,
   );
   LibraryFolder copyWithCompanion(LibraryFoldersCompanion data) {
@@ -1024,6 +1078,9 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
       lastSyncedAt: data.lastSyncedAt.present
           ? data.lastSyncedAt.value
           : this.lastSyncedAt,
+      manifestProbeToken: data.manifestProbeToken.present
+          ? data.manifestProbeToken.value
+          : this.manifestProbeToken,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -1037,6 +1094,7 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
           ..write('relativePath: $relativePath, ')
           ..write('lastSyncedRevision: $lastSyncedRevision, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
+          ..write('manifestProbeToken: $manifestProbeToken, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -1050,6 +1108,7 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
     relativePath,
     lastSyncedRevision,
     lastSyncedAt,
+    manifestProbeToken,
     createdAt,
   );
   @override
@@ -1062,6 +1121,7 @@ class LibraryFolder extends DataClass implements Insertable<LibraryFolder> {
           other.relativePath == this.relativePath &&
           other.lastSyncedRevision == this.lastSyncedRevision &&
           other.lastSyncedAt == this.lastSyncedAt &&
+          other.manifestProbeToken == this.manifestProbeToken &&
           other.createdAt == this.createdAt);
 }
 
@@ -1072,6 +1132,7 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolder> {
   final Value<String> relativePath;
   final Value<int> lastSyncedRevision;
   final Value<DateTime?> lastSyncedAt;
+  final Value<String?> manifestProbeToken;
   final Value<DateTime> createdAt;
   const LibraryFoldersCompanion({
     this.id = const Value.absent(),
@@ -1080,6 +1141,7 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolder> {
     this.relativePath = const Value.absent(),
     this.lastSyncedRevision = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
+    this.manifestProbeToken = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   LibraryFoldersCompanion.insert({
@@ -1089,6 +1151,7 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolder> {
     this.relativePath = const Value.absent(),
     this.lastSyncedRevision = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
+    this.manifestProbeToken = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : libraryId = Value(libraryId),
        driveFolderId = Value(driveFolderId);
@@ -1099,6 +1162,7 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolder> {
     Expression<String>? relativePath,
     Expression<int>? lastSyncedRevision,
     Expression<DateTime>? lastSyncedAt,
+    Expression<String>? manifestProbeToken,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -1109,6 +1173,8 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolder> {
       if (lastSyncedRevision != null)
         'last_synced_revision': lastSyncedRevision,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
+      if (manifestProbeToken != null)
+        'manifest_probe_token': manifestProbeToken,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -1120,6 +1186,7 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolder> {
     Value<String>? relativePath,
     Value<int>? lastSyncedRevision,
     Value<DateTime?>? lastSyncedAt,
+    Value<String?>? manifestProbeToken,
     Value<DateTime>? createdAt,
   }) {
     return LibraryFoldersCompanion(
@@ -1129,6 +1196,7 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolder> {
       relativePath: relativePath ?? this.relativePath,
       lastSyncedRevision: lastSyncedRevision ?? this.lastSyncedRevision,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+      manifestProbeToken: manifestProbeToken ?? this.manifestProbeToken,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -1154,6 +1222,9 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolder> {
     if (lastSyncedAt.present) {
       map['last_synced_at'] = Variable<DateTime>(lastSyncedAt.value);
     }
+    if (manifestProbeToken.present) {
+      map['manifest_probe_token'] = Variable<String>(manifestProbeToken.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1169,6 +1240,7 @@ class LibraryFoldersCompanion extends UpdateCompanion<LibraryFolder> {
           ..write('relativePath: $relativePath, ')
           ..write('lastSyncedRevision: $lastSyncedRevision, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
+          ..write('manifestProbeToken: $manifestProbeToken, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -6842,6 +6914,7 @@ typedef $$LibraryFoldersTableCreateCompanionBuilder =
       Value<String> relativePath,
       Value<int> lastSyncedRevision,
       Value<DateTime?> lastSyncedAt,
+      Value<String?> manifestProbeToken,
       Value<DateTime> createdAt,
     });
 typedef $$LibraryFoldersTableUpdateCompanionBuilder =
@@ -6852,6 +6925,7 @@ typedef $$LibraryFoldersTableUpdateCompanionBuilder =
       Value<String> relativePath,
       Value<int> lastSyncedRevision,
       Value<DateTime?> lastSyncedAt,
+      Value<String?> manifestProbeToken,
       Value<DateTime> createdAt,
     });
 
@@ -6957,6 +7031,11 @@ class $$LibraryFoldersTableFilterComposer
 
   ColumnFilters<DateTime> get lastSyncedAt => $composableBuilder(
     column: $table.lastSyncedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get manifestProbeToken => $composableBuilder(
+    column: $table.manifestProbeToken,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7073,6 +7152,11 @@ class $$LibraryFoldersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get manifestProbeToken => $composableBuilder(
+    column: $table.manifestProbeToken,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -7131,6 +7215,11 @@ class $$LibraryFoldersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get lastSyncedAt => $composableBuilder(
     column: $table.lastSyncedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get manifestProbeToken => $composableBuilder(
+    column: $table.manifestProbeToken,
     builder: (column) => column,
   );
 
@@ -7252,6 +7341,7 @@ class $$LibraryFoldersTableTableManager
                 Value<String> relativePath = const Value.absent(),
                 Value<int> lastSyncedRevision = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
+                Value<String?> manifestProbeToken = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => LibraryFoldersCompanion(
                 id: id,
@@ -7260,6 +7350,7 @@ class $$LibraryFoldersTableTableManager
                 relativePath: relativePath,
                 lastSyncedRevision: lastSyncedRevision,
                 lastSyncedAt: lastSyncedAt,
+                manifestProbeToken: manifestProbeToken,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -7270,6 +7361,7 @@ class $$LibraryFoldersTableTableManager
                 Value<String> relativePath = const Value.absent(),
                 Value<int> lastSyncedRevision = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
+                Value<String?> manifestProbeToken = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => LibraryFoldersCompanion.insert(
                 id: id,
@@ -7278,6 +7370,7 @@ class $$LibraryFoldersTableTableManager
                 relativePath: relativePath,
                 lastSyncedRevision: lastSyncedRevision,
                 lastSyncedAt: lastSyncedAt,
+                manifestProbeToken: manifestProbeToken,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
