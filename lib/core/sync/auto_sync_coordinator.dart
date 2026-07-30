@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:drift/drift.dart' show TableUpdate;
-import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../../features/sampler/data/repositories/library_repository.dart';
 import '../../features/sampler/domain/entities/library.dart';
 import '../../features/sampler/presentation/providers/sync_controller.dart';
 import '../database/database.dart' as db;
 import '../settings/app_preferences.dart';
+import 'sync_log.dart';
 
 /// Coordonne la synchronisation automatique (mode semi-auto) :
 /// - **pull au lancement** : reconnexion silencieuse + récupération du snapshot
@@ -145,14 +145,16 @@ class AutoSyncCoordinator {
                 // Sans cette trace, impossible de répondre à la seule question
                 // qui compte sur ce chemin : le delta sert-il vraiment, ou
                 // rescanne-t-on en réalité à chaque lancement ?
-                debugPrint(
-                  'Synchro ${library.name} : delta appliqué '
-                  '($upserted ajout(s)/modif(s), $removed retrait(s)).',
+                SyncLog.deltaApplied(
+                  library: library.name,
+                  upserted: upserted,
+                  removed: removed,
                 );
                 fullyIndexed.add(library);
               case DriveSyncNeedsFullScan(:final reason):
-                debugPrint(
-                  'Synchro ${library.name} : scan complet — $reason.',
+                SyncLog.fullScanRequired(
+                  library: library.name,
+                  reason: reason,
                 );
                 final result = await _repository
                     .indexDriveFolder(library: library)
@@ -160,8 +162,11 @@ class AutoSyncCoordinator {
                 fullyIndexed.add(library);
                 presentByLibrary[library.id] = result.presentDriveFileIds;
             }
-          } catch (_) {
-            // Index incomplet : on saute son pull cette session.
+          } catch (e) {
+            // Index incomplet : on saute son pull cette session. Non bloquant
+            // (les autres bibliothèques continuent), mais plus muet — c'est la
+            // conséquence la plus lourde de toute la passe de lancement.
+            SyncLog.librarySkipped(library: library.name, error: e);
           }
         }
 
@@ -187,9 +192,11 @@ class AutoSyncCoordinator {
       } finally {
         _ignoreUpdates = false;
       }
-    } catch (_) {
+    } catch (e, stackTrace) {
       // Erreur inattendue au démarrage : passer en hors-ligne plutôt que
-      // de laisser la pastille bloquée sur « Synchro… ».
+      // de laisser la pastille bloquée sur « Synchro… ». La pastille ne peut pas
+      // distinguer « pas de réseau » d'un bug : seul ce log le dit.
+      SyncLog.initialPullFailed(e, stackTrace);
       _syncController.markOffline();
     }
   }

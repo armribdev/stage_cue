@@ -9,6 +9,7 @@ import 'library_sound_paths.dart';
 import '../../features/sampler/domain/entities/library.dart';
 import 'drive_client.dart';
 import 'drive_models.dart';
+import 'sync_log.dart';
 
 /// Résultat d'un import de fichier audio dans une bibliothèque.
 class ImportedAudio {
@@ -105,6 +106,7 @@ class AudioCacheManager {
       final materialized =
           await PathUnicode.canonicalizeLocalPath(downloadPath) ?? downloadPath;
       final size = await File(materialized).length();
+      SyncLog.trace('téléchargé (id) $cachePath — $size o');
       await _touch(library, cachePath, size);
       await _evictIfNeeded(library, protect: cachePath);
       return materialized;
@@ -134,6 +136,10 @@ class AudioCacheManager {
     final materialized =
         await PathUnicode.canonicalizeLocalPath(downloadPath) ?? downloadPath;
     final size = await File(materialized).length();
+    // Repli par NOM : signalé explicitement, c'est le chemin fragile (sensible
+    // aux accents, doublons et renommages) et il ne devrait servir que pour les
+    // sons legacy sans identité forte.
+    SyncLog.trace('téléchargé (repli par nom) $cachePath — $size o');
     await _touch(library, cachePath, size);
     await _evictIfNeeded(library, protect: cachePath);
     return materialized;
@@ -406,7 +412,11 @@ class AudioCacheManager {
     try {
       final file = File(canonical);
       if (await file.exists()) await file.delete();
-    } catch (_) {
+    } catch (e) {
+      // Le fichier survit à la ligne en base : occupe le disque sans être
+      // référencé. Non bloquant, mais c'est l'origine typique d'un cache qui
+      // grossit sans raison apparente.
+      SyncLog.evictionFailed(path: canonical, error: e);
       // Best-effort : un fichier non supprimable ne doit pas bloquer l'index.
     }
     final index = await _indexFor(library.localRootPath);
@@ -571,8 +581,14 @@ class _AccessIndex {
           );
         });
         return _AccessIndex(file, entries);
-      } catch (_) {
+      } catch (e) {
         // Index corrompu : on repart d'un index vide plutôt que de planter.
+        // Conséquence à ne pas taire — l'éviction perd tout son historique
+        // d'accès et redevient arbitraire jusqu'à ce que l'index se reconstitue.
+        SyncLog.warn(
+          'Index LRU illisible ($indexPath), repart à vide — $e',
+          error: e,
+        );
       }
     }
     return _AccessIndex(file, {});

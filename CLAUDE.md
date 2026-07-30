@@ -40,6 +40,24 @@ flutter test
 dart analyze
 ```
 
+**Débuguer l'indexation / le cache / la synchro Drive :**
+
+Deux canaux `developer.log`, filtrables dans la vue Logging de DevTools :
+`StageCue.Sync` (indexation, pull, téléchargements) et `StageCue.Audio` (lecture).
+
+Par défaut, une ligne par décision : chemin choisi (delta appliqué **avec ses
+compteurs**, ou scan complet **avec sa raison**), bilan d'indexation, bilan de
+pull dont le nombre de manifests sautés par jeton de sonde. Pour le détail
+fichier par fichier :
+```sh
+flutter run --dart-define=STAGE_CUE_SYNC_TRACE=true   # + STAGE_CUE_AUDIO_TRACE
+```
+
+L'état qui décide du prochain lancement est en base, donc inspectable à froid :
+`libraries.drive_change_token` / `last_full_scan_at` (scan complet ou delta) et
+`library_folders.manifest_probe_token` (sonde de pull). Les deux premiers à
+`null` ⇒ scan complet garanti.
+
 ## Conventions
 
 - Noms de fichiers : `snake_case.dart` — classes : `PascalCase`
