@@ -34,7 +34,7 @@ class DriveProfileStore {
       // Le profil restauré au lancement disparaît (ni e-mail ni avatar affichés)
       // alors que la session Drive, elle, est intacte : dissociation trompeuse
       // qui n'avait aucune trace.
-      SyncLog.warn('Profil Drive en cache illisible — $e', error: e);
+      SyncLog.warn('Profil Drive en cache illisible — $e');
       return null;
     }
   }
@@ -186,7 +186,6 @@ class DriveAvatarCache {
       // même si la question de ce qui subsiste après déconnexion se pose.
       SyncLog.warn(
         'Photos de compte non purgées à la déconnexion — $e',
-        error: e,
       );
     }
   }

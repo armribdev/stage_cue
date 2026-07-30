@@ -347,7 +347,6 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
       SyncLog.warn(
         'Identifiants Drive stockés illisibles, reconnexion interactive '
         'nécessaire — $e',
-        error: e,
       );
       return null;
     }

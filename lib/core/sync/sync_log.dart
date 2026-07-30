@@ -36,8 +36,15 @@ class SyncLog {
 
   static void info(String message) => _emit(message);
 
-  static void warn(String message, {Object? error}) =>
-      _emit(message, level: 900, error: error);
+  /// Un avertissement porte TOUT dans son message — pas d'objet d'erreur.
+  ///
+  /// `developer.log` imprime le message ET l'erreur qu'on lui passe : accepter
+  /// les deux, c'est garantir qu'un appelant finira par interpoler `$e` dans son
+  /// message tout en le passant aussi ici, et doubler le volume de la console
+  /// pile au moment où elle sert — pendant une rafale d'échecs. Le seul endroit
+  /// qui justifie l'objet est [severe], où la stack trace doit lui être
+  /// attachée.
+  static void warn(String message) => _emit(message, level: 900);
 
   static void severe(
     String message, {
@@ -79,17 +86,16 @@ class SyncLog {
     required String library,
     required Object error,
   }) {
-    warn(
-      '$library : écartée du pull cette session (index incomplet) — $error',
-      error: error,
-    );
+    warn('$library : écartée du pull cette session (index incomplet) — $error');
   }
 
   /// Échec inattendu de la passe de lancement : l'app bascule hors-ligne.
   static void initialPullFailed(Object error, StackTrace stackTrace) {
+    // Seul cas où l'on passe l'objet d'erreur : la stack trace n'a de sens
+    // qu'attachée à lui, et un incident unique ne risque pas de noyer la
+    // console.
     severe(
-      'Passe de synchronisation initiale interrompue — bascule hors-ligne : '
-      '$error',
+      'Passe de synchronisation initiale interrompue — bascule hors-ligne.',
       error: error,
       stackTrace: stackTrace,
     );
@@ -119,7 +125,6 @@ class SyncLog {
     warn(
       '$library : jeton de reprise Drive indisponible, le prochain lancement '
       'rescannera intégralement — $error',
-      error: error,
     );
   }
 
@@ -148,14 +153,14 @@ class SyncLog {
     required String title,
     required Object error,
   }) {
-    warn('Téléchargement échoué — « $title » : $error', error: error);
+    warn('Téléchargement échoué — « $title » : $error');
   }
 
   static void evictionFailed({
     required String path,
     required Object error,
   }) {
-    warn('Éviction du cache impossible — $path : $error', error: error);
+    warn('Éviction du cache impossible — $path : $error');
   }
 
   /// Ménage best-effort qui a échoué (blob résiduel, fichier temporaire).
@@ -164,7 +169,7 @@ class SyncLog {
     required String what,
     required Object error,
   }) {
-    warn('Ménage incomplet — $what : $error', error: error);
+    warn('Ménage incomplet — $what : $error');
   }
 
   static void _emit(

@@ -1128,7 +1128,6 @@ class LibraryRepository extends ChangeNotifier {
           SyncLog.warn(
             'Cache corrompu impossible à supprimer ($localPath) — le son '
             'restera indisponible : $e',
-            error: e,
           );
         }
         markPathUnloadable(localPath);
@@ -1303,8 +1302,17 @@ class LibraryRepository extends ChangeNotifier {
     try {
       // Le contrat [DriveClient] suffit ici (seul `ensureCached` est appelé) :
       // pas de raison d'exiger l'implémentation Google concrète.
-      final client = await _ensureAnyDriveClient();
-      if (client == null) throw StateError('Bibliothèque non connectée à Drive');
+      //
+      // Résolu à chaque fichier, JAMAIS capturé pour toute la passe : une passe
+      // dure des minutes, pendant lesquelles `reconnectSilently` ou un
+      // renouvellement de token remplace le client et `dispose()` l'ancien —
+      // fermant son `http.Client`. Toutes les requêtes suivantes levaient alors
+      // `ClientException: Client is already closed`, que `_describe` traduit en
+      // « Pas de connexion » : des centaines d'échecs en rafale, annonçant une
+      // panne réseau qui n'existait pas.
+      if (await _ensureAnyDriveClient() == null) {
+        throw StateError('Bibliothèque non connectée à Drive');
+      }
 
       final sounds = await _soundDataSource.getSoundsForLibrary(library.id);
       final total = sounds.length;
@@ -1321,6 +1329,7 @@ class LibraryRepository extends ChangeNotifier {
       var downloaded = 0;
       var failed = 0;
       var authExpired = false;
+      var sessionLost = false;
       var processed = 0;
 
       // Téléchargements en parallèle borné. Un par un, une bibliothèque de
@@ -1337,7 +1346,7 @@ class LibraryRepository extends ChangeNotifier {
           // Annulation et expiration de session : les tâches déjà en file se
           // vident sans rien faire plutôt que d'être interrompues en vol (un
           // téléchargement à moitié écrit serait un `.part` de plus à nettoyer).
-          if (cancelled() || authExpired) return;
+          if (cancelled() || authExpired || sessionLost) return;
 
           final relativePath = sound.relativePath;
           try {
@@ -1346,6 +1355,15 @@ class LibraryRepository extends ChangeNotifier {
             }
             final localPath = _cacheManager.localPathFor(library, relativePath);
             if (!await File(localPath).exists()) {
+              // Client relu ICI, pas capturé plus haut : celui du début de passe
+              // a pu être disposé entre-temps (cf. commentaire ci-dessus).
+              final client = await _ensureAnyDriveClient();
+              if (client == null) {
+                // Session réellement perdue : inutile de faire échouer les
+                // centaines de fichiers restants un par un.
+                sessionLost = true;
+                return;
+              }
               final resolvedLocalPath = await _cacheManager.ensureCached(
                 client: client,
                 library: library,
@@ -1379,7 +1397,7 @@ class LibraryRepository extends ChangeNotifier {
               try {
                 await invalidateAuthSession();
               } catch (e) {
-                SyncLog.warn('Invalidation de session échouée — $e', error: e);
+                SyncLog.warn('Invalidation de session échouée — $e');
               }
             }
           } catch (e) {
@@ -1409,9 +1427,15 @@ class LibraryRepository extends ChangeNotifier {
           current: total,
           total: total,
           isComplete: true,
-          error: authExpired
-              ? 'Session Google expirée — reconnexion requise.'
-              : (failed > 0 ? '$failed fichier(s) ignoré(s)' : null),
+          error: switch ((authExpired, sessionLost, failed)) {
+            (true, _, _) => 'Session Google expirée — reconnexion requise.',
+            // Distinct d'une expiration : la session a été fermée sous nos
+            // pieds, pas refusée par Google. Un simple relancement suffit.
+            (_, true, _) => 'Connexion Drive interrompue — relancez le '
+                'téléchargement.',
+            (_, _, final n) when n > 0 => '$n fichier(s) ignoré(s)',
+            _ => null,
+          },
         ),
       );
 
@@ -1854,7 +1878,6 @@ class LibraryRepository extends ChangeNotifier {
     } catch (e) {
       SyncLog.warn(
         'Pré-téléchargement en arrière-plan échoué (${library.name}) — $e',
-        error: e,
       );
     }
   }
@@ -1878,7 +1901,6 @@ class LibraryRepository extends ChangeNotifier {
       SyncLog.warn(
         'Cache de « ${library.name} » non supprimé (${library.localRootPath}), '
         'fichiers orphelins à retirer à la main — $e',
-        error: e,
       );
       // Le cache local est optionnel à la suppression.
     }

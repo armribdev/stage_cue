@@ -533,4 +533,119 @@ void main() {
       await dbB.close();
     });
   });
+
+  group('board_key : identité GLOBALE', () {
+    /// Exporte un snapshot racine contenant un board de clé [boardKey].
+    Future<String> exportBoardSnapshot(String boardKey, String name) async {
+      final lib = await database.into(database.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'src', localRootPath: '/src'),
+          );
+      await database.into(database.soundBoards).insert(
+            db.SoundBoardsCompanion.insert(
+              name: name,
+              libraryId: Value(lib),
+              boardKey: Value(boardKey),
+              updatedAt: Value(DateTime(2026, 3)),
+            ),
+          );
+      final path = p.join(tempDir.path, 'root_$boardKey.db');
+      await store.exportLibrarySnapshot(lib, path);
+      return path;
+    }
+
+    test('un board de MÊME clé dans une AUTRE bibliothèque ne fait pas planter '
+        'la fusion', () async {
+      const key = '3c27f4c7-d331-4b51-930d-db87c437fec0';
+      final snapshotPath = await exportBoardSnapshot(key, 'Armand');
+
+      // Appareil cible : le board existe déjà sous une PREMIÈRE bibliothèque
+      // (deux liens Drive qui recouvrent la même racine, cf. décision 0003).
+      final dbB = db.AppDatabase.forTesting(NativeDatabase.memory());
+      final libA = await dbB.into(dbB.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/A'),
+          );
+      await dbB.into(dbB.soundBoards).insert(
+            db.SoundBoardsCompanion.insert(
+              name: 'Armand',
+              libraryId: Value(libA),
+              boardKey: const Value(key),
+              updatedAt: Value(DateTime(2026)),
+            ),
+          );
+      // Puis on lie une SECONDE bibliothèque et on y fusionne le même snapshot.
+      final libB = await dbB.into(dbB.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'B', localRootPath: '/B'),
+          );
+
+      // Sans correctif : UNIQUE constraint failed sur sound_boards.board_key,
+      // l'ajout du dossier Drive échoue entièrement.
+      await LibrarySnapshotStore(dbB).mergeLibrarySnapshot(libB, snapshotPath);
+
+      final boards = await dbB.select(dbB.soundBoards).get();
+      expect(boards, hasLength(1),
+          reason: 'la clé étant globale, le board ne doit pas être dupliqué');
+      expect(boards.single.libraryId, libA,
+          reason: 'un board possédé ailleurs n\'est pas confisqué');
+      await dbB.close();
+    });
+
+    test('un board LOCAL (sans bibliothèque) de même clé est adopté, pas '
+        'dupliqué', () async {
+      const key = '9f14b0a2-0000-4000-8000-000000000001';
+      final snapshotPath = await exportBoardSnapshot(key, 'Scène distante');
+
+      final dbB = db.AppDatabase.forTesting(NativeDatabase.memory());
+      // `library_id = null` = scène locale non synchronisée (cf. SoundBoards).
+      await dbB.into(dbB.soundBoards).insert(
+            db.SoundBoardsCompanion.insert(
+              name: 'Scène locale',
+              boardKey: const Value(key),
+              updatedAt: Value(DateTime(2026)),
+            ),
+          );
+      final libB = await dbB.into(dbB.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'B', localRootPath: '/B'),
+          );
+
+      await LibrarySnapshotStore(dbB).mergeLibrarySnapshot(libB, snapshotPath);
+
+      final boards = await dbB.select(dbB.soundBoards).get();
+      expect(boards, hasLength(1));
+      expect(boards.single.libraryId, libB,
+          reason: 'un board sans propriétaire rejoint la bibliothèque tirée');
+      expect(boards.single.name, 'Scène distante',
+          reason: 'le distant est plus récent : il gagne');
+      await dbB.close();
+    });
+
+    test('un board local PLUS RÉCENT est rattaché quand même, sinon sa version '
+        'ne serait jamais repoussée', () async {
+      const key = '9f14b0a2-0000-4000-8000-000000000002';
+      final snapshotPath = await exportBoardSnapshot(key, 'Ancienne version');
+
+      final dbB = db.AppDatabase.forTesting(NativeDatabase.memory());
+      await dbB.into(dbB.soundBoards).insert(
+            db.SoundBoardsCompanion.insert(
+              name: 'Version locale récente',
+              boardKey: const Value(key),
+              // Postérieur au snapshot (exporté à 2026-03) : le local gagne.
+              updatedAt: Value(DateTime(2026, 6)),
+            ),
+          );
+      final libB = await dbB.into(dbB.libraries).insert(
+            db.LibrariesCompanion.insert(name: 'B', localRootPath: '/B'),
+          );
+
+      await LibrarySnapshotStore(dbB).mergeLibrarySnapshot(libB, snapshotPath);
+
+      final board = (await dbB.select(dbB.soundBoards).get()).single;
+      expect(board.name, 'Version locale récente',
+          reason: 'le contenu local, plus récent, est conservé');
+      // Le rattachement est INDÉPENDANT de l'arbitrage de contenu :
+      // `exportLibrarySnapshot` filtre sur `library_id`, donc un board resté
+      // orphelin ne serait jamais republié — sa version gagnante serait perdue.
+      expect(board.libraryId, libB);
+      await dbB.close();
+    });
+  });
 }
