@@ -54,6 +54,20 @@ class LibraryFolders extends Table {
   /// Révision de snapshot connue pour CE dossier (bookkeeping par-dossier).
   IntColumn get lastSyncedRevision => integer().withDefault(const Constant(0))();
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+
+  /// Jeton de sonde du manifest au dernier pull CONCLUANT de ce nœud (fusionné
+  /// ou constaté à jour) : le `modifiedTime` Drive sérialisé en ISO-8601 UTC.
+  /// Le pull s'en sert pour ne pas retélécharger un manifest inchangé — le
+  /// listing groupé ramène déjà ce champ gratuitement.
+  ///
+  /// **Texte et non `dateTime()` à dessein.** C'est une clé de cache opaque, que
+  /// l'on ne compare que par égalité, jamais par ordre. Une colonne `dateTime()`
+  /// serait un piège : Drift la stocke en secondes epoch (la précision
+  /// milliseconde de Drive serait perdue) et la relit en heure LOCALE, alors que
+  /// Drive émet de l'UTC — `==` sur `DateTime` distinguant les deux fuseaux, la
+  /// comparaison échouerait toujours et le cache ne servirait jamais, sans que
+  /// rien ne le signale. `null` = jamais sondé → on télécharge.
+  TextColumn get manifestProbeToken => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override

@@ -22,6 +22,7 @@ import '../../../../core/sync/library_sync_service.dart';
 import '../../../../core/sync/local_availability_probe.dart' as probe;
 import '../../../../core/sync/reconcile_path_matcher.dart';
 import '../../../../core/sync/snapshot_store.dart';
+import '../../../../core/utils/bounded_concurrency.dart';
 import '../../../../core/utils/file_utils.dart' show isAudioFile;
 import '../../../../core/utils/path_unicode.dart';
 import '../../domain/entities/library.dart';
@@ -730,13 +731,26 @@ class LibraryRepository extends ChangeNotifier {
       //    un appareil vierge les crée via indexDriveFolder avant que ceci ne
       //    remonte des métadonnées synchronisées.
       final folders = await _dataSource.getFoldersForLibrary(library.id);
+      // Passe GROUPÉE : les sondes `.stagecue` et manifest de tous les nœuds
+      // sont rassemblées, au lieu de deux allers-retours par dossier avant même
+      // de savoir s'il y a quelque chose à tirer.
+      final results = await _syncService.pullFolders(
+        client: client,
+        folders: [
+          for (final folder in folders)
+            FolderPullTarget(
+              folderId: folder.id,
+              folderDriveId: folder.driveFolderId,
+              knownRevision: folder.lastSyncedRevision,
+              knownProbeToken: folder.manifestProbeToken,
+            ),
+        ],
+      );
       for (final folder in folders) {
-        final outcome = await _syncService.pullFolder(
-          client: client,
-          folderId: folder.id,
-          folderDriveId: folder.driveFolderId,
-          knownRevision: folder.lastSyncedRevision,
-        );
+        final result = results[folder.id];
+        if (result == null) continue;
+
+        final outcome = result.outcome;
         if (outcome is PullStaged) {
           staged = true;
           stagedRevision = outcome.revision;
@@ -746,6 +760,13 @@ class LibraryRepository extends ChangeNotifier {
             lastSyncedAt: DateTime.now(),
           );
         }
+        // Rafraîchit la sonde APRÈS la fusion : une passe interrompue avant ce
+        // point laisse le cache tel quel, donc le prochain pull resondera au
+        // lieu de croire à tort que le nœud est à jour.
+        await _dataSource.updateFolderManifestProbe(
+          id: folder.id,
+          probeToken: result.probeToken,
+        );
       }
 
       // 2. Snapshot racine (boards → recâblage par driveFileId).
@@ -1568,9 +1589,10 @@ class LibraryRepository extends ChangeNotifier {
       // Un listing par dossier du niveau, en parallèle borné. `listFolder` est
       // idempotent : son réessai sur erreur transitoire est déjà assuré par
       // `_guardRetry` côté client Drive (cf. décision 0012).
-      final listings = await _mapBounded(
+      final listings = await mapBounded(
         level,
         (folder) => client.listFolder(folder.id, sharedDriveId: sharedDriveId),
+        concurrency: _driveListingConcurrency,
       );
 
       final next = <({String id, String prefix})>[];
@@ -1606,40 +1628,6 @@ class LibraryRepository extends ChangeNotifier {
     }
 
     return results;
-  }
-
-  /// Applique [task] à chaque élément avec au plus [_driveListingConcurrency]
-  /// exécutions simultanées, en préservant l'ordre des résultats.
-  ///
-  /// La première erreur arrête l'alimentation des workers et remonte (les
-  /// requêtes déjà en vol sont attendues avant de propager, pour ne laisser
-  /// aucun appel orphelin derrière soi).
-  Future<List<R>> _mapBounded<T, R>(
-    List<T> items,
-    Future<R> Function(T item) task,
-  ) async {
-    if (items.isEmpty) return const [];
-
-    final results = List<R?>.filled(items.length, null);
-    var nextIndex = 0;
-    var failed = false;
-
-    Future<void> worker() async {
-      while (!failed) {
-        final index = nextIndex++;
-        if (index >= items.length) return;
-        try {
-          results[index] = await task(items[index]);
-        } catch (_) {
-          failed = true;
-          rethrow;
-        }
-      }
-    }
-
-    final workerCount = math.min(_driveListingConcurrency, items.length);
-    await Future.wait([for (var i = 0; i < workerCount; i++) worker()]);
-    return results.cast<R>();
   }
 
   /// Réaligne les chemins issus d'un snapshot sur les fichiers réellement

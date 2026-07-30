@@ -28,6 +28,19 @@ abstract class DriveClient {
     String? sharedDriveId,
   });
 
+  /// Variante groupée de [findInFolder] : cherche le même [name] dans plusieurs
+  /// dossiers à la fois. Retourne `parentId -> fichier`, sans entrée pour les
+  /// dossiers où le nom est absent.
+  ///
+  /// Le pull sonde le même fichier (`.stagecue`, puis le manifest) dans chaque
+  /// nœud dossier de la bibliothèque : en unitaire, c'est deux allers-retours
+  /// par dossier avant même de savoir s'il y a quelque chose à tirer.
+  Future<Map<String, DriveFile>> findInFolders({
+    required Iterable<String> parentIds,
+    required String name,
+    String? sharedDriveId,
+  });
+
   /// Crée un dossier. `parentId` null = racine « My Drive ».
   Future<DriveFile> createFolder({required String name, String? parentId});
 

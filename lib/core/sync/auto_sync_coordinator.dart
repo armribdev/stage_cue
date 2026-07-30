@@ -59,10 +59,16 @@ class AutoSyncCoordinator {
 
   Future<void> _onTablesUpdated(Set<TableUpdate> updates) async {
     if (_ignoreUpdates || !_appPreferences.allowsNetworkSync) return;
-    // Ignorer les écritures ne touchant QUE la table de bookkeeping `libraries`
-    // (mise à jour de révision après un push) : sinon le push se relancerait en
-    // boucle.
-    final touchesUserData = updates.any((u) => u.table != 'libraries');
+    // Ignorer les écritures ne touchant QUE des tables de bookkeeping de
+    // synchro : sinon le push se relancerait en boucle.
+    // - `libraries` : révision mise à jour après un push ;
+    // - `library_folders` : révision et sonde de manifest par nœud, écrites par
+    //   le pull lui-même. Ces deux tables ne voyagent dans aucun snapshot (les
+    //   exports portent sur `sounds`, `sound_boards` et `pads`), donc une
+    //   écriture qui ne touche qu'elles n'a par construction rien à pousser.
+    const bookkeepingTables = {'libraries', 'library_folders'};
+    final touchesUserData =
+        updates.any((u) => !bookkeepingTables.contains(u.table));
     if (!touchesUserData) return;
 
     final libraries = await _connectedLibraries();

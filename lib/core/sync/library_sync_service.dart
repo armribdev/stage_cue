@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../utils/bounded_concurrency.dart';
 import 'drive_client.dart';
 import 'drive_models.dart';
 import 'snapshot_store.dart';
@@ -22,6 +23,58 @@ const String _boardsDbFileName = 'boards.db';
 const String _boardsManifestFileName = 'boards-manifest.json';
 const String _sqliteMimeType = 'application/x-sqlite3';
 const String _jsonMimeType = 'application/json';
+
+/// Manifests lus simultanément lors d'un pull groupé. Même prudence que pour le
+/// listing d'indexation : ce sont de petits GET, mais inutile de s'approcher des
+/// quotas Drive pour un gain marginal.
+const int _pullConcurrency = 5;
+
+/// Nœud dossier à tirer, tel que le demande [LibrarySyncService.pullFolders].
+class FolderPullTarget {
+  /// Id LOCAL du nœud dossier (clé des résultats retournés).
+  final int folderId;
+
+  /// Id du dossier Drive qui héberge le `.stagecue`.
+  final String folderDriveId;
+
+  /// Révision de snapshot déjà connue localement pour ce nœud.
+  final int knownRevision;
+
+  /// Jeton de sonde du manifest au dernier pull concluant, s'il est connu (cf.
+  /// [manifestProbeTokenOf]). Si le manifest distant porte toujours ce jeton, il
+  /// n'a pas changé : son téléchargement est sauté.
+  final String? knownProbeToken;
+
+  const FolderPullTarget({
+    required this.folderId,
+    required this.folderDriveId,
+    required this.knownRevision,
+    this.knownProbeToken,
+  });
+}
+
+/// Jeton de sonde d'un manifest distant : son `modifiedTime` sérialisé en
+/// ISO-8601 UTC, ou `null` si Drive ne l'a pas renvoyé.
+///
+/// Passer par cette fonction des DEUX côtés (ce qu'on mémorise et ce qu'on
+/// compare) : c'est ce qui garantit que la comparaison porte sur des formes
+/// identiques, sans dépendre d'un fuseau ni d'une précision de stockage.
+String? manifestProbeTokenOf(DriveFile manifestFile) =>
+    manifestFile.modifiedTime?.toUtc().toIso8601String();
+
+/// Issue d'un pull par-dossier, accompagnée de quoi rafraîchir le cache de
+/// sonde de l'appelant.
+class FolderPullResult {
+  final PullOutcome outcome;
+
+  /// Jeton de sonde observé pendant cette passe. À mémoriser tel quel quand
+  /// l'issue est concluante ([PullStaged] ou [PullUpToDate]) ; `null` quand il
+  /// n'y a rien de fiable à mémoriser (pas de manifest distant, fusion ratée, ou
+  /// Drive n'a pas renvoyé la date).
+  final String? probeToken;
+
+  const FolderPullResult(this.outcome, {this.probeToken});
+}
 
 /// Résultat d'un push de snapshot.
 sealed class PushOutcome {
@@ -273,21 +326,158 @@ class LibrarySyncService {
 
   /// Variante par-dossier : tire le snapshot du `.stagecue` co-localisé au
   /// dossier Drive [folderDriveId] et le fusionne dans le nœud [folderId].
+  ///
+  /// Façade à une entrée sur [pullFolders] — une seule implémentation des règles
+  /// de pull par-dossier.
   Future<PullOutcome> pullFolder({
     required DriveClient client,
     required int folderId,
     required String folderDriveId,
     required int knownRevision,
-  }) {
-    return _pullSnapshot(
+  }) async {
+    final outcomes = await pullFolders(
       client: client,
-      remoteFolderId: folderDriveId,
-      dbFileName: _folderDbFileName,
-      manifestFileName: _folderManifestFileName,
-      knownRevision: knownRevision,
-      mergeSnapshot: (path) =>
-          _snapshotStore.mergeFolderSnapshot(folderId, path),
+      folders: [
+        FolderPullTarget(
+          folderId: folderId,
+          folderDriveId: folderDriveId,
+          knownRevision: knownRevision,
+        ),
+      ],
     );
+    return outcomes[folderId]?.outcome ?? const PullNoRemoteSnapshot();
+  }
+
+  /// Tire les snapshots de PLUSIEURS nœuds dossier en une passe.
+  ///
+  /// Le pull unitaire sondait `.stagecue` puis le manifest dossier par dossier :
+  /// deux allers-retours chacun avant même de savoir s'il y avait quelque chose
+  /// à tirer, soit une bibliothèque de 80 dossiers qui coûtait ~240 requêtes en
+  /// série à chaque lancement pour, le plus souvent, conclure « rien de neuf ».
+  /// Ici, les deux sondes sont groupées et les manifests téléchargés en
+  /// parallèle borné.
+  ///
+  /// Les FUSIONS restent strictement séquentielles : elles encadrent la
+  /// transaction Drift d'un `ATTACH`/`DETACH` sur la base partagée, que deux
+  /// fusions concurrentes feraient entrer en collision (cf. décision 0004).
+  Future<Map<int, FolderPullResult>> pullFolders({
+    required DriveClient client,
+    required List<FolderPullTarget> folders,
+  }) async {
+    final outcomes = <int, FolderPullResult>{};
+    if (folders.isEmpty) return outcomes;
+
+    // 1. Tous les `.stagecue` d'un coup.
+    final stages = await client.findInFolders(
+      parentIds: folders.map((f) => f.folderDriveId),
+      name: _stageFolderName,
+    );
+
+    final staged = <({FolderPullTarget target, String stageId})>[];
+    for (final folder in folders) {
+      final stage = stages[folder.folderDriveId];
+      if (stage == null) {
+        // Pas de `.stagecue` : rien à comparer. On n'a rien de fiable à
+        // mémoriser, et le cache éventuel doit être oublié.
+        outcomes[folder.folderId] = const FolderPullResult(
+          PullNoRemoteSnapshot(),
+        );
+        continue;
+      }
+      staged.add((target: folder, stageId: stage.id));
+    }
+    if (staged.isEmpty) return outcomes;
+
+    // 2. Tous les manifests d'un coup. Le listing ramène leur `modifiedTime` au
+    //    passage : c'est ce qui permet l'étape 3.
+    final manifestFiles = await client.findInFolders(
+      parentIds: staged.map((e) => e.stageId),
+      name: _folderManifestFileName,
+    );
+
+    final readable = <({
+      FolderPullTarget target,
+      String stageId,
+      String fileId,
+      String? probeToken,
+    })>[];
+    for (final entry in staged) {
+      final manifestFile = manifestFiles[entry.stageId];
+      if (manifestFile == null) {
+        outcomes[entry.target.folderId] = const FolderPullResult(
+          PullNoRemoteSnapshot(),
+        );
+        continue;
+      }
+
+      // 3. Manifest inchangé depuis le dernier pull concluant → on ne le
+      //    télécharge même pas. Les deux jetons comparés sortent de
+      //    `manifestProbeTokenOf`, donc de la même horloge (celle de Drive) et
+      //    de la même sérialisation : aucune dérive d'horloge locale ni perte de
+      //    précision au stockage ne peut faire sauter une synchro légitime. Le
+      //    manifest étant l'unique source de vérité sur le snapshot courant (cf.
+      //    décision 0007), un manifest identique garantit un blob identique.
+      final probeToken = manifestProbeTokenOf(manifestFile);
+      final known = entry.target.knownProbeToken;
+      if (probeToken != null && known != null && probeToken == known) {
+        outcomes[entry.target.folderId] = FolderPullResult(
+          const PullUpToDate(),
+          probeToken: probeToken,
+        );
+        continue;
+      }
+
+      readable.add((
+        target: entry.target,
+        stageId: entry.stageId,
+        fileId: manifestFile.id,
+        probeToken: probeToken,
+      ));
+    }
+    if (readable.isEmpty) return outcomes;
+
+    // 4. Lecture des manifests restants en parallèle (idempotent, sans effet
+    //    de bord).
+    final manifests = await mapBounded(
+      readable,
+      (entry) async {
+        final bytes = await client.downloadBytes(entry.fileId);
+        return SyncManifest.decode(utf8.decode(bytes));
+      },
+      concurrency: _pullConcurrency,
+    );
+
+    // 5. Fusion, une par une.
+    for (var i = 0; i < readable.length; i++) {
+      final entry = readable[i];
+      final manifest = manifests[i];
+
+      if (manifest.revision <= entry.target.knownRevision) {
+        outcomes[entry.target.folderId] = FolderPullResult(
+          const PullUpToDate(),
+          probeToken: entry.probeToken,
+        );
+        continue;
+      }
+
+      final outcome = await _mergeRemoteSnapshot(
+        client: client,
+        stageId: entry.stageId,
+        manifest: manifest,
+        fallbackDbFileName: _folderDbFileName,
+        mergeSnapshot: (path) =>
+            _snapshotStore.mergeFolderSnapshot(entry.target.folderId, path),
+      );
+      outcomes[entry.target.folderId] = FolderPullResult(
+        outcome,
+        // Une fusion ratée ou un blob introuvable ne doit RIEN mémoriser :
+        // sinon le prochain pull sauterait la sonde et croirait à tort être à
+        // jour, figeant le nœud sur une révision jamais fusionnée.
+        probeToken: outcome is PullStaged ? entry.probeToken : null,
+      );
+    }
+
+    return outcomes;
   }
 
   Future<PullOutcome> _pullSnapshot({
@@ -307,11 +497,31 @@ class LibrarySyncService {
       return const PullUpToDate();
     }
 
+    return _mergeRemoteSnapshot(
+      client: client,
+      stageId: stage.id,
+      manifest: remoteManifest,
+      fallbackDbFileName: dbFileName,
+      mergeSnapshot: mergeSnapshot,
+    );
+  }
+
+  /// Tire le blob désigné par [manifest] et le fusionne. Appelé une fois la
+  /// décision prise (révision distante strictement plus récente) — partagé par
+  /// le pull unitaire et le pull groupé, pour que la résolution du blob et le
+  /// nettoyage du fichier temporaire n'existent qu'en un exemplaire.
+  Future<PullOutcome> _mergeRemoteSnapshot({
+    required DriveClient client,
+    required String stageId,
+    required SyncManifest manifest,
+    required String fallbackDbFileName,
+    required Future<void> Function(String path) mergeSnapshot,
+  }) async {
     // Le manifest désigne son snapshot par son nom unique. À défaut (manifest
     // écrit par une version antérieure), on retombe sur le nom historique.
     final dbFile = await client.findInFolder(
-      parentId: stage.id,
-      name: remoteManifest.dbFileName ?? dbFileName,
+      parentId: stageId,
+      name: manifest.dbFileName ?? fallbackDbFileName,
     );
     // Le manifest annonce une révision mais son snapshot est absent : distant
     // incohérent, surtout pas « à jour ».
@@ -325,7 +535,7 @@ class LibrarySyncService {
         destinationPath: downloadPath,
       );
       await mergeSnapshot(downloadPath);
-      return PullStaged(remoteManifest.revision);
+      return PullStaged(manifest.revision);
     } finally {
       await _safeDelete(downloadPath);
     }

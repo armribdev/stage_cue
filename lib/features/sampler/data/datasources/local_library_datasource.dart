@@ -236,4 +236,26 @@ class LocalLibraryDataSource {
           lastSyncedAt != null ? Value(lastSyncedAt) : const Value.absent(),
     ));
   }
+
+  /// Mémorise le jeton de sonde du manifest observé au dernier pull concluant
+  /// de ce nœud, ou l'efface (`null`) quand il n'y a rien de fiable à retenir.
+  ///
+  /// Écrit uniquement en cas de CHANGEMENT : sans ce garde-fou, chaque pull —
+  /// y compris ceux qui ne concluent à rien de neuf — marquerait la table comme
+  /// modifiée et déclencherait un push parasite via le flux `tableUpdates`.
+  Future<void> updateFolderManifestProbe({
+    required int id,
+    required String? probeToken,
+  }) async {
+    final current = await (_database.select(_database.libraryFolders)
+          ..where((f) => f.id.equals(id)))
+        .getSingleOrNull();
+    if (current == null || current.manifestProbeToken == probeToken) return;
+
+    await (_database.update(_database.libraryFolders)
+          ..where((f) => f.id.equals(id)))
+        .write(db.LibraryFoldersCompanion(
+      manifestProbeToken: Value(probeToken),
+    ));
+  }
 }
