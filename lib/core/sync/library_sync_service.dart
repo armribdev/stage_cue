@@ -9,6 +9,7 @@ import '../utils/bounded_concurrency.dart';
 import 'drive_client.dart';
 import 'drive_models.dart';
 import 'snapshot_store.dart';
+import 'sync_log.dart';
 import 'sync_manifest.dart';
 
 const String _stageFolderName = '.stagecue';
@@ -73,7 +74,17 @@ class FolderPullResult {
   /// Drive n'a pas renvoyé la date).
   final String? probeToken;
 
-  const FolderPullResult(this.outcome, {this.probeToken});
+  /// Vrai si le manifest n'a même pas été téléchargé, son jeton de sonde étant
+  /// inchangé. C'est la mesure directe de l'efficacité de la sonde : si ce
+  /// drapeau ne se lève jamais, le pull retélécharge tous les manifests à chaque
+  /// lancement et l'optimisation ne sert à rien.
+  final bool skippedByProbe;
+
+  const FolderPullResult(
+    this.outcome, {
+    this.probeToken,
+    this.skippedByProbe = false,
+  });
 }
 
 /// Résultat d'un push de snapshot.
@@ -274,7 +285,8 @@ class LibrarySyncService {
     try {
       final file = await client.findInFolder(parentId: parentId, name: name);
       if (file != null) await client.deleteFile(file.id);
-    } catch (_) {
+    } catch (e) {
+      SyncLog.cleanupFailed(what: 'blob distant $name', error: e);
       // Ménage best-effort : un blob résiduel ne compromet pas la synchro.
     }
   }
@@ -423,6 +435,7 @@ class LibrarySyncService {
         outcomes[entry.target.folderId] = FolderPullResult(
           const PullUpToDate(),
           probeToken: probeToken,
+          skippedByProbe: true,
         );
         continue;
       }
@@ -660,7 +673,8 @@ class LibrarySyncService {
     try {
       final f = File(path);
       if (await f.exists()) await f.delete();
-    } catch (_) {
+    } catch (e) {
+      SyncLog.cleanupFailed(what: 'fichier temporaire $path', error: e);
       // Nettoyage best-effort : un fichier temporaire résiduel n'est pas grave.
     }
   }

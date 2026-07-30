@@ -22,6 +22,7 @@ import '../../../../core/sync/library_sync_service.dart';
 import '../../../../core/sync/local_availability_probe.dart' as probe;
 import '../../../../core/sync/reconcile_path_matcher.dart';
 import '../../../../core/sync/snapshot_store.dart';
+import '../../../../core/sync/sync_log.dart';
 import '../../../../core/utils/bounded_concurrency.dart';
 import '../../../../core/utils/file_utils.dart' show isAudioFile;
 import '../../../../core/utils/path_unicode.dart';
@@ -779,12 +780,18 @@ class LibraryRepository extends ChangeNotifier {
             ),
         ],
       );
+      var skippedByProbe = 0;
+      var mergedCount = 0;
+      var noRemoteCount = 0;
       for (final folder in folders) {
         final result = results[folder.id];
         if (result == null) continue;
 
+        if (result.skippedByProbe) skippedByProbe++;
         final outcome = result.outcome;
+        if (outcome is PullNoRemoteSnapshot) noRemoteCount++;
         if (outcome is PullStaged) {
+          mergedCount++;
           staged = true;
           stagedRevision = outcome.revision;
           await _dataSource.updateFolderSyncState(
@@ -801,6 +808,14 @@ class LibraryRepository extends ChangeNotifier {
           probeToken: result.probeToken,
         );
       }
+
+      SyncLog.pullFinished(
+        library: library.name,
+        probed: folders.length,
+        skippedByProbe: skippedByProbe,
+        merged: mergedCount,
+        noRemote: noRemoteCount,
+      );
 
       // 2. Snapshot racine (boards → recâblage par driveFileId).
       final rootOutcome = await _syncService.pull(
@@ -1297,7 +1312,7 @@ class LibraryRepository extends ChangeNotifier {
           break;
         } catch (e) {
           failed++;
-          debugPrint('Téléchargement échoué pour ${sound.title}: $e');
+          SyncLog.downloadFailed(title: sound.title, error: e);
         }
 
         report(
@@ -1522,7 +1537,10 @@ class LibraryRepository extends ChangeNotifier {
   /// snapshot : un snapshot distant périmé (poussé par un appareil qui n'a pas
   /// encore rescanné) peut réinsérer un son pointant vers un fichier déjà
   /// supprimé — cet appel le retire à nouveau.
-  Future<void> pruneSoundsAbsentFromDrive({
+  /// Retourne le nombre de sons élagués — utile au bilan de fin d'indexation,
+  /// où c'est le chiffre à surveiller : un élagage inattendu est le symptôme d'un
+  /// scan qui a vu moins que la réalité.
+  Future<int> pruneSoundsAbsentFromDrive({
     required Library library,
     required Set<String> presentDriveFileIds,
   }) async {
@@ -1534,6 +1552,12 @@ class LibraryRepository extends ChangeNotifier {
     for (final relativePath in prunedPaths) {
       await _cacheManager.evictCachedFile(library, relativePath);
     }
+    if (prunedPaths.isNotEmpty) {
+      SyncLog.trace(
+        '${library.name} : élagués — ${prunedPaths.join(', ')}',
+      );
+    }
+    return prunedPaths.length;
   }
 
   Future<DriveIndexResult> _indexDriveFolder({
@@ -1563,7 +1587,7 @@ class LibraryRepository extends ChangeNotifier {
           sharedDriveId: library.sharedDriveId,
         );
       } catch (e) {
-        debugPrint('Jeton de reprise Drive indisponible (${library.name}): $e');
+        SyncLog.startTokenUnavailable(library: library.name, error: e);
       }
 
       final audioFiles = await _collectDriveAudioFiles(
@@ -1677,9 +1701,17 @@ class LibraryRepository extends ChangeNotifier {
       // directement sur Drive (identité forte absente du scan). Les sons legacy
       // sans driveFileId sont épargnés (réalignés par chemin, jamais élagués).
       final seenDriveIds = audioFiles.map((e) => e.driveFileId).toSet();
-      await pruneSoundsAbsentFromDrive(
+      final prunedCount = await pruneSoundsAbsentFromDrive(
         library: library,
         presentDriveFileIds: seenDriveIds,
+      );
+
+      SyncLog.indexFinished(
+        library: library.name,
+        folderCount: folderIds.length,
+        fileCount: audioFiles.length,
+        createdCount: indexedCount,
+        prunedCount: prunedCount,
       );
 
       // Le scan a réussi et il est COMPLET : c'est le seul moment où l'on peut
@@ -1742,8 +1774,9 @@ class LibraryRepository extends ChangeNotifier {
     try {
       await downloadAllLibraryAudio(library: library);
     } catch (e) {
-      debugPrint(
-        'Pré-téléchargement en arrière-plan échoué (${library.name}): $e',
+      SyncLog.warn(
+        'Pré-téléchargement en arrière-plan échoué (${library.name}) — $e',
+        error: e,
       );
     }
   }

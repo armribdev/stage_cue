@@ -771,10 +771,14 @@ void main() {
 
       expect(results[1]?.outcome, isA<PullUpToDate>());
       expect(results[1]?.probeToken, probedToken);
+      // Le drapeau est la seule mesure de l'efficacité de la sonde : s'il ne se
+      // lève jamais en production, le pull retélécharge tous les manifests.
+      expect(results[1]?.skippedByProbe, isTrue);
       verifyNever(() => client.downloadBytes(any()));
     });
 
-    test('manifest redaté : le téléchargement a bien lieu', () async {
+    test('manifest redaté : le téléchargement a bien lieu, sans saut compté',
+        () async {
       stubProbe(modifiedTime: probedAt.add(const Duration(minutes: 1)));
       when(() => client.downloadBytes('ma'))
           .thenAnswer((_) async => utf8.encode(manifest(3).encode()));
@@ -792,6 +796,7 @@ void main() {
       );
 
       expect(results[1]?.outcome, isA<PullUpToDate>());
+      expect(results[1]?.skippedByProbe, isFalse);
       verify(() => client.downloadBytes('ma')).called(1);
     });
 
