@@ -11,6 +11,7 @@ import 'drive_account_profile.dart';
 import 'drive_client.dart';
 import 'google_drive_client.dart';
 import 'google_oauth_config.dart';
+import 'sync_log.dart';
 
 const String _kTokenKey = 'token';
 const String _kExpiresAtKey = 'expires_at';
@@ -338,7 +339,16 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
         credentials: _credentialsFromStoredMap(map),
         expiresAt: expiresAt,
       );
-    } catch (_) {
+    } catch (e) {
+      // Symptôme visible par l'utilisateur — « pourquoi dois-je me reconnecter
+      // alors que j'étais connecté hier ? » — et jusqu'ici sans aucune trace :
+      // la reconnexion silencieuse échouait sans dire que le jeton stocké était
+      // simplement illisible (format changé, écriture tronquée).
+      SyncLog.warn(
+        'Identifiants Drive stockés illisibles, reconnexion interactive '
+        'nécessaire — $e',
+        error: e,
+      );
       return null;
     }
   }
@@ -390,6 +400,14 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
     final fromUserInfo = await _profileFromUserInfo(credentials.accessToken);
 
     if (fromIdToken == null && fromUserInfo == null) {
+      // On journalise l'ISSUE, pas chaque tentative : échouer sur une des deux
+      // sources est normal (elles se replient l'une sur l'autre), échouer sur
+      // les deux se voit dans l'UI — ni e-mail ni avatar de compte — sans que
+      // rien n'en explique la cause.
+      SyncLog.warn(
+        'Profil de compte Drive introuvable : ni l\'ID token ni userinfo n\'ont '
+        'donné d\'e-mail. Connexion fonctionnelle, identité non affichée.',
+      );
       return null;
     }
     if (fromIdToken == null) {
@@ -430,7 +448,11 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
           displayName: payload['name'] as String?,
           photoUrl: payload['picture'] as String?,
         );
-      } catch (_) {
+      } catch (e) {
+        // Tentative individuelle : trace seulement. Le premier endpoint qui
+        // échoue est un cas courant, le second prend le relais — l'échec des
+        // deux est signalé par l'appelant.
+        SyncLog.trace('userinfo $path indisponible — $e');
         continue;
       }
     }
@@ -459,7 +481,8 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
         displayName: payload['name'] as String?,
         photoUrl: payload['picture'] as String?,
       );
-    } catch (_) {
+    } catch (e) {
+      SyncLog.trace('ID token illisible — $e');
       return null;
     }
   }

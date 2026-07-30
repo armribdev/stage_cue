@@ -14,6 +14,7 @@ import 'drive_client.dart';
 import 'drive_models.dart';
 import 'drive_profile_cache.dart';
 import 'google_drive_desktop_auth.dart';
+import 'sync_log.dart';
 
 /// Champs Drive demandés pour décrire un fichier (révision, hash, taille…).
 const String _fileFields =
@@ -517,9 +518,21 @@ class GoogleDriveClient implements DriveClient {
       final sink = tmp.openWrite();
       try {
         await media.stream.pipe(sink);
-      } catch (_) {
-        await sink.close();
-        if (await tmp.exists()) await tmp.delete();
+      } catch (e) {
+        // Le nettoyage ne doit JAMAIS masquer la cause du téléchargement raté :
+        // sans ce garde, une suppression impossible (fichier verrouillé) se
+        // propagerait à la place de l'erreur réseau d'origine, et le `rethrow`
+        // ci-dessous ne serait même pas atteint.
+        try {
+          await sink.close();
+          if (await tmp.exists()) await tmp.delete();
+        } catch (cleanupError) {
+          SyncLog.cleanupFailed(
+            what: 'téléchargement partiel ${tmp.path}',
+            error: cleanupError,
+          );
+        }
+        SyncLog.trace('téléchargement interrompu $fileId — $e');
         rethrow;
       }
       await tmp.rename(destinationPath);

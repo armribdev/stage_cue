@@ -308,6 +308,88 @@ void main() {
     expect(await File(manager.localPathFor(library, 'b.wav')).exists(), isTrue);
   });
 
+  test('éviction LRU : une entrée dont le fichier a déjà disparu ne compte pas '
+      'comme espace libéré', () async {
+    var tick = 0;
+    final manager = AudioCacheManager(
+      minFreeDiskBytes: _simulatedDiskCapacity - 100,
+      availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
+      clock: () => ++tick,
+    );
+    when(() => client.findInFolder(
+          parentId: any(named: 'parentId'),
+          name: any(named: 'name'),
+        )).thenAnswer((_) async => file('remote', 'x'));
+    stubDownloadWriting(80);
+
+    await manager.ensureCached(
+      client: client,
+      library: library,
+      relativePath: 'a.wav',
+    );
+    // Le fichier de `a.wav` disparaît hors de notre dos ; son entrée d'index,
+    // elle, subsiste. Compter son poids comme « libéré » ferait croire la cible
+    // atteinte et laisserait `b.wav` ET `c.wav` en place sous pression disque.
+    await File(manager.localPathFor(library, 'a.wav')).delete();
+
+    await manager.ensureCached(
+      client: client,
+      library: library,
+      relativePath: 'b.wav',
+    );
+    await manager.ensureCached(
+      client: client,
+      library: library,
+      relativePath: 'c.wav',
+    );
+
+    // 160 o réellement sur disque pour un budget de 100 : la passe doit avoir
+    // évincé b.wav pour de bon, sans se satisfaire de l'entrée fantôme.
+    expect(await File(manager.localPathFor(library, 'b.wav')).exists(), isFalse);
+    expect(await File(manager.localPathFor(library, 'c.wav')).exists(), isTrue);
+  });
+
+  test('éviction LRU : un fichier non supprimable GARDE son entrée d\'index',
+      () async {
+    var tick = 0;
+    final manager = AudioCacheManager(
+      minFreeDiskBytes: _simulatedDiskCapacity - 100,
+      availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
+      clock: () => ++tick,
+    );
+    when(() => client.findInFolder(
+          parentId: any(named: 'parentId'),
+          name: any(named: 'name'),
+        )).thenAnswer((_) async => file('remote', 'x'));
+    stubDownloadWriting(80);
+
+    await manager.ensureCached(
+      client: client,
+      library: library,
+      relativePath: 'a.wav',
+    );
+    // Remplace le fichier par un DOSSIER non vide : sa suppression échoue comme
+    // le ferait un verrou système, sans dépendre des ACL de la machine de test.
+    final aPath = manager.localPathFor(library, 'a.wav');
+    await File(aPath).delete();
+    await Directory(aPath).create();
+    await File(p.join(aPath, 'verrou')).writeAsString('x');
+
+    await manager.ensureCached(
+      client: client,
+      library: library,
+      relativePath: 'b.wav',
+    );
+
+    // L'entrée doit survivre dans l'index : sortie de l'index, elle ne serait
+    // plus jamais reprise et l'espace resterait perdu.
+    final indexRaw = await File(
+      p.join(rootDir.path, '.cache_access.json'),
+    ).readAsString();
+    expect(indexRaw, contains('a.wav'),
+        reason: 'un fichier non supprimable ne doit pas sortir de l\'index');
+  });
+
   test('éviction LRU : un favori épinglé n\'est jamais évincé', () async {
     var tick = 0;
     final manager = AudioCacheManager(

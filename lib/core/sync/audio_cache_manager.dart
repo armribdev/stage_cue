@@ -203,12 +203,26 @@ class AudioCacheManager {
           final size = await entity.length();
           await entity.delete();
           reclaimed += size;
-        } catch (_) {
-          // Fichier verrouillé ou déjà disparu : on passe au suivant.
+        } catch (e) {
+          // Fichier verrouillé ou déjà disparu : on passe au suivant. Par
+          // fichier, donc en trace — le bilan global suffit d'ordinaire.
+          SyncLog.trace('résidu .part non supprimé (${entity.path}) — $e');
         }
       }
-    } catch (_) {
-      // Racine illisible : le ménage n'est pas critique.
+    } catch (e) {
+      // Racine illisible : le ménage n'est pas critique, mais l'annoncer évite
+      // de chercher pourquoi les résidus s'accumulent sans jamais diminuer.
+      SyncLog.warn(
+        'Ménage des téléchargements partiels impossible '
+        '(${library.localRootPath}) — $e',
+        error: e,
+      );
+    }
+    if (reclaimed > 0) {
+      SyncLog.info(
+        '${library.name} : ${reclaimed ~/ 1024} Kio récupérés sur des '
+        'téléchargements interrompus.',
+      );
     }
     return reclaimed;
   }
@@ -481,13 +495,33 @@ class AudioCacheManager {
       if (entry.key == protectedKey) continue;
       if (pinned.contains(entry.key)) continue; // épinglé : jamais évincé
       final fileToDelete = File(localPathFor(library, entry.key));
+      final int reclaimedBytes;
       try {
-        if (await fileToDelete.exists()) await fileToDelete.delete();
-      } catch (_) {
-        // Best-effort : un fichier non supprimable ne doit pas bloquer.
+        if (await fileToDelete.exists()) {
+          await fileToDelete.delete();
+          reclaimedBytes = entry.value.size;
+          SyncLog.trace('évincé ${entry.key} — ${entry.value.size} o');
+        } else {
+          // Entrée périmée : le fichier a disparu hors de notre dos. On la
+          // retire de l'index, mais SANS rien compter comme libéré — l'espace
+          // l'était déjà. Le compter ferait croire la cible atteinte et
+          // arrêterait la passe trop tôt, en pleine pression disque.
+          reclaimedBytes = 0;
+        }
+      } catch (e) {
+        // Le fichier est TOUJOURS là. On garde donc son entrée : la retirer le
+        // ferait sortir de l'index, et plus aucune passe d'éviction ne le
+        // reprendrait — espace perdu jusqu'à une purge manuelle. Best-effort
+        // veut dire « ne bloque pas la passe », pas « oublie le fichier ».
+        SyncLog.warn(
+          'Éviction impossible (${fileToDelete.path}), entrée conservée pour '
+          'la prochaine passe — $e',
+          error: e,
+        );
+        continue;
       }
       index.entries.remove(entry.key);
-      freed += entry.value.size;
+      freed += reclaimedBytes;
     }
     await _saveIndex(library.localRootPath, index);
   }

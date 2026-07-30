@@ -920,7 +920,9 @@ class LibraryRepository extends ChangeNotifier {
       if (await stale.exists() && !await isPlausibleAudioFile(stale)) {
         await stale.delete();
       }
-    } catch (_) {}
+    } catch (e) {
+      SyncLog.trace('purge du cache périmé impossible ($localPath) — $e');
+    }
   }
 
   /// Sonde disque rapide — sans SoLoud, sans réseau, sans modifier le cache.
@@ -952,7 +954,9 @@ class LibraryRepository extends ChangeNotifier {
               await PathUnicode.canonicalizeLocalPath(localPath) ?? localPath;
           final stale = File(stalePath);
           if (await stale.exists()) await stale.delete();
-        } catch (_) {}
+        } catch (e) {
+          SyncLog.trace('purge avant re-téléchargement impossible — $e');
+        }
         return LocalSoundProbeResult.needsDownload;
       }
       return LocalSoundProbeResult.missingFile;
@@ -1082,7 +1086,16 @@ class LibraryRepository extends ChangeNotifier {
         AudioLoadLog.corruptCacheFile(path: localPath, bytes: corruptSize);
         try {
           await localFile.delete();
-        } catch (_) {}
+        } catch (e) {
+          // Corrompu ET non supprimable : le re-téléchargement ne partira pas
+          // (le fichier existe toujours), donc le pad reste cassé tant que le
+          // verrou dure. Distinct d'une simple corruption, déjà journalisée.
+          SyncLog.warn(
+            'Cache corrompu impossible à supprimer ($localPath) — le son '
+            'restera indisponible : $e',
+            error: e,
+          );
+        }
         markPathUnloadable(localPath);
         if (!downloadIfNeeded) {
           throw SoundNotAvailableLocallyException(isOffline: false);
@@ -1791,7 +1804,17 @@ class LibraryRepository extends ChangeNotifier {
       if (await cacheDir.exists()) {
         await cacheDir.delete(recursive: true);
       }
-    } catch (_) {
+    } catch (e) {
+      // La bibliothèque a disparu de la base mais son cache reste sur le disque,
+      // désormais sans rien pour le référencer : potentiellement des gigaoctets
+      // d'audio orphelins qu'aucune éviction ne viendra jamais reprendre. C'est
+      // exactement le genre de « disque qui se remplit sans raison » qu'on ne
+      // peut pas diagnostiquer après coup sans cette ligne.
+      SyncLog.warn(
+        'Cache de « ${library.name} » non supprimé (${library.localRootPath}), '
+        'fichiers orphelins à retirer à la main — $e',
+        error: e,
+      );
       // Le cache local est optionnel à la suppression.
     }
   }
