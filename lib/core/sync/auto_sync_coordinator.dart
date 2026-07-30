@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:drift/drift.dart' show TableUpdate;
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../../features/sampler/data/repositories/library_repository.dart';
 import '../../features/sampler/domain/entities/library.dart';
@@ -140,9 +141,19 @@ class AutoSyncCoordinator {
                 .applyDriveChanges(library: library)
                 .timeout(const Duration(seconds: 30));
             switch (outcome) {
-              case DriveSyncApplied():
+              case DriveSyncApplied(:final upserted, :final removed):
+                // Sans cette trace, impossible de répondre à la seule question
+                // qui compte sur ce chemin : le delta sert-il vraiment, ou
+                // rescanne-t-on en réalité à chaque lancement ?
+                debugPrint(
+                  'Synchro ${library.name} : delta appliqué '
+                  '($upserted ajout(s)/modif(s), $removed retrait(s)).',
+                );
                 fullyIndexed.add(library);
-              case DriveSyncNeedsFullScan():
+              case DriveSyncNeedsFullScan(:final reason):
+                debugPrint(
+                  'Synchro ${library.name} : scan complet — $reason.',
+                );
                 final result = await _repository
                     .indexDriveFolder(library: library)
                     .timeout(const Duration(seconds: 120));
