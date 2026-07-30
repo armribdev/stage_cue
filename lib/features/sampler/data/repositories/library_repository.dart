@@ -46,6 +46,16 @@ const int _indexBatchSize = 250;
 /// provoquer : chaque réessai coûte plus cher que la requête économisée.
 const int _driveListingConcurrency = 5;
 
+/// Téléchargements simultanés lors d'une passe de masse (« Tout télécharger »,
+/// pré-téléchargement auto).
+///
+/// Plus bas que la concurrence de listing : un listing est borné par la latence
+/// (le réseau dort en l'attendant), un téléchargement par la bande passante —
+/// au-delà d'un certain point on ne fait que se partager le même tuyau, en
+/// ajoutant des connexions et du risque de quota. Ces 4 s'ajoutent par ailleurs
+/// aux 2 de `DownloadQueue`, qui sert les pads déclenchés depuis l'UI.
+const int _bulkDownloadConcurrency = 4;
+
 /// Intervalle maximal entre deux scans COMPLETS de l'arborescence Drive.
 ///
 /// Le parcours incrémental n'élague que ce que Drive lui signale explicitement :
@@ -297,6 +307,31 @@ class LibraryRepository extends ChangeNotifier {
       folderName: folderName,
       existingClient: client,
     );
+  }
+
+  /// Session utilisable par tout ce qui se contente du contrat [DriveClient].
+  ///
+  /// À préférer systématiquement à [_ensureDriveClient], qui restreint au type
+  /// CONCRET `GoogleDriveClient` pour les rares appels hors interface
+  /// (résolution de dossier par chemin, e-mail du propriétaire). Passer par le
+  /// type concret là où l'interface suffit rend le code indissociable de
+  /// l'implémentation Google — donc impossible à couvrir avec un double, ce qui
+  /// avait laissé `downloadAllLibraryAudio` sans aucun test.
+  Future<DriveClient?> _ensureAnyDriveClient() async {
+    if (_requiresInteractiveReconnect) {
+      return null;
+    }
+    final active = _activeClient;
+    if (active != null) {
+      return active;
+    }
+
+    final client = await _authenticator.connectSilently();
+    if (client != null) {
+      _activeClient = client;
+      _notifyDriveSessionChanged();
+    }
+    return client;
   }
 
   /// Client Drive actif ou reconnexion silencieuse (sans nouveau consentement).
@@ -1266,7 +1301,9 @@ class LibraryRepository extends ChangeNotifier {
         isCancelled?.call() == true || _cancelledDownloads.contains(library.id);
 
     try {
-      final client = await _ensureDriveClient();
+      // Le contrat [DriveClient] suffit ici (seul `ensureCached` est appelé) :
+      // pas de raison d'exiger l'implémentation Google concrète.
+      final client = await _ensureAnyDriveClient();
       if (client == null) throw StateError('Bibliothèque non connectée à Drive');
 
       final sounds = await _soundDataSource.getSoundsForLibrary(library.id);
@@ -1284,59 +1321,87 @@ class LibraryRepository extends ChangeNotifier {
       var downloaded = 0;
       var failed = 0;
       var authExpired = false;
+      var processed = 0;
 
-      for (var i = 0; i < sounds.length; i++) {
-        if (cancelled()) break;
+      // Téléchargements en parallèle borné. Un par un, une bibliothèque de
+      // milliers de sons enchaînait autant d'allers-retours Drive, chacun
+      // laissant la bande passante inoccupée pendant sa latence.
+      //
+      // Chaque tâche capture SES erreurs : `mapBounded` est « complet ou rien »,
+      // et ici on veut au contraire qu'un fichier illisible n'emporte pas toute
+      // la passe (c'est l'inverse de l'indexation, où un trou fait supprimer des
+      // sons — ici il ne fait que laisser un son non téléchargé).
+      await mapBounded(
+        sounds,
+        (sound) async {
+          // Annulation et expiration de session : les tâches déjà en file se
+          // vident sans rien faire plutôt que d'être interrompues en vol (un
+          // téléchargement à moitié écrit serait un `.part` de plus à nettoyer).
+          if (cancelled() || authExpired) return;
 
-        final sound = sounds[i];
-        final relativePath = sound.relativePath;
-
-        try {
-          if (relativePath == null) {
-            throw StateError('Aucun chemin Drive associé');
+          final relativePath = sound.relativePath;
+          try {
+            if (relativePath == null) {
+              throw StateError('Aucun chemin Drive associé');
+            }
+            final localPath = _cacheManager.localPathFor(library, relativePath);
+            if (!await File(localPath).exists()) {
+              final resolvedLocalPath = await _cacheManager.ensureCached(
+                client: client,
+                library: library,
+                relativePath: relativePath,
+                driveFileId: sound.driveFileId,
+              );
+              unawaited(
+                _soundDataSource.syncLibrarySoundLocalPath(
+                  sound.id,
+                  resolvedLocalPath,
+                ),
+              );
+              unawaited(
+                _materializeSoundFileMetadataIfNeeded(
+                  sound,
+                  File(resolvedLocalPath),
+                ),
+              );
+              downloaded++;
+            }
+          } on DriveAuthException {
+            // Token révoqué/expiré : les fichiers suivants échoueraient de la
+            // même façon. On lève le drapeau — les tâches restantes le voient et
+            // renoncent — plutôt que de les marquer une par une en échec.
+            if (!authExpired) {
+              authExpired = true;
+              // Gardé : `mapBounded` est « complet ou rien », donc la moindre
+              // erreur qui s'échappe d'ici emporterait la passe entière et
+              // sauterait le rapport final — laissant la barre de progression
+              // figée alors que tout est terminé.
+              try {
+                await invalidateAuthSession();
+              } catch (e) {
+                SyncLog.warn('Invalidation de session échouée — $e', error: e);
+              }
+            }
+          } catch (e) {
+            failed++;
+            SyncLog.downloadFailed(title: sound.title, error: e);
           }
-          final localPath = _cacheManager.localPathFor(library, relativePath);
-          if (!await File(localPath).exists()) {
-            final resolvedLocalPath = await _cacheManager.ensureCached(
-              client: client,
-              library: library,
-              relativePath: relativePath,
-              driveFileId: sound.driveFileId,
-            );
-            unawaited(
-              _soundDataSource.syncLibrarySoundLocalPath(
-                sound.id,
-                resolvedLocalPath,
-              ),
-            );
-            unawaited(
-              _materializeSoundFileMetadataIfNeeded(
-                sound,
-                File(resolvedLocalPath),
-              ),
-            );
-            downloaded++;
-          }
-        } on DriveAuthException {
-          // Token révoqué/expiré : les fichiers suivants échoueraient de la même
-          // façon — on arrête la passe plutôt que de les marquer un par un en échec.
-          authExpired = true;
-          await invalidateAuthSession();
-          break;
-        } catch (e) {
-          failed++;
-          SyncLog.downloadFailed(title: sound.title, error: e);
-        }
 
-        report(
-          IndexingProgress(
-            path: library.name,
-            current: i + 1,
-            total: total,
-            isComplete: false,
-          ),
-        );
-      }
+          // Compteur de tâches ACHEVÉES : en parallèle, l'indice dans la liste
+          // ne dit plus où en est la passe. Dart étant mono-isolate, cet
+          // incrément n'a pas besoin de verrou.
+          processed++;
+          report(
+            IndexingProgress(
+              path: library.name,
+              current: processed,
+              total: total,
+              isComplete: false,
+            ),
+          );
+        },
+        concurrency: _bulkDownloadConcurrency,
+      );
 
       report(
         IndexingProgress(

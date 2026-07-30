@@ -23,6 +23,7 @@ import 'package:stage_cue/core/sync/library_sync_service.dart';
 import 'package:stage_cue/core/sync/snapshot_store.dart';
 import 'package:stage_cue/features/sampler/data/datasources/local_library_datasource.dart';
 import 'package:stage_cue/features/sampler/data/datasources/local_sound_datasource.dart';
+import 'package:stage_cue/features/sampler/data/models/indexing_progress.dart';
 import 'package:stage_cue/features/sampler/data/repositories/library_repository.dart';
 import 'package:stage_cue/features/sampler/domain/entities/library.dart';
 
@@ -59,7 +60,49 @@ class _FakeDriveClient implements DriveClient {
 
   int listChangesCalls = 0;
 
+  /// Ids de fichiers dont le téléchargement doit échouer.
+  final Set<String> failingDownloads = {};
+
+  /// Ids de fichiers dont le téléchargement lève une expiration de session.
+  final Set<String> authExpiredDownloads = {};
+
+  Duration downloadLatency = Duration.zero;
+  int downloadCalls = 0;
+  int maxConcurrentDownloads = 0;
+  int _downloadsInFlight = 0;
+
   _FakeDriveClient(this.tree);
+
+  @override
+  Future<void> downloadToFile({
+    required String fileId,
+    required String destinationPath,
+  }) async {
+    downloadCalls++;
+    _downloadsInFlight++;
+    if (_downloadsInFlight > maxConcurrentDownloads) {
+      maxConcurrentDownloads = _downloadsInFlight;
+    }
+    try {
+      if (downloadLatency > Duration.zero) {
+        await Future<void>.delayed(downloadLatency);
+      }
+      if (authExpiredDownloads.contains(fileId)) {
+        throw const DriveAuthException();
+      }
+      if (failingDownloads.contains(fileId)) {
+        throw const DriveRequestException.offline();
+      }
+      final file = File(destinationPath);
+      await file.parent.create(recursive: true);
+      // Volontairement minuscule : sous le seuil de validité audio, donc le
+      // backfill de métadonnées renonce avant tout appel à SoLoud (non
+      // initialisé en test).
+      await file.writeAsBytes(List.filled(16, 1));
+    } finally {
+      _downloadsInFlight--;
+    }
+  }
 
   @override
   Future<String> getStartPageToken({String? sharedDriveId}) async =>
@@ -153,7 +196,12 @@ void main() {
       libraryDataSource,
       _FakeAuthenticator(client),
       LibrarySyncService(DriftSnapshotStore(database)),
-      AudioCacheManager(),
+      // Sonde disque simulée : la sonde réelle passe par le canal de plateforme,
+      // indisponible en test unitaire — sans ça, chaque `ensureCached` échoue à
+      // l'étape d'éviction et tous les téléchargements sont comptés en erreur.
+      AudioCacheManager(
+        availableDiskBytes: (_) async => 100 * 1024 * 1024 * 1024,
+      ),
       soundDataSource,
     );
     // Passe par le chemin de production pour poser `_activeClient` : pas de
@@ -694,6 +742,101 @@ void main() {
           .getSingle();
       expect(stored.driveChangeToken, 'token-frais');
       expect(stored.lastFullScanAt, isNotNull);
+    });
+  });
+
+  group('téléchargement de masse', () {
+    /// Indexe [count] sons (métadonnées seules — aucun fichier local).
+    Future<LibraryRepository> indexedLibrary(
+      _FakeDriveClient client,
+      int count,
+    ) async {
+      client.tree['root'] = [
+        for (var i = 0; i < count; i++) _audio('f$i', 'son_$i.mp3'),
+      ];
+      final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
+      return repository;
+    }
+
+    test('les téléchargements sont parallèles, dans la limite de la borne',
+        () async {
+      final client = _FakeDriveClient({})
+        ..downloadLatency = const Duration(milliseconds: 5);
+      final repository = await indexedLibrary(client, 20);
+
+      final downloaded =
+          await repository.downloadAllLibraryAudio(library: library);
+
+      expect(downloaded, 20);
+      expect(client.maxConcurrentDownloads, greaterThan(1),
+          reason: 'la passe doit être parallèle');
+      expect(client.maxConcurrentDownloads, lessThanOrEqualTo(4),
+          reason: 'la borne de concurrence doit être respectée');
+    });
+
+    test('un fichier en échec n\'emporte pas la passe', () async {
+      final client = _FakeDriveClient({})..failingDownloads.add('f2');
+      final repository = await indexedLibrary(client, 5);
+
+      IndexingProgress? last;
+      final downloaded = await repository.downloadAllLibraryAudio(
+        library: library,
+        onProgress: (p) => last = p,
+      );
+
+      // Contrairement à l'indexation, où un trou fait SUPPRIMER des sons, un
+      // téléchargement raté ne fait que laisser un son non matérialisé : la
+      // passe doit continuer.
+      expect(downloaded, 4);
+      expect(last?.isComplete, isTrue);
+      expect(last?.error, contains('1 fichier(s) ignoré(s)'));
+    });
+
+    test('session expirée : la passe s\'arrête, les tâches restantes renoncent',
+        () async {
+      final client = _FakeDriveClient({})
+        ..downloadLatency = const Duration(milliseconds: 5)
+        ..authExpiredDownloads.add('f0');
+      final repository = await indexedLibrary(client, 30);
+
+      IndexingProgress? last;
+      await repository.downloadAllLibraryAudio(
+        library: library,
+        onProgress: (p) => last = p,
+      );
+
+      expect(last?.error, contains('Session Google expirée'));
+      // Les tâches déjà en file se vident sans rien télécharger : on ne doit
+      // pas voir les 30 fichiers tentés un par un.
+      expect(client.downloadCalls, lessThan(30),
+          reason: 'les tâches restantes doivent renoncer, pas échouer une à une');
+    });
+
+    test('annulation : plus aucun téléchargement ne démarre', () async {
+      final client = _FakeDriveClient({})
+        ..downloadLatency = const Duration(milliseconds: 5);
+      final repository = await indexedLibrary(client, 40);
+
+      final pass = repository.downloadAllLibraryAudio(library: library);
+      repository.cancelLibraryDownload(library.id);
+      await pass;
+
+      expect(client.downloadCalls, lessThan(40),
+          reason: 'l\'annulation doit tarir la file');
+    });
+
+    test('fichiers déjà en cache : aucun téléchargement', () async {
+      final client = _FakeDriveClient({});
+      final repository = await indexedLibrary(client, 3);
+      await repository.downloadAllLibraryAudio(library: library);
+      final afterFirst = client.downloadCalls;
+
+      final downloaded =
+          await repository.downloadAllLibraryAudio(library: library);
+
+      expect(downloaded, 0);
+      expect(client.downloadCalls, afterFirst);
     });
   });
 

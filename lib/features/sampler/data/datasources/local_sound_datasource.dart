@@ -1015,27 +1015,14 @@ class LocalSoundDataSource {
                 s.relativePath.isNotNull(),
           ))
         .get();
-    return rows.map((row) {
-      return domain.Sound(
-        id: row.id,
-        title: row.title,
-        displayName: row.displayName,
-        filePath: row.filePath,
-        type: switch (row.type) {
-          db_sounds.SoundType.music => domain.SoundType.music,
-          db_sounds.SoundType.ambiance => domain.SoundType.ambiance,
-          db_sounds.SoundType.soundEffect => domain.SoundType.soundEffect,
-          null => null,
-        },
-        colorValue: row.color,
-        volume: row.volume,
-        createdAt: row.createdAt,
-        libraryId: row.libraryId,
-        relativePath: row.relativePath,
-        contentHash: row.contentHash,
-        waveform: row.waveform,
-      );
-    }).toList();
+    // Mapper de référence, et surtout PAS une recopie champ par champ : celle
+    // qui vivait ici omettait `driveFileId`, si bien que le téléchargement de
+    // masse repassait sur la résolution par NOM (fragile aux accents, doublons
+    // et renommages) au lieu de l'identité forte — l'inverse de la décision
+    // 0002 — en payant au passage un aller-retour Drive par segment de chemin.
+    // Elle laissait aussi tomber isFavorite, lastPlayedAt,
+    // waveformProbeGeneration et startOffsetMs.
+    return rows.map(SoundModel.toEntity).toList();
   }
 
   /// Ids des sons VISIBLES par une bibliothèque (VUE PARTAGÉE) : ses propres
