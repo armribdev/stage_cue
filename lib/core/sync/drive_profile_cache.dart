@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'drive_account_profile.dart';
+import 'sync_log.dart';
 
 /// Persiste le profil du compte Google (e-mail, nom, URL photo) pour un
 /// affichage immédiat au lancement, avant toute reconnexion réseau.
@@ -29,7 +30,11 @@ class DriveProfileStore {
     try {
       final map = Map<String, dynamic>.from(jsonDecode(raw) as Map);
       return DriveAccountProfile.fromJson(map);
-    } catch (_) {
+    } catch (e) {
+      // Le profil restauré au lancement disparaît (ni e-mail ni avatar affichés)
+      // alors que la session Drive, elle, est intacte : dissociation trompeuse
+      // qui n'avait aucune trace.
+      SyncLog.warn('Profil Drive en cache illisible — $e', error: e);
       return null;
     }
   }
@@ -143,8 +148,10 @@ class DriveAvatarCache {
         await _pruneExcept(file);
         return file;
       }
-    } catch (_) {
+    } catch (e) {
       // Hors-ligne ou URL périmée : pas d'avatar frais à écrire cette fois-ci.
+      // Purement cosmétique (l'avatar en cache reste affiché), d'où la trace.
+      SyncLog.trace('avatar non rafraîchi — $e');
     }
     return null;
   }
@@ -159,8 +166,9 @@ class DriveAvatarCache {
           await entity.delete();
         }
       }
-    } catch (_) {
+    } catch (e) {
       // Best-effort : un fichier résiduel n'est pas bloquant.
+      SyncLog.trace('purge des avatars obsolètes incomplète — $e');
     }
   }
 
@@ -172,8 +180,14 @@ class DriveAvatarCache {
         await dir.delete(recursive: true);
       }
       _cachedDir = null;
-    } catch (_) {
-      // Best-effort : un cache résiduel n'est pas bloquant.
+    } catch (e) {
+      // Best-effort, mais c'est une DÉCONNEXION : la photo du compte quitté
+      // reste sur le disque. Sans conséquence fonctionnelle, à savoir tout de
+      // même si la question de ce qui subsiste après déconnexion se pose.
+      SyncLog.warn(
+        'Photos de compte non purgées à la déconnexion — $e',
+        error: e,
+      );
     }
   }
 
