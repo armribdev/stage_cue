@@ -28,6 +28,13 @@ class Library {
   /// Si true, les nouveaux fichiers indexés sont téléchargés automatiquement.
   final bool autoDownload;
 
+  /// Jeton de reprise du parcours des changements Drive. `null` = le prochain
+  /// lancement repart d'un scan complet.
+  final String? driveChangeToken;
+
+  /// Date du dernier scan COMPLET de l'arborescence Drive (horloge locale).
+  final DateTime? lastFullScanAt;
+
   Library({
     required this.id,
     required this.name,
@@ -40,6 +47,8 @@ class Library {
     this.lastSyncedAt,
     required this.createdAt,
     this.autoDownload = false,
+    this.driveChangeToken,
+    this.lastFullScanAt,
   });
 
   bool get isConnectedToDrive => driveFolderId != null;

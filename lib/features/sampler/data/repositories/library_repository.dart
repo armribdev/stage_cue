@@ -45,6 +45,39 @@ const int _indexBatchSize = 250;
 /// provoquer : chaque réessai coûte plus cher que la requête économisée.
 const int _driveListingConcurrency = 5;
 
+/// Intervalle maximal entre deux scans COMPLETS de l'arborescence Drive.
+///
+/// Le parcours incrémental n'élague que ce que Drive lui signale explicitement :
+/// il ne peut pas constater qu'il a manqué quelque chose. Ce rescan périodique
+/// borne la dérive accumulée — c'est le filet, pas l'exception.
+const Duration _fullScanInterval = Duration(days: 7);
+
+/// Issue d'une tentative de synchronisation incrémentale.
+sealed class DriveSyncOutcome {
+  const DriveSyncOutcome();
+}
+
+/// Les changements ont été appliqués : aucun scan complet n'est nécessaire.
+class DriveSyncApplied extends DriveSyncOutcome {
+  /// Fichiers ajoutés ou modifiés reflétés en base.
+  final int upserted;
+
+  /// Sons retirés parce que Drive a signalé leur disparition.
+  final int removed;
+
+  const DriveSyncApplied({required this.upserted, required this.removed});
+}
+
+/// Le delta n'est pas exploitable : l'appelant doit lancer un scan complet.
+///
+/// **Ce n'est pas un échec** : c'est le mode dégradé attendu, et le seul qui
+/// puisse rétablir la vérité. Y retomber souvent coûte du temps ; ne pas y
+/// retomber quand il le faudrait coûte des données.
+class DriveSyncNeedsFullScan extends DriveSyncOutcome {
+  final String reason;
+  const DriveSyncNeedsFullScan(this.reason);
+}
+
 /// Levée quand un son de bibliothèque n'est pas accessible localement sans
 /// déclencher un téléchargement (utilisé pendant le chargement des pads).
 class SoundNotAvailableLocallyException implements Exception {
@@ -1319,6 +1352,170 @@ class LibraryRepository extends ChangeNotifier {
     );
   }
 
+  /// Tente d'appliquer les changements Drive survenus depuis le dernier passage,
+  /// sans reparcourir l'arborescence.
+  ///
+  /// Retourne [DriveSyncNeedsFullScan] dès que le delta n'est pas exploitable
+  /// avec certitude — l'appelant doit alors passer par [indexDriveFolder]. Le
+  /// déséquilibre est VOULU : un scan complet de trop coûte quelques secondes,
+  /// un delta appliqué de travers coûte des sons.
+  ///
+  /// Cette méthode n'appelle JAMAIS [pruneSoundsAbsentFromDrive] : elle ne
+  /// connaît pas l'ensemble des fichiers présents sur Drive, seulement les
+  /// disparitions que Drive lui a signalées. Élaguer par différence d'ensembles
+  /// depuis un delta reviendrait à supprimer tout ce qui n'a pas bougé.
+  Future<DriveSyncOutcome> applyDriveChanges({required Library library}) {
+    if (library.driveFolderId == null) {
+      throw StateError('Bibliothèque non connectée à Drive');
+    }
+    return _withDriveClient(
+      (client) => _applyDriveChanges(client: client, library: library),
+    );
+  }
+
+  Future<DriveSyncOutcome> _applyDriveChanges({
+    required DriveClient client,
+    required Library library,
+  }) async {
+    final token = library.driveChangeToken;
+    if (token == null) {
+      return const DriveSyncNeedsFullScan('aucun jeton de reprise');
+    }
+    final lastFullScan = library.lastFullScanAt;
+    if (lastFullScan == null ||
+        DateTime.now().difference(lastFullScan) > _fullScanInterval) {
+      return const DriveSyncNeedsFullScan('rescan périodique');
+    }
+
+    // 1. Collecte de TOUTES les pages avant d'appliquer quoi que ce soit : un
+    //    delta à moitié appliqué serait pire que pas de delta du tout, et on ne
+    //    veut poser le nouveau jeton qu'après un succès complet.
+    final changes = <DriveChange>[];
+    String? newToken;
+    var pageToken = token;
+    try {
+      while (true) {
+        final page = await client.listChanges(
+          pageToken: pageToken,
+          sharedDriveId: library.sharedDriveId,
+        );
+        changes.addAll(page.changes);
+        final next = page.nextPageToken;
+        if (next == null) {
+          newToken = page.newStartPageToken;
+          break;
+        }
+        pageToken = next;
+      }
+    } on DriveChangeTokenExpiredException {
+      return const DriveSyncNeedsFullScan('jeton expiré');
+    }
+
+    if (newToken == null) {
+      // Drive n'a pas fourni de jeton de reprise : impossible de garantir la
+      // continuité du prochain delta.
+      return const DriveSyncNeedsFullScan('aucun jeton de reprise renvoyé');
+    }
+
+    // 2. Un changement de DOSSIER peut remodeler le chemin de tout un
+    //    sous-arbre (renommage, déplacement, suppression). Le delta ne porte
+    //    que le dossier lui-même, pas sa descendance : l'appliquer laisserait
+    //    des chemins faux dans toute la branche. On rescanne.
+    if (changes.any((c) => c.isFolder)) {
+      return const DriveSyncNeedsFullScan('changement de structure');
+    }
+
+    // 3. Cadre de chemins : les nœuds dossier connus de CETTE bibliothèque.
+    //    Un fichier dont le parent n'y figure pas est soit hors périmètre, soit
+    //    dans un dossier qu'on ne connaît pas encore — indiscernable sans
+    //    remonter la chaîne, donc rescan.
+    final folders = await _dataSource.getFoldersForLibrary(library.id);
+    final folderByDriveId = {for (final f in folders) f.driveFolderId: f};
+    final knownSoundIds = await _soundDataSource.getDriveFileIdsForLibrary(
+      library.id,
+    );
+
+    final entries = <DriveIndexEntry>[];
+    final removedIds = <String>{};
+
+    for (final change in changes) {
+      if (change.removed) {
+        // Ne retenir que ce qui nous appartient : le flux de changements couvre
+        // tout ce que l'app peut voir, pas seulement cette bibliothèque.
+        if (knownSoundIds.contains(change.fileId)) {
+          removedIds.add(change.fileId);
+        }
+        continue;
+      }
+
+      final file = change.file;
+      if (file == null) continue;
+      final name = PathUnicode.toNfc(file.name);
+      if (!isAudioFile(name)) continue;
+
+      final parentId = change.parentId;
+      final folder = parentId != null ? folderByDriveId[parentId] : null;
+      if (folder == null) {
+        // Fichier audio qu'on ne sait pas situer : soit un fichier connu déplacé
+        // ailleurs, soit un fichier neuf dans un dossier dont on n'a pas de
+        // nœud (dossier créé sur Drive depuis le dernier scan), soit un fichier
+        // d'une autre bibliothèque. Seul un scan complet tranche.
+        //
+        // Le sauter silencieusement serait pire que de rescanner : un son
+        // ajouté sur Drive resterait invisible jusqu'au rescan périodique,
+        // c'est-à-dire potentiellement une semaine.
+        return const DriveSyncNeedsFullScan('fichier hors du cadre connu');
+      }
+
+      final relativePath = folder.relativePath.isEmpty
+          ? name
+          : '${folder.relativePath}/$name';
+      entries.add(DriveIndexEntry(
+        relativePath: relativePath,
+        localPath: _cacheManager.localPathFor(library, relativePath),
+        driveFileId: change.fileId,
+        driveMd5: file.md5Checksum,
+        folderId: folder.id,
+      ));
+    }
+
+    // 4. Application. Les ajouts/modifications passent par les MÊMES règles de
+    //    rapprochement que l'indexation complète (identité forte, adoption par
+    //    chemin, invalidation des dérivés sur md5 changé).
+    var upserted = 0;
+    if (entries.isNotEmpty) {
+      final result = await _soundDataSource.syncLibrarySoundsFromDriveIndex(
+        libraryId: library.id,
+        entries: entries,
+      );
+      upserted = entries.length;
+      for (final relativePath in result.contentChangedPaths) {
+        await _cacheManager.evictCachedFile(library, relativePath);
+      }
+    }
+
+    if (removedIds.isNotEmpty) {
+      final prunedPaths =
+          await _soundDataSource.deleteLibrarySoundsByDriveFileIds(
+        libraryId: library.id,
+        driveFileIds: removedIds,
+      );
+      for (final relativePath in prunedPaths) {
+        await _cacheManager.evictCachedFile(library, relativePath);
+      }
+    }
+
+    // 5. Jeton posé en DERNIER : une interruption avant ce point fait rejouer le
+    //    même delta au prochain lancement, ce qui est sans effet (les règles de
+    //    rapprochement sont idempotentes). L'inverse perdrait des changements.
+    await _dataSource.updateDriveChangeToken(
+      id: library.id,
+      driveChangeToken: newToken,
+    );
+
+    return DriveSyncApplied(upserted: upserted, removed: removedIds.length);
+  }
+
   /// Élague les sons dont le fichier a disparu de Drive, d'après l'ensemble
   /// [presentDriveFileIds] d'un scan RÉUSSI, et évince leur fichier du cache
   /// local. Sert à redonner le dernier mot au scan live après un pull de
@@ -1354,6 +1551,20 @@ class LibraryRepository extends ChangeNotifier {
           isComplete: false,
         ),
       );
+
+      // Jeton de reprise capturé AVANT le parcours, jamais après : un fichier
+      // modifié pendant le scan doit apparaître dans le PROCHAIN delta. Pris
+      // après, ce changement serait absent du scan (déjà passé sur ce dossier)
+      // ET du delta (antérieur au jeton) — donc perdu jusqu'au rescan
+      // périodique. Best-effort : sans jeton, on reste en scan complet.
+      String? startPageToken;
+      try {
+        startPageToken = await client.getStartPageToken(
+          sharedDriveId: library.sharedDriveId,
+        );
+      } catch (e) {
+        debugPrint('Jeton de reprise Drive indisponible (${library.name}): $e');
+      }
 
       final audioFiles = await _collectDriveAudioFiles(
         client,
@@ -1469,6 +1680,15 @@ class LibraryRepository extends ChangeNotifier {
       await pruneSoundsAbsentFromDrive(
         library: library,
         presentDriveFileIds: seenDriveIds,
+      );
+
+      // Le scan a réussi et il est COMPLET : c'est le seul moment où l'on peut
+      // affirmer que la base reflète Drive. On arme donc le parcours incrémental
+      // et on réarme l'horloge du rescan périodique.
+      await _dataSource.updateDriveChangeToken(
+        id: library.id,
+        driveChangeToken: startPageToken,
+        lastFullScanAt: DateTime.now(),
       );
 
       onProgress?.call(

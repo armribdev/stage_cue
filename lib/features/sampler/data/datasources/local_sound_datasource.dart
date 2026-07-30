@@ -1138,6 +1138,58 @@ class LocalSoundDataSource {
     });
   }
 
+  /// Identités fortes (`driveFileId`) des sons d'une bibliothèque.
+  ///
+  /// Sert au parcours incrémental à distinguer ce qui le concerne : le flux de
+  /// changements Drive couvre tout ce que l'app peut voir, pas seulement cette
+  /// bibliothèque.
+  Future<Set<String>> getDriveFileIdsForLibrary(int libraryId) async {
+    final rows = await (_database.selectOnly(_database.sounds)
+          ..addColumns([_database.sounds.driveFileId])
+          ..where(
+            _database.sounds.libraryId.equals(libraryId) &
+                _database.sounds.driveFileId.isNotNull(),
+          ))
+        .get();
+    return {
+      for (final row in rows) ?row.read(_database.sounds.driveFileId),
+    };
+  }
+
+  /// Supprime les sons d'une bibliothèque dont l'identité forte figure dans
+  /// [driveFileIds]. Retourne leurs `relativePath` (non nuls) pour que
+  /// l'appelant évince aussi leurs fichiers du cache local.
+  ///
+  /// Suppression CIBLÉE, par opposition à [pruneLibrarySoundsAbsentFromDrive]
+  /// qui procède par différence d'ensembles. C'est la seule forme admissible sur
+  /// le chemin incrémental : ce dernier ne connaît que les disparitions que
+  /// Drive lui a explicitement signalées, jamais l'ensemble de ce qui existe.
+  Future<List<String>> deleteLibrarySoundsByDriveFileIds({
+    required int libraryId,
+    required Set<String> driveFileIds,
+  }) async {
+    if (driveFileIds.isEmpty) return const [];
+    return _database.transaction(() async {
+      final toDelete = await (_database.select(_database.sounds)
+            ..where(
+              (s) =>
+                  s.libraryId.equals(libraryId) &
+                  s.driveFileId.isIn(driveFileIds.toList()),
+            ))
+          .get();
+      if (toDelete.isEmpty) return const <String>[];
+
+      await (_database.delete(_database.sounds)
+            ..where((s) => s.id.isIn(toDelete.map((s) => s.id).toList())))
+          .go();
+
+      return [
+        for (final s in toDelete)
+          if (s.relativePath != null) s.relativePath!,
+      ];
+    });
+  }
+
   /// Supprime les sons associés à un chemin surveillé.
   Future<void> deleteSoundsForWatchedPath({
     required String path,

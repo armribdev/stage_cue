@@ -41,5 +41,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0018](0018-journalisation-wal-et-synchronous-normal.md) | Journalisation WAL et `synchronous = NORMAL` | acceptée |
 | [0019](0019-parcours-drive-parallele-borne.md) | Parcours Drive en largeur, parallélisme borné, complet ou rien | acceptée |
 | [0020](0020-sonde-de-pull-groupee-et-jeton-de-manifest.md) | Sonde de pull groupée et jeton de manifest | acceptée |
+| [0021](0021-synchronisation-incrementale-par-changes-list.md) | Synchronisation incrémentale par `changes.list`, avec repli systématique | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

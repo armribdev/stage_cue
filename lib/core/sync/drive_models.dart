@@ -37,3 +37,49 @@ class DriveFile {
 
   bool get isFolder => mimeType == driveFolderMimeType;
 }
+
+/// Un changement Drive depuis un jeton de page donné.
+///
+/// [removed] agrège les trois façons dont un fichier peut disparaître de notre
+/// vue : suppression définitive, mise à la corbeille, ou retrait des droits.
+/// L'appelant n'a donc jamais à les distinguer.
+class DriveChange {
+  final String fileId;
+  final bool removed;
+
+  /// Métadonnées si le fichier est encore accessible ; `null` si [removed].
+  final DriveFile? file;
+
+  /// Parent direct du fichier, quand Drive le renvoie.
+  final String? parentId;
+
+  /// Vrai si le changement porte sur un DOSSIER : il peut alors remodeler le
+  /// chemin de tout un sous-arbre, ce qu'un delta ne sait pas appliquer seul.
+  final bool isFolder;
+
+  const DriveChange({
+    required this.fileId,
+    required this.removed,
+    this.file,
+    this.parentId,
+    this.isFolder = false,
+  });
+}
+
+/// Une page de résultats de `changes.list`.
+class DriveChangePage {
+  final List<DriveChange> changes;
+
+  /// Page suivante du même parcours, ou `null` si c'était la dernière.
+  final String? nextPageToken;
+
+  /// Jeton à mémoriser pour le PROCHAIN parcours. Fourni uniquement sur la
+  /// dernière page.
+  final String? newStartPageToken;
+
+  const DriveChangePage({
+    required this.changes,
+    this.nextPageToken,
+    this.newStartPageToken,
+  });
+}

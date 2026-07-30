@@ -237,6 +237,25 @@ class LocalLibraryDataSource {
     ));
   }
 
+  /// Mémorise le jeton de reprise du parcours des changements Drive.
+  ///
+  /// [lastFullScanAt] n'est renseigné qu'à l'issue d'un scan COMPLET : c'est lui
+  /// qui borne la dérive du parcours incrémental. Le laisser à `null` sur une
+  /// passe incrémentale, sinon le rescan périodique ne se déclencherait jamais.
+  Future<void> updateDriveChangeToken({
+    required int id,
+    required String? driveChangeToken,
+    DateTime? lastFullScanAt,
+  }) async {
+    await (_database.update(_database.libraries)..where((l) => l.id.equals(id)))
+        .write(db.LibrariesCompanion(
+      driveChangeToken: Value(driveChangeToken),
+      lastFullScanAt: lastFullScanAt != null
+          ? Value(lastFullScanAt)
+          : const Value.absent(),
+    ));
+  }
+
   /// Mémorise le jeton de sonde du manifest observé au dernier pull concluant
   /// de ce nœud, ou l'efface (`null`) quand il n'y a rien de fiable à retenir.
   ///

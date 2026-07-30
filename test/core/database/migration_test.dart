@@ -1,4 +1,4 @@
-// Vérifie le chemin d'UPGRADE vers v36 (colonne `manifest_probe_token`).
+// Vérifie les chemins d'UPGRADE de schéma.
 //
 // Le projet n'a pas de schémas Drift versionnés : à défaut, on fabrique une base
 // à l'état v35 en retirant la colonne d'une base fraîche, puis on rouvre par
@@ -77,7 +77,35 @@ void main() {
     await database.close();
   });
 
-  test('la migration est idempotente : une base déjà v36 rembobinée en v35 '
+  test('une base v36 gagne le suivi du parcours incrémental', () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    final libraryId = await database.into(database.libraries).insert(
+          db.LibrariesCompanion.insert(name: 'Lib', localRootPath: '/cache'),
+        );
+
+    await database.customStatement(
+        'ALTER TABLE libraries DROP COLUMN drive_change_token');
+    await database.customStatement(
+        'ALTER TABLE libraries DROP COLUMN last_full_scan_at');
+    await database.customStatement('PRAGMA user_version = 36');
+    await database.close();
+
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    final row = await (database.select(database.libraries)
+          ..where((l) => l.id.equals(libraryId)))
+        .getSingle();
+
+    expect(row.name, 'Lib', reason: 'les données doivent survivre');
+    // Les deux à null : la première passe après migration est donc un scan
+    // COMPLET, qui pose le jeton. Un jeton hérité de nulle part ferait démarrer
+    // le parcours incrémental sans point de référence.
+    expect(row.driveChangeToken, isNull);
+    expect(row.lastFullScanAt, isNull);
+
+    await database.close();
+  });
+
+  test('la migration est idempotente : une base à jour rembobinée en v35 '
       'passe sans erreur', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));
     await database.customStatement('SELECT 1');

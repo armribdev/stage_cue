@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 36;
+  int get schemaVersion => 37;
 
   @override
   MigrationStrategy get migration {
@@ -339,6 +339,17 @@ class AppDatabase extends _$AppDatabase {
           // recrée déjà les tables au schéma courant.
           if (!await _columnExists('library_folders', 'manifest_probe_token')) {
             await m.addColumn(libraryFolders, libraryFolders.manifestProbeToken);
+          }
+        }
+        if (from < 37) {
+          // Suivi du parcours incrémental des changements Drive. Backfill
+          // implicite à null pour les deux : la première passe après migration
+          // est donc un scan complet, qui pose le jeton de départ.
+          if (!await _columnExists('libraries', 'drive_change_token')) {
+            await m.addColumn(libraries, libraries.driveChangeToken);
+          }
+          if (!await _columnExists('libraries', 'last_full_scan_at')) {
+            await m.addColumn(libraries, libraries.lastFullScanAt);
           }
         }
       },
