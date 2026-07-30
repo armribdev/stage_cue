@@ -135,6 +135,29 @@ class $LibrariesTable extends Libraries
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _driveChangeTokenMeta = const VerificationMeta(
+    'driveChangeToken',
+  );
+  @override
+  late final GeneratedColumn<String> driveChangeToken = GeneratedColumn<String>(
+    'drive_change_token',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastFullScanAtMeta = const VerificationMeta(
+    'lastFullScanAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastFullScanAt =
+      GeneratedColumn<DateTime>(
+        'last_full_scan_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -148,6 +171,8 @@ class $LibrariesTable extends Libraries
     lastSyncedAt,
     createdAt,
     autoDownload,
+    driveChangeToken,
+    lastFullScanAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -246,6 +271,24 @@ class $LibrariesTable extends Libraries
         ),
       );
     }
+    if (data.containsKey('drive_change_token')) {
+      context.handle(
+        _driveChangeTokenMeta,
+        driveChangeToken.isAcceptableOrUnknown(
+          data['drive_change_token']!,
+          _driveChangeTokenMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_full_scan_at')) {
+      context.handle(
+        _lastFullScanAtMeta,
+        lastFullScanAt.isAcceptableOrUnknown(
+          data['last_full_scan_at']!,
+          _lastFullScanAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -299,6 +342,14 @@ class $LibrariesTable extends Libraries
         DriftSqlType.bool,
         data['${effectivePrefix}auto_download'],
       )!,
+      driveChangeToken: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}drive_change_token'],
+      ),
+      lastFullScanAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_full_scan_at'],
+      ),
     );
   }
 
@@ -328,6 +379,20 @@ class Library extends DataClass implements Insertable<Library> {
 
   /// Si true, les nouveaux fichiers indexés sont téléchargés automatiquement.
   final bool autoDownload;
+
+  /// Jeton de reprise du parcours des changements Drive (`changes.list`).
+  /// `null` = jamais scanné, ou jeton invalidé → prochain lancement en scan
+  /// complet. Opaque : à ne comparer ni ordonner, seulement transmettre.
+  final String? driveChangeToken;
+
+  /// Date du dernier scan COMPLET de l'arborescence Drive.
+  ///
+  /// Le parcours incrémental n'élague jamais par différence d'ensembles : il ne
+  /// retire que ce que Drive lui signale explicitement. Il peut donc accumuler
+  /// une dérive (changement manqué, delta partiellement applicable). Ce champ
+  /// borne cette dérive en forçant un scan complet périodique. Horloge LOCALE
+  /// des deux côtés de la comparaison — jamais opposée à une horloge serveur.
+  final DateTime? lastFullScanAt;
   const Library({
     required this.id,
     required this.name,
@@ -340,6 +405,8 @@ class Library extends DataClass implements Insertable<Library> {
     this.lastSyncedAt,
     required this.createdAt,
     required this.autoDownload,
+    this.driveChangeToken,
+    this.lastFullScanAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -365,6 +432,12 @@ class Library extends DataClass implements Insertable<Library> {
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['auto_download'] = Variable<bool>(autoDownload);
+    if (!nullToAbsent || driveChangeToken != null) {
+      map['drive_change_token'] = Variable<String>(driveChangeToken);
+    }
+    if (!nullToAbsent || lastFullScanAt != null) {
+      map['last_full_scan_at'] = Variable<DateTime>(lastFullScanAt);
+    }
     return map;
   }
 
@@ -391,6 +464,12 @@ class Library extends DataClass implements Insertable<Library> {
           : Value(lastSyncedAt),
       createdAt: Value(createdAt),
       autoDownload: Value(autoDownload),
+      driveChangeToken: driveChangeToken == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driveChangeToken),
+      lastFullScanAt: lastFullScanAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastFullScanAt),
     );
   }
 
@@ -411,6 +490,8 @@ class Library extends DataClass implements Insertable<Library> {
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       autoDownload: serializer.fromJson<bool>(json['autoDownload']),
+      driveChangeToken: serializer.fromJson<String?>(json['driveChangeToken']),
+      lastFullScanAt: serializer.fromJson<DateTime?>(json['lastFullScanAt']),
     );
   }
   @override
@@ -428,6 +509,8 @@ class Library extends DataClass implements Insertable<Library> {
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'autoDownload': serializer.toJson<bool>(autoDownload),
+      'driveChangeToken': serializer.toJson<String?>(driveChangeToken),
+      'lastFullScanAt': serializer.toJson<DateTime?>(lastFullScanAt),
     };
   }
 
@@ -443,6 +526,8 @@ class Library extends DataClass implements Insertable<Library> {
     Value<DateTime?> lastSyncedAt = const Value.absent(),
     DateTime? createdAt,
     bool? autoDownload,
+    Value<String?> driveChangeToken = const Value.absent(),
+    Value<DateTime?> lastFullScanAt = const Value.absent(),
   }) => Library(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -459,6 +544,12 @@ class Library extends DataClass implements Insertable<Library> {
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
     createdAt: createdAt ?? this.createdAt,
     autoDownload: autoDownload ?? this.autoDownload,
+    driveChangeToken: driveChangeToken.present
+        ? driveChangeToken.value
+        : this.driveChangeToken,
+    lastFullScanAt: lastFullScanAt.present
+        ? lastFullScanAt.value
+        : this.lastFullScanAt,
   );
   Library copyWithCompanion(LibrariesCompanion data) {
     return Library(
@@ -487,6 +578,12 @@ class Library extends DataClass implements Insertable<Library> {
       autoDownload: data.autoDownload.present
           ? data.autoDownload.value
           : this.autoDownload,
+      driveChangeToken: data.driveChangeToken.present
+          ? data.driveChangeToken.value
+          : this.driveChangeToken,
+      lastFullScanAt: data.lastFullScanAt.present
+          ? data.lastFullScanAt.value
+          : this.lastFullScanAt,
     );
   }
 
@@ -503,7 +600,9 @@ class Library extends DataClass implements Insertable<Library> {
           ..write('lastSyncedRevision: $lastSyncedRevision, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt, ')
-          ..write('autoDownload: $autoDownload')
+          ..write('autoDownload: $autoDownload, ')
+          ..write('driveChangeToken: $driveChangeToken, ')
+          ..write('lastFullScanAt: $lastFullScanAt')
           ..write(')'))
         .toString();
   }
@@ -521,6 +620,8 @@ class Library extends DataClass implements Insertable<Library> {
     lastSyncedAt,
     createdAt,
     autoDownload,
+    driveChangeToken,
+    lastFullScanAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -536,7 +637,9 @@ class Library extends DataClass implements Insertable<Library> {
           other.lastSyncedRevision == this.lastSyncedRevision &&
           other.lastSyncedAt == this.lastSyncedAt &&
           other.createdAt == this.createdAt &&
-          other.autoDownload == this.autoDownload);
+          other.autoDownload == this.autoDownload &&
+          other.driveChangeToken == this.driveChangeToken &&
+          other.lastFullScanAt == this.lastFullScanAt);
 }
 
 class LibrariesCompanion extends UpdateCompanion<Library> {
@@ -551,6 +654,8 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
   final Value<DateTime?> lastSyncedAt;
   final Value<DateTime> createdAt;
   final Value<bool> autoDownload;
+  final Value<String?> driveChangeToken;
+  final Value<DateTime?> lastFullScanAt;
   const LibrariesCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -563,6 +668,8 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.autoDownload = const Value.absent(),
+    this.driveChangeToken = const Value.absent(),
+    this.lastFullScanAt = const Value.absent(),
   });
   LibrariesCompanion.insert({
     this.id = const Value.absent(),
@@ -576,6 +683,8 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.autoDownload = const Value.absent(),
+    this.driveChangeToken = const Value.absent(),
+    this.lastFullScanAt = const Value.absent(),
   }) : name = Value(name),
        localRootPath = Value(localRootPath);
   static Insertable<Library> custom({
@@ -590,6 +699,8 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     Expression<DateTime>? lastSyncedAt,
     Expression<DateTime>? createdAt,
     Expression<bool>? autoDownload,
+    Expression<String>? driveChangeToken,
+    Expression<DateTime>? lastFullScanAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -604,6 +715,8 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (autoDownload != null) 'auto_download': autoDownload,
+      if (driveChangeToken != null) 'drive_change_token': driveChangeToken,
+      if (lastFullScanAt != null) 'last_full_scan_at': lastFullScanAt,
     });
   }
 
@@ -619,6 +732,8 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     Value<DateTime?>? lastSyncedAt,
     Value<DateTime>? createdAt,
     Value<bool>? autoDownload,
+    Value<String?>? driveChangeToken,
+    Value<DateTime?>? lastFullScanAt,
   }) {
     return LibrariesCompanion(
       id: id ?? this.id,
@@ -632,6 +747,8 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       createdAt: createdAt ?? this.createdAt,
       autoDownload: autoDownload ?? this.autoDownload,
+      driveChangeToken: driveChangeToken ?? this.driveChangeToken,
+      lastFullScanAt: lastFullScanAt ?? this.lastFullScanAt,
     );
   }
 
@@ -671,6 +788,12 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
     if (autoDownload.present) {
       map['auto_download'] = Variable<bool>(autoDownload.value);
     }
+    if (driveChangeToken.present) {
+      map['drive_change_token'] = Variable<String>(driveChangeToken.value);
+    }
+    if (lastFullScanAt.present) {
+      map['last_full_scan_at'] = Variable<DateTime>(lastFullScanAt.value);
+    }
     return map;
   }
 
@@ -687,7 +810,9 @@ class LibrariesCompanion extends UpdateCompanion<Library> {
           ..write('lastSyncedRevision: $lastSyncedRevision, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt, ')
-          ..write('autoDownload: $autoDownload')
+          ..write('autoDownload: $autoDownload, ')
+          ..write('driveChangeToken: $driveChangeToken, ')
+          ..write('lastFullScanAt: $lastFullScanAt')
           ..write(')'))
         .toString();
   }
@@ -6195,6 +6320,8 @@ typedef $$LibrariesTableCreateCompanionBuilder =
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
       Value<bool> autoDownload,
+      Value<String?> driveChangeToken,
+      Value<DateTime?> lastFullScanAt,
     });
 typedef $$LibrariesTableUpdateCompanionBuilder =
     LibrariesCompanion Function({
@@ -6209,6 +6336,8 @@ typedef $$LibrariesTableUpdateCompanionBuilder =
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
       Value<bool> autoDownload,
+      Value<String?> driveChangeToken,
+      Value<DateTime?> lastFullScanAt,
     });
 
 final class $$LibrariesTableReferences
@@ -6359,6 +6488,16 @@ class $$LibrariesTableFilterComposer
 
   ColumnFilters<bool> get autoDownload => $composableBuilder(
     column: $table.autoDownload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get driveChangeToken => $composableBuilder(
+    column: $table.driveChangeToken,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastFullScanAt => $composableBuilder(
+    column: $table.lastFullScanAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6526,6 +6665,16 @@ class $$LibrariesTableOrderingComposer
     column: $table.autoDownload,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get driveChangeToken => $composableBuilder(
+    column: $table.driveChangeToken,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastFullScanAt => $composableBuilder(
+    column: $table.lastFullScanAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$LibrariesTableAnnotationComposer
@@ -6581,6 +6730,16 @@ class $$LibrariesTableAnnotationComposer
 
   GeneratedColumn<bool> get autoDownload => $composableBuilder(
     column: $table.autoDownload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get driveChangeToken => $composableBuilder(
+    column: $table.driveChangeToken,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastFullScanAt => $composableBuilder(
+    column: $table.lastFullScanAt,
     builder: (column) => column,
   );
 
@@ -6730,6 +6889,8 @@ class $$LibrariesTableTableManager
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<bool> autoDownload = const Value.absent(),
+                Value<String?> driveChangeToken = const Value.absent(),
+                Value<DateTime?> lastFullScanAt = const Value.absent(),
               }) => LibrariesCompanion(
                 id: id,
                 name: name,
@@ -6742,6 +6903,8 @@ class $$LibrariesTableTableManager
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,
                 autoDownload: autoDownload,
+                driveChangeToken: driveChangeToken,
+                lastFullScanAt: lastFullScanAt,
               ),
           createCompanionCallback:
               ({
@@ -6756,6 +6919,8 @@ class $$LibrariesTableTableManager
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<bool> autoDownload = const Value.absent(),
+                Value<String?> driveChangeToken = const Value.absent(),
+                Value<DateTime?> lastFullScanAt = const Value.absent(),
               }) => LibrariesCompanion.insert(
                 id: id,
                 name: name,
@@ -6768,6 +6933,8 @@ class $$LibrariesTableTableManager
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,
                 autoDownload: autoDownload,
+                driveChangeToken: driveChangeToken,
+                lastFullScanAt: lastFullScanAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(

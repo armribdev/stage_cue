@@ -48,7 +48,35 @@ class _FakeDriveClient implements DriveClient {
   int maxConcurrent = 0;
   int _inFlight = 0;
 
+  /// Jeton rendu par `getStartPageToken`.
+  String startPageToken = 'token-1';
+
+  /// Pages de changements servies par `listChanges`, indexées par jeton.
+  final Map<String, DriveChangePage> changePages = {};
+
+  /// Jetons pour lesquels `listChanges` doit signaler une expiration.
+  final Set<String> expiredTokens = {};
+
+  int listChangesCalls = 0;
+
   _FakeDriveClient(this.tree);
+
+  @override
+  Future<String> getStartPageToken({String? sharedDriveId}) async =>
+      startPageToken;
+
+  @override
+  Future<DriveChangePage> listChanges({
+    required String pageToken,
+    String? sharedDriveId,
+  }) async {
+    listChangesCalls++;
+    if (expiredTokens.contains(pageToken)) {
+      throw const DriveChangeTokenExpiredException();
+    }
+    return changePages[pageToken] ??
+        const DriveChangePage(changes: [], newStartPageToken: 'token-next');
+  }
 
   @override
   Future<List<DriveFile>> listFolder(
@@ -403,6 +431,269 @@ void main() {
       final sounds = await soundsOf(library.id);
       expect(sounds, hasLength(2),
           reason: 'aucun son ne doit être élagué sur un scan incomplet');
+    });
+  });
+
+  group('synchronisation incrémentale (changes.list)', () {
+    /// Bibliothèque armée pour le chemin incrémental : jeton posé et scan
+    /// complet récent.
+    Library armed({String token = 'token-1', Duration since = Duration.zero}) =>
+        Library(
+          id: library.id,
+          name: library.name,
+          localRootPath: library.localRootPath,
+          driveFolderId: library.driveFolderId,
+          createdAt: library.createdAt,
+          driveChangeToken: token,
+          lastFullScanAt: DateTime.now().subtract(since),
+        );
+
+    DriveChange audioChange(
+      String id,
+      String name, {
+      required String parentId,
+      String? md5,
+    }) =>
+        DriveChange(
+          fileId: id,
+          removed: false,
+          file: DriveFile(
+            id: id,
+            name: name,
+            mimeType: 'audio/mpeg',
+            md5Checksum: md5,
+          ),
+          parentId: parentId,
+        );
+
+    test('sans jeton de reprise : scan complet demandé', () async {
+      final client = _FakeDriveClient({'root': []});
+      final repository = await repositoryFor(client);
+
+      final outcome = await repository.applyDriveChanges(library: library);
+
+      expect(outcome, isA<DriveSyncNeedsFullScan>());
+      expect(client.listChangesCalls, 0);
+    });
+
+    test('dernier scan complet trop ancien : rescan périodique demandé',
+        () async {
+      final client = _FakeDriveClient({'root': []});
+      final repository = await repositoryFor(client);
+
+      final outcome = await repository.applyDriveChanges(
+        library: armed(since: const Duration(days: 8)),
+      );
+
+      expect(outcome, isA<DriveSyncNeedsFullScan>());
+      expect((outcome as DriveSyncNeedsFullScan).reason, 'rescan périodique');
+      expect(client.listChangesCalls, 0,
+          reason: 'le rescan périodique doit court-circuiter le delta');
+    });
+
+    test('jeton expiré : scan complet demandé', () async {
+      final client = _FakeDriveClient({'root': []})
+        ..expiredTokens.add('token-1');
+      final repository = await repositoryFor(client);
+
+      final outcome = await repository.applyDriveChanges(library: armed());
+
+      expect(outcome, isA<DriveSyncNeedsFullScan>());
+      expect((outcome as DriveSyncNeedsFullScan).reason, 'jeton expiré');
+    });
+
+    test('changement de DOSSIER : scan complet demandé (le delta ne porte pas '
+        'la descendance)', () async {
+      final client = _FakeDriveClient({'root': []});
+      client.changePages['token-1'] = DriveChangePage(
+        changes: [
+          DriveChange(
+            fileId: 'd9',
+            removed: false,
+            file: _folder('d9', 'Renommé'),
+            parentId: 'root',
+            isFolder: true,
+          ),
+        ],
+        newStartPageToken: 'token-2',
+      );
+      final repository = await repositoryFor(client);
+
+      final outcome = await repository.applyDriveChanges(library: armed());
+
+      expect(outcome, isA<DriveSyncNeedsFullScan>());
+      expect(
+        (outcome as DriveSyncNeedsFullScan).reason,
+        'changement de structure',
+      );
+    });
+
+    test('ajout d\'un fichier dans un dossier connu : son créé, jeton avancé',
+        () async {
+      final client = _FakeDriveClient({
+        'root': [_folder('d1', 'Portes')],
+        // Le dossier doit déjà porter un son : un nœud dossier n'existe
+        // localement que pour les dossiers qui contiennent des fichiers.
+        'd1': [_audio('f0', 'existant.mp3')],
+      });
+      final repository = await repositoryFor(client);
+      // Scan initial : crée le nœud dossier `d1` et pose le jeton.
+      await repository.indexDriveFolder(library: library);
+
+      client.changePages['token-1'] = DriveChangePage(
+        changes: [audioChange('f1', 'knock.mp3', parentId: 'd1', md5: 'aaa')],
+        newStartPageToken: 'token-2',
+      );
+
+      final outcome = await repository.applyDriveChanges(library: armed());
+
+      expect(outcome, isA<DriveSyncApplied>());
+      expect((outcome as DriveSyncApplied).upserted, 1);
+
+      final sounds = await soundsOf(library.id);
+      expect(sounds, hasLength(2));
+      final added = sounds.firstWhere((s) => s.driveFileId == 'f1');
+      expect(added.relativePath, 'Portes/knock.mp3');
+
+      final stored = await (database.select(database.libraries)
+            ..where((l) => l.id.equals(library.id)))
+          .getSingle();
+      expect(stored.driveChangeToken, 'token-2');
+    });
+
+    test('suppression signalée : son retiré et cache évincé', () async {
+      final client = _FakeDriveClient({
+        'root': [_audio('f1', 'intro.mp3'), _audio('f2', 'outro.mp3')],
+      });
+      final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
+
+      final cached =
+          File('${cacheRoot.path}${Platform.pathSeparator}outro.mp3');
+      await cached.writeAsString('audio');
+
+      client.changePages['token-1'] = const DriveChangePage(
+        changes: [DriveChange(fileId: 'f2', removed: true)],
+        newStartPageToken: 'token-2',
+      );
+
+      final outcome = await repository.applyDriveChanges(library: armed());
+
+      expect((outcome as DriveSyncApplied).removed, 1);
+      final sounds = await soundsOf(library.id);
+      expect(sounds, hasLength(1));
+      expect(sounds.single.driveFileId, 'f1');
+      expect(await cached.exists(), isFalse);
+    });
+
+    test('AUCUN élagage par différence : un delta vide ne supprime RIEN',
+        () async {
+      final client = _FakeDriveClient({
+        'root': [
+          _audio('f1', 'a.mp3'),
+          _audio('f2', 'b.mp3'),
+          _audio('f3', 'c.mp3'),
+        ],
+      });
+      final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
+      expect(await soundsOf(library.id), hasLength(3));
+
+      // Delta vide : Drive dit « rien n'a changé ». Un élagage par différence
+      // d'ensembles conclurait ici que les trois fichiers ont disparu.
+      client.changePages['token-1'] = const DriveChangePage(
+        changes: [],
+        newStartPageToken: 'token-2',
+      );
+
+      final outcome = await repository.applyDriveChanges(library: armed());
+
+      expect(outcome, isA<DriveSyncApplied>());
+      expect(await soundsOf(library.id), hasLength(3),
+          reason: 'le chemin incrémental ne doit JAMAIS élaguer par différence');
+    });
+
+    test('un fichier audio dans un dossier inconnu : scan complet demandé, '
+        'jamais un saut silencieux', () async {
+      final client = _FakeDriveClient({
+        'root': [_audio('f1', 'intro.mp3')],
+      });
+      final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
+
+      client.changePages['token-1'] = DriveChangePage(
+        changes: [
+          audioChange('f1', 'intro.mp3', parentId: 'dossier-inconnu'),
+        ],
+        newStartPageToken: 'token-2',
+      );
+
+      final outcome = await repository.applyDriveChanges(library: armed());
+
+      expect(outcome, isA<DriveSyncNeedsFullScan>());
+      // Le son reste intact : on n'a rien appliqué.
+      expect((await soundsOf(library.id)).single.relativePath, 'intro.mp3');
+    });
+
+    test('changement portant sur une AUTRE bibliothèque : ignoré', () async {
+      final client = _FakeDriveClient({
+        'root': [_audio('f1', 'intro.mp3')],
+      });
+      final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
+
+      client.changePages['token-1'] = const DriveChangePage(
+        changes: [
+          // Fichier inconnu de cette bibliothèque, retiré ailleurs.
+          DriveChange(fileId: 'etranger', removed: true),
+        ],
+        newStartPageToken: 'token-2',
+      );
+
+      final outcome = await repository.applyDriveChanges(library: armed());
+
+      expect((outcome as DriveSyncApplied).removed, 0);
+      expect(await soundsOf(library.id), hasLength(1));
+    });
+
+    test('pagination : toutes les pages sont collectées avant application',
+        () async {
+      final client = _FakeDriveClient({
+        'root': [_folder('d1', 'Portes')],
+        'd1': [_audio('f0', 'existant.mp3')],
+      });
+      final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
+
+      client.changePages['token-1'] = DriveChangePage(
+        changes: [audioChange('f1', 'a.mp3', parentId: 'd1')],
+        nextPageToken: 'page-2',
+      );
+      client.changePages['page-2'] = DriveChangePage(
+        changes: [audioChange('f2', 'b.mp3', parentId: 'd1')],
+        newStartPageToken: 'token-2',
+      );
+
+      final outcome = await repository.applyDriveChanges(library: armed());
+
+      expect((outcome as DriveSyncApplied).upserted, 2);
+      expect(await soundsOf(library.id), hasLength(3));
+      expect(client.listChangesCalls, 2);
+    });
+
+    test('un scan complet arme le parcours incrémental (jeton pris AVANT le '
+        'parcours) et réarme l\'horloge du rescan', () async {
+      final client = _FakeDriveClient({'root': [_audio('f1', 'intro.mp3')]})
+        ..startPageToken = 'token-frais';
+      final repository = await repositoryFor(client);
+
+      await repository.indexDriveFolder(library: library);
+
+      final stored = await (database.select(database.libraries)
+            ..where((l) => l.id.equals(library.id)))
+          .getSingle();
+      expect(stored.driveChangeToken, 'token-frais');
+      expect(stored.lastFullScanAt, isNotNull);
     });
   });
 

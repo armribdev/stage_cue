@@ -41,6 +41,24 @@ abstract class DriveClient {
     String? sharedDriveId,
   });
 
+  /// Jeton représentant « l'état courant » du drive : point de départ d'un futur
+  /// parcours de changements.
+  ///
+  /// À obtenir AVANT le scan complet qu'il accompagne, jamais après : un fichier
+  /// modifié pendant le scan serait sinon absent à la fois du scan et du premier
+  /// delta.
+  Future<String> getStartPageToken({String? sharedDriveId});
+
+  /// Changements survenus depuis [pageToken].
+  ///
+  /// Lève [DriveChangeTokenExpiredException] si le jeton est trop ancien pour
+  /// que Drive puisse encore répondre : l'appelant doit alors repartir d'un scan
+  /// complet.
+  Future<DriveChangePage> listChanges({
+    required String pageToken,
+    String? sharedDriveId,
+  });
+
   /// Crée un dossier. `parentId` null = racine « My Drive ».
   Future<DriveFile> createFolder({required String name, String? parentId});
 
@@ -118,6 +136,16 @@ class DriveAuthException implements Exception {
   @override
   String toString() =>
       'DriveAuthException: ${message ?? "token révoqué ou expiré"}';
+}
+
+/// Le jeton de parcours des changements est périmé : Drive ne peut plus dire ce
+/// qui a changé depuis. Seul remède, un scan complet — jamais une reprise
+/// partielle, qui laisserait des suppressions inaperçues.
+class DriveChangeTokenExpiredException implements Exception {
+  const DriveChangeTokenExpiredException();
+
+  @override
+  String toString() => 'DriveChangeTokenExpiredException';
 }
 
 /// Échec d'un appel Drive, formulé pour l'utilisateur.

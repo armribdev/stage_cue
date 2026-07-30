@@ -17,6 +17,8 @@ class LibraryModel {
       lastSyncedAt: row.lastSyncedAt,
       createdAt: row.createdAt,
       autoDownload: row.autoDownload,
+      driveChangeToken: row.driveChangeToken,
+      lastFullScanAt: row.lastFullScanAt,
     );
   }
 

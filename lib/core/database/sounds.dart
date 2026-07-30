@@ -33,6 +33,20 @@ class Libraries extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   /// Si true, les nouveaux fichiers indexés sont téléchargés automatiquement.
   BoolColumn get autoDownload => boolean().withDefault(const Constant(false))();
+
+  /// Jeton de reprise du parcours des changements Drive (`changes.list`).
+  /// `null` = jamais scanné, ou jeton invalidé → prochain lancement en scan
+  /// complet. Opaque : à ne comparer ni ordonner, seulement transmettre.
+  TextColumn get driveChangeToken => text().nullable()();
+
+  /// Date du dernier scan COMPLET de l'arborescence Drive.
+  ///
+  /// Le parcours incrémental n'élague jamais par différence d'ensembles : il ne
+  /// retire que ce que Drive lui signale explicitement. Il peut donc accumuler
+  /// une dérive (changement manqué, delta partiellement applicable). Ce champ
+  /// borne cette dérive en forçant un scan complet périodique. Horloge LOCALE
+  /// des deux côtés de la comparaison — jamais opposée à une horloge serveur.
+  DateTimeColumn get lastFullScanAt => dateTime().nullable()();
 }
 
 /// Nœud « dossier » d'une bibliothèque Drive : chaque dossier contenant de

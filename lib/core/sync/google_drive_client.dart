@@ -326,6 +326,77 @@ class GoogleDriveClient implements DriveClient {
   }
 
   @override
+  Future<String> getStartPageToken({String? sharedDriveId}) {
+    return _guardRetry(() async {
+      final response = await _api.changes.getStartPageToken(
+        driveId: sharedDriveId,
+        supportsAllDrives: true,
+      );
+      final token = response.startPageToken;
+      if (token == null) {
+        throw StateError('Drive n\'a pas renvoyé de jeton de départ');
+      }
+      return token;
+    });
+  }
+
+  @override
+  Future<DriveChangePage> listChanges({
+    required String pageToken,
+    String? sharedDriveId,
+  }) {
+    return _guardRetry(() async {
+      final drive.ChangeList list;
+      try {
+        list = await _api.changes.list(
+          pageToken,
+          driveId: sharedDriveId,
+          includeItemsFromAllDrives: true,
+          supportsAllDrives: true,
+          // Sans ceci, les suppressions n'apparaîtraient pas : le delta ne
+          // servirait qu'à ajouter, jamais à retirer.
+          includeRemoved: true,
+          spaces: 'drive',
+          pageSize: 200,
+          $fields: 'nextPageToken, newStartPageToken, '
+              'changes(fileId, removed, file($_fileFields, parents, trashed))',
+        );
+      } on drive.DetailedApiRequestError catch (e) {
+        // 410 Gone : jeton trop ancien. Ce n'est pas une erreur transitoire —
+        // la rejouer ne servirait à rien, il faut un scan complet.
+        if (e.status == 410) throw const DriveChangeTokenExpiredException();
+        rethrow;
+      }
+
+      final changes = <DriveChange>[];
+      for (final change in list.changes ?? const <drive.Change>[]) {
+        final fileId = change.fileId;
+        if (fileId == null) continue;
+
+        final file = change.file;
+        // Corbeille et retrait de droits comptent comme une disparition : du
+        // point de vue de la bibliothèque, le fichier n'est plus là.
+        final removed =
+            change.removed == true || file == null || file.trashed == true;
+
+        changes.add(DriveChange(
+          fileId: fileId,
+          removed: removed,
+          file: removed ? null : _toDriveFile(file),
+          parentId: file?.parents?.firstOrNull,
+          isFolder: file?.mimeType == driveFolderMimeType,
+        ));
+      }
+
+      return DriveChangePage(
+        changes: changes,
+        nextPageToken: list.nextPageToken,
+        newStartPageToken: list.newStartPageToken,
+      );
+    });
+  }
+
+  @override
   Future<DriveFile> createFolder({
     required String name,
     String? parentId,

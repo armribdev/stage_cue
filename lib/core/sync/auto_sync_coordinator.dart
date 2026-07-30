@@ -126,15 +126,29 @@ class AutoSyncCoordinator {
         //    profonde (des milliers de fichiers en de nombreux sous-dossiers).
         final fullyIndexed = <Library>[];
         // Ensemble « présent sur Drive » de chaque scan complet : source de
-        // vérité pour l'existence, réutilisée en 3. après le pull.
+        // vérité pour l'existence, réutilisée en 3. après le pull. Une passe
+        // INCRÉMENTALE n'y met rien — elle ne connaît pas cet ensemble, et
+        // l'élagage par différence sur un delta supprimerait tout ce qui n'a
+        // pas bougé.
         final presentByLibrary = <int, Set<String>>{};
         for (final library in libraries) {
           try {
-            final result = await _repository
-                .indexDriveFolder(library: library)
-                .timeout(const Duration(seconds: 120));
-            fullyIndexed.add(library);
-            presentByLibrary[library.id] = result.presentDriveFileIds;
+            // Chemin rapide : n'appliquer que ce qui a changé depuis la
+            // dernière passe. Il se déclare lui-même insuffisant dès qu'il y a
+            // le moindre doute, et on retombe alors sur le scan complet.
+            final outcome = await _repository
+                .applyDriveChanges(library: library)
+                .timeout(const Duration(seconds: 30));
+            switch (outcome) {
+              case DriveSyncApplied():
+                fullyIndexed.add(library);
+              case DriveSyncNeedsFullScan():
+                final result = await _repository
+                    .indexDriveFolder(library: library)
+                    .timeout(const Duration(seconds: 120));
+                fullyIndexed.add(library);
+                presentByLibrary[library.id] = result.presentDriveFileIds;
+            }
           } catch (_) {
             // Index incomplet : on saute son pull cette session.
           }
