@@ -167,6 +167,56 @@ void main() {
           ));
     });
 
+    test('budget de requêtes : un push nominal ne cherche le manifest QU\'UNE '
+        'fois de trop', () async {
+      final remote = SyncManifest(
+        revision: 3,
+        deviceId: 'other',
+        updatedAt: DateTime.now().toUtc(),
+        schemaVersion: 11,
+      );
+      when(() => client.findInFolder(parentId: 'lib', name: '.stagecue'))
+          .thenAnswer((_) async => folder('stage', '.stagecue'));
+      when(() => client.findInFolder(
+              parentId: 'stage', name: 'boards-manifest.json'))
+          .thenAnswer((_) async => file('m', 'boards-manifest.json'));
+      when(() => client.downloadBytes('m'))
+          .thenAnswer((_) async => utf8.encode(remote.encode()));
+      stubUpload();
+
+      await service.push(
+        client: client,
+        libraryId: 1,
+        libraryFolderId: 'lib',
+        knownRevision: 3,
+      );
+
+      // DEUX recherches de manifest, pas trois : la lecture initiale et la
+      // relecture d'avant publication. L'écriture qui suit réutilise l'id que
+      // la relecture vient de rendre, au lieu de rechercher un fichier qu'elle
+      // vient de voir.
+      verify(() => client.findInFolder(
+            parentId: 'stage',
+            name: 'boards-manifest.json',
+          )).called(2);
+      // Le manifest est mis à jour EN PLACE, par son id.
+      verify(() => client.updateFileContent(
+            fileId: 'm',
+            data: any(named: 'data'),
+            length: any(named: 'length'),
+            mimeType: any(named: 'mimeType'),
+          )).called(1);
+      // Aucune recherche de blob : ni avant l'upload (nom neuf), et pas de
+      // nettoyage ici puisque le manifest précédent ne désignait aucun blob.
+      verifyNever(() => client.findInFolder(
+            parentId: 'stage',
+            name: any(
+              named: 'name',
+              that: allOf(startsWith('boards-'), endsWith('.db')),
+            ),
+          ));
+    });
+
     test('publication concurrente pendant l\'upload : conflit détecté, '
         'snapshot du gagnant intact', () async {
       when(() => client.findInFolder(parentId: 'lib', name: '.stagecue'))
@@ -191,6 +241,10 @@ void main() {
       });
       stubUpload();
 
+      // Un SEUL lookup de blob dans toute la séquence : celui du nettoyage de
+      // notre orphelin, une fois le conflit détecté. L'upload, lui, crée
+      // directement — son nom porte un UUID neuf, chercher un homonyme ne
+      // pouvait rien donner.
       var blobLookups = 0;
       when(() => client.findInFolder(
             parentId: 'stage',
@@ -199,12 +253,8 @@ void main() {
               that: allOf(startsWith('boards-'), endsWith('.db')),
             ),
           )).thenAnswer((invocation) async {
-        // 1er appel : _putFile constate que le blob est neuf. 2e : nettoyage de
-        // notre orphelin une fois le conflit détecté.
         blobLookups++;
-        return blobLookups == 1
-            ? null
-            : file('orphan', invocation.namedArguments[#name] as String);
+        return file('orphan', invocation.namedArguments[#name] as String);
       });
 
       final outcome = await service.push(
@@ -226,6 +276,10 @@ void main() {
           ));
       // Notre snapshot, que plus rien ne référence, est nettoyé.
       verify(() => client.deleteFile('orphan')).called(1);
+      // Et ce nettoyage est le SEUL lookup de blob : réintroduire une recherche
+      // avant l'upload rendrait un aller-retour Drive garanti stérile à chaque
+      // sauvegarde.
+      expect(blobLookups, 1);
     });
 
     test('révision distante différente : conflit, pas d\'export', () async {

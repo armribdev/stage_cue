@@ -219,10 +219,13 @@ class LibrarySyncService {
     final snapshotName = _uniqueSnapshotName(dbFileName);
 
     try {
-      await _putFile(
-        client: client,
-        parentId: stageId,
+      // Création directe, sans chercher un homonyme au préalable : le nom porte
+      // un UUID fraîchement tiré, donc la recherche ne pourrait par construction
+      // rien trouver. C'était un aller-retour Drive garanti inutile à chaque
+      // sauvegarde.
+      await client.uploadFile(
         name: snapshotName,
+        parentId: stageId,
         data: File(snapshotPath).openRead(),
         length: length,
         mimeType: _sqliteMimeType,
@@ -234,7 +237,14 @@ class LibrarySyncService {
       // `files.update`), donc la séquence ne peut pas être rendue atomique. On
       // réduit la fenêtre de course à un aller-retour API, et surtout le
       // perdant abandonne SANS avoir détruit le snapshot du gagnant.
-      final current = await _readManifest(client, stageId, manifestFileName);
+      //
+      // Cette lecture reste une VRAIE recherche : c'est elle qui doit voir un
+      // manifest apparu entre-temps, y compris publié par un appareil qui n'en
+      // avait posé aucun. L'optimiser en relisant un id mémorisé plus haut
+      // ferait manquer exactement le cas qu'elle existe pour détecter.
+      final currentEntry =
+          await _readManifestEntry(client, stageId, manifestFileName);
+      final current = currentEntry?.manifest;
       if (!force &&
           current != null &&
           current.revision != remoteManifest?.revision) {
@@ -255,7 +265,15 @@ class LibrarySyncService {
         schemaVersion: _snapshotStore.schemaVersion,
         dbFileName: snapshotName,
       );
-      await _writeManifest(client, stageId, manifestFileName, manifest);
+      // La relecture ci-dessus vient de donner l'id du manifest : on écrit
+      // dessus directement au lieu de le rechercher à nouveau.
+      await _writeManifest(
+        client,
+        stageId,
+        manifestFileName,
+        manifest,
+        knownFile: currentEntry?.file,
+      );
 
       // Le snapshot précédent n'est plus référencé : on le retire pour que
       // `.stagecue` ne grossisse pas à chaque push. Best-effort — un résidu ne
@@ -594,13 +612,46 @@ class LibrarySyncService {
     return SyncManifest.decode(utf8.decode(bytes));
   }
 
+  /// Comme [_readManifest], mais rend aussi le FICHIER lu.
+  ///
+  /// Le push relit le manifest juste avant de publier (fenêtre de conflit) : cet
+  /// aller-retour lui donne déjà l'id du fichier. Le renvoyer évite au
+  /// [_writeManifest] qui suit de le rechercher une seconde fois pour écrire
+  /// dessus, à un instant où il vient tout juste de le voir.
+  Future<({DriveFile file, SyncManifest manifest})?> _readManifestEntry(
+    DriveClient client,
+    String stageId,
+    String manifestFileName,
+  ) async {
+    final file = await client.findInFolder(
+      parentId: stageId,
+      name: manifestFileName,
+    );
+    if (file == null) return null;
+    final bytes = await client.downloadBytes(file.id);
+    return (file: file, manifest: SyncManifest.decode(utf8.decode(bytes)));
+  }
+
+  /// Écrit le manifest. [knownFile] court-circuite la recherche quand
+  /// l'appelant vient de le lire — l'id d'un manifest est stable, `_putFile`
+  /// le met à jour en place et ne le recrée jamais.
   Future<void> _writeManifest(
     DriveClient client,
     String stageId,
     String manifestFileName,
-    SyncManifest manifest,
-  ) async {
+    SyncManifest manifest, {
+    DriveFile? knownFile,
+  }) async {
     final bytes = utf8.encode(manifest.encode());
+    if (knownFile != null) {
+      await client.updateFileContent(
+        fileId: knownFile.id,
+        data: Stream.value(bytes),
+        length: bytes.length,
+        mimeType: _jsonMimeType,
+      );
+      return;
+    }
     await _putFile(
       client: client,
       parentId: stageId,
