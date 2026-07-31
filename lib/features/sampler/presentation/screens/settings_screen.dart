@@ -11,11 +11,11 @@ import '../../../../core/database/database.dart' as db;
 import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/platform/saf_directory_bridge.dart';
+import '../../../../core/sync/auto_sync_coordinator.dart';
 import '../../../../core/sync/drive_account_profile.dart';
 import '../../../../core/sync/drive_profile_cache.dart';
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
-import '../../../../core/sync/drive_client.dart';
 import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../../../core/utils/layout_utils.dart';
@@ -38,6 +38,7 @@ class SettingsScreen extends StatefulWidget {
   final db.AppDatabase database;
   final LibraryRepository libraryRepository;
   final SyncController syncController;
+  final AutoSyncCoordinator autoSyncCoordinator;
   final AppPreferences appPreferences;
   final bool isModal;
   final bool scrollToDriveSection;
@@ -47,6 +48,7 @@ class SettingsScreen extends StatefulWidget {
     required this.database,
     required this.libraryRepository,
     required this.syncController,
+    required this.autoSyncCoordinator,
     required this.appPreferences,
     this.isModal = false,
     this.scrollToDriveSection = false,
@@ -58,6 +60,7 @@ class SettingsScreen extends StatefulWidget {
     required db.AppDatabase database,
     required LibraryRepository libraryRepository,
     required SyncController syncController,
+    required AutoSyncCoordinator autoSyncCoordinator,
     required AppPreferences appPreferences,
     bool scrollToDriveSection = false,
   }) {
@@ -67,6 +70,7 @@ class SettingsScreen extends StatefulWidget {
         database: database,
         libraryRepository: libraryRepository,
         syncController: syncController,
+        autoSyncCoordinator: autoSyncCoordinator,
         appPreferences: appPreferences,
         isModal: isModal,
         scrollToDriveSection: scrollToDriveSection,
@@ -1359,11 +1363,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _removeWatchedPath(watchedPath);
   }
 
+  /// Actualisation manuelle : délègue au coordinateur, qui rejoue exactement la
+  /// séquence de lancement (delta d'abord, scan complet en repli, indexation
+  /// AVANT le pull). Cet écran n'orchestre plus rien lui-même — deux séquences
+  /// de synchronisation en parallèle finiraient par diverger, et c'est ici que
+  /// la divergence était déjà réelle : le bouton tirait avant d'indexer et
+  /// rescannait systématiquement.
   Future<void> _refreshAllFromDrive() async {
-    final connected = _libraries
-        .where((library) => library.isConnectedToDrive)
-        .toList();
-    if (connected.isEmpty) {
+    final hasDriveLibrary =
+        _libraries.any((library) => library.isConnectedToDrive);
+    if (!hasDriveLibrary) {
       if (mounted) {
         AppSnackBar.show(context, 'Aucun dossier Drive indexé');
       }
@@ -1372,40 +1381,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _isSyncBusy = true);
     try {
-      for (final library in connected) {
-        await widget.syncController.pullForLaunch(library);
-        if (!mounted) return;
-
-        final progressKey = _driveProgressKey(library.id);
-        await widget.libraryRepository.indexDriveFolder(
-          library: library,
-          onProgress: (progress) {
-            if (mounted) {
-              setState(() {
-                _indexingProgress[progressKey] = progress;
-              });
-            }
-          },
-        );
-      }
+      final report = await widget.autoSyncCoordinator.refreshNow(
+        onIndexProgress: (library, progress) {
+          if (!mounted) return;
+          setState(() {
+            _indexingProgress[_driveProgressKey(library.id)] = progress;
+          });
+        },
+      );
+      if (!mounted) return;
 
       await _loadDatabaseInfo();
+      if (!mounted) return;
 
-      if (mounted) {
-        AppSnackBar.show(
-          context,
-          'Bibliothèque(s) Drive actualisée(s)',
-          duration: const Duration(seconds: 2),
-        );
-      }
-    } on DriveAuthException {
-      await widget.syncController.handleAuthFailure();
-      if (mounted) {
-        showCopyableSnackBar(
-          context,
-          'Session Google expirée — utilisez « Renouveler » ci-dessus.',
-        );
-      }
+      _showRefreshOutcome(report);
     } catch (e) {
       if (mounted) {
         showCopyableSnackBar(context, 'Erreur lors de l\'actualisation : $e');
@@ -1413,6 +1402,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _isSyncBusy = false);
     }
+  }
+
+  /// Traduit le bilan d'une passe en un message. Une passe partielle ne doit
+  /// jamais s'annoncer comme un succès : c'est le cas où l'utilisateur cherche
+  /// un son qu'il vient d'ajouter et ne le trouve pas.
+  void _showRefreshOutcome(SyncPassReport report) {
+    if (report.authExpired) {
+      showCopyableSnackBar(
+        context,
+        'Session Google expirée — utilisez « Renouveler » ci-dessus.',
+      );
+      return;
+    }
+    if (report.error != null) {
+      showCopyableSnackBar(
+        context,
+        'Erreur lors de l\'actualisation : ${report.error}',
+      );
+      return;
+    }
+    if (report.localMode) {
+      AppSnackBar.show(
+        context,
+        'Mode local — passez en mode connecté pour actualiser',
+      );
+      return;
+    }
+    if (report.offline) {
+      AppSnackBar.show(context, 'Hors ligne — actualisation impossible');
+      return;
+    }
+    if (report.skipped > 0) {
+      showCopyableSnackBar(
+        context,
+        '${report.skipped} bibliothèque(s) non actualisée(s) — '
+        'réessayez ou consultez les journaux.',
+      );
+      return;
+    }
+    AppSnackBar.show(
+      context,
+      'Bibliothèque(s) Drive actualisée(s)',
+      duration: const Duration(seconds: 2),
+    );
   }
 
   /// Régénère l'enveloppe waveform de tous les sons musique déjà en cache

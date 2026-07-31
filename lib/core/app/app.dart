@@ -30,7 +30,8 @@ class SoundboardApp extends StatefulWidget {
 /// ne pas déborder sur un écran de téléphone étroit.
 const double _maxSnackBarWidth = 420;
 
-class _SoundboardAppState extends State<SoundboardApp> with WindowListener {
+class _SoundboardAppState extends State<SoundboardApp>
+    with WindowListener, WidgetsBindingObserver {
   static bool get _isWindowsDesktop => !kIsWeb && Platform.isWindows;
 
   /// Bornes de la fenêtre avant passage en plein écran — `null` hors plein
@@ -49,6 +50,7 @@ class _SoundboardAppState extends State<SoundboardApp> with WindowListener {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (_isWindowsDesktop) {
       HardwareKeyboard.instance.addHandler(_handleKeyEvent);
       windowManager.addListener(this);
@@ -63,8 +65,31 @@ class _SoundboardAppState extends State<SoundboardApp> with WindowListener {
     }
   }
 
+  /// Retour au premier plan : c'est le moment le plus probable où Drive a bougé
+  /// sans nous (fichiers déposés depuis un navigateur ou un téléphone). On ne
+  /// fait que rapporter l'état — l'anti-rebond, le Mode Spectacle et le verrou
+  /// de passe sont du ressort d'`AutoSyncCoordinator`.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final coordinator = widget.services.autoSyncCoordinator;
+    switch (state) {
+      case AppLifecycleState.resumed:
+        coordinator.onAppResumed();
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        coordinator.onAppBackgrounded();
+      case AppLifecycleState.inactive:
+        // Desktop : la fenêtre a seulement perdu le focus (alt-tab) — souvent
+        // pour aller justement déposer des fichiers sur Drive. La veille
+        // continue de tourner.
+        break;
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (_isWindowsDesktop) {
       HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
       windowManager.removeListener(this);
