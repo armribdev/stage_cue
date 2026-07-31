@@ -89,13 +89,37 @@ class SyncLog {
     warn('$library : écartée du pull cette session (index incomplet) — $error');
   }
 
-  /// Échec inattendu de la passe de lancement : l'app bascule hors-ligne.
-  static void initialPullFailed(Object error, StackTrace stackTrace) {
+  /// La veille a rencontré un delta inexploitable et refuse de rescanner.
+  ///
+  /// Journalisé **une fois par bibliothèque** : la raison ne change pas d'un
+  /// tick à l'autre, et la répéter toutes les quelques minutes rendrait le canal
+  /// inutilisable — mais renoncer en silence laisserait croire que la veille
+  /// tourne alors qu'elle ne rattrape plus rien.
+  static void watchFullScanDeferred({
+    required String library,
+    required String reason,
+  }) {
+    info(
+      '$library : veille — scan complet requis ($reason), différé au prochain '
+      'lancement ou à une actualisation manuelle.',
+    );
+  }
+
+  /// Échec inattendu d'une passe de synchronisation : l'app bascule hors-ligne.
+  ///
+  /// [trigger] distingue le lancement, le bouton « Actualiser » et la veille :
+  /// une passe de veille qui échoue en boucle ne se diagnostique pas comme un
+  /// lancement raté.
+  static void syncPassFailed({
+    required String trigger,
+    required Object error,
+    required StackTrace stackTrace,
+  }) {
     // Seul cas où l'on passe l'objet d'erreur : la stack trace n'a de sens
     // qu'attachée à lui, et un incident unique ne risque pas de noyer la
     // console.
     severe(
-      'Passe de synchronisation initiale interrompue — bascule hors-ligne.',
+      'Passe de synchronisation ($trigger) interrompue — bascule hors-ligne.',
       error: error,
       stackTrace: stackTrace,
     );

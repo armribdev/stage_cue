@@ -217,6 +217,50 @@ void main() {
     });
   });
 
+  // La veille sonde Drive toutes les quelques minutes : si elle faisait bouger
+  // la pastille pour dire qu'il n'y a rien à dire, un écran de régie
+  // clignoterait en boucle « Synchro… » / « Synchronisé » pour zéro information.
+  group('pullInBackground', () {
+    test('déjà à jour -> la pastille ne bouge PAS', () async {
+      when(() => repo.pullLibrary(any()))
+          .thenAnswer((_) async => const PullUpToDate());
+      final controller = SyncController(repo);
+      var notifications = 0;
+      controller.addListener(() => notifications++);
+
+      await controller.pullInBackground(library);
+
+      expect(controller.state.status, SyncStatus.idle);
+      expect(controller.state.lastSyncedAt, isNull);
+      expect(notifications, 0, reason: 'aucune transition à afficher');
+    });
+
+    test('fusion réelle -> synced et onLibraryMerged, comme au lancement',
+        () async {
+      when(() => repo.pullLibrary(any()))
+          .thenAnswer((_) async => const PullStaged(7));
+      final controller = SyncController(repo);
+      var mergedCalled = false;
+      controller.onLibraryMerged = () => mergedCalled = true;
+
+      await controller.pullInBackground(library);
+
+      // Le contenu des scènes vient de changer sous les yeux de l'utilisateur :
+      // c'est précisément ce qu'une veille silencieuse doit quand même dire.
+      expect(controller.state.status, SyncStatus.synced);
+      expect(mergedCalled, isTrue);
+    });
+
+    test('erreur -> signalée malgré le mode silencieux', () async {
+      when(() => repo.pullLibrary(any())).thenThrow(StateError('réseau'));
+      final controller = SyncController(repo);
+
+      await controller.pullInBackground(library);
+
+      expect(controller.state.status, SyncStatus.error);
+    });
+  });
+
   group('markOffline', () {
     test('passe à offline pour la pastille ambiante', () {
       final controller = SyncController(repo);

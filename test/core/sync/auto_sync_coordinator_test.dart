@@ -9,6 +9,8 @@
 // qu'avec l'ensemble issu d'un scan COMPLET. L'appeler après une passe
 // incrémentale supprimerait tout ce qui n'a pas changé.
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +18,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:stage_cue/core/database/database.dart' as db;
 import 'package:stage_cue/core/settings/app_preferences.dart';
 import 'package:stage_cue/core/sync/auto_sync_coordinator.dart';
+import 'package:stage_cue/core/sync/drive_client.dart';
+import 'package:stage_cue/features/sampler/data/models/indexing_progress.dart';
 import 'package:stage_cue/features/sampler/data/repositories/library_repository.dart';
 import 'package:stage_cue/features/sampler/domain/entities/library.dart';
 import 'package:stage_cue/features/sampler/presentation/providers/sync_controller.dart';
@@ -76,6 +80,8 @@ void main() {
     when(() => repository.getLibraries()).thenAnswer((_) async => []);
     when(() => syncController.markOffline()).thenReturn(null);
     when(() => syncController.schedulePush(any())).thenReturn(null);
+    when(() => syncController.isAutoSyncPaused).thenReturn(false);
+    when(() => syncController.handleAuthFailure()).thenAnswer((_) async {});
 
     coordinator = AutoSyncCoordinator(
       database,
@@ -107,11 +113,18 @@ void main() {
           const DriveSyncNeedsFullScan('test');
     });
 
-    when(() => repository.indexDriveFolder(library: any(named: 'library')))
-        .thenAnswer((invocation) async {
+    when(() => repository.indexDriveFolder(
+          library: any(named: 'library'),
+          onProgress: any(named: 'onProgress'),
+        )).thenAnswer((invocation) async {
       final library = invocation.namedArguments[#library] as Library;
       calls.add('index:${library.id}');
       if (indexThrows != null) throw indexThrows;
+      final onProgress = invocation.namedArguments[#onProgress]
+          as void Function(IndexingProgress)?;
+      onProgress?.call(
+        IndexingProgress(path: library.name, current: 1, total: 1),
+      );
       return DriveIndexResult(
         newFileCount: 0,
         presentDriveFileIds: onIndex?.call(library) ?? {'f1'},
@@ -123,6 +136,16 @@ void main() {
     ) async {
       final library = invocation.positionalArguments.first as Library;
       calls.add('pull:${library.id}');
+    });
+
+    // Le pull de veille est une méthode DISTINCTE (pastille silencieuse) :
+    // l'enregistrer sous un autre nom permet aux tests de vérifier que la
+    // veille n'emprunte pas le chemin bruyant du lancement.
+    when(() => syncController.pullInBackground(any())).thenAnswer((
+      invocation,
+    ) async {
+      final library = invocation.positionalArguments.first as Library;
+      calls.add('watch-pull:${library.id}');
     });
 
     when(() => repository.pruneSoundsAbsentFromDrive(
@@ -145,6 +168,13 @@ void main() {
       await Future<void>.delayed(Duration.zero);
     }
     expect(settled, isNotEmpty, reason: 'la passe doit toujours se conclure');
+  }
+
+  /// Laisse les futures en vol se résoudre (passes lancées en `unawaited`).
+  Future<void> pump() async {
+    for (var i = 0; i < 20; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
   }
 
   group('séquence de lancement', () {
@@ -211,8 +241,10 @@ void main() {
         calls.add('apply:${library.id}');
         return const DriveSyncNeedsFullScan('test');
       });
-      when(() => repository.indexDriveFolder(library: any(named: 'library')))
-          .thenAnswer((invocation) async {
+      when(() => repository.indexDriveFolder(
+            library: any(named: 'library'),
+            onProgress: any(named: 'onProgress'),
+          )).thenAnswer((invocation) async {
         final library = invocation.namedArguments[#library] as Library;
         calls.add('index:${library.id}');
         if (library.id == 2) throw StateError('dossier injoignable');
@@ -239,6 +271,190 @@ void main() {
       // recâblerait sur un sous-ensemble de sons (cf. décision 0005).
       expect(calls, ['apply:2', 'index:2', 'apply:1', 'index:1', 'pull:1',
           'prune:1']);
+    });
+  });
+
+  // Le bouton « Actualiser depuis Drive » orchestrait autrefois sa propre
+  // séquence : pull PUIS scan complet systématique. Deux séquences parallèles
+  // pour le même travail finissent par diverger — et celle-ci l'était déjà, à
+  // rebours de la décision 0005.
+  group('actualisation manuelle', () {
+    test('emprunte exactement la séquence de lancement', () async {
+      stubSequence(libraries: [_library(1)]);
+
+      final report = await coordinator.refreshNow();
+
+      expect(calls, ['apply:1', 'index:1', 'pull:1', 'prune:1']);
+      expect(report.synced, 1);
+      expect(report.skipped, 0);
+    });
+
+    test('le delta suffit : aucun scan complet déclenché à la main', () async {
+      stubSequence(
+        libraries: [_library(1)],
+        onApplyChanges: (_) => const DriveSyncApplied(upserted: 3, removed: 0),
+      );
+
+      await coordinator.refreshNow();
+
+      // Tout l'intérêt : rescanner intégralement coûte des secondes pour ce que
+      // `changes.list` rattrape en une requête.
+      expect(calls, ['apply:1', 'pull:1']);
+      verifyNever(() => repository.indexDriveFolder(
+            library: any(named: 'library'),
+            onProgress: any(named: 'onProgress'),
+          ));
+    });
+
+    test('la progression du scan remonte avec sa bibliothèque', () async {
+      final library = _library(1);
+      stubSequence(libraries: [library]);
+      final seen = <int>[];
+
+      await coordinator.refreshNow(
+        onIndexProgress: (lib, _) => seen.add(lib.id),
+      );
+
+      expect(seen, [1]);
+    });
+
+    test('session expirée : le bilan le dit, et la pastille est prévenue',
+        () async {
+      stubSequence(libraries: [_library(1)]);
+      when(() => repository.applyDriveChanges(library: any(named: 'library')))
+          .thenThrow(const DriveAuthException());
+
+      final report = await coordinator.refreshNow();
+
+      // Une session expirée pendant l'INDEXATION ne passe jamais par le pull :
+      // sans cette remontée, l'UI afficherait une erreur générique et la
+      // pastille resterait sur un état sain.
+      expect(report.authExpired, isTrue);
+      expect(report.synced, 0);
+      verify(() => syncController.handleAuthFailure()).called(1);
+    });
+  });
+
+  group('veille', () {
+    test('delta appliqué : pull SILENCIEUX, jamais de scan complet', () async {
+      stubSequence(
+        libraries: [_library(1)],
+        onApplyChanges: (_) => const DriveSyncApplied(upserted: 1, removed: 0),
+      );
+
+      coordinator.onAppResumed();
+      await pump();
+
+      expect(calls, ['apply:1', 'watch-pull:1']);
+      verifyNever(() => syncController.pullForLaunch(any()));
+    });
+
+    test('delta inexploitable : ni scan complet, ni pull', () async {
+      stubSequence(
+        libraries: [_library(1)],
+        onApplyChanges: (_) => const DriveSyncNeedsFullScan('jeton expiré'),
+      );
+
+      coordinator.onAppResumed();
+      await pump();
+
+      // Un scan complet, c'est des secondes de listing Drive et des écritures
+      // en masse déclenchées par une horloge : la veille y renonce et laisse la
+      // bibliothèque dans son état. Tirer sans avoir indexé recâblerait en
+      // outre les boards sur des sons inconnus (décision 0005).
+      expect(calls, ['apply:1']);
+      verifyNever(() => repository.indexDriveFolder(
+            library: any(named: 'library'),
+            onProgress: any(named: 'onProgress'),
+          ));
+      verifyNever(() => syncController.pullInBackground(any()));
+    });
+
+    test('Mode Spectacle : aucune sonde', () async {
+      when(() => syncController.isAutoSyncPaused).thenReturn(true);
+      stubSequence(libraries: [_library(1)]);
+
+      coordinator.onAppResumed();
+      await pump();
+
+      // Même raison que la suspension des push : aucun trafic réseau ni
+      // écriture disque imprévus pendant les déclenchements live.
+      expect(calls, isEmpty);
+    });
+
+    test('app en arrière-plan : aucune sonde', () async {
+      stubSequence(libraries: [_library(1)]);
+
+      coordinator.onAppBackgrounded();
+      await pump();
+
+      expect(calls, isEmpty);
+    });
+
+    test('mode local : aucune sonde', () async {
+      preferences.setAllowsNetworkSync(false);
+      stubSequence(libraries: [_library(1)]);
+
+      coordinator.onAppResumed();
+      await pump();
+
+      expect(calls, isEmpty);
+      verifyNever(() => repository.reconnectSilently());
+    });
+
+    test('mode local : l\'actualisation manuelle le DIT au lieu de mentir',
+        () async {
+      preferences.setAllowsNetworkSync(false);
+      stubSequence(libraries: [_library(1)]);
+
+      final report = await coordinator.refreshNow();
+
+      // Sans ce drapeau, le bouton annonçait « Bibliothèque(s) actualisée(s) »
+      // après n'avoir rien fait du tout.
+      expect(report.localMode, isTrue);
+      expect(calls, isEmpty);
+    });
+
+    test('reprises rapprochées : la seconde sonde est ignorée', () async {
+      stubSequence(
+        libraries: [_library(1)],
+        onApplyChanges: (_) => const DriveSyncApplied(upserted: 0, removed: 0),
+      );
+
+      coordinator.onAppResumed();
+      await pump();
+      coordinator.onAppResumed();
+      await pump();
+
+      // Un alt-tab répété — exactement ce que fait quelqu'un qui dépose des
+      // fichiers sur Drive depuis un navigateur — ne doit pas sonder Drive à
+      // chaque aller-retour.
+      expect(calls, ['apply:1', 'watch-pull:1']);
+    });
+  });
+
+  group('verrou de passe', () {
+    test('une demande manuelle rejoint la passe en cours au lieu de la doubler',
+        () async {
+      final gate = Completer<DriveSyncOutcome>();
+      stubSequence(libraries: [_library(1)]);
+      when(() => repository.applyDriveChanges(library: any(named: 'library')))
+          .thenAnswer((invocation) {
+        calls.add('apply:${(invocation.namedArguments[#library] as Library).id}');
+        return gate.future;
+      });
+
+      final first = coordinator.refreshNow();
+      await pump();
+      final second = coordinator.refreshNow();
+      gate.complete(const DriveSyncApplied(upserted: 0, removed: 0));
+      await first;
+      await second;
+
+      // Deux passes concurrentes se marcheraient sur `_ignoreUpdates` (la
+      // première à finir le rabaisserait sous la seconde, rouvrant les push
+      // parasites) et doubleraient le trafic Drive.
+      expect(calls, ['apply:1', 'pull:1']);
     });
   });
 

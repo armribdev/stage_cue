@@ -455,6 +455,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       database: _database,
       libraryRepository: widget.services.libraryRepository,
       syncController: widget.services.syncController,
+      autoSyncCoordinator: widget.services.autoSyncCoordinator,
       appPreferences: widget.services.appPreferences,
       scrollToDriveSection: scrollToDriveSection,
     );

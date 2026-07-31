@@ -180,6 +180,11 @@ class SyncController extends ChangeNotifier {
     _debounceTimers.clear();
   }
 
+  /// Vrai pendant le Mode Spectacle. Lu par `AutoSyncCoordinator` : sa veille
+  /// périodique se tait pour la même raison que les push (aucun trafic réseau
+  /// ni écriture disque imprévus pendant les déclenchements live).
+  bool get isAutoSyncPaused => _autoSyncPaused;
+
   /// Reprend les push automatiques (sortie du Mode Spectacle) et rejoue le push
   /// éventuellement supprimé pendant la pause.
   void resumeAutoSync() {
@@ -261,24 +266,40 @@ class SyncController extends ChangeNotifier {
     _set(_state.copyWith(status: SyncStatus.offline));
   }
 
-  /// Au lancement : reconnexion silencieuse puis pull/fusion du snapshot distant.
-  Future<void> pullForLaunch(Library library) async {
+  /// Au lancement (ou sur actualisation manuelle) : reconnexion silencieuse puis
+  /// pull/fusion du snapshot distant. La pastille suit toute la passe.
+  Future<void> pullForLaunch(Library library) => _pull(library, quiet: false);
+
+  /// Pull de veille : même travail, mais la pastille ne bouge que s'il y a
+  /// quelque chose à dire (fusion réelle, erreur, session perdue).
+  ///
+  /// Une sonde qui conclut « rien de neuf » revient toutes les quelques minutes :
+  /// la laisser afficher « Synchro… » puis « Synchronisé » ferait clignoter en
+  /// boucle un écran de régie, pour zéro information.
+  Future<void> pullInBackground(Library library) => _pull(library, quiet: true);
+
+  Future<void> _pull(Library library, {required bool quiet}) async {
     if (!await _ensureConnected()) {
       _set(_state.copyWith(status: SyncStatus.offline));
       return;
     }
 
-    _set(_state.copyWith(status: SyncStatus.syncing, clearMessage: true));
+    if (!quiet) {
+      _set(_state.copyWith(status: SyncStatus.syncing, clearMessage: true));
+    }
     try {
       final outcome = await _repository.pullLibrary(library);
       switch (outcome) {
         case PullStaged():
+          // Une fusion réelle se voit toujours, même en veille : le contenu des
+          // scènes vient de changer sous les yeux de l'utilisateur.
           _set(_state.copyWith(
             status: SyncStatus.synced,
             lastSyncedAt: DateTime.now(),
           ));
           onLibraryMerged?.call();
         case PullUpToDate():
+          if (quiet) return;
           _set(_state.copyWith(
             status: SyncStatus.synced,
             lastSyncedAt: DateTime.now(),
