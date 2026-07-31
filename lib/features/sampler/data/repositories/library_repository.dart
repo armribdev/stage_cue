@@ -203,7 +203,20 @@ class LibraryRepository extends ChangeNotifier {
   );
 
   /// Assemble le repository avec ses dépendances Drive par défaut.
-  factory LibraryRepository.fromDatabase(db.AppDatabase database) {
+  ///
+  /// Les trois paramètres optionnels ne servent qu'aux tests : ils permettent
+  /// de provoquer une éviction LRU sans remplir un vrai disque, et donc de
+  /// vérifier que l'épinglage construit ici est réellement branché (mode de
+  /// régression signalé par la décision 0010). En production, aucun appelant ne
+  /// les fournit et les défauts d'[AudioCacheManager] s'appliquent.
+  factory LibraryRepository.fromDatabase(
+    db.AppDatabase database, {
+    @visibleForTesting
+    int minFreeDiskBytes = AudioCacheManager.kDefaultMinFreeDiskBytes,
+    @visibleForTesting
+    Future<int?> Function(String rootPath)? availableDiskBytes,
+    @visibleForTesting int Function()? clock,
+  }) {
     final soundDataSource = LocalSoundDataSource(database);
     // Le plateau actif n'est connu qu'à l'exécution : la closure le relit à
     // chaque éviction, ce qui évite au cache de connaître le repository
@@ -214,6 +227,9 @@ class LibraryRepository extends ChangeNotifier {
       GoogleDriveAuthenticator(),
       LibrarySyncService(DriftSnapshotStore(database)),
       AudioCacheManager(
+        minFreeDiskBytes: minFreeDiskBytes,
+        availableDiskBytes: availableDiskBytes,
+        clock: clock,
         // Épinglés, donc jamais évincés : les favoris (peu lus mais voulus sous
         // la main) ET les sons du plateau actif. La « protection implicite par
         // récence » ne suffit pas — un téléchargement massif rebat l'ordre LRU
@@ -233,6 +249,15 @@ class LibraryRepository extends ChangeNotifier {
     );
     return repository;
   }
+
+  /// Cache audio assemblé par [fromDatabase].
+  ///
+  /// Exposé pour que les tests puissent vérifier que son épinglage anti-éviction
+  /// est réellement branché : sans callback, l'éviction redevient purement LRU
+  /// *sans avertissement* (décision 0010). Ne pas s'en servir en production —
+  /// le repository est la seule façade attendue sur le cache.
+  @visibleForTesting
+  AudioCacheManager get cacheManager => _cacheManager;
 
   DriveClient? get activeClient => _activeClient;
   String? get connectedAccountEmail => _authenticator.accountEmail;

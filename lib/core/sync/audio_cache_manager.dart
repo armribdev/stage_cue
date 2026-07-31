@@ -39,9 +39,14 @@ class AudioCacheManager {
   final Future<int?> Function(String rootPath) _availableDiskBytes;
 
   /// Fournit les chemins relatifs « épinglés » d'une bibliothèque : ces fichiers
-  /// (favoris) ne sont jamais évincés par le LRU, même rarement lus. La scène
-  /// active est, elle, protégée implicitement par la récence (sons fraîchement
-  /// mis en cache). Optionnel : null = aucun épinglage (refonte UX P3).
+  /// ne sont jamais évincés par le LRU, même rarement lus. L'appelant y met les
+  /// favoris **et** les sons de la scène active — contrairement à ce que cette
+  /// doc affirmait, la récence ne protège PAS la scène en cours : un
+  /// téléchargement de masse rebat l'ordre LRU et rend ses sons les plus
+  /// anciens ([décision 0010](../../../docs/decisions/0010-epinglage-lru-favoris-et-plateau-actif.md)).
+  ///
+  /// Optionnel, mais `null` = aucun épinglage **sans avertissement** : c'est le
+  /// mode de régression que `library_repository_pinning_test.dart` verrouille.
   final Future<Set<String>> Function(Library library)? _pinnedPaths;
 
   /// Index LRU chargé paresseusement, indexé par racine de cache.
@@ -52,8 +57,11 @@ class AudioCacheManager {
 
   static const String _accessIndexFileName = '.cache_access.json';
 
+  /// Garde-fou par défaut : on cesse de remplir le cache en deçà de 2 Go libres.
+  static const int kDefaultMinFreeDiskBytes = 2 * 1024 * 1024 * 1024;
+
   AudioCacheManager({
-    this.minFreeDiskBytes = 2 * 1024 * 1024 * 1024, // garde-fou : 2 Go libres
+    this.minFreeDiskBytes = kDefaultMinFreeDiskBytes,
     int Function()? clock,
     Future<Set<String>> Function(Library library)? pinnedPaths,
     Future<int?> Function(String rootPath)? availableDiskBytes,
