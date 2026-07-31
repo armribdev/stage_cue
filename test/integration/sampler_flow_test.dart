@@ -25,6 +25,8 @@ import 'package:stage_cue/features/sampler/domain/entities/pad.dart'
 import 'package:stage_cue/features/sampler/presentation/screens/sampler_screen.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/pad_item.dart'
     show PadCard;
+import 'package:stage_cue/features/sampler/presentation/widgets/threshold_draggable.dart'
+    show kPadDragSlop;
 
 /// Tests d'intégration UI : montent le VRAI `SamplerScreen` sur la vraie stack
 /// (base Drift en mémoire, repositories et `SamplerNotifier` réels) et vérifient
@@ -130,6 +132,13 @@ void main() {
         );
   }
 
+  /// Noms des pads en base, dans leur ordre d'affichage (`sortOrder`).
+  Future<List<String?>> padNamesInOrder() async {
+    final pads = await database.select(database.pads).get()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return pads.map((pad) => pad.name).toList();
+  }
+
   /// Identifiant du plateau créé d'office au premier lancement.
   Future<int> firstBoardId() async {
     final boards = await database.select(database.soundBoards).get();
@@ -163,6 +172,30 @@ void main() {
         matching: find.byIcon(Icons.close),
       );
 
+  /// Glisse le pad [from] sur la position du pad [to].
+  ///
+  /// Le drop n'est pas résolu par un `DragTarget` mais géométriquement, à
+  /// partir de la position globale du pointeur — d'où le `moveTo` sur le centre
+  /// de la cible plutôt qu'un simple `drag` par delta.
+  Future<void> dragPadOnto(WidgetTester tester, String from, String to) async {
+    final start = tester.getCenter(find.text(from));
+    final end = tester.getCenter(find.text(to));
+
+    final gesture = await tester.startGesture(start);
+    // `ThresholdDraggable` n'accroche le geste qu'au-delà de [kPadDragSlop] ;
+    // un premier mouvement franchit ce seuil et déclenche `onDragStarted`.
+    await gesture.moveBy(const Offset(kPadDragSlop + 8, 0));
+    await tester.pump();
+    // `_editDragUiReady` est posé dans un post-frame : sans cette 2e frame, la
+    // grille de drop n'est pas encore montée.
+    await tester.pump();
+
+    await gesture.moveTo(end);
+    await tester.pump();
+    await gesture.up();
+    await flushIo(tester);
+  }
+
   /// Bascule sur la scène [boardName].
   ///
   /// En layout desktop les plateaux ne sont pas listés à l'écran : ils vivent
@@ -176,16 +209,21 @@ void main() {
     await flushIo(tester);
   }
 
-  Future<void> pressCtrlZ(WidgetTester tester) async {
+  /// Envoie `Ctrl` + [key] à l'écran focalisé.
+  Future<void> pressCtrl(WidgetTester tester, LogicalKeyboardKey key) async {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyEvent(key);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await flushIo(tester);
-    // Le pad restauré est mis en surbrillance pendant `_padEmphasisDuration`
-    // (2,2 s) par un timer différé. `flutter_test` refuse de terminer un test
+    // Plusieurs actions (annulation, validation d'une recherche-éclair) mettent
+    // le pad concerné en surbrillance via un timer différé de
+    // `_padEmphasisDuration` (2,2 s). `flutter_test` refuse de terminer un test
     // sur un timer en vol : on laisse le temps simulé s'écouler au-delà.
     await tester.pump(const Duration(milliseconds: 2500));
   }
+
+  Future<void> pressCtrlZ(WidgetTester tester) =>
+      pressCtrl(tester, LogicalKeyboardKey.keyZ);
 
   group('Lancement', () {
     testDesktopWidgets(
@@ -296,6 +334,67 @@ void main() {
         expect(find.text('Porte qui claque'), findsOneWidget);
         final pads = await database.select(database.pads).get();
         expect(pads.where((pad) => pad.name == 'Porte qui claque'), hasLength(1));
+      },
+    );
+  });
+
+  group('Réorganisation', () {
+    testDesktopWidgets(
+      'glisser un pad en fin de rangée persiste le nouvel ordre',
+      (tester) async {
+        await pumpSampler(tester);
+        final boardId = await firstBoardId();
+        for (final (index, name) in ['Un', 'Deux', 'Trois'].indexed) {
+          await addPad(
+            boardId,
+            name: name,
+            soundTitle: 'son$index',
+            sortOrder: index,
+          );
+        }
+        await pumpSampler(tester);
+        expect(await padNamesInOrder(), ['Un', 'Deux', 'Trois']);
+
+        await dragPadOnto(tester, 'Un', 'Trois');
+
+        expect(await padNamesInOrder(), ['Deux', 'Trois', 'Un']);
+
+        // L'ordre doit être persisté, pas seulement réarrangé à l'écran :
+        // on remonte l'écran, ce qui le relit depuis la base.
+        await pumpSampler(tester);
+        expect(await padNamesInOrder(), ['Deux', 'Trois', 'Un']);
+      },
+    );
+  });
+
+  group('Recherche-éclair', () {
+    testDesktopWidgets(
+      'Ctrl+F puis Ctrl+Entrée pose le son trouvé sur le plateau',
+      (tester) async {
+        await pumpSampler(tester);
+        // Son présent en bibliothèque mais absent du plateau.
+        await insertSound('tonnerre');
+        await pumpSampler(tester);
+        expect(await database.select(database.pads).get(), isEmpty);
+
+        await pressCtrl(tester, LogicalKeyboardKey.keyF);
+        expect(
+          find.byType(TextField),
+          findsOneWidget,
+          reason: 'Ctrl+F doit ouvrir la recherche-éclair',
+        );
+
+        await tester.enterText(find.byType(TextField), 'tonnerre');
+        await flushIo(tester);
+
+        // Le tap sur un résultat ne fait que pré-écouter ; c'est Ctrl+Entrée
+        // qui valide et pose le son sur le plateau.
+        await pressCtrl(tester, LogicalKeyboardKey.enter);
+
+        final pads = await database.select(database.pads).get();
+        expect(pads, hasLength(1));
+        final padSounds = await database.select(database.padSounds).get();
+        expect(padSounds, hasLength(1));
       },
     );
   });
