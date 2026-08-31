@@ -2109,7 +2109,7 @@ class _StopAllButton extends StatelessWidget {
 class _LiveModeActiveIcon extends StatefulWidget {
   final IconData baseIcon;
 
-  const _LiveModeActiveIcon({this.baseIcon = Icons.theater_comedy_rounded});
+  const _LiveModeActiveIcon() : baseIcon = Icons.theater_comedy_rounded;
 
   @override
   State<_LiveModeActiveIcon> createState() => _LiveModeActiveIconState();
