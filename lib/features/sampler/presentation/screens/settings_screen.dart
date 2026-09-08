@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart' show OrderingTerm;
 import '../../../../core/audio/cue_audio_service.dart';
@@ -16,6 +17,9 @@ import '../../../../core/sync/drive_account_profile.dart';
 import '../../../../core/sync/drive_profile_cache.dart';
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
+import '../../../../core/update/app_update_checker.dart';
+import '../../../../core/update/update_flow.dart';
+import '../../../../core/update/update_log.dart';
 import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../../../core/utils/layout_utils.dart';
@@ -108,6 +112,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isRegeneratingWaveforms = false;
   int _waveformRegenDone = 0;
   int _waveformRegenTotal = 0;
+  String? _appVersion;
+  bool _isCheckingForUpdate = false;
 
   /// Périphériques de sortie de pré-écoute (cue) — desktop uniquement.
   List<CueDevice> _cueDevices = const [];
@@ -166,6 +172,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     if (CueAudioService.isSupported) {
       unawaited(_loadCueDevices());
+    }
+    if (Platform.isWindows) {
+      unawaited(_loadAppVersion());
+    }
+  }
+
+  Future<void> _loadAppVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() => _appVersion = packageInfo.version);
+  }
+
+  /// Vérification manuelle : ignore le throttle 6h du check automatique
+  /// (voir `SoundboardApp._maybeCheckForUpdateOnLaunch`).
+  Future<void> _checkForUpdatesManually() async {
+    if (_isCheckingForUpdate) return;
+    setState(() => _isCheckingForUpdate = true);
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final update = await AppUpdateChecker().checkForUpdate(
+        currentVersion: packageInfo.version,
+      );
+      if (!mounted) return;
+      if (update == null) {
+        AppSnackBar.show(
+          context,
+          'Vous avez déjà la dernière version',
+          duration: const Duration(seconds: 2),
+        );
+        return;
+      }
+      await runUpdateFlow(context, update);
+    } catch (e) {
+      UpdateLog.checkFailed(e);
+      if (mounted) {
+        showCopyableSnackBar(context, 'Échec de la vérification : $e');
+      }
+    } finally {
+      if (mounted) setState(() => _isCheckingForUpdate = false);
     }
   }
 
@@ -2412,6 +2457,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _buildIndexedFoldersCard(),
                     const SizedBox(height: 16),
                     _buildMaintenanceCard(),
+                    if (Platform.isWindows) ...[
+                      const SizedBox(height: 16),
+                      _buildUpdateCard(),
+                    ],
                   ],
                 ),
               ),
@@ -2460,6 +2509,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   )
                 : const Icon(Icons.refresh, size: 18),
             label: const Text('Régénérer les waveforms en cache'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Carte « Mise à jour » : version courante + vérification manuelle.
+  /// Windows uniquement — seule plateforme avec un installeur auto-updatable
+  /// (voir `windows/installer/stage_cue.iss`).
+  Widget _buildUpdateCard() {
+    final scheme = Theme.of(context).colorScheme;
+    return _buildSettingsSectionCard(
+      title: _buildSectionTitleRow(
+        icon: Icons.system_update_outlined,
+        title: 'Mise à jour',
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _appVersion == null
+                  ? 'Version…'
+                  : 'Version installée : $_appVersion',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton.icon(
+            onPressed: _isCheckingForUpdate ? null : _checkForUpdatesManually,
+            icon: _isCheckingForUpdate
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh, size: 18),
+            label: const Text('Vérifier les mises à jour'),
           ),
         ],
       ),
