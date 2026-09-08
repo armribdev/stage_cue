@@ -10,6 +10,7 @@ import 'core/app/app.dart';
 import 'core/app/app_services.dart';
 import 'core/audio/audio_load_log.dart';
 import 'core/audio/cue_audio_service.dart';
+import 'core/update/app_mutex_windows.dart';
 
 void main() {
   runZonedGuarded(
@@ -25,6 +26,9 @@ void main() {
 
       if (!kIsWeb && Platform.isWindows) {
         await windowManager.ensureInitialized();
+        // Maintenu ouvert toute la durée du process : signale l'instance en
+        // cours à l'installeur Inno Setup lors d'une mise à jour silencieuse.
+        holdAppMutexForUpdateDetection();
       }
 
       try {

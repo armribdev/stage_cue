@@ -56,12 +56,14 @@ class AppPreferences extends ChangeNotifier {
   static const _keyConnectivityMode = 'connectivity_mode';
   static const _keyCueOutputDeviceId = 'cue_output_device_id';
   static const _keyWindowsFullScreen = 'windows_full_screen';
+  static const _keyLastUpdateCheckAt = 'last_update_check_at';
 
   bool _autoDownloadPadSounds = true;
   bool _autoDownloadDriveByDefault = true;
   ConnectivityMode _connectivityMode = ConnectivityMode.liveOffline;
   String? _cueOutputDeviceId;
   bool _isWindowsFullScreen = false;
+  DateTime? _lastUpdateCheckAt;
   bool _loaded = false;
 
   /// Télécharge automatiquement les sons ajoutés à un pad (si Drive connecté).
@@ -81,6 +83,11 @@ class AppPreferences extends ChangeNotifier {
   /// Dernier état plein écran connu de la fenêtre Windows — appliqué à la
   /// réouverture de l'app (voir `SoundboardApp._toggleFullScreen`).
   bool get isWindowsFullScreen => _isWindowsFullScreen;
+
+  /// Horodatage du dernier check de mise à jour **automatique** (lancement) —
+  /// sert à le limiter à une fois toutes les 6h. Le bouton manuel de Réglages
+  /// ignore ce throttle.
+  DateTime? get lastUpdateCheckAt => _lastUpdateCheckAt;
 
   /// Synchro Drive automatique (push débouncé, pull au lancement).
   bool get allowsNetworkSync =>
@@ -114,6 +121,10 @@ class AppPreferences extends ChangeNotifier {
         _cueOutputDeviceId = data[_keyCueOutputDeviceId] as String?;
         _isWindowsFullScreen =
             (data[_keyWindowsFullScreen] as bool?) ?? false;
+        final lastUpdateCheckRaw = data[_keyLastUpdateCheckAt] as String?;
+        _lastUpdateCheckAt = lastUpdateCheckRaw == null
+            ? null
+            : DateTime.tryParse(lastUpdateCheckRaw);
       } catch (_) {
         // Fichier corrompu : valeurs par défaut.
       }
@@ -157,6 +168,13 @@ class AppPreferences extends ChangeNotifier {
     await _save();
   }
 
+  /// Marque l'instant du dernier check automatique — pas de notification, un
+  /// throttle n'a pas besoin de reconstruire l'UI.
+  Future<void> markUpdateCheckedNow() async {
+    _lastUpdateCheckAt = DateTime.now();
+    await _save();
+  }
+
   /// Bascule le mode sans persistance (tests unitaires).
   @visibleForTesting
   void debugSetConnectivityMode(ConnectivityMode value) {
@@ -183,6 +201,7 @@ class AppPreferences extends ChangeNotifier {
         _keyConnectivityMode: _connectivityMode.storageKey,
         _keyCueOutputDeviceId: _cueOutputDeviceId,
         _keyWindowsFullScreen: _isWindowsFullScreen,
+        _keyLastUpdateCheckAt: _lastUpdateCheckAt?.toIso8601String(),
       }),
     );
   }

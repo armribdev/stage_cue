@@ -6,9 +6,15 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:win32/win32.dart' as win32;
 import 'package:window_manager/window_manager.dart';
 import '../theme/app_theme.dart';
+import '../update/app_update_checker.dart';
+import '../update/app_update_info.dart';
+import '../update/update_flow.dart';
+import '../update/update_log.dart';
+import '../utils/app_snackbar.dart';
 import '../../features/sampler/presentation/screens/sampler_screen.dart';
 import 'app_services.dart';
 
@@ -62,7 +68,47 @@ class _SoundboardAppState extends State<SoundboardApp>
           }),
         );
       }
+      unawaited(_maybeCheckForUpdateOnLaunch());
     }
+  }
+
+  /// Limite le check automatique à une fois toutes les 6h (le bouton manuel
+  /// de Réglages l'ignore). Ne fait jamais qu'informer — jamais de
+  /// téléchargement ni d'installation sans clic explicite sur l'action de la
+  /// snackbar (voir [runUpdateFlow]).
+  static const _updateCheckThrottle = Duration(hours: 6);
+
+  Future<void> _maybeCheckForUpdateOnLaunch() async {
+    final prefs = widget.services.appPreferences;
+    final lastCheck = prefs.lastUpdateCheckAt;
+    if (lastCheck != null &&
+        DateTime.now().difference(lastCheck) < _updateCheckThrottle) {
+      return;
+    }
+    await prefs.markUpdateCheckedNow();
+
+    AppUpdateInfo? update;
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      update = await AppUpdateChecker().checkForUpdate(
+        currentVersion: packageInfo.version,
+      );
+    } catch (e) {
+      UpdateLog.checkFailed(e);
+      return;
+    }
+
+    if (update == null || !mounted) return;
+    final info = update;
+    AppSnackBar.show(
+      context,
+      'Version ${info.version} disponible',
+      action: SnackBarAction(
+        label: 'Mettre à jour',
+        onPressed: () => unawaited(runUpdateFlow(context, info)),
+      ),
+      duration: const Duration(seconds: 10),
+    );
   }
 
   /// Retour au premier plan : c'est le moment le plus probable où Drive a bougé

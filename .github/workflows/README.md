@@ -22,7 +22,7 @@ Le workflow [`release.yml`](release.yml) compile Stage Cue sur **Android, iOS, m
 | iOS        | `app-unsigned.ipa`            | ❌ non — signature requise (voir ci-dessous)  |
 | macOS      | `stage_cue-macos.zip`         | oui, avec avertissement Gatekeeper            |
 | Linux      | `stage_cue-linux-x64.tar.gz`  | oui                                           |
-| Windows    | `stage_cue-windows-x64.zip`   | oui, avec avertissement SmartScreen           |
+| Windows    | `stage_cue-windows-x64.zip` + `StageCue-Setup-X.Y.Z.exe` | oui, avec avertissement SmartScreen (installeur : voir `windows/installer/stage_cue.iss`) |
 
 ## Signature (à faire plus tard)
 
@@ -45,3 +45,10 @@ variables → Actions) et adapter `release.yml`.
 
 ### Windows / Linux
 Optionnel : signature de code (certificat EXE) ou packaging `.msix` / `.deb` / AppImage.
+
+Windows dispose déjà d'un mécanisme de mise à jour automatique (check au
+lancement + bouton dans Réglages, téléchargement de `StageCue-Setup-*.exe`
+depuis la dernière Release, installation silencieuse) — voir
+`lib/core/update/` et `windows/installer/stage_cue.iss`. Signer l'exécutable
+resterait utile pour supprimer l'avertissement SmartScreen, mais n'est pas
+requis pour que la mise à jour fonctionne.

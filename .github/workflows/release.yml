@@ -224,10 +224,29 @@ jobs:
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath stage_cue-windows-x64.zip
         shell: pwsh
 
+      # Insensible à la préinstallation éventuelle d'Inno Setup sur l'image du
+      # runner (elle l'est, mais on ne veut pas en dépendre silencieusement).
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+        shell: pwsh
+
+      # AppVersion dérivé du tag (vX.Y.Z -> X.Y.Z) sur un push de tag ; figé à
+      # 0.0.0-dev pour un déclenchement manuel (workflow_dispatch), où aucun
+      # tag n'existe encore — l'installeur reste alors utilisable pour tester
+      # la CI sans polluer le numéro de version des vraies releases.
+      - name: Build Windows installer (Inno Setup)
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v', ''
+          if ("${{ github.ref_type }}" -ne "tag") { $ver = "0.0.0-dev" }
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$ver" windows\installer\stage_cue.iss
+        shell: pwsh
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: stage_cue-windows-x64.zip
+          path: |
+            stage_cue-windows-x64.zip
+            windows/installer/installer_output/StageCue-Setup-*.exe
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
