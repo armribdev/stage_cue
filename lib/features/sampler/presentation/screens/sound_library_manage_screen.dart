@@ -168,9 +168,6 @@ class SoundLibraryManageScreen {
                         onFieldSubmitted: (v) => displayNameValue = v,
                         decoration: InputDecoration(
                           hintText: sound.title,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
                         ),
                       ),
                       const SizedBox(height: 12),

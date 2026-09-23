@@ -10,11 +10,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:win32/win32.dart' as win32;
 import 'package:window_manager/window_manager.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_tokens.dart';
 import '../update/app_update_checker.dart';
 import '../update/app_update_info.dart';
 import '../update/update_flow.dart';
 import '../update/update_log.dart';
 import '../utils/app_snackbar.dart';
+import '../utils/layout_utils.dart';
 import '../../features/sampler/presentation/screens/sampler_screen.dart';
 import 'app_services.dart';
 
@@ -333,8 +335,18 @@ class _SoundboardAppState extends State<SoundboardApp>
         final theme = Theme.of(context);
         final availableWidth = MediaQuery.sizeOf(context).width - 48;
         final snackBarWidth = availableWidth.clamp(0, _maxSnackBarWidth).toDouble();
+        // Échelle typographique réduite sur poste desktop (souris/clavier,
+        // distance de lecture normale) — les tailles pensées tactile/mobile
+        // paraissent surdimensionnées. Un seul point d'ajustement pour tout
+        // l'arbre plutôt qu'un facteur par écran.
+        final textTheme = context.prefersDesktopUi
+            ? theme.textTheme.apply(
+                fontSizeFactor: AppTypography.desktopFontScale,
+              )
+            : theme.textTheme;
         return Theme(
           data: theme.copyWith(
+            textTheme: textTheme,
             snackBarTheme: theme.snackBarTheme.copyWith(width: snackBarWidth),
           ),
           child: child!,

@@ -30,17 +30,13 @@ class AppFormDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const dialogRadius = 16.0;
-    const dialogInset = 24.0;
     const dialogPadding = 16.0;
 
     return AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(dialogRadius),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
       insetPadding: const EdgeInsets.symmetric(
-        horizontal: dialogInset,
-        vertical: dialogInset * 0.8,
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.xl * 0.8,
       ),
       titlePadding: const EdgeInsets.fromLTRB(
         dialogPadding,
@@ -553,7 +549,6 @@ class _ColorSwatch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const size = 28.0;
-    const radius = AppRadius.md;
 
     return Padding(
       padding: const EdgeInsets.only(right: AppSpacing.xs + 2),
@@ -565,7 +560,7 @@ class _ColorSwatch extends StatelessWidget {
           height: size,
           decoration: BoxDecoration(
             color: color ?? scheme.surfaceContainerHighest,
-            borderRadius: const BorderRadius.all(Radius.circular(radius)),
+            shape: BoxShape.circle,
             border: Border.all(
               color: isSelected
                   ? scheme.primary

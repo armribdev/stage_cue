@@ -460,9 +460,6 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                   icon: const Icon(Icons.close_rounded),
                 )
               : null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
         ),
         onChanged: (value) {
           setState(() {
@@ -493,7 +490,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                       Icon(
                         _selectedType.icon,
                         size: 64,
-                        color: Colors.grey[600],
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -502,7 +499,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                             : 'Aucun ${_selectedType.label.toLowerCase()} trouvé',
                         style: TextStyle(
                           fontSize: 18,
-                          color: Colors.grey[600],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -538,7 +535,10 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                         child: Opacity(
                           opacity: isInBoard ? 0.6 : 1.0,
                           child: ListTile(
-                            leading: SoundTypeAvatar(type: sound.type),
+                            leading: SoundTypeAvatar(
+                              type: sound.type,
+                              colorValue: sound.colorValue,
+                            ),
                             title: Text.rich(
                               buildHighlightedSpan(
                                 sound.title,
@@ -583,7 +583,9 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                                       'Type: ${sound.typeDisplayLabel}',
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: Colors.grey[600],
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
                                       ),
                                     ),
                                   ],

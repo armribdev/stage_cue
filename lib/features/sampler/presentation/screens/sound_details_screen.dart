@@ -174,9 +174,6 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
               onChanged: (value) => _displayNameValue = value,
               decoration: InputDecoration(
                 hintText: widget.sound.title,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -341,12 +338,17 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SoundTypeAvatar(type: _selectedType, radius: 32, iconSize: 32),
+        SoundTypeAvatar(
+          type: _selectedType,
+          colorValue: _selectedColorValue,
+          radius: 32,
+          iconSize: 32,
+        ),
         const SizedBox(width: 16),
         Expanded(
           child: Text(
             widget.sound.title,
-            style: Theme.of(context).textTheme.titleLarge,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
         ),
       ],

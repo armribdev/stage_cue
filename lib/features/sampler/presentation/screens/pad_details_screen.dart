@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_tokens.dart';
 import '../widgets/app_modal.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
@@ -155,7 +156,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   }
 
   Widget _buildBody(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final pad = widget.padItem.pad;
     final sounds = pad.sounds;
     return SingleChildScrollView(
@@ -164,170 +164,152 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
             // ── Réglages du pad ──────────────────────────────────────────
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Réglages du pad',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Nom affiché',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _displayNameController,
-                      decoration: InputDecoration(
-                        hintText: widget.padItem.displayName,
-                        border: OutlineInputBorder(
-                          borderSide:
-                              BorderSide(color: scheme.outline),
-                        ),
-                        suffixIcon: _displayNameController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  setState(
-                                    () => _displayNameController.clear(),
-                                  );
-                                  _updateDisplayName();
-                                },
-                              )
-                            : null,
-                      ),
-                      textInputAction: TextInputAction.done,
-                      onChanged: (v) {
-                        setState(() {});
-                        _scheduleDisplayNameUpdate(v);
-                      },
-                      onSubmitted: (_) => _updateDisplayName(),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Couleur du bouton',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        _buildDefaultColorOption(context),
-                        for (final c in _colorChoices)
-                          _buildColorDot(context, c),
-                      ],
-                    ),
-                    if (sounds.length > 1) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        'Mode de lecture',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      _PlayModeSelector(
-                        value: _playMode,
-                        onChanged: _updatePlayMode,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+            // Pas de Card : la maquette pose la section à plat (label +
+            // champs), une carte ici lirait comme un "Card-in-dialog" M3.
+            Text(
+              'RÉGLAGES',
+              style: AppTextStyles.sectionLabel(context),
             ),
             const SizedBox(height: 16),
+            Text(
+              'Nom affiché',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _displayNameController,
+              decoration: InputDecoration(
+                hintText: widget.padItem.displayName,
+                suffixIcon: _displayNameController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(
+                            () => _displayNameController.clear(),
+                          );
+                          _updateDisplayName();
+                        },
+                      )
+                    : null,
+              ),
+              textInputAction: TextInputAction.done,
+              onChanged: (v) {
+                setState(() {});
+                _scheduleDisplayNameUpdate(v);
+              },
+              onSubmitted: (_) => _updateDisplayName(),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Couleur du bouton',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _buildDefaultColorOption(context),
+                for (final c in _colorChoices)
+                  _buildColorDot(context, c),
+              ],
+            ),
+            if (sounds.length > 1) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Mode de lecture',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 8),
+              _PlayModeSelector(
+                value: _playMode,
+                onChanged: _updatePlayMode,
+              ),
+            ],
+
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Divider(height: 1),
+            ),
 
             // ── Sons du pad ───────────────────────────────────────────────
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Sons du pad',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                        if (sounds.isNotEmpty)
-                          Tooltip(
-                            message: _volumeControlsVisible ? 'Masquer les volumes' : 'Afficher les volumes',
-                            child: IconButton(
-                              icon: Icon(
-                                _volumeControlsVisible
-                                    ? Icons.volume_up_rounded
-                                    : Icons.volume_off_rounded,
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                setState(() => _volumeControlsVisible = !_volumeControlsVisible);
-                              },
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                            ),
-                          ),
-                        TextButton.icon(
-                          onPressed: () => _addSound(context),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Ajouter'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (sounds.isEmpty)
-                      Text(
-                        'Aucun son',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      )
-                    else
-                      ListenableBuilder(
-                        listenable: widget.notifier,
-                        builder: (context, _) {
-                          final offlineMode = widget.notifier.offlineMode;
-                          final visibleIndices = <int>[
-                            for (var i = 0; i < sounds.length; i++)
-                              if (!offlineMode ||
-                                  widget.notifier.isSlotLocallyAvailable(
-                                    widget.padItem,
-                                    i,
-                                  ))
-                                i,
-                          ];
-                          if (visibleIndices.isEmpty) {
-                            return Text(
-                              offlineMode
-                                  ? 'Aucun son disponible hors-ligne'
-                                  : 'Aucun son',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            );
-                          }
-                          return Column(
-                            children: [
-                              for (final i in visibleIndices)
-                                _SoundRow(
-                                  padItem: widget.padItem,
-                                  slotIndex: i,
-                                  sound: sounds[i],
-                                  canRemove: sounds.length > 1,
-                                  tagCatalog: _tagCatalog,
-                                  isTagsLoading: _isTagsLoading,
-                                  notifier: widget.notifier,
-                                  onRemove: () => _removeSound(sounds[i].id),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                  ],
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'SONS DU PAD',
+                    style: AppTextStyles.sectionLabel(context),
+                  ),
                 ),
-              ),
+                if (sounds.isNotEmpty)
+                  Tooltip(
+                    message: _volumeControlsVisible ? 'Masquer les volumes' : 'Afficher les volumes',
+                    child: IconButton(
+                      icon: Icon(
+                        _volumeControlsVisible
+                            ? Icons.volume_up_rounded
+                            : Icons.volume_off_rounded,
+                        size: 20,
+                      ),
+                      onPressed: () {
+                        setState(() => _volumeControlsVisible = !_volumeControlsVisible);
+                      },
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                  ),
+                TextButton.icon(
+                  onPressed: () => _addSound(context),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Ajouter'),
+                ),
+              ],
             ),
+            const SizedBox(height: 12),
+            if (sounds.isEmpty)
+              Text(
+                'Aucun son',
+                style: Theme.of(context).textTheme.bodyMedium,
+              )
+            else
+              ListenableBuilder(
+                listenable: widget.notifier,
+                builder: (context, _) {
+                  final offlineMode = widget.notifier.offlineMode;
+                  final visibleIndices = <int>[
+                    for (var i = 0; i < sounds.length; i++)
+                      if (!offlineMode ||
+                          widget.notifier.isSlotLocallyAvailable(
+                            widget.padItem,
+                            i,
+                          ))
+                        i,
+                  ];
+                  if (visibleIndices.isEmpty) {
+                    return Text(
+                      offlineMode
+                          ? 'Aucun son disponible hors-ligne'
+                          : 'Aucun son',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    );
+                  }
+                  return Column(
+                    children: [
+                      for (final i in visibleIndices)
+                        _SoundRow(
+                          padItem: widget.padItem,
+                          slotIndex: i,
+                          sound: sounds[i],
+                          canRemove: sounds.length > 1,
+                          tagCatalog: _tagCatalog,
+                          isTagsLoading: _isTagsLoading,
+                          notifier: widget.notifier,
+                          onRemove: () => _removeSound(sounds[i].id),
+                        ),
+                    ],
+                  );
+                },
+              ),
         ],
       ),
     );
@@ -338,12 +320,55 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     final body = _buildBody(context);
 
     if (widget.isModal) {
-      return AppModalShell(title: 'Détails du pad', body: body);
+      return AppModalShell(
+        title: 'Détails du pad',
+        body: body,
+        footer: _buildFooterActions(context),
+      );
     }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Détails du pad')),
       body: body,
+      bottomNavigationBar: _buildFooterActions(context),
+    );
+  }
+
+  // Chaque champ s'enregistre déjà tout seul à la volée (debounce sur le nom,
+  // effet immédiat sur couleur/mode/volume) : "Annuler" et "Enregistrer" ne
+  // font donc que fermer l'écran — pas d'état "brouillon" à annuler ou à
+  // committer séparément. Ajouté uniquement pour l'affordance visuelle
+  // attendue (cf. maquette) ; zéro changement de logique d'enregistrement.
+  Widget _buildFooterActions(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(top: AppElevation.border(scheme)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          OutlinedButton(
+            // Le thème global met `minimumSize` à largeur infinie (pensé pour
+            // un bouton seul en pleine largeur) — invisible dans un Row à
+            // plusieurs boutons sans cette borne locale.
+            style: OutlinedButton.styleFrom(minimumSize: const Size(64, 42)),
+            onPressed: () => Navigator.of(context).maybePop(),
+            child: const Text('Annuler'),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(minimumSize: const Size(64, 42)),
+            onPressed: () => Navigator.of(context).maybePop(),
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -432,6 +457,7 @@ class _PlayModeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SegmentedButton<PadPlayMode>(
+      showSelectedIcon: false,
       segments: const [
         ButtonSegment(
           value: PadPlayMode.random,
@@ -499,34 +525,6 @@ class _SoundRowState extends State<_SoundRow> {
       _resolvedPadItem(),
       widget.sound.id,
       clamped,
-    );
-  }
-
-  Widget _buildVolumeControl(BuildContext context, ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, top: 2),
-      child: Row(
-        children: [
-          Icon(Icons.volume_up_rounded, size: 18, color: scheme.onSurfaceVariant),
-          Expanded(
-            child: Slider(
-              value: _volume.clamp(0.0, 1.0),
-              min: 0.0,
-              max: 1.0,
-              label: '${(_volume * 100).round()}%',
-              onChanged: _updateVolume,
-            ),
-          ),
-          SizedBox(
-            width: 40,
-            child: Text(
-              '${(_volume * 100).round()}%',
-              textAlign: TextAlign.end,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -674,17 +672,19 @@ class _SoundRowState extends State<_SoundRow> {
         final soundContent = Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(
-              sound.type?.icon ?? Icons.help_outline_rounded,
-              color: scheme.onSurfaceVariant,
+            SoundTypeAvatar(
+              type: sound.type,
+              colorValue: sound.colorValue,
+              radius: 12,
+              iconSize: 14,
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 10),
             Expanded(
               child: MouseRegion(
                 onEnter: (_) => setState(() => _hovered = true),
                 onExit: (_) => setState(() => _hovered = false),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ScrollingTextSpan(
@@ -704,45 +704,61 @@ class _SoundRowState extends State<_SoundRow> {
                 ),
               ),
             ),
-            if (widget.canRemove)
+            // Volume propre à ce son dans ce pad — barre compacte inline
+            // (plutôt qu'une rangée pleine largeur séparée) ; visible
+            // seulement quand le son est jouable localement.
+            if (isLocal) ...[
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 56,
+                child: Slider(
+                  value: _volume.clamp(0.0, 1.0),
+                  min: 0.0,
+                  max: 1.0,
+                  label: '${(_volume * 100).round()}%',
+                  onChanged: _updateVolume,
+                ),
+              ),
+            ],
+            if (widget.canRemove) ...[
+              const SizedBox(width: 2),
               IconButton(
-                icon: const Icon(Icons.remove_circle_outline, size: 20),
+                icon: const Icon(Icons.close, size: 16),
                 onPressed: widget.onRemove,
-                color: scheme.error,
+                color: scheme.onSurfaceVariant,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 style: canDownload
-                    ? IconButton.styleFrom(
-                        hoverColor: Colors.transparent,
-                      )
+                    ? IconButton.styleFrom(hoverColor: Colors.transparent)
                     : null,
               ),
+            ],
           ],
         );
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (canDownload)
-                Material(
+        return Container(
+          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+          padding: const EdgeInsets.all(AppSpacing.sm + 2),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainer,
+            borderRadius: AppRadius.radiusMd,
+            border: Border.fromBorderSide(AppElevation.border(scheme)),
+          ),
+          child: canDownload
+              ? Material(
                   color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: AppRadius.radiusSm,
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
                     onTap: () => unawaited(_downloadSound()),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: AppRadius.radiusSm,
                     hoverColor: scheme.onSurface.withValues(alpha: 0.08),
                     splashColor: scheme.onSurface.withValues(alpha: 0.12),
                     child: soundContent,
                   ),
                 )
-              else
-                soundContent,
-              // Volume propre à ce son dans ce pad — visible seulement quand le
-              // son est jouable localement (sinon le réglage n'a pas d'effet).
-              if (isLocal) _buildVolumeControl(context, scheme),
-            ],
-          ),
+              : soundContent,
         );
       },
     );

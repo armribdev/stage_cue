@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/audio/cue_audio_service.dart';
 import '../../../../core/audio/preview_playback.dart';
 import '../../../../core/audio/waveform_extractor.dart';
+import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/layout_utils.dart';
 import 'waveform_envelope.dart';
@@ -188,7 +189,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: AppRadius.radiusLg,
           border: Border.all(
             color: scheme.outlineVariant.withValues(alpha: 0.5),
           ),
@@ -327,9 +328,8 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
             const Spacer(),
             Text(
               '${_fmt(_offset)} / ${_fmt(_duration)}',
-              style: textTheme.labelLarge?.copyWith(
-                color: scheme.onSurface,
-                fontFeatures: const [FontFeature.tabularFigures()],
+              style: AppFonts.monoStyle(
+                textTheme.labelLarge!.copyWith(color: scheme.onSurface),
               ),
             ),
           ],

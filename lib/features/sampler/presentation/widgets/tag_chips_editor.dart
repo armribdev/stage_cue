@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
@@ -200,10 +201,10 @@ class _TagPickerPanelState extends State<_TagPickerPanel> {
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.radiusLg,
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.radiusLg,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -222,9 +223,6 @@ class _TagPickerPanelState extends State<_TagPickerPanel> {
                         prefixIcon: const Icon(Icons.search, size: 18),
                         contentPadding:
                             const EdgeInsets.symmetric(vertical: 8),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
                       ),
                       onChanged: (v) => setState(() => _query = v),
                     ),

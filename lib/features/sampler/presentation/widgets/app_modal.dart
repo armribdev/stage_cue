@@ -2,11 +2,12 @@ import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
 
 /// Constantes partagées pour modales et petits dialogues.
 abstract final class AppModalStyle {
-  static const double radius = 16;
+  static const double radius = AppRadius.lg;
   static const double inset = 24;
   static const double padding = 16;
   static const double maxWidth = 520;
@@ -68,6 +69,7 @@ class AppModalShell extends StatelessWidget {
     required this.body,
     this.actions,
     this.onClose,
+    this.footer,
   });
 
   static const double _headerHeight = 52;
@@ -76,6 +78,12 @@ class AppModalShell extends StatelessWidget {
   final Widget body;
   final List<Widget>? actions;
   final VoidCallback? onClose;
+
+  /// Barre d'actions fixe en bas de la modale (ex. Annuler/Enregistrer).
+  /// Rendue hors de la zone défilante — jamais à l'intérieur d'un `Expanded`
+  /// ajouté par l'appelant, ce qui a déjà produit un pied de page invisible
+  /// (double `Expanded`/`Flexible` imbriqué sans hauteur bornée claire).
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
@@ -99,7 +107,10 @@ class AppModalShell extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -116,7 +127,7 @@ class AppModalShell extends StatelessWidget {
                     width: 34,
                     height: 34,
                   ),
-                  icon: const Icon(Icons.close, size: 22),
+                  icon: const Icon(Icons.close, size: 18),
                 ),
               ],
             ),
@@ -124,6 +135,7 @@ class AppModalShell extends StatelessWidget {
         ),
         const Divider(height: 1),
         Flexible(fit: FlexFit.loose, child: body),
+        ?footer,
       ],
     );
   }
@@ -164,7 +176,13 @@ class AppNavigationCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
@@ -229,7 +247,7 @@ class AppChoiceOption extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: Theme.of(context).textTheme.titleMedium,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -248,7 +266,7 @@ class AppChoiceOption extends StatelessWidget {
           Text(
             label,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
         ],
       ),

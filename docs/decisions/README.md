@@ -43,5 +43,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0020](0020-sonde-de-pull-groupee-et-jeton-de-manifest.md) | Sonde de pull groupée et jeton de manifest | acceptée |
 | [0021](0021-synchronisation-incrementale-par-changes-list.md) | Synchronisation incrémentale par `changes.list`, avec repli systématique | acceptée |
 | [0022](0022-veille-drive-en-cours-de-session.md) | Veille Drive en cours de session : delta seulement, jamais de scan | acceptée |
+| [0023](0023-direction-visuelle-console-linear.md) | Direction visuelle "Console Linear", en rupture avec Material 3 par défaut | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

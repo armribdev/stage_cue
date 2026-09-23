@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:flutter/services.dart'
         KeyUpEvent,
         LogicalKeyboardKey;
 import '../../../../core/audio/waveform_extractor.dart';
+import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/sound_color_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
@@ -57,9 +59,20 @@ class MusicPreviewPanel extends StatefulWidget {
 
   /// Résout un pad musique par id — sur la scène ou hors-scène (régie seule).
   final PadItem? Function(int padId) resolveMusicPad;
+
+  /// « Ajouter à la file » : ouvre le sélecteur en mode mise en file.
   final VoidCallback onChooseMusic;
+
+  /// Bouton lecture quand rien n'est chargé : ouvre le sélecteur en mode
+  /// lecture immédiate. À défaut, retombe sur [onChooseMusic].
+  final VoidCallback? onChooseMusicToPlay;
   final VoidCallback? onTogglePlayPause;
   final VoidCallback? onSkipNext;
+
+  /// Éjecte la musique en cours (coupe et oublie la position de reprise) —
+  /// désactivé pendant la lecture : il faut d'abord mettre en pause ou
+  /// attendre le fondu pour éviter une coupure sèche accidentelle.
+  final VoidCallback? onEjectMusic;
   final ValueChanged<int>? onRemoveFromQueue;
   final void Function(int oldIndex, int newIndex)? onReorderMusicQueue;
   final ValueChanged<double>? onMusicVolumeChanged;
@@ -71,8 +84,6 @@ class MusicPreviewPanel extends StatefulWidget {
   final bool isAdvanced;
   final ValueChanged<bool> onAdvancedChanged;
   final bool isDesktop;
-  final bool isLocked;
-  final ValueChanged<bool>? onLockedChanged;
 
   /// Hauteur occupée en bas de l'écran — pour réserver l'espace sous la grille.
   final ValueChanged<double>? onOccupiedHeightChanged;
@@ -85,8 +96,10 @@ class MusicPreviewPanel extends StatefulWidget {
     required this.isAdvanced,
     required this.onAdvancedChanged,
     required this.onChooseMusic,
+    this.onChooseMusicToPlay,
     this.onTogglePlayPause,
     this.onSkipNext,
+    this.onEjectMusic,
     this.onRemoveFromQueue,
     this.onReorderMusicQueue,
     this.onMusicVolumeChanged,
@@ -94,8 +107,6 @@ class MusicPreviewPanel extends StatefulWidget {
     this.onTransitionToNext,
     this.onSeekMusic,
     this.isDesktop = false,
-    this.isLocked = false,
-    this.onLockedChanged,
     this.onOccupiedHeightChanged,
   });
 
@@ -341,12 +352,12 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
       resolveMusicPad: widget.resolveMusicPad,
       isAdvanced: isAdvanced,
       isDesktop: widget.isDesktop,
-      isLocked: widget.isLocked,
-      onLockedChanged: widget.onLockedChanged,
       onModeToggle: _toggleMode,
       onChooseMusic: widget.onChooseMusic,
+      onChooseMusicToPlay: widget.onChooseMusicToPlay ?? widget.onChooseMusic,
       onPauseToggle: _handlePauseToggle,
       onSkipNext: _handleSkipNext,
+      onEjectMusic: widget.onEjectMusic,
       onRemoveFromQueue: widget.onRemoveFromQueue,
       onReorderMusicQueue: widget.onReorderMusicQueue,
       onMusicVolumeChanged: widget.onMusicVolumeChanged,
@@ -505,26 +516,44 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
 }
 
 class _MusicRegieDrawer extends StatefulWidget {
-  /// Largeur minimale pour afficher « À l'antenne » et file de passage côte à côte.
-  static const _twoColumnMinWidth = 560.0;
+  /// Espacements de la barre réduite (bandeau plat, une seule ligne) et du
+  /// panneau avancé (queue + à l'antenne détaillé).
+  ///
+  /// Le chevron (ouvrir/fermer) n'a jamais de ligne à lui : il se glisse
+  /// toujours dans une rangée de contrôles déjà plus haute que lui (la barre
+  /// réduite, la rangée « à l'antenne » en colonne unique, ou sa propre
+  /// colonne centrale en deux colonnes — voir _buildCompactBar et
+  /// _buildModeBody), donc ces paddings n'ont pas à lui réserver de place.
+  static const _compactDrawerPadding = EdgeInsets.fromLTRB(16, 10, 16, 10);
+  static const _advancedDrawerPadding = EdgeInsets.fromLTRB(16, 14, 16, 16);
 
-  /// Espacements du mode réduit — compact mais aéré.
-  static const _compactDrawerPadding = EdgeInsets.fromLTRB(16, 14, 16, 16);
-  static const _compactSectionGap = 10.0;
+  /// Largeurs minimales de chaque moitié du panneau avancé (contrôles à
+  /// gauche, file de passage à droite) — en dessous du total, on repasse en
+  /// colonne unique (contrôles puis file, empilés).
+  static const _onAirColumnMinWidth = 260.0;
+  static const _queueColumnMinWidth = 260.0;
+  static const _advancedColumnGap = 16.0;
+  static const _centerChevronColumnWidth = 32.0;
+  static const _twoColumnMinWidth =
+      _onAirColumnMinWidth +
+      _advancedColumnGap +
+      _centerChevronColumnWidth +
+      _advancedColumnGap +
+      _queueColumnMinWidth;
 
   final SamplerState state;
   final double musicVolume;
   final PadItem? Function(int padId) resolveMusicPad;
   final bool isAdvanced;
   final bool isDesktop;
-  final bool isLocked;
-  final ValueChanged<bool>? onLockedChanged;
   final VoidCallback onModeToggle;
   final VoidCallback onChooseMusic;
+  final VoidCallback onChooseMusicToPlay;
   final void Function({required bool isPlaying, required bool hasCurrent})
       onPauseToggle;
   final void Function({required bool isPlaying, required bool hasQueue})
       onSkipNext;
+  final VoidCallback? onEjectMusic;
   final ValueChanged<int>? onRemoveFromQueue;
   final void Function(int oldIndex, int newIndex)? onReorderMusicQueue;
   final ValueChanged<double>? onMusicVolumeChanged;
@@ -548,12 +577,12 @@ class _MusicRegieDrawer extends StatefulWidget {
     required this.resolveMusicPad,
     required this.isAdvanced,
     this.isDesktop = false,
-    this.isLocked = false,
-    this.onLockedChanged,
     required this.onModeToggle,
     required this.onChooseMusic,
+    required this.onChooseMusicToPlay,
     required this.onPauseToggle,
     required this.onSkipNext,
+    this.onEjectMusic,
     this.onRemoveFromQueue,
     this.onReorderMusicQueue,
     this.onMusicVolumeChanged,
@@ -577,6 +606,24 @@ class _MusicRegieDrawer extends StatefulWidget {
 }
 
 class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
+  /// Hauteur mesurée de la colonne « à l'antenne » en mode deux colonnes —
+  /// reportée à la file de passage (voir _buildModeBody) pour qu'elle
+  /// s'étire à la même hauteur plutôt que de ne prendre que celle de son
+  /// contenu. Une vraie contrainte de hauteur (via Row.stretch ou
+  /// IntrinsicHeight) est hors jeu ici : le tiroir s'auto-dimensionne sur
+  /// tout le rail (aucun plafond ambiant), et IntrinsicHeight casse la file
+  /// (ReorderableListView est un viewport, qui ne sait pas répondre à une
+  /// mesure intrinsèque).
+  double? _onAirColumnHeight;
+
+  void _reportOnAirColumnHeight(Size size) {
+    if (_onAirColumnHeight != null &&
+        (size.height - _onAirColumnHeight!).abs() < 0.5) {
+      return;
+    }
+    setState(() => _onAirColumnHeight = size.height);
+  }
+
   bool get _isInteractive => widget.expandProgress != null && !widget.isDesktop;
 
   bool get _canTapToExpand {
@@ -609,7 +656,258 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
       activeTransitionKind: widget.activeTransitionKind,
       transitionProgress: widget.transitionProgress,
       transitionBlinkOpacity: widget.transitionBlinkOpacity,
+      onChooseMusic: widget.onChooseMusicToPlay,
+      onTogglePlayPause: () => widget.onPauseToggle(
+        isPlaying: isPlaying,
+        hasCurrent: hasCurrent,
+      ),
+      onSkipNext: () => widget.onSkipNext(
+        isPlaying: isPlaying,
+        hasQueue: hasQueue,
+      ),
+      onEjectMusic: widget.onEjectMusic,
+    );
+  }
+
+  Widget _buildModeBody({
+    required BuildContext context,
+    required ColorScheme scheme,
+    required bool advanced,
+    required bool useTwoColumns,
+    required PadItem? current,
+    required bool isPlaying,
+    required PadItem? next,
+    required List<PadItem> queue,
+    required _OnAirControls onAirControls,
+  }) {
+    if (!advanced) {
+      return _buildCompactBar(
+        context: context,
+        scheme: scheme,
+        current: current,
+        isPlaying: isPlaying,
+        hasQueue: queue.isNotEmpty,
+        next: next,
+      );
+    }
+
+    // Pas de cadre autour de la lecture en cours : contrôles en tête, puis
+    // titre/avancement en dessous. Assez de largeur pour les deux moitiés
+    // (lecture / file) → côte à côte ; sinon empilés, la file en dernier.
+    // En deux colonnes, le chevron a sa propre colonne (plus bas) ; en
+    // colonne unique, il n'y a plus de gouttière pour l'accueillir, donc on
+    // le glisse en bout de la rangée « à l'antenne », déjà plus haute que
+    // lui — toujours zéro hauteur ajoutée, jamais d'overlay à réserver.
+    final onAirRow = useTwoColumns
+        ? onAirControls
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: onAirControls),
+              const SizedBox(width: 8),
+              _DrawerChevronButton(
+                scheme: scheme,
+                expanded: true,
+                onTap: widget.onModeToggle,
+              ),
+            ],
+          );
+    final leftColumn = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        onAirRow,
+        const SizedBox(height: 14),
+        _buildTrackInfo(scheme: scheme, current: current, isPlaying: isPlaying),
+      ],
+    );
+    final queueSection = _PassageQueueSection(
+      queue: queue,
+      isDesktop: widget.isDesktop,
+      onRemove: widget.onRemoveFromQueue,
+      onReorder: widget.onReorderMusicQueue,
       onChooseMusic: widget.onChooseMusic,
+      // En deux colonnes, la carte est étirée à une hauteur fixe (voir plus
+      // bas) : « Ajouter à la file » doit rester ancré tout en bas plutôt
+      // que de suivre le dernier élément de la liste. Tant que cette hauteur
+      // n'a pas encore été mesurée (premier affichage en deux colonnes,
+      // avant le postFrameCallback de _ReportSize), rester en shrinkWrap :
+      // un stretch sans hauteur bornée ferait planter le RenderFlex.
+      stretchToFill: useTwoColumns && _onAirColumnHeight != null,
+    );
+
+    if (useTwoColumns) {
+      // Le chevron vit dans sa propre colonne centrale, alignée en haut :
+      // les deux colonnes voisines sont toujours plus hautes que lui, donc
+      // il n'ajoute aucune hauteur au tiroir (cf. build(), qui saute
+      // l'overlay dans ce cas précis).
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: _ReportSize(
+              onChange: _reportOnAirColumnHeight,
+              child: leftColumn,
+            ),
+          ),
+          const SizedBox(width: _MusicRegieDrawer._advancedColumnGap),
+          SizedBox(
+            width: _MusicRegieDrawer._centerChevronColumnWidth,
+            child: Center(
+              child: _DrawerChevronButton(
+                scheme: scheme,
+                expanded: true,
+                onTap: widget.onModeToggle,
+              ),
+            ),
+          ),
+          const SizedBox(width: _MusicRegieDrawer._advancedColumnGap),
+          Expanded(
+            // La file est étirée à exactement la hauteur de la colonne « à
+            // l'antenne » (mesurée ci-dessus) plutôt que de ne prendre que
+            // celle de son propre contenu — une hauteur fixe, pas un simple
+            // minimum, sinon la colonne grandirait pour remplir tout le
+            // tiroir dès qu'un stretch quelconque s'applique (mainAxisSize
+            // par défaut = max). stretchToFill fait défiler la liste en
+            // interne dans cette hauteur fixe (au lieu du shrinkWrap
+            // habituel) : jamais de débordement même avec beaucoup
+            // d'éléments, et « Ajouter à la file » reste ancré en bas.
+            // Plancher à _PassageQueueSection.minStretchHeight : la colonne
+            // « à l'antenne » est courte, et à sa seule hauteur la file ne
+            // montrait qu'un élément — le tiroir grandit alors un peu.
+            child: _onAirColumnHeight == null
+                ? queueSection
+                : SizedBox(
+                    height: math.max(
+                      _onAirColumnHeight ?? 0,
+                      _PassageQueueSection.minStretchHeight,
+                    ),
+                    child: queueSection,
+                  ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        leftColumn,
+        const SizedBox(height: 12),
+        queueSection,
+      ],
+    );
+  }
+
+  /// Titre courant + avancement (waveform ou barre linéaire, avec seek) —
+  /// sans cadre ni pastille « à l'antenne » (supprimés), juste l'info utile
+  /// sous les contrôles.
+  Widget _buildTrackInfo({
+    required ColorScheme scheme,
+    required PadItem? current,
+    required bool isPlaying,
+  }) {
+    final titleText = Text(
+      current?.displayName ?? 'Aucune musique lancée',
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: current != null ? scheme.onSurface : scheme.onSurfaceVariant,
+      ),
+    );
+    final titleRow = current == null
+        ? titleText
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: titleText),
+              _EjectMusicButton(
+                scheme: scheme,
+                enabled: !isPlaying,
+                onTap: widget.onEjectMusic,
+              ),
+            ],
+          );
+
+    final details = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        titleRow,
+        if (current != null && current.pad.sounds.length > 1)
+          Text(
+            '${current.pad.sounds.length} variantes',
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          )
+        else if (current == null)
+          Text(
+            'Choisissez une piste pour démarrer',
+            style: TextStyle(
+              fontSize: 12,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.75),
+            ),
+          ),
+        if (current != null) ...[
+          const SizedBox(height: 10),
+          _RegieProgressBar(
+            padItem: current,
+            isPlaying: isPlaying,
+            showTimes: true,
+            onSeek: widget.onSeekMusic,
+          ),
+        ],
+      ],
+    );
+
+    if (current == null) return details;
+
+    // Jaquette minimale : la couleur du pad suffit à identifier la piste
+    // d'un coup d'œil, pas de vraie pochette à afficher en régie.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _PadColorChip(padItem: current, size: 44),
+        const SizedBox(width: 12),
+        Expanded(child: details),
+      ],
+    );
+  }
+
+  /// Bandeau réduit — une seule ligne : lecture/pause (accent plein) + suivant
+  /// + fondu, titre courant avec position, volume. Pas de section « à
+  /// l'antenne » ni de carte : direction "Console Linear", voir
+  /// `.claude/rules/ui.md`. Le détail (queue, à l'antenne étendu) reste
+  /// disponible en développant vers le mode avancé.
+  Widget _buildCompactBar({
+    required BuildContext context,
+    required ColorScheme scheme,
+    required PadItem? current,
+    required bool isPlaying,
+    required bool hasQueue,
+    required PadItem? next,
+  }) {
+    final hasCurrent = current != null;
+    final canControl = hasCurrent || hasQueue;
+    final comfortable =
+        MediaQuery.sizeOf(context).width >=
+        _GroupedPlaybackControls.comfortableWidthThreshold;
+
+    final playbackControls = _GroupedPlaybackControls(
+      isPlaying: isPlaying,
+      canControl: canControl,
+      hasQueue: hasQueue,
+      selectedTransitionDuration: widget.selectedTransitionDuration,
+      transitionDurationLocked: widget.transitionDurationLocked,
+      onTransitionOptionTapped: widget.onTransitionOptionTapped,
+      onTransitionOptionLongPressed: widget.onTransitionOptionLongPressed,
+      showCut: comfortable,
+      isDesktop: widget.isDesktop,
+      activeTransitionKind: widget.activeTransitionKind,
+      transitionProgress: widget.transitionProgress,
+      transitionBlinkOpacity: widget.transitionBlinkOpacity,
+      onChooseMusic: widget.onChooseMusicToPlay,
       onTogglePlayPause: () => widget.onPauseToggle(
         isPlaying: isPlaying,
         hasCurrent: hasCurrent,
@@ -619,93 +917,121 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
         hasQueue: hasQueue,
       ),
     );
-  }
 
-  Widget _buildModeBody({
-    required BuildContext context,
-    required ColorScheme scheme,
-    required bool advanced,
-    required PadItem? current,
-    required bool isPlaying,
-    required PadItem? next,
-    required List<PadItem> queue,
-    required _OnAirControls onAirControls,
-  }) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final useTwoColumns =
-            constraints.maxWidth >= _MusicRegieDrawer._twoColumnMinWidth;
+    final currentTitleStyle = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w700,
+      color: hasCurrent ? scheme.onSurface : scheme.onSurfaceVariant,
+    );
+    final currentTitleText = Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (hasCurrent) ...[
+          _PadColorChip(padItem: current, size: 14),
+          const SizedBox(width: 6),
+        ],
+        Flexible(
+          child: Text(
+            current?.displayName ?? 'Aucune piste sélectionnée',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: currentTitleStyle,
+          ),
+        ),
+        if (hasCurrent)
+          _EjectMusicButton(
+            scheme: scheme,
+            enabled: !isPlaying,
+            onTap: widget.onEjectMusic,
+          ),
+      ],
+    );
 
-        if (!advanced) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _CueSlot(
-                label: 'À l\'antenne',
-                padItem: current,
-                isActive: isPlaying,
-                emptyLabel: 'Aucune piste',
-              ),
-              const SizedBox(height: 10),
-              if (current != null) ...[
-                _RegieProgressBar(
+    final trackInfo = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // Place restante entre les boutons de lecture et le volume : en
+              // dessous du seuil, la musique en cours garde toute la largeur ;
+              // au-dessus, on la partage à parts égales avec la file (moitié
+              // gauche = en cours, moitié droite = suivant).
+              const splitThreshold = 680.0;
+              const splitGap = 10.0;
+              final showNext =
+                  next != null && constraints.maxWidth >= splitThreshold;
+              if (!showNext) return currentTitleText;
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: currentTitleText),
+                  const SizedBox(width: splitGap),
+                  Expanded(
+                    child: _CompactNextUpLabel(
+                      name: next.displayName,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          if (hasCurrent) ...[
+            const SizedBox(height: 3),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.graphic_eq_rounded,
+                  size: 12,
+                  color: isPlaying
+                      ? scheme.primary
+                      : scheme.onSurfaceVariant.withValues(alpha: 0.55),
+                ),
+                const SizedBox(width: 5),
+                _CompactNowPlayingTime(
                   padItem: current,
                   isPlaying: isPlaying,
-                  height: 4,
-                  waveformHeight: 26,
-                  onSeek: widget.onSeekMusic,
+                  color: scheme.onSurfaceVariant,
                 ),
               ],
-              const SizedBox(height: 12),
-              onAirControls,
-              if (next != null) ...[
-                const SizedBox(height: _MusicRegieDrawer._compactSectionGap),
-                _CueSlot(
-                  label: 'Prévu ensuite',
-                  padItem: next,
-                  isActive: true,
-                  emptyLabel: '—',
-                  showDownloadBar: true,
-                ),
-              ],
-            ],
-          );
-        }
-
-        final onAirCard = _OnAirCard(
-          padItem: current,
-          isPlaying: isPlaying,
-          controls: onAirControls,
-          onSeek: widget.onSeekMusic,
-        );
-        final queueSection = _PassageQueueSection(
-          queue: queue,
-          isDesktop: widget.isDesktop,
-          onRemove: widget.onRemoveFromQueue,
-          onReorder: widget.onReorderMusicQueue,
-          onChooseMusic: widget.onChooseMusic,
-        );
-
-        if (useTwoColumns) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: onAirCard),
-              const SizedBox(width: 12),
-              Expanded(child: queueSection),
-            ],
-          );
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            onAirCard,
-            const SizedBox(height: 12),
-            queueSection,
+            ),
           ],
-        );
-      },
+        ],
+      ),
+    );
+
+    final volume = SizedBox(
+      width: comfortable ? 150 : 110,
+      child: _CompactVolumeSlider(
+        value: widget.musicVolume,
+        onChanged: widget.onMusicVolumeChanged,
+        isPlaying: isPlaying,
+        keyboardEnabled: widget.isDesktop,
+      ),
+    );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        playbackControls,
+        Expanded(child: trackInfo),
+        volume,
+        const SizedBox(width: 8),
+        // Chevron en bout de bandeau, jamais au-dessus : la rangée est déjà
+        // plus haute que lui (boutons de lecture), donc la barre réduite ne
+        // grandit pas d'un pixel pour l'accueillir.
+        _DrawerChevronButton(
+          scheme: scheme,
+          expanded: false,
+          onTap: widget.onModeToggle,
+        ),
+      ],
     );
   }
 
@@ -714,6 +1040,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
     required ColorScheme scheme,
     required bool advanced,
     required double? progress,
+    required bool useTwoColumns,
   }) {
     final current = widget.state.currentMusicPad;
     final isPlaying = current?.isPlaying ?? false;
@@ -726,56 +1053,25 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
       hasCurrent: hasCurrent,
       hasQueue: hasQueue,
     );
-    final showCompactHeaderBadge =
-        progress == null ? !advanced : (progress < 0.5);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: _MusicRegieDrawer._compactDrawerPadding,
+          padding: advanced
+              ? _MusicRegieDrawer._advancedDrawerPadding
+              : _MusicRegieDrawer._compactDrawerPadding,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Icon(
-                    SoundType.music.icon,
-                    size: 18,
-                    color: scheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'RÉGIE MUSIQUE',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  if (isPlaying && showCompactHeaderBadge) ...[
-                    const SizedBox(width: 8),
-                    const _LiveBadge(compact: true),
-                  ],
-                  const Spacer(),
-                  if (widget.isDesktop &&
-                      widget.isAdvanced &&
-                      widget.onLockedChanged != null)
-                    _DrawerLockButton(
-                      scheme: scheme,
-                      isLocked: widget.isLocked,
-                      onTap: () => widget.onLockedChanged!(!widget.isLocked),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
               if (progress == null)
                 _buildModeBody(
                   context: context,
                   scheme: scheme,
                   advanced: advanced,
+                  useTwoColumns: useTwoColumns,
                   current: current,
                   isPlaying: isPlaying,
                   next: next,
@@ -794,6 +1090,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
                           context: context,
                           scheme: scheme,
                           advanced: false,
+                          useTwoColumns: useTwoColumns,
                           current: current,
                           isPlaying: isPlaying,
                           next: next,
@@ -814,6 +1111,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
                           context: context,
                           scheme: scheme,
                           advanced: true,
+                          useTwoColumns: useTwoColumns,
                           current: current,
                           isPlaying: isPlaying,
                           next: next,
@@ -839,87 +1137,82 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final progress = widget.expandProgress;
-    final drawerBody = _buildDrawerInner(
-      context: context,
-      scheme: scheme,
-      advanced: widget.isAdvanced,
-      progress: progress,
-    );
+    final expanded = (progress ?? (widget.isAdvanced ? 1.0 : 0.0)) >= 0.5;
 
-    final Widget drawerContent;
-    if (_isInteractive) {
-      drawerContent = Semantics(
-        label: (progress ?? 0) >= 0.5
-            ? 'Réduire la régie'
-            : 'Développer la régie',
-        hint:
-            'Appuyer ou glisser vers le haut pour développer, '
-            'vers le bas pour réduire',
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _handleTapToExpand,
-          onVerticalDragStart: (_) => widget.onVerticalDragStart?.call(),
-          onVerticalDragUpdate: widget.onVerticalDragUpdate,
-          onVerticalDragEnd: widget.onVerticalDragEnd,
-          onVerticalDragCancel: widget.onVerticalDragCancel,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              drawerBody,
-              Positioned(
-                top: 4,
-                left: 0,
-                right: 0,
-                child: IgnorePointer(
-                  child: Center(
-                    child: Container(
-                      width: 24,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: scheme.onSurfaceVariant.withValues(
-                          alpha: 0.35,
-                        ),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    } else if (_canTapToExpand) {
-      drawerContent = GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _handleTapToExpand,
-        child: drawerBody,
-      );
-    } else {
-      drawerContent = drawerBody;
-    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Mesurée avant le padding du tiroir (voir _buildDrawerInner) : on
+        // rajoute ce padding au seuil plutôt que de le retrancher de la
+        // largeur, pour garder une seule mesure ici.
+        final useTwoColumns =
+            widget.isAdvanced &&
+            constraints.maxWidth >=
+                _MusicRegieDrawer._twoColumnMinWidth +
+                    _MusicRegieDrawer._advancedDrawerPadding.horizontal;
 
-    return Material(
-      color: scheme.surfaceContainerLow,
-      shape: widget.isDesktop
-          ? const RoundedRectangleBorder()
-          : const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        final drawerBody = _buildDrawerInner(
+          context: context,
+          scheme: scheme,
+          advanced: widget.isAdvanced,
+          progress: progress,
+          useTwoColumns: useTwoColumns,
+        );
+
+        final Widget drawerContent;
+        if (_isInteractive) {
+          drawerContent = Semantics(
+            label: expanded ? 'Réduire la régie' : 'Développer la régie',
+            hint:
+                'Appuyer ou glisser vers le haut pour développer, '
+                'vers le bas pour réduire',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _handleTapToExpand,
+              onVerticalDragStart: (_) => widget.onVerticalDragStart?.call(),
+              onVerticalDragUpdate: widget.onVerticalDragUpdate,
+              onVerticalDragEnd: widget.onVerticalDragEnd,
+              onVerticalDragCancel: widget.onVerticalDragCancel,
+              child: drawerBody,
             ),
-      clipBehavior: Clip.none,
-      child: drawerContent,
+          );
+        } else if (_canTapToExpand) {
+          drawerContent = GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _handleTapToExpand,
+            child: drawerBody,
+          );
+        } else {
+          drawerContent = drawerBody;
+        }
+
+        return Material(
+          color: scheme.surfaceContainerLow,
+          shape: widget.isDesktop
+              ? const RoundedRectangleBorder()
+              : const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+          clipBehavior: Clip.none,
+          child: drawerContent,
+        );
+      },
     );
   }
 }
 
-class _DrawerLockButton extends StatelessWidget {
+/// Chevron très fin (hauteur minimale) : ouvre/ferme la régie explicitement,
+/// sans dépendre d'un clic à l'extérieur — la régie reste ouverte quoi qu'il
+/// se passe ailleurs sur l'écran (zone pads incluse). Toujours inséré en bout
+/// d'une rangée de contrôles déjà plus haute que lui (jamais en overlay au-
+/// dessus) : il n'ajoute donc aucune hauteur au tiroir, réduit ou ouvert.
+class _DrawerChevronButton extends StatelessWidget {
   final ColorScheme scheme;
-  final bool isLocked;
+  final bool expanded;
   final VoidCallback? onTap;
 
-  const _DrawerLockButton({
+  const _DrawerChevronButton({
     required this.scheme,
-    required this.isLocked,
+    required this.expanded,
     this.onTap,
   });
 
@@ -929,13 +1222,46 @@ class _DrawerLockButton extends StatelessWidget {
       onPressed: onTap,
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 18),
       icon: Icon(
-        isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
-        size: 18,
-        color: isLocked
-            ? scheme.primary
-            : scheme.onSurfaceVariant.withValues(alpha: 0.75),
+        expanded
+            ? Icons.keyboard_arrow_down_rounded
+            : Icons.keyboard_arrow_up_rounded,
+        size: 16,
+        color: scheme.onSurfaceVariant.withValues(alpha: 0.75),
+      ),
+    );
+  }
+}
+
+/// Éjecte la musique en cours — placé juste après le titre, donc affiché
+/// uniquement quand une piste est chargée. Désactivé tant qu'elle est en
+/// lecture (voir [MusicPreviewPanel.onEjectMusic]) : il faut d'abord mettre
+/// en pause ou attendre un fondu pour éviter une coupure sèche accidentelle.
+class _EjectMusicButton extends StatelessWidget {
+  final ColorScheme scheme;
+  final bool enabled;
+  final VoidCallback? onTap;
+
+  const _EjectMusicButton({
+    required this.scheme,
+    required this.enabled,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: enabled ? onTap : null,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 24, minHeight: 20),
+      icon: Icon(
+        Icons.eject_rounded,
+        size: 16,
+        color: enabled
+            ? scheme.onSurfaceVariant.withValues(alpha: 0.75)
+            : scheme.onSurfaceVariant.withValues(alpha: 0.3),
       ),
     );
   }
@@ -965,6 +1291,7 @@ class _OnAirControls extends StatelessWidget {
   final VoidCallback onChooseMusic;
   final VoidCallback? onTogglePlayPause;
   final VoidCallback? onSkipNext;
+  final VoidCallback? onEjectMusic;
 
   const _OnAirControls({
     required this.volume,
@@ -983,6 +1310,7 @@ class _OnAirControls extends StatelessWidget {
     required this.onChooseMusic,
     this.onTogglePlayPause,
     this.onSkipNext,
+    this.onEjectMusic,
   });
 
   double _resolveSliderWidth(double available) {
@@ -1031,15 +1359,19 @@ class _OnAirControls extends StatelessWidget {
         final maxWidth = constraints.maxWidth;
         final comfortable = MediaQuery.sizeOf(context).width >=
             _GroupedPlaybackControls.comfortableWidthThreshold;
+        // Cellules agrandies réservées au confort tactile — sans souris
+        // desktop, la taille compacte suffit même sur écran large (voir
+        // [_GroupedPlaybackControls.isDesktop]).
+        final roomyPicker = comfortable && !keyboardEnabled;
         // Coupe sèche explicite dès que le groupe complet (4 cellules) tient
         // dans la largeur disponible — sinon repli sur les trois durées.
         final showCut = maxWidth >=
             _GroupedPlaybackControls.resolvedMinWidth(
-              comfortable,
+              roomyPicker,
               withCut: true,
             );
         final groupMinWidth = _GroupedPlaybackControls.resolvedMinWidth(
-          comfortable,
+          roomyPicker,
           withCut: showCut,
         );
         final fitsOnOneLine =
@@ -1054,6 +1386,7 @@ class _OnAirControls extends StatelessWidget {
           onTransitionOptionTapped: onTransitionOptionTapped,
           onTransitionOptionLongPressed: onTransitionOptionLongPressed,
           showCut: showCut,
+          isDesktop: keyboardEnabled,
           activeTransitionKind: activeTransitionKind,
           transitionProgress: transitionProgress,
           transitionBlinkOpacity: transitionBlinkOpacity,
@@ -1101,9 +1434,11 @@ class _GroupedPlaybackControls extends StatelessWidget {
   static const _progressBadgeSize = 11.0;
 
   /// Au-delà de cette largeur d'écran on n'est plus sur un téléphone : on
-  /// agrandit les cibles du sélecteur de durée pour le confort de régie
-  /// (tablette / desktop). Sous ce seuil on garde le mode compact pour que
-  /// tout tienne sur petit écran.
+  /// agrandit les cibles du sélecteur de durée pour le confort tactile
+  /// (tablette). Sous ce seuil on garde le mode compact pour que tout tienne
+  /// sur petit écran. Sans pointeur tactile (souris desktop), l'agrandissement
+  /// ne sert à rien — [isDesktop] force alors les petites cellules même sur
+  /// un écran large.
   static const comfortableWidthThreshold = 600.0;
 
   static const _pickerCellCompact = 18.0;
@@ -1147,6 +1482,11 @@ class _GroupedPlaybackControls extends StatelessWidget {
   final ValueChanged<Duration> onTransitionOptionTapped;
   final ValueChanged<Duration> onTransitionOptionLongPressed;
   final bool showCut;
+
+  /// Vrai sur desktop (souris) : les cellules du sélecteur de durée restent
+  /// en taille compacte même sur écran large — l'agrandissement "confort" ne
+  /// répond qu'à un besoin tactile, absent ici.
+  final bool isDesktop;
   final _MusicTransitionKind? activeTransitionKind;
   final Animation<double>? transitionProgress;
   final Animation<double>? transitionBlinkOpacity;
@@ -1163,6 +1503,7 @@ class _GroupedPlaybackControls extends StatelessWidget {
     required this.onTransitionOptionTapped,
     required this.onTransitionOptionLongPressed,
     required this.showCut,
+    this.isDesktop = false,
     this.activeTransitionKind,
     this.transitionProgress,
     this.transitionBlinkOpacity,
@@ -1176,6 +1517,7 @@ class _GroupedPlaybackControls extends StatelessWidget {
     required VoidCallback? onPressed,
     required IconData icon,
     required bool showTransitionFeedback,
+    bool filled = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
 
@@ -1184,13 +1526,18 @@ class _GroupedPlaybackControls extends StatelessWidget {
       height: _actionButtonSize,
       child: IconButton(
         onPressed: onPressed,
-        iconSize: _iconSize,
+        iconSize: filled ? _iconSize - 2 : _iconSize,
         padding: EdgeInsets.zero,
         visualDensity: VisualDensity.compact,
         style: IconButton.styleFrom(
           shape: const CircleBorder(),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           alignment: Alignment.center,
+          backgroundColor: filled ? scheme.primary : null,
+          disabledBackgroundColor: filled ? scheme.surfaceContainerHigh : null,
+          foregroundColor: filled ? scheme.onPrimary : null,
+          disabledForegroundColor:
+              filled ? scheme.onSurfaceVariant.withValues(alpha: 0.4) : null,
         ),
         constraints: const BoxConstraints(
           minWidth: _actionButtonSize,
@@ -1244,68 +1591,97 @@ class _GroupedPlaybackControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final borderColor = scheme.outlineVariant.withValues(alpha: 0.55);
+    final borderColor = AppElevation.border(scheme).color;
     final comfortable =
-        MediaQuery.sizeOf(context).width >= comfortableWidthThreshold;
+        MediaQuery.sizeOf(context).width >= comfortableWidthThreshold &&
+        !isDesktop;
     final playFeedback =
         activeTransitionKind == _MusicTransitionKind.fadeOut;
     final skipFeedback =
         activeTransitionKind == _MusicTransitionKind.crossfade;
     final transitionInProgress = activeTransitionKind != null;
 
-    return Material(
-      color: Colors.transparent,
-      shape: StadiumBorder(side: BorderSide(color: borderColor)),
-      clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        height: _actionSize,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 6),
-              child: _actionButton(
-                context: context,
-                onPressed: transitionInProgress
-                    ? null
-                    : (canControl ? onTogglePlayPause : onChooseMusic),
-                icon: canControl
-                    ? (isPlaying
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded)
-                    : Icons.play_arrow_rounded,
-                showTransitionFeedback: playFeedback,
-              ),
+    // Pas de pilule bordée autour du groupe — les commandes flottent
+    // directement sur le fond de la barre, seul le bouton lecture porte un
+    // fond plein (accent) pour rester le repère visuel principal.
+    return SizedBox(
+      height: _actionSize,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _actionButton(
+            context: context,
+            onPressed: transitionInProgress
+                ? null
+                : (canControl ? onTogglePlayPause : onChooseMusic),
+            icon: canControl
+                ? (isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded)
+                : Icons.play_arrow_rounded,
+            showTransitionFeedback: playFeedback,
+            filled: true,
+          ),
+          const SizedBox(width: 4),
+          _actionButton(
+            context: context,
+            onPressed: hasQueue && !transitionInProgress ? onSkipNext : null,
+            icon: Icons.skip_next_rounded,
+            showTransitionFeedback: skipFeedback,
+          ),
+          const SizedBox(width: 6),
+          Container(width: 1, height: 24, color: borderColor),
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: _CompactTransitionPicker(
+              selected: selectedTransitionDuration,
+              locked: transitionDurationLocked,
+              onOptionTapped: onTransitionOptionTapped,
+              onOptionLongPressed: onTransitionOptionLongPressed,
+              showCut: showCut,
+              cellSize: _pickerCellSize(comfortable),
+              cellGap: _pickerGap(comfortable),
+              fontSize: _pickerFontSize(comfortable),
             ),
-            _actionButton(
-              context: context,
-              onPressed: hasQueue && !transitionInProgress ? onSkipNext : null,
-              icon: Icons.skip_next_rounded,
-              showTransitionFeedback: skipFeedback,
-            ),
-            const SizedBox(width: 6),
-            Container(
-              width: 1,
-              height: 24,
-              color: borderColor,
-            ),
-            Padding(
-              padding: const EdgeInsets.only(left: 4, right: 8),
-              child: _CompactTransitionPicker(
-                selected: selectedTransitionDuration,
-                locked: transitionDurationLocked,
-                onOptionTapped: onTransitionOptionTapped,
-                onOptionLongPressed: onTransitionOptionLongPressed,
-                showCut: showCut,
-                cellSize: _pickerCellSize(comfortable),
-                cellGap: _pickerGap(comfortable),
-                fontSize: _pickerFontSize(comfortable),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// Aperçu discret du prochain son de la file — affiché dans le bandeau
+/// réduit à droite du titre courant, seulement quand la place restante le
+/// permet (voir mesure dans `_buildCompactBar`).
+class _CompactNextUpLabel extends StatelessWidget {
+  final String name;
+  final Color color;
+
+  const _CompactNextUpLabel({required this.name, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.skip_next_rounded,
+          size: 14,
+          color: color.withValues(alpha: 0.6),
+        ),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: color.withValues(alpha: 0.75),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1715,91 +2091,6 @@ class _TransitionCell extends StatelessWidget {
   }
 }
 
-/// Voyant « ON AIR » de régie : le point rouge pulse comme un tally light
-/// broadcast tant que la musique sort des enceintes — signal sans ambiguïté de
-/// ce qui est à l'antenne (refonte UX P2). Statique si l'utilisateur a réduit
-/// les animations.
-class _LiveBadge extends StatefulWidget {
-  final bool compact;
-
-  const _LiveBadge({this.compact = false});
-
-  @override
-  State<_LiveBadge> createState() => _LiveBadgeState();
-}
-
-class _LiveBadgeState extends State<_LiveBadge>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _pulse;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 850),
-    );
-    _pulse = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    if (reduceMotion) {
-      _controller.stop();
-      _controller.value = 1.0;
-    } else if (!_controller.isAnimating) {
-      _controller.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final compact = widget.compact;
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 6 : 8,
-        vertical: compact ? 2 : 3,
-      ),
-      decoration: BoxDecoration(
-        color: scheme.error.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: scheme.error.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FadeTransition(
-            opacity: _pulse,
-            child: Icon(Icons.circle, size: compact ? 7 : 8, color: scheme.error),
-          ),
-          SizedBox(width: compact ? 4 : 5),
-          Text(
-            'ON AIR',
-            style: TextStyle(
-              color: scheme.error,
-              fontSize: compact ? 9 : 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.6,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Indicateur circulaire de téléchargement pour la régie musique.
 class _RegieDownloadRing extends StatelessWidget {
   final PadItem padItem;
@@ -1851,177 +2142,80 @@ class _RegieDownloadBar extends StatelessWidget {
   }
 }
 
-class _CueSlot extends StatelessWidget {
-  final String label;
-  final PadItem? padItem;
-  final bool isActive;
-  final String emptyLabel;
-  final bool showDownloadBar;
-
-  const _CueSlot({
-    required this.label,
-    required this.padItem,
-    required this.isActive,
-    required this.emptyLabel,
-    this.showDownloadBar = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final title = padItem?.displayName ?? emptyLabel;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: scheme.onSurfaceVariant,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.5,
-            fontSize: 10,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            if (padItem != null)
-              _PadColorChip(padItem: padItem!, size: 14)
-            else
-              const _OnAirEmptyChip(size: 14),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive ? scheme.onSurface : scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            if (padItem != null)
-              _RegieDownloadRing(padItem: padItem!, size: 22),
-          ],
-        ),
-        if (showDownloadBar && padItem != null) ...[
-          const SizedBox(height: 6),
-          _RegieDownloadBar(padItem: padItem!),
-        ],
-      ],
-    );
-  }
-}
-
-class _OnAirCard extends StatelessWidget {
-  final PadItem? padItem;
+/// Position/durée du morceau à l'antenne en une ligne compacte
+/// ("01:12 / 03:52", police technique) — mise à jour en direct pendant la
+/// lecture. Même logique de ticker que [_RegieProgressBar], en plus simple
+/// (pas de waveform/seek) : la barre réduite n'affiche qu'un repère temporel.
+class _CompactNowPlayingTime extends StatefulWidget {
+  final PadItem padItem;
   final bool isPlaying;
-  final Widget controls;
-  final ValueChanged<Duration>? onSeek;
+  final Color color;
 
-  const _OnAirCard({
+  const _CompactNowPlayingTime({
     required this.padItem,
     required this.isPlaying,
-    required this.controls,
-    this.onSeek,
+    required this.color,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  State<_CompactNowPlayingTime> createState() =>
+      _CompactNowPlayingTimeState();
+}
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: isPlaying
-              ? scheme.primary.withValues(alpha: 0.45)
-              : scheme.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  'À l\'antenne',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                const Spacer(),
-                if (isPlaying) const _LiveBadge(),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (padItem != null)
-                  _PadColorChip(padItem: padItem!, size: 40)
-                else
-                  const _OnAirEmptyChip(size: 40),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        padItem?.displayName ?? 'Aucune musique lancée',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: padItem != null
-                                  ? scheme.onSurface
-                                  : scheme.onSurfaceVariant,
-                            ),
-                      ),
-                      if (padItem != null && padItem!.pad.sounds.length > 1)
-                        Text(
-                          '${padItem!.pad.sounds.length} variantes',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        )
-                      else if (padItem == null)
-                        Text(
-                          'Choisissez une piste pour démarrer',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant
-                                .withValues(alpha: 0.75),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (padItem != null)
-              _RegieProgressBar(
-                padItem: padItem,
-                isPlaying: isPlaying,
-                showTimes: true,
-                onSeek: onSeek,
-              ),
-            const SizedBox(height: 12),
-            controls,
-          ],
-        ),
-      ),
+class _CompactNowPlayingTimeState extends State<_CompactNowPlayingTime>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker;
+
+  bool get _isLive => widget.isPlaying && widget.padItem.isPlaying;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker((_) {
+      if (mounted) setState(() {});
+    });
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CompactNowPlayingTime oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncTicker();
+  }
+
+  void _syncTicker() {
+    if (_isLive) {
+      if (!_ticker.isActive) _ticker.start();
+    } else if (_ticker.isActive) {
+      _ticker.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  String _format(Duration d) {
+    final totalSeconds = d.inSeconds;
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final player = widget.padItem.progressPlayer;
+    final duration = player?.duration ?? Duration.zero;
+    final position = _isLive && widget.padItem.currentPlayer != null
+        ? widget.padItem.currentPlayer!.position
+        : widget.padItem.pausedPlaybackPosition ?? Duration.zero;
+
+    return Text(
+      '${_format(position)} / ${_format(duration)}',
+      style: AppFonts.monoStyle(TextStyle(fontSize: 11, color: widget.color)),
     );
   }
 }
@@ -2197,16 +2391,14 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
             children: [
               Text(
                 _formatDuration(playback.position),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+                style: AppFonts.monoStyle(
+                  TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                 ),
               ),
               Text(
                 _formatDuration(playback.duration),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+                style: AppFonts.monoStyle(
+                  TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                 ),
               ),
             ],
@@ -2320,72 +2512,99 @@ class _PassageQueueSection extends StatelessWidget {
   final void Function(int oldIndex, int newIndex)? onReorder;
   final VoidCallback? onChooseMusic;
 
+  /// En deux colonnes, la carte reçoit une hauteur fixe (voir _buildModeBody)
+  /// pour égaler la colonne « à l'antenne ». `true` fait remplir cette
+  /// hauteur par la liste elle-même (qui défile en interne si elle a plus
+  /// d'éléments que de place), au lieu de la laisser pousser la carte plus
+  /// haut — c'est ce qui garde « Ajouter à la file » ancré tout en bas sans
+  /// jamais faire déborder la carte, quel que soit le nombre d'éléments.
+  final bool stretchToFill;
+
+  /// Nombre de lignes que la file doit toujours laisser voir en deux
+  /// colonnes, même quand la colonne « à l'antenne » est plus courte.
+  static const int minVisibleRows = 4;
+
+  /// Hauteur d'une ligne de file : padding 4+4 autour de l'IconButton
+  /// compact (40) de suppression — la plus haute des deux variantes.
+  static const double _rowHeight = 48;
+
+  /// Tout ce qui n'est pas la liste : padding de carte (14×2), titre (~20)
+  /// + écart (8), écart (10) + bouton « Ajouter à la file » (42), bordures.
+  static const double _chromeHeight = 28 + 20 + 8 + 10 + 42 + 2;
+
+  /// Hauteur minimale de la carte étirée pour afficher [minVisibleRows]
+  /// éléments sans défiler.
+  static const double minStretchHeight =
+      _chromeHeight + minVisibleRows * _rowHeight;
+
   const _PassageQueueSection({
     required this.queue,
     this.isDesktop = false,
     this.onRemove,
     this.onReorder,
     this.onChooseMusic,
+    this.stretchToFill = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
+    Widget content = queue.isEmpty
+        ? Text(
+            'Préparez la musique suivante sans interrompre celle en cours.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          )
+        // Sans stretchToFill, pas de plafond de hauteur : la file utilise
+        // toute la place libérée par la suppression du cadre « à l'antenne »
+        // (shrinkWrap). Avec stretchToFill, la carte a une hauteur fixe
+        // (voir _buildModeBody) : la liste la remplit et défile en interne
+        // plutôt que de pousser la carte plus haut que sa colonne voisine.
+        : ReorderableListView.builder(
+            shrinkWrap: !stretchToFill,
+            buildDefaultDragHandles: false,
+            padding: EdgeInsets.zero,
+            proxyDecorator: _queueDragProxyDecorator,
+            itemCount: queue.length,
+            onReorderItem: onReorder == null
+                ? null
+                : (oldIndex, newIndex) => onReorder!(oldIndex, newIndex),
+            itemBuilder: (context, index) {
+              final padItem = queue[index];
+              return _QueueRow(
+                key: ValueKey(padItem.pad.id),
+                listIndex: index,
+                padItem: padItem,
+                enableReorder: onReorder != null,
+                useDelayedDrag: !isDesktop,
+                enableSwipeToRemove: !isDesktop,
+                onRemove: onRemove == null
+                    ? null
+                    : () => onRemove!(padItem.pad.id),
+              );
+            },
+          );
+    if (stretchToFill) content = Expanded(child: content);
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.45)),
+        borderRadius: AppRadius.radiusLg,
+        side: AppElevation.border(scheme),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'File de passage',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
-            if (queue.isEmpty)
-              Text(
-                'Préparez la musique suivante sans interrompre celle en cours.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              )
-            else
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 220),
-                child: ReorderableListView.builder(
-                  shrinkWrap: true,
-                  buildDefaultDragHandles: false,
-                  padding: EdgeInsets.zero,
-                  proxyDecorator: _queueDragProxyDecorator,
-                  itemCount: queue.length,
-                  onReorderItem: onReorder == null
-                      ? null
-                      : (oldIndex, newIndex) =>
-                          onReorder!(oldIndex, newIndex),
-                  itemBuilder: (context, index) {
-                    final padItem = queue[index];
-                    return _QueueRow(
-                      key: ValueKey(padItem.pad.id),
-                      listIndex: index,
-                      padItem: padItem,
-                      enableReorder: onReorder != null,
-                      useDelayedDrag: !isDesktop,
-                      enableSwipeToRemove: !isDesktop,
-                      onRemove: onRemove == null
-                          ? null
-                          : () => onRemove!(padItem.pad.id),
-                    );
-                  },
-                ),
-              ),
+            content,
             if (onChooseMusic != null) ...[
               const SizedBox(height: 10),
               OutlinedButton.icon(
@@ -2497,37 +2716,6 @@ class _QueueRow extends StatelessWidget {
   }
 }
 
-/// Pastille vide affichée quand aucune piste n'est à l'antenne.
-class _OnAirEmptyChip extends StatelessWidget {
-  final double size;
-
-  const _OnAirEmptyChip({required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(size > 20 ? 8 : 4),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
-      ),
-      child: size >= 32
-          ? Icon(
-              Icons.music_note_outlined,
-              size: size * 0.45,
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-            )
-          : null,
-    );
-  }
-}
-
 /// Pastille couleur alignée sur les pads de la scène.
 class _PadColorChip extends StatelessWidget {
   final PadItem padItem;
@@ -2585,17 +2773,13 @@ Widget _queueDragProxyDecorator(
     animation: animation,
     builder: (context, child) {
       final theme = Theme.of(context);
-      final scheme = theme.colorScheme;
       final baseColor = theme.canvasColor;
-      const dragElevation = 6.0;
-      final elevatedColor = ElevationOverlay.applySurfaceTint(
-        baseColor,
-        scheme.surfaceTint,
-        dragElevation,
-      );
+      // Pas d'élévation Material (surfaceTint neutralisé pour la direction
+      // "Console Linear") : le retour visuel du drag vient d'un éclaircissement
+      // plat de la surface plutôt que d'un glacis de tint.
       final animValue = Curves.easeInOut.transform(animation.value);
       return Material(
-        color: Color.lerp(baseColor, elevatedColor, animValue),
+        color: Color.lerp(baseColor, AppColors.surface2, animValue),
         elevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,

@@ -10,6 +10,7 @@ import '../../../../core/audio/cue_audio_service.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/settings/app_preferences.dart';
+import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/platform/saf_directory_bridge.dart';
 import '../../../../core/sync/auto_sync_coordinator.dart';
@@ -25,6 +26,7 @@ import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../widgets/app_form_dialog.dart';
 import '../widgets/app_modal.dart';
+import '../widgets/boxed_icon_button.dart';
 import '../widgets/drive_folder_picker.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
@@ -638,11 +640,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Compte Google',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -689,11 +689,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Compte Google',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -950,12 +948,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return showModalBottomSheet<String>(
       context: context,
+      showDragHandle: true,
       clipBehavior: Clip.antiAlias,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppModalStyle.radius),
-        ),
-      ),
       builder: (sheetContext) {
         return SafeArea(
           child: Padding(
@@ -1644,6 +1638,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return PopupMenuButton<_LibraryAction>(
         tooltip: 'Options',
         icon: Icon(Icons.more_vert, color: muted),
+        popUpAnimationStyle: AnimationStyle.noAnimation,
         onSelected: (action) {
           if (action == _LibraryAction.remove) {
             unawaited(_confirmRemoveWatchedPath(item.watchedPath!));
@@ -1652,6 +1647,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         itemBuilder: (context) => [
           PopupMenuItem<_LibraryAction>(
             value: _LibraryAction.remove,
+            height: AppMenu.itemHeight,
+            padding: AppMenu.itemPadding,
             child: _menuRow(
               Icons.delete_outline,
               'Retirer',
@@ -1686,6 +1683,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return PopupMenuButton<_LibraryAction>(
       tooltip: 'Options',
       icon: Icon(Icons.more_vert, color: muted),
+      popUpAnimationStyle: AnimationStyle.noAnimation,
       onSelected: (action) {
         switch (action) {
           case _LibraryAction.downloadAll:
@@ -1700,6 +1698,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         PopupMenuItem<_LibraryAction>(
           value: _LibraryAction.downloadAll,
           enabled: !isDownloading && !fullyOffline,
+          height: AppMenu.itemHeight,
+          padding: AppMenu.itemPadding,
           child: _menuRow(
             fullyOffline
                 ? Icons.download_done_outlined
@@ -1709,6 +1709,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         PopupMenuItem<_LibraryAction>(
           value: _LibraryAction.toggleAutoDownload,
+          height: AppMenu.itemHeight,
+          padding: AppMenu.itemPadding,
           child: _menuRow(
             library.autoDownload
                 ? Icons.check_box_outlined
@@ -1720,6 +1722,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const PopupMenuDivider(),
         PopupMenuItem<_LibraryAction>(
           value: _LibraryAction.remove,
+          height: AppMenu.itemHeight,
+          padding: AppMenu.itemPadding,
           child: _menuRow(
             Icons.delete_outline,
             'Retirer',
@@ -1997,31 +2001,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return count <= 1 ? '$count fichier' : '$count fichiers';
   }
 
+  // Pas de Card : la direction "Console Linear" pose les sections à plat
+  // (label + séparateur) plutôt qu'en cartes empilées façon Material.
   Widget _buildSettingsSectionCard({
     required Widget title,
     required Widget child,
   }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [title, const Divider(), child],
-        ),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [title, const SizedBox(height: 14), child],
     );
   }
+
+  Widget _sectionDivider() => const Padding(
+    padding: EdgeInsets.symmetric(vertical: 8),
+    child: Divider(height: 1),
+  );
 
   Widget _buildSectionTitleRow({
     required IconData icon,
     required String title,
     List<Widget>? trailing,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
-        Icon(icon, color: Theme.of(context).colorScheme.primary),
+        Icon(icon, size: 16, color: scheme.onSurfaceVariant),
         const SizedBox(width: 8),
-        Text(title, style: Theme.of(context).textTheme.titleLarge),
+        Text(title.toUpperCase(), style: AppTextStyles.sectionLabel(context)),
         if (trailing != null) ...[const Spacer(), ...trailing],
       ],
     );
@@ -2449,16 +2456,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildDriveSection(),
-                    const SizedBox(height: 16),
+                    _sectionDivider(),
                     if (CueAudioService.isSupported) ...[
                       _buildAudioSection(),
-                      const SizedBox(height: 16),
+                      _sectionDivider(),
                     ],
                     _buildIndexedFoldersCard(),
-                    const SizedBox(height: 16),
+                    _sectionDivider(),
                     _buildMaintenanceCard(),
                     if (Platform.isWindows) ...[
-                      const SizedBox(height: 16),
+                      _sectionDivider(),
                       _buildUpdateCard(),
                     ],
                   ],
@@ -2693,12 +2700,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final soundLabel = '${_sounds.length} son${_sounds.length > 1 ? 's' : ''}';
     return Column(
       children: [
-        Divider(
-          height: 24,
-          color: Theme.of(
-            context,
-          ).colorScheme.outlineVariant.withValues(alpha: 0.45),
-        ),
+        const Divider(height: 24),
         InkWell(
           onTap: _showDatabaseStateDialog,
           borderRadius: BorderRadius.circular(8),
@@ -2771,8 +2773,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
 
-    return IconButton(
-      icon: const Icon(Icons.refresh),
+    return BoxedIconButton(
+      icon: Icons.refresh,
       tooltip: 'Actualiser depuis Drive',
       onPressed: _refreshAllFromDrive,
     );
@@ -2877,14 +2879,9 @@ class _SettingsLoadingViewState extends State<_SettingsLoadingView>
   }
 
   Widget _sectionCardSkeleton({required Widget title, required Widget child}) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [title, const Divider(), child],
-        ),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [title, const SizedBox(height: 14), child],
     );
   }
 

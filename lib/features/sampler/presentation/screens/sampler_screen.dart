@@ -14,6 +14,8 @@ import '../widgets/music_picker_sheet.dart';
 import '../widgets/quick_search_overlay.dart';
 import '../widgets/audio_vu_meter.dart';
 import '../widgets/app_form_dialog.dart';
+import '../widgets/boxed_icon_button.dart';
+import '../widgets/waveform_mark_button.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
@@ -108,10 +110,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
   int? _highlightedPadId;
   bool _didAutoOpenCreateForCurrentEmptyState = false;
   bool _isMusicRegieAdvanced = false;
-  bool _isMusicRegieLocked = false;
   double _musicRegieOccupiedHeight = 0;
 
-  static const _musicRegieTapGroup = 'music-regie-dismiss';
   static const _padsGridPadding = 16.0;
 
   EdgeInsets _padsGridScrollPadding(BuildContext context) => EdgeInsets.fromLTRB(
@@ -264,7 +264,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
   Future<void> _showBoardActions(SoundBoard board) async {
     await showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
       builder: (context) {
+        final scheme = Theme.of(context).colorScheme;
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -286,8 +288,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Supprimer'),
+                leading: Icon(Icons.delete_outline, color: scheme.error),
+                title: Text('Supprimer', style: TextStyle(color: scheme.error)),
                 onTap: () {
                   Navigator.pop(context);
                   _deleteBoard(board);
@@ -318,9 +320,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
     final value = await showMenu<String>(
       context: context,
       position: position,
+      popUpAnimationStyle: AnimationStyle.noAnimation,
       items: [
         PopupMenuItem(
           value: 'rename',
+          height: AppMenu.itemHeight,
+          padding: AppMenu.itemPadding,
           child: Row(
             children: [
               Icon(Icons.edit_rounded, size: 18, color: scheme.onSurface),
@@ -331,6 +336,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
         ),
         PopupMenuItem(
           value: 'duplicate',
+          height: AppMenu.itemHeight,
+          padding: AppMenu.itemPadding,
           child: Row(
             children: [
               Icon(Icons.copy_rounded, size: 18, color: scheme.onSurface),
@@ -342,6 +349,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'delete',
+          height: AppMenu.itemHeight,
+          padding: AppMenu.itemPadding,
           child: Row(
             children: [
               Icon(Icons.delete_outline_rounded, size: 18, color: scheme.error),
@@ -885,7 +894,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     if (!_isEditable) return const SizedBox.shrink();
 
     final scheme = Theme.of(context).colorScheme;
-    Widget card = DashedSlotFrame(
+    return DashedSlotFrame(
       onTap: () => _openAddPadFlow(board, rowIndex: rowIndex),
       child: Center(
         child: Icon(
@@ -895,7 +904,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
         ),
       ),
     );
-    return _wrapMusicRegieTapTarget(card);
   }
 
   static const Duration _addSlotTransitionDuration = Duration(
@@ -1335,11 +1343,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
-  Widget _wrapMusicRegieTapTarget(Widget child) {
-    if (!_isMusicRegieAdvanced) return child;
-    return TapRegion(groupId: _musicRegieTapGroup, child: child);
-  }
-
   Future<void> _handlePadTap(BuildContext context, PadItem padItem) async {
     final resolved = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
 
@@ -1516,7 +1519,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: Theme.of(ctx).textTheme.titleMedium),
+              Text(
+                title,
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 8),
               Text(body, style: Theme.of(ctx).textTheme.bodyMedium),
             ],
@@ -1536,36 +1542,34 @@ class _SamplerScreenState extends State<SamplerScreen> {
     // confirmés en mode classique — jamais un brouillon en cours de création
     // ni le Mode Spectacle (verrouillé).
     final showEditAffordances = editable && !padItem.isDraft;
-    return _wrapMusicRegieTapTarget(
-      PadCard(
-        key: ValueKey<int>(padItem.pad.id),
-        padItem: padItem,
-        isEditable: editable,
-        isTapBlocked: _notifier.isPadTapBlocked,
-        animateOnRestore: _recentlyRestoredSoundId == padItem.pad.id,
-        isHighlighted: _highlightedPadId == padItem.pad.id,
-        onTap: () => unawaited(_handlePadTap(context, padItem)),
-        onEdit: showEditAffordances
-            ? () {
-                final live =
-                    _notifier.findPadItemById(padItem.pad.id) ?? padItem;
-                PadDetailsScreen.open(
-                  context,
-                  padItem: live,
-                  notifier: _notifier,
-                );
-              }
-            : null,
-        onRemove: showEditAffordances
-            ? () async {
-                final removed = await _notifier.removeSound(padItem);
-                if (!mounted || !removed) return;
-              }
-            : null,
-        onShowSounds: padItem.totalSoundCount > 1
-            ? () => _showPadSoundPicker(context, padItem)
-            : null,
-      ),
+    return PadCard(
+      key: ValueKey<int>(padItem.pad.id),
+      padItem: padItem,
+      isEditable: editable,
+      isTapBlocked: _notifier.isPadTapBlocked,
+      animateOnRestore: _recentlyRestoredSoundId == padItem.pad.id,
+      isHighlighted: _highlightedPadId == padItem.pad.id,
+      onTap: () => unawaited(_handlePadTap(context, padItem)),
+      onEdit: showEditAffordances
+          ? () {
+              final live =
+                  _notifier.findPadItemById(padItem.pad.id) ?? padItem;
+              PadDetailsScreen.open(
+                context,
+                padItem: live,
+                notifier: _notifier,
+              );
+            }
+          : null,
+      onRemove: showEditAffordances
+          ? () async {
+              final removed = await _notifier.removeSound(padItem);
+              if (!mounted || !removed) return;
+            }
+          : null,
+      onShowSounds: padItem.totalSoundCount > 1
+          ? () => _showPadSoundPicker(context, padItem)
+          : null,
     );
   }
 
@@ -1623,25 +1627,26 @@ class _SamplerScreenState extends State<SamplerScreen> {
           }
           if (state.error != null && state.pads.isEmpty) {
             return Center(
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        size: 48,
-                        color: Theme.of(context).colorScheme.error,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: 40,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Erreur: ${state.error}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Erreur: ${state.error}',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -1790,48 +1795,48 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
+  /// Bouton lecture de la régie sans rien de chargé : la musique choisie
+  /// part immédiatement au lieu d'aller en file.
+  Future<void> _openMusicPickerToPlay() async {
+    await SoundPickerOverlay.showForMusic(
+      context,
+      notifier: _notifier,
+      playNow: true,
+    );
+  }
+
   Widget _buildMusicPreviewPanel(BuildContext context, SamplerState state) {
-    return TapRegion(
-      groupId: _musicRegieTapGroup,
-      onTapOutside: _isMusicRegieAdvanced && !_isMusicRegieLocked
-          ? (_) => setState(() => _isMusicRegieAdvanced = false)
-          : null,
-      child: MusicPreviewPanel(
-        state: state,
-        musicVolume: _notifier.musicVolume,
-        resolveMusicPad: _notifier.resolveMusicPad,
-        isAdvanced: _isMusicRegieAdvanced,
-        isDesktop: context.prefersDesktopUi,
-        isLocked: _isMusicRegieLocked,
-        onLockedChanged: context.prefersDesktopUi
-            ? (locked) => setState(() => _isMusicRegieLocked = locked)
-            : null,
-        onAdvancedChanged: (isAdvanced) => setState(() {
-          _isMusicRegieAdvanced = isAdvanced;
-          if (!isAdvanced) _isMusicRegieLocked = false;
-        }),
-        onChooseMusic: () => unawaited(_openMusicPicker()),
-        onTogglePlayPause: () =>
-            unawaited(_notifier.toggleCurrentMusicPlayback()),
-        onSkipNext: () => unawaited(_notifier.skipToNextMusic()),
-        onRemoveFromQueue: (padId) =>
-            unawaited(_notifier.removeFromMusicQueue(padId)),
-        onReorderMusicQueue: _notifier.reorderMusicQueue,
-        onMusicVolumeChanged: (value) =>
-            unawaited(_notifier.setMusicVolume(value, smooth: true)),
-        onFadeOut: (duration) =>
-            unawaited(_notifier.fadeOutCurrentMusic(duration)),
-        onTransitionToNext: (duration) =>
-            unawaited(_notifier.crossfadeToNextMusic(duration)),
-        onSeekMusic: (position) =>
-            unawaited(_notifier.seekPausedMusic(position)),
-        onOccupiedHeightChanged: context.prefersDesktopUi
-            ? null
-            : (height) {
-                if ((height - _musicRegieOccupiedHeight).abs() < 0.5) return;
-                setState(() => _musicRegieOccupiedHeight = height);
-              },
-      ),
+    return MusicPreviewPanel(
+      state: state,
+      musicVolume: _notifier.musicVolume,
+      resolveMusicPad: _notifier.resolveMusicPad,
+      isAdvanced: _isMusicRegieAdvanced,
+      isDesktop: context.prefersDesktopUi,
+      onAdvancedChanged: (isAdvanced) =>
+          setState(() => _isMusicRegieAdvanced = isAdvanced),
+      onChooseMusic: () => unawaited(_openMusicPicker()),
+      onChooseMusicToPlay: () => unawaited(_openMusicPickerToPlay()),
+      onTogglePlayPause: () =>
+          unawaited(_notifier.toggleCurrentMusicPlayback()),
+      onSkipNext: () => unawaited(_notifier.skipToNextMusic()),
+      onEjectMusic: () => unawaited(_notifier.stopCurrentMusic()),
+      onRemoveFromQueue: (padId) =>
+          unawaited(_notifier.removeFromMusicQueue(padId)),
+      onReorderMusicQueue: _notifier.reorderMusicQueue,
+      onMusicVolumeChanged: (value) =>
+          unawaited(_notifier.setMusicVolume(value, smooth: true)),
+      onFadeOut: (duration) =>
+          unawaited(_notifier.fadeOutCurrentMusic(duration)),
+      onTransitionToNext: (duration) =>
+          unawaited(_notifier.crossfadeToNextMusic(duration)),
+      onSeekMusic: (position) =>
+          unawaited(_notifier.seekPausedMusic(position)),
+      onOccupiedHeightChanged: context.prefersDesktopUi
+          ? null
+          : (height) {
+              if ((height - _musicRegieOccupiedHeight).abs() < 0.5) return;
+              setState(() => _musicRegieOccupiedHeight = height);
+            },
     );
   }
 
@@ -2036,8 +2041,8 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
       // hamburger ouvre le tiroir (mode live / bibliothèque / paramètres).
       leading: isPerformanceMode
           ? _LiveExitButton(onExit: onTogglePerformanceMode)
-          : IconButton(
-              icon: const Icon(Icons.menu_rounded),
+          : BoxedIconButton(
+              icon: Icons.menu_rounded,
               tooltip: 'Menu',
               onPressed: onOpenMenu,
             ),
@@ -2045,7 +2050,7 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(
-          color: scheme.outlineVariant.withValues(alpha: 0.35),
+          color: AppElevation.border(scheme).color,
           height: 1,
         ),
       ),
@@ -2054,8 +2059,8 @@ class _SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
         if (context.deviceClass.isAtLeastTablet)
           const Center(child: AudioVuMeter()),
         stopAllButton,
-        IconButton(
-          icon: const Icon(Icons.search_rounded),
+        BoxedIconButton(
+          icon: Icons.search_rounded,
           tooltip: 'Recherche rapide',
           onPressed: onQuickSearch,
         ),
@@ -2086,16 +2091,47 @@ class _StopAllButton extends StatelessWidget {
         if (!notifier.hasNonMusicSoundsPlaying) {
           return const SizedBox.shrink();
         }
-        return IconButton(
-          icon: const Icon(Icons.stop_rounded),
-          tooltip: isNativeDesktopPlatform()
-              ? 'Tout arrêter (Échap)'
-              : 'Tout arrêter',
-          color: scheme.error,
-          onPressed: () {
-            unawaited(HapticFeedback.heavyImpact());
-            unawaited(notifier.stopAllNonMusicSounds());
-          },
+        void handleTap() {
+          unawaited(HapticFeedback.heavyImpact());
+          unawaited(notifier.stopAllNonMusicSounds());
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Tooltip(
+            message: isNativeDesktopPlatform()
+                ? 'Tout arrêter (Échap)'
+                : 'Tout arrêter',
+            child: InkWell(
+              borderRadius: AppRadius.radiusMd,
+              onTap: handleTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm + 2,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: AppRadius.radiusMd,
+                  border: Border.all(color: scheme.error.withValues(alpha: 0.5)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.stop_rounded, size: 14, color: scheme.error),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Stop',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.error,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
@@ -2247,11 +2283,9 @@ class _BoardsList extends StatelessWidget {
             children: [
               Icon(Icons.theater_comedy_rounded, color: scheme.primary),
               const SizedBox(width: 8),
-              Text(
+              const Text(
                 'Scènes',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -2267,7 +2301,9 @@ class _BoardsList extends StatelessWidget {
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     'Aucune scène',
-                    style: TextStyle(color: Colors.grey[700]),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 )
               else
@@ -2401,6 +2437,12 @@ class _SamplerDesktopAppBar extends StatelessWidget
     final scheme = Theme.of(context).colorScheme;
     return AppBar(
       automaticallyImplyLeading: false,
+      // Largeur resserrée sur celle de la marque (32px + padding 4px de
+      // chaque côté) : la valeur par défaut (56) laissait un espace mort
+      // avant le sélecteur de scène. `titleSpacing: 0` retire l'espacement
+      // minimal que l'AppBar impose sinon entre `leading` et `title`.
+      leadingWidth: 40,
+      titleSpacing: 0,
       // Menu hamburger : regroupe mode live / bibliothèque / paramètres. Toujours
       // accessible — c'est la seule porte de sortie du Mode Spectacle.
       leading: _SamplerDesktopMenuButton(
@@ -2423,14 +2465,14 @@ class _SamplerDesktopAppBar extends StatelessWidget
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(
-          color: scheme.outlineVariant.withValues(alpha: 0.35),
+          color: AppElevation.border(scheme).color,
           height: 1,
         ),
       ),
       actions: [
         stopAllButton,
-        IconButton(
-          icon: const Icon(Icons.search_rounded),
+        BoxedIconButton(
+          icon: Icons.search_rounded,
           tooltip: 'Recherche rapide (Ctrl+F)',
           onPressed: onQuickSearch,
         ),
@@ -2467,40 +2509,42 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
     this.onQuitApp,
   });
 
-  @override
-  Widget build(BuildContext context) {
+  /// Ouvre le menu via `showMenu` positionné sous le bouton, plutôt que de
+  /// passer par `PopupMenuButton.child` : ce dernier imbriquerait son propre
+  /// `InkWell`/`Tooltip` autour de [BoxedIconButton], qui les fournit déjà —
+  /// deux calques de retour visuel superposés pour une seule action.
+  Future<void> _openMenu(BuildContext context) async {
     final scheme = Theme.of(context).colorScheme;
     final fullScreen = isWindowsFullScreen;
     final toggleFullScreen = onToggleWindowsFullScreen;
     final quitApp = onQuitApp;
 
-    // En session live : la bascule étant la seule action disponible, on remplace
-    // le menu par un bouton de sortie direct (un clic).
-    if (isPerformanceMode) {
-      return _LiveExitButton(onExit: onTogglePerformanceMode);
-    }
+    final button = context.findRenderObject()! as RenderBox;
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(
+          Offset(0, button.size.height + 8),
+          ancestor: overlay,
+        ),
+        button.localToGlobal(
+          button.size.bottomRight(const Offset(0, 8)),
+          ancestor: overlay,
+        ),
+      ),
+      Offset.zero & overlay.size,
+    );
 
-    return PopupMenuButton<String>(
-      tooltip: 'Menu',
-      icon: const Icon(Icons.menu_rounded),
-      offset: const Offset(0, 48),
-      onSelected: (value) {
-        switch (value) {
-          case 'live':
-            onTogglePerformanceMode();
-          case 'library':
-            unawaited(onOpenLibrary());
-          case 'settings':
-            unawaited(onOpenSettings());
-          case 'fullscreen':
-            toggleFullScreen?.call();
-          case 'quit':
-            quitApp?.call();
-        }
-      },
-      itemBuilder: (context) => [
+    final value = await showMenu<String>(
+      context: context,
+      position: position,
+      popUpAnimationStyle: AnimationStyle.noAnimation,
+      items: [
         PopupMenuItem<String>(
           value: 'live',
+          height: AppMenu.itemHeight,
+          padding: AppMenu.itemPadding,
           child: Row(
             children: [
               Icon(
@@ -2515,6 +2559,8 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
         ),
         PopupMenuItem<String>(
           value: 'library',
+          height: AppMenu.itemHeight,
+          padding: AppMenu.itemPadding,
           child: Row(
             children: [
               Icon(
@@ -2530,6 +2576,8 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
         const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'settings',
+          height: AppMenu.itemHeight,
+          padding: AppMenu.itemPadding,
           child: Row(
             children: [
               Icon(Icons.settings, size: 18, color: scheme.onSurface),
@@ -2541,6 +2589,8 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
         if (toggleFullScreen != null)
           PopupMenuItem<String>(
             value: 'fullscreen',
+            height: AppMenu.itemHeight,
+            padding: AppMenu.itemPadding,
             child: Row(
               children: [
                 Icon(
@@ -2564,6 +2614,8 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
         if (fullScreen == true && quitApp != null)
           PopupMenuItem<String>(
             value: 'quit',
+            height: AppMenu.itemHeight,
+            padding: AppMenu.itemPadding,
             child: Row(
               children: [
                 Icon(
@@ -2577,6 +2629,36 @@ class _SamplerDesktopMenuButton extends StatelessWidget {
             ),
           ),
       ],
+    );
+
+    if (!context.mounted || value == null) return;
+    switch (value) {
+      case 'live':
+        onTogglePerformanceMode();
+      case 'library':
+        unawaited(onOpenLibrary());
+      case 'settings':
+        unawaited(onOpenSettings());
+      case 'fullscreen':
+        toggleFullScreen?.call();
+      case 'quit':
+        quitApp?.call();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // En session live : la bascule étant la seule action disponible, on remplace
+    // le menu par un bouton de sortie direct (un clic).
+    if (isPerformanceMode) {
+      return _LiveExitButton(onExit: onTogglePerformanceMode);
+    }
+
+    return Builder(
+      builder: (buttonContext) => WaveformMarkButton(
+        tooltip: 'Menu',
+        onPressed: () => unawaited(_openMenu(buttonContext)),
+      ),
     );
   }
 }
@@ -2628,6 +2710,7 @@ class _BoardSceneSelector extends StatelessWidget {
       child: PopupMenuButton<Object>(
         tooltip: '',
         offset: const Offset(0, 48),
+        popUpAnimationStyle: AnimationStyle.noAnimation,
         onSelected: (value) async {
           if (value is SoundBoard) {
             await onSelectBoard(value);
@@ -2662,6 +2745,8 @@ class _BoardSceneSelector extends StatelessWidget {
             ...boards.map(
               (board) => PopupMenuItem<Object>(
                 value: board,
+                height: AppMenu.itemHeight,
+                padding: AppMenu.itemPadding,
                 child: Row(
                   children: [
                     if (board.id == selectedBoard?.id)
@@ -2679,9 +2764,11 @@ class _BoardSceneSelector extends StatelessWidget {
               ),
             ),
           const PopupMenuDivider(),
-          const PopupMenuItem<Object>(
+          PopupMenuItem<Object>(
             value: 'create',
-            child: Row(
+            height: AppMenu.itemHeight,
+            padding: AppMenu.itemPadding,
+            child: const Row(
               children: [
                 Icon(Icons.add, size: 18),
                 SizedBox(width: AppSpacing.sm),
@@ -2695,15 +2782,13 @@ class _BoardSceneSelector extends StatelessWidget {
               ? (details) =>
                     onBoardContextMenu(selectedBoard!, details.globalPosition)
               : null,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _BoardTitleLabel(board: selectedBoard),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: scheme.onSurfaceVariant,
-              ),
-            ],
+          child: _BoardTitleLabel(
+            board: selectedBoard,
+            trailing: Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ),
       ),
@@ -2714,31 +2799,47 @@ class _BoardSceneSelector extends StatelessWidget {
 // ---------- Titre de scène dans l'AppBar (icône + nom) ----------
 
 class _BoardTitleLabel extends StatelessWidget {
-  const _BoardTitleLabel({this.board});
+  const _BoardTitleLabel({this.board, this.trailing});
 
   final SoundBoard? board;
 
+  /// Chevron du sélecteur desktop — absent sur le titre mobile (pas de menu
+  /// déroulant, le tiroir des scènes s'ouvre par le hamburger).
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) {
-    final showIcon = board != null && board!.color != null;
+    final scheme = Theme.of(context).colorScheme;
+    final dotColor = board?.color != null
+        ? Color(board!.color!)
+        : scheme.onSurfaceVariant.withValues(alpha: 0.5);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (showIcon) ...[
-          _BoardTileIcon(color: board!.color!),
-          const SizedBox(width: AppSpacing.sm),
-        ],
-        Flexible(
-          child: Text(
-            board?.name ?? 'Scène',
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm + 2, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainer,
+        borderRadius: AppRadius.radiusMd,
+        border: Border.fromBorderSide(AppElevation.border(scheme)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor),
           ),
-        ),
-      ],
+          const SizedBox(width: AppSpacing.sm),
+          Flexible(
+            child: Text(
+              board?.name ?? 'Scène',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+          ),
+          ?trailing,
+        ],
+      ),
     );
   }
 }
@@ -2801,7 +2902,7 @@ class _PadDownloadSheetState extends State<_PadDownloadSheet> {
         children: [
           Text(
             isMulti ? 'Variantes du pad' : 'Son non téléchargé',
-            style: Theme.of(context).textTheme.titleMedium,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           Text(
