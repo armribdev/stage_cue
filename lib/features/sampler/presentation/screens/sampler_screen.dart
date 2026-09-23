@@ -134,6 +134,9 @@ class _SamplerScreenState extends State<SamplerScreen> {
     widget.services.syncController.onLibraryMerged = _onLibraryMerged;
     widget.services.autoSyncCoordinator.onInitialPullSettled = _onLibraryMerged;
     _notifier.loadBoards();
+    if (isNativeDesktopPlatform()) {
+      HardwareKeyboard.instance.addHandler(_handlePadHotkeyEvent);
+    }
   }
 
   void _initializeNotifier() {
@@ -592,6 +595,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       context,
       padItem: padItem,
       notifier: _notifier,
+      appPreferences: widget.services.appPreferences,
       openPickerOnStart: true,
     );
 
@@ -1558,6 +1562,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
                 context,
                 padItem: live,
                 notifier: _notifier,
+                appPreferences: widget.services.appPreferences,
               );
             }
           : null,
@@ -1844,10 +1849,41 @@ class _SamplerScreenState extends State<SamplerScreen> {
   void dispose() {
     widget.services.syncController.onLibraryMerged = null;
     widget.services.autoSyncCoordinator.onInitialPullSettled = null;
+    if (isNativeDesktopPlatform()) {
+      HardwareKeyboard.instance.removeHandler(_handlePadHotkeyEvent);
+    }
     _normalGridScrollController.dispose();
     _notifier.removeListener(_onStateChanged);
     _notifier.dispose();
     super.dispose();
+  }
+
+  /// Déclenche un pad depuis une touche assignée (voir
+  /// `PadDetailsScreen`/`AppPreferences.setPadHotkey`) — un `HardwareKeyboard`
+  /// global plutôt que le `Shortcuts`/`Actions` plus bas : ce dernier gère des
+  /// combinaisons avec modificateur, alors qu'ici il faut explicitement
+  /// vérifier l'absence de modificateur ET l'absence de focus texte (une
+  /// touche seule assignée ne doit jamais voler une frappe de saisie).
+  bool _handlePadHotkeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isControlPressed ||
+        keyboard.isShiftPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isMetaPressed) {
+      return false;
+    }
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused?.context?.widget is EditableText) return false;
+
+    final keyId = event.logicalKey.keyId;
+    for (final item in _notifier.state.pads) {
+      if (widget.services.appPreferences.hotkeyForPad(item.pad.id) == keyId) {
+        unawaited(_handlePadTap(context, item));
+        return true;
+      }
+    }
+    return false;
   }
 
   // ---------- build ----------

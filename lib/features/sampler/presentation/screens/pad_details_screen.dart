@@ -1,7 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/utils/layout_utils.dart';
 import '../widgets/app_modal.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
@@ -17,6 +20,7 @@ import '../widgets/sound_picker_overlay.dart';
 class PadDetailsScreen extends StatefulWidget {
   final PadItem padItem;
   final SamplerNotifier notifier;
+  final AppPreferences appPreferences;
   final bool isModal;
   final bool openPickerOnStart;
 
@@ -24,6 +28,7 @@ class PadDetailsScreen extends StatefulWidget {
     super.key,
     required this.padItem,
     required this.notifier,
+    required this.appPreferences,
     this.isModal = false,
     this.openPickerOnStart = false,
   });
@@ -33,6 +38,7 @@ class PadDetailsScreen extends StatefulWidget {
     BuildContext context, {
     required PadItem padItem,
     required SamplerNotifier notifier,
+    required AppPreferences appPreferences,
     bool openPickerOnStart = false,
   }) {
     return openAdaptiveScreen(
@@ -40,6 +46,7 @@ class PadDetailsScreen extends StatefulWidget {
       builder: ({required isModal}) => PadDetailsScreen(
         padItem: padItem,
         notifier: notifier,
+        appPreferences: appPreferences,
         isModal: isModal,
         openPickerOnStart: openPickerOnStart,
       ),
@@ -69,6 +76,8 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   List<TagCategoryWithTags> _tagCatalog = [];
   bool _isTagsLoading = true;
   bool _volumeControlsVisible = true;
+  bool _isCapturingHotkey = false;
+  late final FocusNode _hotkeyCaptureFocusNode;
 
   @override
   void initState() {
@@ -77,6 +86,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     _selectedColorValue = pad.colorValue;
     _playMode = pad.playMode;
     _displayNameController = TextEditingController(text: pad.name ?? '');
+    _hotkeyCaptureFocusNode = FocusNode(debugLabel: 'pad-hotkey-capture');
     _loadTagCatalog();
     if (widget.openPickerOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -89,6 +99,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   void dispose() {
     _displayNameDebounce?.cancel();
     _displayNameController.dispose();
+    _hotkeyCaptureFocusNode.dispose();
     super.dispose();
   }
 
@@ -153,6 +164,135 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     );
     if (!mounted) return;
     setState(() {});
+  }
+
+  static final _hotkeyModifiers = <LogicalKeyboardKey>{
+    LogicalKeyboardKey.control,
+    LogicalKeyboardKey.controlLeft,
+    LogicalKeyboardKey.controlRight,
+    LogicalKeyboardKey.shift,
+    LogicalKeyboardKey.shiftLeft,
+    LogicalKeyboardKey.shiftRight,
+    LogicalKeyboardKey.alt,
+    LogicalKeyboardKey.altLeft,
+    LogicalKeyboardKey.altRight,
+    LogicalKeyboardKey.meta,
+    LogicalKeyboardKey.metaLeft,
+    LogicalKeyboardKey.metaRight,
+  };
+
+  void _startHotkeyCapture() {
+    setState(() => _isCapturingHotkey = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _hotkeyCaptureFocusNode.requestFocus();
+    });
+  }
+
+  void _cancelHotkeyCapture() {
+    if (!mounted) return;
+    setState(() => _isCapturingHotkey = false);
+  }
+
+  Future<void> _clearHotkey() async {
+    await widget.appPreferences.setPadHotkey(widget.padItem.pad.id, null);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// Pad du même board qui détient déjà [keyId], le cas échéant (exclut le
+  /// pad courant). La portée par board seule est correcte : un raccourci n'est
+  /// jamais actif que pour le board affiché.
+  PadItem? _padHoldingHotkey(int keyId) {
+    for (final item in widget.notifier.state.pads) {
+      if (item.pad.id == widget.padItem.pad.id) continue;
+      if (widget.appPreferences.hotkeyForPad(item.pad.id) == keyId) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  KeyEventResult _handleHotkeyCaptureKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.handled;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _cancelHotkeyCapture();
+      return KeyEventResult.handled;
+    }
+    if (_hotkeyModifiers.contains(event.logicalKey)) {
+      return KeyEventResult.handled; // reste en capture
+    }
+
+    final keyId = event.logicalKey.keyId;
+    final holder = _padHoldingHotkey(keyId);
+    if (holder != null) {
+      _cancelHotkeyCapture();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Déjà utilisée par « ${holder.displayName} ».',
+          ),
+        ),
+      );
+      return KeyEventResult.handled;
+    }
+
+    unawaited(
+      widget.appPreferences.setPadHotkey(widget.padItem.pad.id, keyId),
+    );
+    setState(() => _isCapturingHotkey = false);
+    return KeyEventResult.handled;
+  }
+
+  Widget _buildHotkeySection(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (_isCapturingHotkey) {
+      return KeyboardListener(
+        focusNode: _hotkeyCaptureFocusNode,
+        autofocus: true,
+        onKeyEvent: (event) =>
+            _handleHotkeyCaptureKey(_hotkeyCaptureFocusNode, event),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Appuyez sur une touche… (Échap pour annuler)',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            TextButton(
+              onPressed: _cancelHotkeyCapture,
+              child: const Text('Annuler'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final keyId = widget.appPreferences.hotkeyForPad(widget.padItem.pad.id);
+    final label =
+        keyId != null ? LogicalKeyboardKey(keyId).keyLabel : null;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label ?? 'Aucune',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        TextButton(
+          onPressed: _startHotkeyCapture,
+          child: Text(label == null ? 'Assigner' : 'Changer'),
+        ),
+        if (label != null)
+          IconButton(
+            icon: Icon(Icons.close, size: 18, color: scheme.onSurfaceVariant),
+            tooltip: 'Retirer le raccourci',
+            onPressed: _clearHotkey,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+      ],
+    );
   }
 
   Widget _buildBody(BuildContext context) {
@@ -225,6 +365,21 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                 value: _playMode,
                 onChanged: _updatePlayMode,
               ),
+            ],
+
+            if (isNativeDesktopPlatform()) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 18),
+                child: Divider(height: 1),
+              ),
+
+              // ── Raccourci clavier ──────────────────────────────────────
+              Text(
+                'RACCOURCI CLAVIER',
+                style: AppTextStyles.sectionLabel(context),
+              ),
+              const SizedBox(height: 16),
+              _buildHotkeySection(context),
             ],
 
             const Padding(

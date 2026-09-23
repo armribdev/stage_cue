@@ -57,6 +57,7 @@ class AppPreferences extends ChangeNotifier {
   static const _keyCueOutputDeviceId = 'cue_output_device_id';
   static const _keyWindowsFullScreen = 'windows_full_screen';
   static const _keyLastUpdateCheckAt = 'last_update_check_at';
+  static const _keyPadHotkeys = 'pad_hotkeys';
 
   bool _autoDownloadPadSounds = true;
   bool _autoDownloadDriveByDefault = true;
@@ -64,6 +65,13 @@ class AppPreferences extends ChangeNotifier {
   String? _cueOutputDeviceId;
   bool _isWindowsFullScreen = false;
   DateTime? _lastUpdateCheckAt;
+  // padId (local, cet appareil) → LogicalKeyboardKey.keyId. Volontairement
+  // local-only (jamais dans le snapshot Drive, cf. décision projet) : un id
+  // de pad n'est stable que tant qu'aucune synchro ne réimporte son board
+  // (LWW distant plus récent) ou qu'un Annuler ne le recrée — l'entrée
+  // devient alors orpheline silencieusement (jamais retrouvée, jamais
+  // fautive), à réassigner. Pas de nettoyage automatique en v1.
+  Map<int, int> _padHotkeys = {};
   bool _loaded = false;
 
   /// Télécharge automatiquement les sons ajoutés à un pad (si Drive connecté).
@@ -88,6 +96,13 @@ class AppPreferences extends ChangeNotifier {
   /// sert à le limiter à une fois toutes les 6h. Le bouton manuel de Réglages
   /// ignore ce throttle.
   DateTime? get lastUpdateCheckAt => _lastUpdateCheckAt;
+
+  /// Touches clavier assignées, par id de pad LOCAL (cet appareil), jamais
+  /// synchronisé — voir le commentaire sur [_padHotkeys].
+  Map<int, int> get padHotkeys => Map.unmodifiable(_padHotkeys);
+
+  /// `LogicalKeyboardKey.keyId` assigné à [padId], ou `null` si aucune touche.
+  int? hotkeyForPad(int padId) => _padHotkeys[padId];
 
   /// Synchro Drive automatique (push débouncé, pull au lancement).
   bool get allowsNetworkSync =>
@@ -125,6 +140,14 @@ class AppPreferences extends ChangeNotifier {
         _lastUpdateCheckAt = lastUpdateCheckRaw == null
             ? null
             : DateTime.tryParse(lastUpdateCheckRaw);
+        final hotkeysRaw = data[_keyPadHotkeys] as Map<String, dynamic>?;
+        if (hotkeysRaw != null) {
+          _padHotkeys = {
+            for (final entry in hotkeysRaw.entries)
+              if (int.tryParse(entry.key) case final padId?)
+                if (entry.value is int) padId: entry.value as int,
+          };
+        }
       } catch (_) {
         // Fichier corrompu : valeurs par défaut.
       }
@@ -168,6 +191,18 @@ class AppPreferences extends ChangeNotifier {
     await _save();
   }
 
+  /// Assigne (ou efface si [keyId] est `null`) la touche déclenchant [padId].
+  Future<void> setPadHotkey(int padId, int? keyId) async {
+    if (keyId == null) {
+      if (_padHotkeys.remove(padId) == null) return;
+    } else {
+      if (_padHotkeys[padId] == keyId) return;
+      _padHotkeys = {..._padHotkeys, padId: keyId};
+    }
+    notifyListeners();
+    await _save();
+  }
+
   /// Marque l'instant du dernier check automatique — pas de notification, un
   /// throttle n'a pas besoin de reconstruire l'UI.
   Future<void> markUpdateCheckedNow() async {
@@ -180,6 +215,17 @@ class AppPreferences extends ChangeNotifier {
   void debugSetConnectivityMode(ConnectivityMode value) {
     if (_connectivityMode == value) return;
     _connectivityMode = value;
+    notifyListeners();
+  }
+
+  /// Assigne une touche sans persistance (tests unitaires).
+  @visibleForTesting
+  void debugSetPadHotkey(int padId, int? keyId) {
+    if (keyId == null) {
+      _padHotkeys.remove(padId);
+    } else {
+      _padHotkeys = {..._padHotkeys, padId: keyId};
+    }
     notifyListeners();
   }
 
@@ -202,6 +248,10 @@ class AppPreferences extends ChangeNotifier {
         _keyCueOutputDeviceId: _cueOutputDeviceId,
         _keyWindowsFullScreen: _isWindowsFullScreen,
         _keyLastUpdateCheckAt: _lastUpdateCheckAt?.toIso8601String(),
+        _keyPadHotkeys: {
+          for (final entry in _padHotkeys.entries)
+            entry.key.toString(): entry.value,
+        },
       }),
     );
   }
