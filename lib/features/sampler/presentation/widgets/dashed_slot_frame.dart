@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 /// Contour pointillé pour les emplacements vides (ajout de pad, brouillon).
 class DashedRoundedRectPainter extends CustomPainter {
@@ -58,13 +59,13 @@ class DashedSlotFrame extends StatelessWidget {
     super.key,
     required this.child,
     this.onTap,
-    this.borderRadius = 14,
+    this.borderRadius = AppRadius.pad,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final dashColor = scheme.outlineVariant.withValues(alpha: 0.45);
+    final dashColor = AppElevation.borderStrong(scheme).color;
 
     Widget content = Card(
       elevation: 0,

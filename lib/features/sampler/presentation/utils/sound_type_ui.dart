@@ -42,16 +42,20 @@ extension SoundClassificationUi on Sound {
   String get typeDisplayLabel => type?.label ?? 'Non classé';
 }
 
-/// Avatar circulaire avec l'icône du type de son.
+/// Avatar circulaire avec l'icône du type de son — la "jaquette" du son.
 /// [type] null = son non encore classé (icône neutre).
+/// [colorValue] non-null = la couleur assignée au son prime sur la couleur
+/// par défaut du type (contraste de l'icône recalculé en conséquence).
 class SoundTypeAvatar extends StatelessWidget {
   final SoundType? type;
+  final int? colorValue;
   final double radius;
   final double? iconSize;
 
   const SoundTypeAvatar({
     super.key,
     required this.type,
+    this.colorValue,
     this.radius = 20,
     this.iconSize,
   });
@@ -59,6 +63,19 @@ class SoundTypeAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final icon = type?.icon ?? Icons.help_outline_rounded;
+
+    if (colorValue != null) {
+      final background = Color(colorValue!);
+      final foreground =
+          background.computeLuminance() > 0.6 ? Colors.black : Colors.white;
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: background,
+        child: Icon(icon, size: iconSize, color: foreground),
+      );
+    }
+
     if (type == null) {
       return CircleAvatar(
         radius: radius,

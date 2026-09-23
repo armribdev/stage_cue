@@ -32,7 +32,12 @@ final class QuickSearchMode extends SoundPickerMode {
 
 /// Sélecteur de musique : joue ou met en file d'attente.
 final class MusicPickerMode extends SoundPickerMode {
-  const MusicPickerMode();
+  /// `true` (bouton lecture de la régie) : la musique choisie part tout de
+  /// suite et le sélecteur se ferme. `false` (« Ajouter à la file ») : mise
+  /// en file, le sélecteur reste ouvert pour en ajouter d'autres.
+  final bool playNow;
+
+  const MusicPickerMode({this.playNow = false});
 }
 
 /// Sélecteur de sons pour un pad existant ou un nouveau pad brouillon.
@@ -126,14 +131,17 @@ class SoundPickerOverlay extends StatefulWidget {
         : _showDialog<QuickSearchPrepareResult?>(context, w);
   }
 
-  /// Sélecteur de musique — joue maintenant ou met en file.
+  /// Sélecteur de musique — joue maintenant ([playNow]) ou met en file.
   static Future<void> showForMusic(
     BuildContext context, {
     required SamplerNotifier notifier,
+    bool playNow = false,
   }) {
     final mobile = _isMobile(context);
     final w = SoundPickerOverlay._(
-        notifier: notifier, mode: const MusicPickerMode(), isFullPage: mobile);
+        notifier: notifier,
+        mode: MusicPickerMode(playNow: playNow),
+        isFullPage: mobile);
     return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
   }
 
@@ -369,6 +377,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   String get _hintsText => switch (widget.mode) {
     QuickSearchMode() =>
       '↑↓ sélectionner    ↵ jouer    ⌘/Ctrl+↵ préparer    tap audition',
+    MusicPickerMode(playNow: true) => '↑↓ sélectionner    ↵/tap jouer',
     MusicPickerMode() =>
       '↑↓ sélectionner    ↵/tap ajouter à la file',
     PadPickerMode() =>
@@ -729,6 +738,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       case QuickSearchMode():
         await widget.notifier.previewSound(sound.id);
         if (mounted) Navigator.of(context).pop();
+      case MusicPickerMode(playNow: true):
+        await _playMusicNow(sound);
       case MusicPickerMode():
         await _enqueueMusic(sound);
       case PadPickerMode():
@@ -804,6 +815,16 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     // Échec : surfacer le message ici (route active) plutôt que de le laisser à
     // [SamplerScreen], qui le dessinerait derrière l'overlay sans le fermer.
     _showPreviewFailureSnackBar();
+  }
+
+  Future<void> _playMusicNow(Sound sound) async {
+    final padItem = await widget.notifier.playMusicBySoundId(sound.id);
+    if (!mounted) return;
+    if (padItem == null) {
+      _showPreviewFailureSnackBar();
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   bool _isMusicOnAir(Sound sound) {
@@ -991,8 +1012,11 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                       onTap: () {},
                       child: Material(
                         color: scheme.surface,
-                        elevation: 8,
-                        borderRadius: BorderRadius.circular(16),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: AppRadius.radiusLg,
+                          side: AppElevation.border(scheme),
+                        ),
                         clipBehavior: Clip.antiAlias,
                         child: TextFieldTapRegion(
                           child: Column(
@@ -1372,6 +1396,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           switch (widget.mode) {
             case QuickSearchMode():
               unawaited(_previewSound(sound));
+            case MusicPickerMode(playNow: true):
+              unawaited(_playMusicNow(sound));
             case MusicPickerMode():
               unawaited(_enqueueMusic(sound));
             case PadPickerMode():
@@ -1389,7 +1415,12 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(_typeIcon(sound.type), color: scheme.onSurfaceVariant),
+              SoundTypeAvatar(
+                type: sound.type,
+                colorValue: sound.colorValue,
+                radius: 14,
+                iconSize: 16,
+              ),
               const SizedBox(width: 16),
               Expanded(
                 child: MouseRegion(
@@ -1751,9 +1782,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       ),
     );
   }
-
-  IconData _typeIcon(SoundType? type) =>
-      type?.icon ?? Icons.help_outline_rounded;
 
   String _typeLabel(SoundType? type) => type?.label ?? 'Non classé';
 }

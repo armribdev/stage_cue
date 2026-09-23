@@ -163,12 +163,15 @@ void main() {
     );
   }
 
+  /// Pad portant [padName]. Pas de `find.text` : le titre d'un pad est coupé
+  /// en deux `Text` (1re ligne à côté des icônes, suite pleine largeur).
+  Finder padNamed(String padName) => find.byWidgetPredicate(
+        (widget) => widget is PadCard && widget.padItem.displayName == padName,
+      );
+
   /// Croix de suppression du pad portant [padName].
   Finder removeCrossOf(String padName) => find.descendant(
-        of: find.ancestor(
-          of: find.text(padName),
-          matching: find.byType(PadCard),
-        ),
+        of: padNamed(padName),
         matching: find.byIcon(Icons.close),
       );
 
@@ -178,8 +181,8 @@ void main() {
   /// partir de la position globale du pointeur — d'où le `moveTo` sur le centre
   /// de la cible plutôt qu'un simple `drag` par delta.
   Future<void> dragPadOnto(WidgetTester tester, String from, String to) async {
-    final start = tester.getCenter(find.text(from));
-    final end = tester.getCenter(find.text(to));
+    final start = tester.getCenter(padNamed(from));
+    final end = tester.getCenter(padNamed(to));
 
     final gesture = await tester.startGesture(start);
     // `ThresholdDraggable` n'accroche le geste qu'au-delà de [kPadDragSlop] ;
@@ -255,8 +258,8 @@ void main() {
 
         await pumpSampler(tester);
 
-        expect(find.text('Porte qui claque'), findsOneWidget);
-        expect(find.text('Tonnerre'), findsOneWidget);
+        expect(padNamed('Porte qui claque'), findsOneWidget);
+        expect(padNamed('Tonnerre'), findsOneWidget);
       },
     );
   });
@@ -269,12 +272,12 @@ void main() {
         final boardId = await firstBoardId();
         await addPad(boardId, name: 'Porte qui claque', soundTitle: 'porte');
         await pumpSampler(tester);
-        expect(find.text('Porte qui claque'), findsOneWidget);
+        expect(padNamed('Porte qui claque'), findsOneWidget);
 
         await tester.tap(removeCrossOf('Porte qui claque'));
         await flushIo(tester);
 
-        expect(find.text('Porte qui claque'), findsNothing);
+        expect(padNamed('Porte qui claque'), findsNothing);
         expect(await database.select(database.pads).get(), isEmpty);
       },
     );
@@ -300,11 +303,11 @@ void main() {
         // et pas simplement « à la fin ».
         await tester.tap(removeCrossOf('Deux'));
         await flushIo(tester);
-        expect(find.text('Deux'), findsNothing);
+        expect(padNamed('Deux'), findsNothing);
 
         await pressCtrlZ(tester);
 
-        expect(find.text('Deux'), findsOneWidget);
+        expect(padNamed('Deux'), findsOneWidget);
 
         // Les réglages du pad restauré sont relus en base, pas dans l'UI.
         final pads = await database.select(database.pads).get();
@@ -331,7 +334,7 @@ void main() {
 
         // Le snapshot est consommé par la première annulation : la seconde ne
         // doit rien recréer, sous peine de doublons à chaque frappe répétée.
-        expect(find.text('Porte qui claque'), findsOneWidget);
+        expect(padNamed('Porte qui claque'), findsOneWidget);
         final pads = await database.select(database.pads).get();
         expect(pads.where((pad) => pad.name == 'Porte qui claque'), hasLength(1));
       },
@@ -410,13 +413,13 @@ void main() {
       await addPad(boardB, name: 'Pad de B', soundTitle: 'b');
 
       await pumpSampler(tester);
-      expect(find.text('Pad de A'), findsOneWidget);
-      expect(find.text('Pad de B'), findsNothing);
+      expect(padNamed('Pad de A'), findsOneWidget);
+      expect(padNamed('Pad de B'), findsNothing);
 
       await selectBoard(tester, 'Scène 2');
 
-      expect(find.text('Pad de B'), findsOneWidget);
-      expect(find.text('Pad de A'), findsNothing);
+      expect(padNamed('Pad de B'), findsOneWidget);
+      expect(padNamed('Pad de A'), findsNothing);
     });
   });
 }

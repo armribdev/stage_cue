@@ -139,4 +139,61 @@ void main() {
 
     expect(find.text('Titre fallback'), findsOneWidget);
   });
+
+  testWidgets(
+    'seule la 1re ligne du titre cède la place aux icônes d édition',
+    (tester) async {
+      final padItem = buildPadItem(
+        padName: 'Aa Bb Cc Dd Ee Ff Gg',
+        soundTitle: 'Titre',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 180,
+                height: 130,
+                child: PadButton(
+                  padItem: padItem,
+                  onTap: () {},
+                  isEditable: true,
+                  onEdit: () {},
+                  onRemove: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Police de test Ahem : 15px par glyphe. Contenu 156px, moins 50px
+      // d'icônes et d'espacement → 106px pour la 1re ligne.
+      final firstLine = find.text('Aa Bb');
+      final rest = find.text('Cc Dd Ee Ff Gg');
+      expect(firstLine, findsOneWidget);
+      expect(rest, findsOneWidget);
+
+      expect(
+        tester.getSize(rest).width,
+        greaterThan(tester.getSize(firstLine).width),
+      );
+      expect(
+        tester.getTopLeft(rest).dx,
+        tester.getTopLeft(firstLine).dx,
+      );
+      // Interligne constant : les icônes, plus hautes qu'une ligne, ne
+      // doivent pas repousser la 2e ligne.
+      expect(
+        tester.getTopLeft(rest).dy,
+        tester.getBottomLeft(firstLine).dy,
+      );
+      expect(
+        tester.getTopRight(firstLine).dx,
+        lessThanOrEqualTo(tester.getTopLeft(find.byIcon(Icons.edit_outlined)).dx),
+      );
+    },
+  );
 }

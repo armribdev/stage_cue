@@ -90,9 +90,7 @@ class _AppBottomSheetTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.titleLarge?.copyWith(
-      fontWeight: FontWeight.w700,
-    );
+    const style = TextStyle(fontSize: 17, fontWeight: FontWeight.w700);
 
     if (leadingIcon == null) {
       return Padding(

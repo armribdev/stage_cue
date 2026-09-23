@@ -354,7 +354,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
           'Aucun sous-dossier.\n'
           'Utilisez « Sélectionner ce dossier » pour indexer « ${_current.name} ».',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey[600]),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       );
     }
@@ -379,7 +379,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
       return Center(
         child: Text(
           'Aucun emplacement Drive accessible.',
-          style: TextStyle(color: Colors.grey[600]),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       );
     }
@@ -423,7 +423,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: Colors.grey[600],
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );
