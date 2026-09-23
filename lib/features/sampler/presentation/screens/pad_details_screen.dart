@@ -6,6 +6,7 @@ import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../widgets/app_modal.dart';
+import '../widgets/dashed_slot_frame.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -77,6 +78,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   bool _isTagsLoading = true;
   bool _volumeControlsVisible = true;
   bool _isCapturingHotkey = false;
+  bool _isHotkeyHovered = false;
   late final FocusNode _hotkeyCaptureFocusNode;
 
   @override
@@ -243,54 +245,184 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     return KeyEventResult.handled;
   }
 
-  Widget _buildHotkeySection(BuildContext context) {
+  /// Étiquette courte affichée sur la touche (symbole pour les non-imprimables
+  /// les plus courants, sinon `keyLabel` — `FittedBox` en aval absorbe le
+  /// reste, ex. "Page Up").
+  static String _keycapLabel(LogicalKeyboardKey key) {
+    final symbols = <LogicalKeyboardKey, String>{
+      LogicalKeyboardKey.space: '␣',
+      LogicalKeyboardKey.tab: '⇥',
+      LogicalKeyboardKey.enter: '⏎',
+      LogicalKeyboardKey.numpadEnter: '⏎',
+      LogicalKeyboardKey.backspace: '⌫',
+      LogicalKeyboardKey.delete: 'Del',
+      LogicalKeyboardKey.arrowUp: '↑',
+      LogicalKeyboardKey.arrowDown: '↓',
+      LogicalKeyboardKey.arrowLeft: '←',
+      LogicalKeyboardKey.arrowRight: '→',
+    };
+    final symbol = symbols[key];
+    if (symbol != null) return symbol;
+    final raw = key.keyLabel;
+    return raw.length <= 3 ? raw.toUpperCase() : raw;
+  }
+
+  Widget _buildHotkeyKeycap(BuildContext context, {String? label}) {
     final scheme = Theme.of(context).colorScheme;
+    const size = 36.0;
+
+    final border = _isCapturingHotkey
+        ? AppElevation.emphasizedBorder(scheme)
+        : (_isHotkeyHovered
+            ? AppElevation.borderStrong(scheme)
+            : AppElevation.border(scheme));
+
+    final content = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: _isCapturingHotkey
+            ? scheme.primary.withValues(alpha: 0.12)
+            : (label != null
+                ? scheme.surfaceContainer
+                : (_isHotkeyHovered
+                    ? scheme.surfaceContainer.withValues(alpha: 0.5)
+                    : Colors.transparent)),
+        borderRadius: AppRadius.radiusSm,
+        border: Border.fromBorderSide(border),
+      ),
+      child: _isCapturingHotkey
+          ? Icon(
+              Icons.keyboard_alt_outlined,
+              size: 18,
+              color: scheme.primary,
+            )
+          : (label != null
+              ? Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      style: AppFonts.monoStyle(
+                        Theme.of(context).textTheme.bodyMedium!,
+                      ).copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                )
+              : null),
+    );
+
+    // Sans touche assignée : cadre pointillé (même langage visuel que les
+    // emplacements vides ailleurs dans l'app, cf. DashedSlotFrame) — accentué
+    // au survol pour signaler que la case est cliquable.
+    final framed = (label == null && !_isCapturingHotkey)
+        ? CustomPaint(
+            foregroundPainter: DashedRoundedRectPainter(
+              color: _isHotkeyHovered
+                  ? scheme.primary.withValues(alpha: 0.6)
+                  : AppElevation.borderStrong(scheme).color,
+              radius: AppRadius.sm,
+            ),
+            child: content,
+          )
+        : content;
+
+    if (_isCapturingHotkey) return framed;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHotkeyHovered = true),
+      onExit: (_) => setState(() => _isHotkeyHovered = false),
+      child: InkWell(
+        onTap: _startHotkeyCapture,
+        borderRadius: AppRadius.radiusSm,
+        child: framed,
+      ),
+    );
+  }
+
+  Widget _buildHotkeyClearBadge(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: 'Retirer le raccourci',
+      child: InkWell(
+        onTap: _clearHotkey,
+        customBorder: const CircleBorder(),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: scheme.surface,
+            border: Border.fromBorderSide(AppElevation.border(scheme)),
+          ),
+          child: Icon(Icons.close, size: 10, color: scheme.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+
+  static const _hotkeyKeycapSize = 36.0;
+  static const _hotkeyBadgeSize = 18.0;
+
+  Widget _buildHotkeySection(BuildContext context) {
+    final keyId = widget.appPreferences.hotkeyForPad(widget.padItem.pad.id);
+    final label =
+        keyId != null ? _keycapLabel(LogicalKeyboardKey(keyId)) : null;
+    final showClearBadge = label != null && !_isCapturingHotkey;
+
+    Widget keycap = _buildHotkeyKeycap(context, label: label);
     if (_isCapturingHotkey) {
-      return KeyboardListener(
+      keycap = KeyboardListener(
         focusNode: _hotkeyCaptureFocusNode,
         autofocus: true,
         onKeyEvent: (event) =>
             _handleHotkeyCaptureKey(_hotkeyCaptureFocusNode, event),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Appuyez sur une touche… (Échap pour annuler)',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-            TextButton(
-              onPressed: _cancelHotkeyCapture,
-              child: const Text('Annuler'),
-            ),
-          ],
-        ),
+        child: keycap,
       );
     }
 
-    final keyId = widget.appPreferences.hotkeyForPad(widget.padItem.pad.id);
-    final label =
-        keyId != null ? LogicalKeyboardKey(keyId).keyLabel : null;
+    // Zone réservée pour le carré + la pastille de suppression, SANS
+    // dépassement négatif (pas de `Positioned` hors des bornes de la boîte) :
+    // un `Positioned` à coordonnée négative peut se faire rogner la zone
+    // tactile par un ancêtre qui clippe (ex. le défilement de l'écran), ce
+    // qui ne coupe alors qu'une fraction du disque au clic — la pastille
+    // reste ici entièrement DANS la boîte, juste chevauchant le coin du carré.
     return Row(
       children: [
+        SizedBox(
+          width: _hotkeyKeycapSize + _hotkeyBadgeSize / 2,
+          height: _hotkeyKeycapSize + _hotkeyBadgeSize / 2,
+          child: Stack(
+            children: [
+              Positioned(
+                left: 0,
+                top: _hotkeyBadgeSize / 2,
+                width: _hotkeyKeycapSize,
+                height: _hotkeyKeycapSize,
+                child: keycap,
+              ),
+              if (showClearBadge)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  width: _hotkeyBadgeSize,
+                  height: _hotkeyBadgeSize,
+                  child: _buildHotkeyClearBadge(context),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
         Expanded(
           child: Text(
-            label ?? 'Aucune',
+            _isCapturingHotkey
+                ? 'Appuyez sur une touche… (Échap pour annuler)'
+                : (label != null
+                    ? 'Déclenche ce pad au clavier.'
+                    : 'Aucune touche assignée — touchez la case.'),
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ),
-        TextButton(
-          onPressed: _startHotkeyCapture,
-          child: Text(label == null ? 'Assigner' : 'Changer'),
-        ),
-        if (label != null)
-          IconButton(
-            icon: Icon(Icons.close, size: 18, color: scheme.onSurfaceVariant),
-            tooltip: 'Retirer le raccourci',
-            onPressed: _clearHotkey,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
       ],
     );
   }
