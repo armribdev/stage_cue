@@ -20,7 +20,7 @@ Ne jamais sauter d'étape. La DB des utilisateurs existants sera corrompue sinon
 
 - Requêtes custom → `LocalSoundDataSource`, pas directement dans le repository
 - Opérations multi-étapes → `database.transaction()`
-- Les settings par board sont dans `board_sound_settings` (override), pas dans `board_sounds` (join)
+- Les overrides d'un pad vivent dans `pads` (nom, couleur, mode de lecture) et le volume par son dans `pad_sounds.volume` (`null` = suivre `sounds.volume`) — `board_sound_settings`/`board_sounds` n'existent plus depuis v10, ne pas les réintroduire
 - La table `tag_aliases` permet la recherche normalisée (accents supprimés)
 - Ouvrir la base via `NativeDatabase(file)` (isolate principal), **jamais** `createInBackground` : ce dernier bloque la 1re requête au cold start Windows et laisse les boards jamais chargés jusqu'à un hot restart ([0013](../../docs/decisions/0013-ouverture-db-isolate-principal.md))
 - Ne pas retirer les `PRAGMA journal_mode = WAL` / `synchronous = NORMAL` du `beforeOpen` : sans eux la base retombe silencieusement aux défauts SQLite (rollback journal + double fsync par transaction), ce que `test/core/database/journal_mode_test.dart` détecte — il doit tourner sur une base **fichier**, une base mémoire ignore WAL sans erreur ([0018](../../docs/decisions/0018-journalisation-wal-et-synchronous-normal.md))
