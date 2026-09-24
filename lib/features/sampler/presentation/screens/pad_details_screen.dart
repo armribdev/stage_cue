@@ -224,20 +224,11 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
       return KeyEventResult.handled; // reste en capture
     }
 
+    // Pas de blocage : une collision reste possible (utile pour « déplacer »
+    // une touche d'un pad à l'autre sans devoir d'abord la libérer) — elle
+    // est signalée en permanence dans `_buildHotkeySection` (touche en rouge
+    // + « déjà utilisée par… ») plutôt que par une notification ponctuelle.
     final keyId = event.logicalKey.keyId;
-    final holder = _padHoldingHotkey(keyId);
-    if (holder != null) {
-      _cancelHotkeyCapture();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Déjà utilisée par « ${holder.displayName} ».',
-          ),
-        ),
-      );
-      return KeyEventResult.handled;
-    }
-
     unawaited(
       widget.appPreferences.setPadHotkey(widget.padItem.pad.id, keyId),
     );
@@ -267,7 +258,11 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     return raw.length <= 3 ? raw.toUpperCase() : raw;
   }
 
-  Widget _buildHotkeyKeycap(BuildContext context, {String? label}) {
+  Widget _buildHotkeyKeycap(
+    BuildContext context, {
+    String? label,
+    bool isConflicting = false,
+  }) {
     final scheme = Theme.of(context).colorScheme;
     const size = 36.0;
 
@@ -307,7 +302,10 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                       label,
                       style: AppFonts.monoStyle(
                         Theme.of(context).textTheme.bodyMedium!,
-                      ).copyWith(fontWeight: FontWeight.w600),
+                      ).copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: isConflicting ? scheme.error : null,
+                      ),
                     ),
                   ),
                 )
@@ -365,12 +363,23 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   static const _hotkeyBadgeSize = 18.0;
 
   Widget _buildHotkeySection(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final keyId = widget.appPreferences.hotkeyForPad(widget.padItem.pad.id);
     final label =
         keyId != null ? _keycapLabel(LogicalKeyboardKey(keyId)) : null;
     final showClearBadge = label != null && !_isCapturingHotkey;
+    // Une collision reste permise à l'assignation (voir
+    // `_handleHotkeyCaptureKey`) — signalée ici en continu plutôt qu'une
+    // seule fois au moment du tap.
+    final conflictingPad = (keyId != null && !_isCapturingHotkey)
+        ? _padHoldingHotkey(keyId)
+        : null;
 
-    Widget keycap = _buildHotkeyKeycap(context, label: label);
+    Widget keycap = _buildHotkeyKeycap(
+      context,
+      label: label,
+      isConflicting: conflictingPad != null,
+    );
     if (_isCapturingHotkey) {
       keycap = KeyboardListener(
         focusNode: _hotkeyCaptureFocusNode,
@@ -417,10 +426,14 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
           child: Text(
             _isCapturingHotkey
                 ? 'Appuyez sur une touche… (Échap pour annuler)'
-                : (label != null
-                    ? 'Déclenche ce pad au clavier.'
-                    : 'Aucune touche assignée — touchez la case.'),
-            style: Theme.of(context).textTheme.bodyMedium,
+                : (conflictingPad != null
+                    ? 'Déjà utilisée par « ${conflictingPad.displayName} ».'
+                    : (label != null
+                        ? 'Déclenche ce pad au clavier.'
+                        : 'Aucune touche assignée — touchez la case.')),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: conflictingPad != null ? scheme.error : null,
+            ),
           ),
         ),
       ],
