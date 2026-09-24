@@ -63,7 +63,7 @@ L'état qui décide du prochain lancement est en base, donc inspectable à froid
 - Noms de fichiers : `snake_case.dart` — classes : `PascalCase`
 - Commentaires en français, identifiants de code en anglais
 - `const` partout où possible dans les widgets
-- Les overrides de pad (nom, couleur, volume) vivent dans la table `pads` — `board_sound_settings` et `board_sounds` n'existent plus depuis v10
+- Les overrides de pad (nom, couleur) vivent dans la table `pads`, le volume par son dans `pad_sounds.volume` — `board_sound_settings` et `board_sounds` n'existent plus depuis v10
 - Les use cases sont intentionnellement minces — la logique reste dans le repository ou le domain
 
 ## Ce qu'il ne faut pas faire
