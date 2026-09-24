@@ -710,7 +710,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   }
 
   KeyEventResult _onSearchKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    // Les flèches acceptent la répétition (touche maintenue = défilement
+    // continu) ; Entrée reste sur l'appui initial pour ne jamais rejouer.
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final isRepeat = event is KeyRepeatEvent;
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _moveSelection(1);
       return KeyEventResult.handled;
@@ -720,7 +723,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       return KeyEventResult.handled;
     }
     // Pas de champ de recherche pour intercepter Entrée dans ce mode.
-    if (_isPadVariant && event.logicalKey == LogicalKeyboardKey.enter) {
+    if (_isPadVariant &&
+        !isRepeat &&
+        event.logicalKey == LogicalKeyboardKey.enter) {
       unawaited(_onSubmit());
       return KeyEventResult.handled;
     }
