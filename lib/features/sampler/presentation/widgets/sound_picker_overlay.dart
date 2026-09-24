@@ -40,6 +40,12 @@ final class MusicPickerMode extends SoundPickerMode {
   const MusicPickerMode({this.playNow = false});
 }
 
+/// Sélecteur d'ambiance de la régie : l'ambiance choisie part tout de suite
+/// (fondu enchaîné avec celle en cours) et le sélecteur se ferme.
+final class AmbiancePickerMode extends SoundPickerMode {
+  const AmbiancePickerMode();
+}
+
 /// Sélecteur de sons pour un pad existant ou un nouveau pad brouillon.
 final class PadPickerMode extends SoundPickerMode {
   final int? padId;
@@ -90,6 +96,7 @@ final class PadVariantMode extends SoundPickerMode {
 /// Overlay flottant unifié pour chercher et sélectionner un son.
 ///
 /// Remplace [QuickSearchMode] (Ctrl+F), [MusicPickerMode] (sélecteur musique),
+/// [AmbiancePickerMode] (sélecteur d'ambiance de la régie),
 /// [PadPickerMode] (ajout/retrait sons d'un pad) et [LibraryMode] (ajout au plateau).
 ///
 /// Même UX partout : fuzzy search normalisé, filtres par type, navigation clavier.
@@ -141,6 +148,19 @@ class SoundPickerOverlay extends StatefulWidget {
     final w = SoundPickerOverlay._(
         notifier: notifier,
         mode: MusicPickerMode(playNow: playNow),
+        isFullPage: mobile);
+    return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
+  }
+
+  /// Sélecteur d'ambiance — lance immédiatement l'ambiance choisie.
+  static Future<void> showForAmbiance(
+    BuildContext context, {
+    required SamplerNotifier notifier,
+  }) {
+    final mobile = _isMobile(context);
+    final w = SoundPickerOverlay._(
+        notifier: notifier,
+        mode: const AmbiancePickerMode(),
         isFullPage: mobile);
     return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
   }
@@ -313,6 +333,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   bool get _isQuickSearch => widget.mode is QuickSearchMode;
   bool get _isMusicPicker => widget.mode is MusicPickerMode;
+  bool get _isAmbiancePicker => widget.mode is AmbiancePickerMode;
   bool get _isPadPicker => widget.mode is PadPickerMode;
   bool get _isLibrary => widget.mode is LibraryMode;
   bool get _isManage => widget.mode is ManageMode;
@@ -346,8 +367,12 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   PadVariantMode? get _padVariantMode =>
       widget.mode is PadVariantMode ? widget.mode as PadVariantMode : null;
 
-  /// Type verrouillé pour le sélecteur de musique.
-  SoundType? get _lockedTypeFilter => _isMusicPicker ? SoundType.music : null;
+  /// Type verrouillé pour les sélecteurs de musique et d'ambiance.
+  SoundType? get _lockedTypeFilter => _isMusicPicker
+      ? SoundType.music
+      : _isAmbiancePicker
+      ? SoundType.ambiance
+      : null;
   SoundType? get _effectiveTypeFilter => _lockedTypeFilter ?? _typeFilter;
 
   bool get _effectiveLocalOnly => _isQuickSearch && _localOnly;
@@ -362,6 +387,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   String get _hintText => switch (widget.mode) {
     QuickSearchMode() => 'Chercher un son…',
     MusicPickerMode() => 'Chercher une musique…',
+    AmbiancePickerMode() => 'Chercher une ambiance…',
     PadPickerMode() || LibraryMode() || ManageMode() => 'Chercher un son…',
     PadVariantMode() => '',
   };
@@ -380,6 +406,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     MusicPickerMode(playNow: true) => '↑↓ sélectionner    ↵/tap jouer',
     MusicPickerMode() =>
       '↑↓ sélectionner    ↵/tap ajouter à la file',
+    AmbiancePickerMode() => '↑↓ sélectionner    ↵/tap lancer',
     PadPickerMode() =>
       '↑↓ sélectionner    ↵ ajouter/retirer',
     LibraryMode() =>
@@ -747,6 +774,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         await _playMusicNow(sound);
       case MusicPickerMode():
         await _enqueueMusic(sound);
+      case AmbiancePickerMode():
+        await _playAmbianceNow(sound);
       case PadPickerMode():
         await _togglePadSound(sound);
       case LibraryMode():
@@ -820,6 +849,23 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     // Échec : surfacer le message ici (route active) plutôt que de le laisser à
     // [SamplerScreen], qui le dessinerait derrière l'overlay sans le fermer.
     _showPreviewFailureSnackBar();
+  }
+
+  Future<void> _playAmbianceNow(Sound sound) async {
+    final padItem = await widget.notifier.playAmbianceBySoundId(sound.id);
+    if (!mounted) return;
+    if (padItem == null) {
+      _showPreviewFailureSnackBar();
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
+  bool _isAmbianceOnAir(Sound sound) {
+    final current = widget.notifier.state.currentAmbiancePad;
+    if (current == null || !current.isPlaying) return false;
+    final sounds = current.pad.sounds;
+    return sounds.length == 1 && sounds.first.id == sound.id;
   }
 
   Future<void> _playMusicNow(Sound sound) async {
@@ -1371,7 +1417,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   }
 
   Widget _buildItem(Sound sound, int index, bool isSelected, ColorScheme scheme) {
-    final onAir = _isMusicPicker && _isMusicOnAir(sound);
+    final onAir = (_isMusicPicker && _isMusicOnAir(sound)) ||
+        (_isAmbiancePicker && _isAmbianceOnAir(sound));
     final queued = _isMusicPicker && _isMusicQueued(sound);
     final onPad = _isPadPicker && _padSoundIds.contains(sound.id);
     final inBoard = _isLibrary && _isMusicOnBoard(sound);
@@ -1405,6 +1452,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               unawaited(_playMusicNow(sound));
             case MusicPickerMode():
               unawaited(_enqueueMusic(sound));
+            case AmbiancePickerMode():
+              unawaited(_playAmbianceNow(sound));
             case PadPickerMode():
               unawaited(_togglePadSound(sound));
             case LibraryMode():
@@ -1502,6 +1551,18 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       );
     }
 
+    if (_isAmbiancePicker) {
+      if (!onAir) return const SizedBox.shrink();
+      return Text(
+        'À l\'antenne',
+        style: TextStyle(
+          fontSize: 12,
+          color: scheme.primary,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+    }
+
     if (isCurrentVariant) {
       return Text(
         'En cours de lecture',
@@ -1591,6 +1652,18 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               onPressed: () => unawaited(_prepareAndClose(sound)),
             ),
           ],
+        );
+
+      case AmbiancePickerMode():
+        if (!onAir) return const SizedBox.shrink();
+        return SizedBox(
+          width: _actionButtonSize,
+          height: _actionButtonSize,
+          child: Icon(
+            Icons.sensors_rounded,
+            size: 18,
+            color: scheme.primary,
+          ),
         );
 
       case MusicPickerMode():

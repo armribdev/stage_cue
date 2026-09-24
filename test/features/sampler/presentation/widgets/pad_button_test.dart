@@ -32,7 +32,12 @@ class FakeAudioPlayerService implements AudioPlayerService {
   Future<void> play() async {}
 
   @override
-  Future<bool> playFromPosition(Duration position, {double volume = 1.0}) async =>
+  Future<bool> playFromPosition(
+    Duration position, {
+    double volume = 1.0,
+    bool looping = false,
+    Duration loopStart = Duration.zero,
+  }) async =>
       true;
 
   @override
@@ -51,7 +56,11 @@ class FakeAudioPlayerService implements AudioPlayerService {
   Future<void> resume() async {}
 
   @override
-  Future<void> playAtVolume(double volume, {Duration startOffset = Duration.zero}) async {}
+  Future<void> playAtVolume(
+    double volume, {
+    Duration startOffset = Duration.zero,
+    bool looping = false,
+  }) async {}
 
   @override
   Future<void> playOverlapping({

@@ -70,27 +70,14 @@ class MusicController {
 
   /// Volume effectif du son à [soundIndex] (défaut : le son courant du pad, ou
   /// le premier). Base = override du pad-son ou volume par défaut du son ; les
-  /// pads musique sont en plus soumis au volume global (courbé, voir
-  /// [_perceptualGain]).
+  /// pads musique et ambiance sont en plus soumis au volume de leur voie
+  /// (courbé, voir [_perceptualGain]).
   double _effectiveVolume(PadItem padItem, {int? soundIndex}) {
     final index = soundIndex ?? padItem.currentSoundIndex ?? 0;
     final base = padItem.pad.effectiveVolume(index);
-    return padItem.pad.isMusicPad
-        ? base * _perceptualGain(_musicVolume)
-        : base;
-  }
-
-  /// Convertit la position du fader de régie (0→1, linéaire, telle qu'affichée
-  /// en %) en gain audio via une loi cubique. L'oreille perçoit le volume de
-  /// façon logarithmique : un fader linéaire concentre toute la variation
-  /// audible dans le bas de course (coupure quasi sèche près du silence, quasi
-  /// rien en haut). Le cube étale la sensation régulièrement sur toute la
-  /// course et atteint zéro proprement, sans plancher à gérer. Ne s'applique
-  /// qu'au gain envoyé au moteur — `_musicVolume`, le mute et le ramp du fader
-  /// restent en espace « position » linéaire.
-  double _perceptualGain(double position) {
-    final p = position.clamp(0.0, 1.0);
-    return p * p * p;
+    if (padItem.pad.isMusicPad) return base * _perceptualGain(_musicVolume);
+    if (padItem.pad.isAmbiancePad) return base * _o._ambiance._gain;
+    return base;
   }
 
   // ── File d'attente ────────────────────────────────────────────────────────
@@ -492,6 +479,12 @@ class MusicController {
 
   // ── Résolution de pads ────────────────────────────────────────────────────
 
+  /// Message d'erreur de lecture destiné à la régie (musique ou ambiance).
+  void _reportPlaybackError(String message) {
+    _lastPlaybackError = message;
+    _o._notify();
+  }
+
   PadItem? _resolvePadItem(int? padId) {
     if (padId == null) return null;
     for (final padItem in _o._state.pads) {
@@ -842,39 +835,30 @@ class MusicController {
   }
 
   Future<PadItem?> _createOffStageMusicPad(int soundId) async {
+    final Sound? sound;
     try {
-      final sound = await _o._repository.getSoundById(soundId);
-      if (sound == null) {
-        _setMusicLoadError();
-        return null;
-      }
-      if (sound.type != SoundType.music) {
-        _lastPlaybackError = 'Ce son n\'est pas une musique.';
-        _o._notify();
-        return null;
-      }
-
-      final pad = Pad(
-        id: -soundId,
-        boardId: -1,
-        sortOrder: 0,
-        createdAt: DateTime.now(),
-        sounds: [sound],
-      );
-      final padItem = PadItem(pad: pad);
-      // Sonde le cache local d'abord (comme les pads du plateau) : sinon, en
-      // mode live hors-ligne, `_loadPlayersForPad` saute un slot dont
-      // `appearsReady` est faux, même si le fichier est déjà en cache.
-      await _o._probePadLocalAvailability(padItem);
-      await _o._loadPlayersForPad(padItem, pad);
-      _offStageMusicPads[pad.id] = padItem;
-      return padItem;
+      sound = await _o._repository.getSoundById(soundId);
     } catch (e) {
       debugPrint('Impossible de préparer la musique pour la régie: $e');
-      _lastPlaybackError = 'Impossible de préparer cette musique.';
-      _o._notify();
+      _reportPlaybackError('Impossible de préparer cette musique.');
       return null;
     }
+    if (sound == null) {
+      _setMusicLoadError();
+      return null;
+    }
+    if (sound.type != SoundType.music) {
+      _reportPlaybackError('Ce son n\'est pas une musique.');
+      return null;
+    }
+
+    final padItem = await _o._buildOffStagePad(sound);
+    if (padItem == null) {
+      _reportPlaybackError('Impossible de préparer cette musique.');
+      return null;
+    }
+    _offStageMusicPads[padItem.pad.id] = padItem;
+    return padItem;
   }
 
   void _setMusicLoadError([PadItem? padItem]) {
@@ -1013,4 +997,18 @@ class MusicController {
     }
     _offStageMusicPads.clear();
   }
+}
+
+/// Convertit la position d'un fader de régie (0→1, linéaire, telle qu'affichée
+/// en %) en gain audio via une loi cubique. L'oreille perçoit le volume de
+/// façon logarithmique : un fader linéaire concentre toute la variation
+/// audible dans le bas de course (coupure quasi sèche près du silence, quasi
+/// rien en haut). Le cube étale la sensation régulièrement sur toute la
+/// course et atteint zéro proprement, sans plancher à gérer. Ne s'applique
+/// qu'au gain envoyé au moteur — le volume de voie, le mute et le ramp du
+/// fader restent en espace « position » linéaire. Partagé par les voies
+/// musique et ambiance.
+double _perceptualGain(double position) {
+  final p = position.clamp(0.0, 1.0);
+  return p * p * p;
 }

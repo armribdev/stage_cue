@@ -25,6 +25,8 @@ class SamplerState {
   final String? boardsError;
   final PadItem? currentMusicPad;
   final List<int> musicQueuePadIds;
+  /// Ambiance à l'antenne (voie exclusive en boucle), ou `null`.
+  final PadItem? currentAmbiancePad;
   /// true pendant la préparation hors-ligne du board (téléchargements en cours).
   final bool isBoardPreparing;
   /// Nombre de pads déjà téléchargés pendant la préparation.
@@ -42,6 +44,7 @@ class SamplerState {
     this.boardsError,
     this.currentMusicPad,
     this.musicQueuePadIds = const [],
+    this.currentAmbiancePad,
     this.isBoardPreparing = false,
     this.boardPrepareDone = 0,
     this.boardPrepareTotal = 0,
@@ -73,6 +76,8 @@ class SamplerState {
     List<int>? musicQueuePadIds,
     bool clearCurrentMusicPad = false,
     bool clearMusicQueue = false,
+    Object? currentAmbiancePad = _unset,
+    bool clearCurrentAmbiancePad = false,
     bool? isBoardPreparing,
     int? boardPrepareDone,
     int? boardPrepareTotal,
@@ -97,6 +102,11 @@ class SamplerState {
       musicQueuePadIds: clearMusicQueue
           ? const []
           : musicQueuePadIds ?? this.musicQueuePadIds,
+      currentAmbiancePad: clearCurrentAmbiancePad
+          ? null
+          : identical(currentAmbiancePad, _unset)
+          ? this.currentAmbiancePad
+          : currentAmbiancePad as PadItem?,
       isBoardPreparing: isBoardPreparing ?? this.isBoardPreparing,
       boardPrepareDone: boardPrepareDone ?? this.boardPrepareDone,
       boardPrepareTotal: boardPrepareTotal ?? this.boardPrepareTotal,

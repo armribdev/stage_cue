@@ -16,6 +16,7 @@ import '../../../../core/utils/sound_color_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
+import 'boxed_icon_button.dart';
 import 'waveform_envelope.dart';
 
 enum _MusicTransitionKind { fadeOut, crossfade }
@@ -88,10 +89,21 @@ class MusicPreviewPanel extends StatefulWidget {
   /// Hauteur occupée en bas de l'écran — pour réserver l'espace sous la grille.
   final ValueChanged<double>? onOccupiedHeightChanged;
 
+  /// Voie ambiance : volume de voie, choix (sélecteur), arrêt avec un fondu
+  /// (`null` = fondu par défaut du contrôleur) et réglage du volume.
+  final double ambianceVolume;
+  final VoidCallback? onChooseAmbiance;
+  final ValueChanged<Duration?>? onStopAmbiance;
+  final ValueChanged<double>? onAmbianceVolumeChanged;
+
   const MusicPreviewPanel({
     super.key,
     required this.state,
     required this.musicVolume,
+    this.ambianceVolume = 1.0,
+    this.onChooseAmbiance,
+    this.onStopAmbiance,
+    this.onAmbianceVolumeChanged,
     required this.resolveMusicPad,
     required this.isAdvanced,
     required this.onAdvancedChanged,
@@ -362,6 +374,14 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
       onReorderMusicQueue: widget.onReorderMusicQueue,
       onMusicVolumeChanged: widget.onMusicVolumeChanged,
       onSeekMusic: widget.onSeekMusic,
+      ambianceVolume: widget.ambianceVolume,
+      onChooseAmbiance: widget.onChooseAmbiance,
+      // Le sélecteur de fondu (1/3/5 s, coupe) est pensé pour la musique :
+      // l'ambiance garde toujours son propre fondu, plus long et plus doux.
+      onStopAmbiance: widget.onStopAmbiance == null
+          ? null
+          : () => widget.onStopAmbiance!(null),
+      onAmbianceVolumeChanged: widget.onAmbianceVolumeChanged,
       selectedTransitionDuration: _selectedTransitionDuration,
       transitionDurationLocked: _transitionDurationLocked,
       onTransitionOptionTapped: _toggleTransitionOption,
@@ -558,6 +578,10 @@ class _MusicRegieDrawer extends StatefulWidget {
   final void Function(int oldIndex, int newIndex)? onReorderMusicQueue;
   final ValueChanged<double>? onMusicVolumeChanged;
   final ValueChanged<Duration>? onSeekMusic;
+  final double ambianceVolume;
+  final VoidCallback? onChooseAmbiance;
+  final VoidCallback? onStopAmbiance;
+  final ValueChanged<double>? onAmbianceVolumeChanged;
   final Duration? selectedTransitionDuration;
   final bool transitionDurationLocked;
   final ValueChanged<Duration> onTransitionOptionTapped;
@@ -587,6 +611,10 @@ class _MusicRegieDrawer extends StatefulWidget {
     this.onReorderMusicQueue,
     this.onMusicVolumeChanged,
     this.onSeekMusic,
+    this.ambianceVolume = 1.0,
+    this.onChooseAmbiance,
+    this.onStopAmbiance,
+    this.onAmbianceVolumeChanged,
     required this.selectedTransitionDuration,
     required this.transitionDurationLocked,
     required this.onTransitionOptionTapped,
@@ -719,6 +747,15 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
         onAirRow,
         const SizedBox(height: 14),
         _buildTrackInfo(scheme: scheme, current: current, isPlaying: isPlaying),
+        const SizedBox(height: 14),
+        const Divider(height: 1),
+        const SizedBox(height: 10),
+        Text(
+          'AMBIANCE',
+          style: AppTextStyles.sectionLabel(context),
+        ),
+        const SizedBox(height: 4),
+        _buildAmbianceSlot(layout: _AmbianceSlotLayout.row),
       ],
     );
     final queueSection = _PassageQueueSection(
@@ -796,6 +833,17 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
         const SizedBox(height: 12),
         queueSection,
       ],
+    );
+  }
+
+  _AmbianceSlot _buildAmbianceSlot({required _AmbianceSlotLayout layout}) {
+    return _AmbianceSlot(
+      current: widget.state.currentAmbiancePad,
+      volume: widget.ambianceVolume,
+      layout: layout,
+      onChoose: widget.onChooseAmbiance,
+      onStop: widget.onStopAmbiance,
+      onVolumeChanged: widget.onAmbianceVolumeChanged,
     );
   }
 
@@ -1016,11 +1064,21 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
       ),
     );
 
+    // Voie ambiance : glissée dans la même rangée (jamais sur une ligne à
+    // elle), pastille complète si la largeur le permet, sinon icône seule.
+    final ambianceSlot = _buildAmbianceSlot(
+      layout: comfortable
+          ? _AmbianceSlotLayout.pill
+          : _AmbianceSlotLayout.icon,
+    );
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         playbackControls,
         Expanded(child: trackInfo),
+        ambianceSlot,
+        const SizedBox(width: 8),
         volume,
         const SizedBox(width: 8),
         // Chevron en bout de bandeau, jamais au-dessus : la rangée est déjà
@@ -1196,6 +1254,209 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
           child: drawerContent,
         );
       },
+    );
+  }
+}
+
+enum _AmbianceSlotLayout {
+  /// Icône seule (écran étroit) : changer / arrêter passent par un menu.
+  icon,
+
+  /// Pastille bordée dans le bandeau réduit : nom et arrêt. Pas de volume
+  /// en mode réduit — il se règle dans le tiroir ouvert.
+  pill,
+
+  /// Ligne pleine largeur dans le tiroir ouvert, avec le volume de voie.
+  row,
+}
+
+/// Voie ambiance de la régie. L'ambiance n'a besoin que de son nom, de son
+/// volume et d'un arrêt (pas de file, pas de pause) : elle tient dans une
+/// pastille glissée dans une rangée existante, sans ajouter de hauteur.
+class _AmbianceSlot extends StatelessWidget {
+  final PadItem? current;
+  final double volume;
+  final _AmbianceSlotLayout layout;
+  final VoidCallback? onChoose;
+  final VoidCallback? onStop;
+  final ValueChanged<double>? onVolumeChanged;
+
+  static const _pillNameMaxWidth = 200.0;
+
+  const _AmbianceSlot({
+    required this.current,
+    required this.volume,
+    required this.layout,
+    this.onChoose,
+    this.onStop,
+    this.onVolumeChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final current = this.current;
+    final onAir = current != null && current.isPlaying;
+
+    if (layout == _AmbianceSlotLayout.row) {
+      return _buildRow(scheme, onAir ? current : null);
+    }
+    if (!onAir) {
+      return BoxedIconButton(
+        icon: SoundType.ambiance.icon,
+        tooltip: 'Lancer une ambiance',
+        onPressed: onChoose,
+      );
+    }
+    if (layout == _AmbianceSlotLayout.icon) {
+      return _buildIconMenu(scheme, current);
+    }
+    return _buildPill(scheme, current);
+  }
+
+  Widget _volumeSlider({required double width}) => SizedBox(
+    width: width,
+    child: _CompactVolumeSlider(
+      value: volume,
+      onChanged: onVolumeChanged,
+      isPlaying: true,
+    ),
+  );
+
+  Widget _stopButton(ColorScheme scheme) => IconButton(
+    tooltip: 'Arrêter l\'ambiance',
+    visualDensity: VisualDensity.compact,
+    iconSize: 16,
+    color: scheme.onSurfaceVariant,
+    onPressed: onStop,
+    icon: const Icon(Icons.close),
+  );
+
+  Widget _name(ColorScheme scheme, String text, {required bool active}) {
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+        color: active ? scheme.onSurface : scheme.onSurfaceVariant,
+      ),
+    );
+  }
+
+  Widget _buildPill(ColorScheme scheme, PadItem current) {
+    return Container(
+      padding: const EdgeInsets.only(left: 8),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainer,
+        border: Border.fromBorderSide(AppElevation.border(scheme)),
+        borderRadius: AppRadius.radiusMd,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(SoundType.ambiance.icon, size: 14, color: scheme.primary),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _pillNameMaxWidth),
+            child: Tooltip(
+              message: 'Changer d\'ambiance',
+              child: InkWell(
+                borderRadius: AppRadius.radiusSm,
+                onTap: onChoose,
+                child: _name(scheme, current.displayName, active: true),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          _stopButton(scheme),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIconMenu(ColorScheme scheme, PadItem current) {
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, -8),
+      menuChildren: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+          child: SizedBox(
+            width: 220,
+            child: Row(
+              children: [
+                Icon(SoundType.ambiance.icon, size: 14, color: scheme.primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _name(scheme, current.displayName, active: true),
+                ),
+              ],
+            ),
+          ),
+        ),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.swap_horiz_rounded, size: 18),
+          onPressed: onChoose,
+          child: const Text('Changer d\'ambiance'),
+        ),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.close, size: 18),
+          onPressed: onStop,
+          child: const Text('Arrêter'),
+        ),
+      ],
+      builder: (context, controller, _) => Tooltip(
+        message: current.displayName,
+        child: InkWell(
+          borderRadius: AppRadius.radiusSm,
+          onTap: () =>
+              controller.isOpen ? controller.close() : controller.open(),
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.12),
+              border: Border.fromBorderSide(AppElevation.border(scheme)),
+              borderRadius: AppRadius.radiusSm,
+            ),
+            child: Icon(
+              SoundType.ambiance.icon,
+              size: 16,
+              color: scheme.primary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(ColorScheme scheme, PadItem? onAir) {
+    return Row(
+      children: [
+        Icon(
+          SoundType.ambiance.icon,
+          size: 16,
+          color: onAir != null ? scheme.primary : scheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _name(
+            scheme,
+            onAir?.displayName ?? 'Aucune ambiance',
+            active: onAir != null,
+          ),
+        ),
+        if (onAir != null) _volumeSlider(width: 96),
+        BoxedIconButton(
+          icon: onAir != null
+              ? Icons.swap_horiz_rounded
+              : SoundType.ambiance.icon,
+          tooltip: onAir != null ? 'Changer d\'ambiance' : 'Lancer une ambiance',
+          onPressed: onChoose,
+        ),
+        if (onAir != null) _stopButton(scheme),
+      ],
     );
   }
 }

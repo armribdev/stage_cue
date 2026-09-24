@@ -114,11 +114,21 @@ class AudioPlayerService implements PreviewPlayback {
 
   /// Démarre une voix en pause, applique volume et position, puis rend audible.
   /// Évite un blip à 100 % avant que le volume cible ne soit appliqué.
+  ///
+  /// [looping] : la voix boucle indéfiniment en repartant de [loopStart]
+  /// (point d'entrée du son) — utilisé par la voie ambiance.
   SoundHandle? _startVoice({
     required double volume,
     Duration position = Duration.zero,
+    bool looping = false,
+    Duration loopStart = Duration.zero,
   }) {
-    final handle = SoLoud.instance.play(_source, paused: true);
+    final handle = SoLoud.instance.play(
+      _source,
+      paused: true,
+      looping: looping,
+      loopingStartAt: loopStart,
+    );
     if (!SoLoud.instance.getIsValidVoiceHandle(handle)) {
       return null;
     }
@@ -138,11 +148,18 @@ class AudioPlayerService implements PreviewPlayback {
   Future<bool> playFromPosition(
     Duration position, {
     double volume = 1.0,
+    bool looping = false,
+    Duration loopStart = Duration.zero,
   }) async {
     debugPrint('[AUDIO-PLAY] playFromPosition pos=$position handles=${_handles.length}');
     try {
       await _stopAllHandles();
-      final handle = _startVoice(volume: volume, position: position);
+      final handle = _startVoice(
+        volume: volume,
+        position: position,
+        looping: looping,
+        loopStart: loopStart,
+      );
       if (handle == null) {
         _paused = false;
         return false;
@@ -243,10 +260,19 @@ class AudioPlayerService implements PreviewPlayback {
   /// Lance la lecture à un volume initial donné (mode mono-voix).
   /// [startOffset] positionne la voix à ce point d'entrée avant de la rendre
   /// audible (départ net) — utilisé par les fondus enchaînés de la régie.
-  Future<void> playAtVolume(double volume, {Duration startOffset = Duration.zero}) async {
+  Future<void> playAtVolume(
+    double volume, {
+    Duration startOffset = Duration.zero,
+    bool looping = false,
+  }) async {
     try {
       await _stopAllHandles();
-      final handle = _startVoice(volume: volume, position: startOffset);
+      final handle = _startVoice(
+        volume: volume,
+        position: startOffset,
+        looping: looping,
+        loopStart: startOffset,
+      );
       if (handle == null) return;
       _handles.add(handle);
       _currentHandle = handle;

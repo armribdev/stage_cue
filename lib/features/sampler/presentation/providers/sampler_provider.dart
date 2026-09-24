@@ -29,6 +29,7 @@ import 'sound_search_index.dart';
 
 part 'sampler_state.dart';
 part 'music_controller.dart';
+part 'ambiance_controller.dart';
 
 /// Provider/Notifier pour la gestion de l'état du sampler
 class SamplerNotifier extends ChangeNotifier {
@@ -109,6 +110,9 @@ class SamplerNotifier extends ChangeNotifier {
   /// Contrôleur musique : file, fondus, volume global musique.
   late final MusicController _music;
 
+  /// Contrôleur ambiance : une ambiance en boucle à la fois, volume de voie.
+  late final AmbianceController _ambiance;
+
   /// Index mémoire de la bibliothèque pour le sélecteur de sons : ouvrir la
   /// recherche en spectacle ne doit pas attendre la base ni le disque.
   late final SoundSearchIndex _searchIndex =
@@ -130,6 +134,7 @@ class SamplerNotifier extends ChangeNotifier {
       _libraryRepository?.requiresInteractiveReconnect ?? false;
 
   double get musicVolume => _music.musicVolume;
+  double get ambianceVolume => _ambiance.ambianceVolume;
 
   bool get canUndoLastRemoval =>
       _lastRemovedPad != null && _lastRemovedPad!.boardId == _activeBoardId;
@@ -142,6 +147,7 @@ class SamplerNotifier extends ChangeNotifier {
     AppPreferences? appPreferences,
   ]) : _appPreferences = appPreferences {
     _music = MusicController(this);
+    _ambiance = AmbianceController(this);
     appPreferences?.addListener(_onConnectivityModeChanged);
   }
 
@@ -151,7 +157,8 @@ class SamplerNotifier extends ChangeNotifier {
   void _notify() => notifyListeners();
 
   /// Volume effectif du son à [soundIndex] dans un pad (override du pad-son ou
-  /// volume par défaut du son) ; pads musique soumis au volume global.
+  /// volume par défaut du son) ; pads musique et ambiance soumis au volume
+  /// de leur voie.
   double _effectiveVolume(PadItem padItem, {int? soundIndex}) =>
       _music._effectiveVolume(padItem, soundIndex: soundIndex);
 
@@ -192,6 +199,10 @@ class SamplerNotifier extends ChangeNotifier {
     final visibleIds = _padsForMultipadNumbering()
         .map((item) => item.pad.id)
         .toSet();
+    final ambiance = _state.currentAmbiancePad;
+    if (ambiance != null && !isPadVisibleInOfflineMode(ambiance)) {
+      await _ambiance._stopImmediately();
+    }
     final newQueue =
         _state.musicQueuePadIds.where(visibleIds.contains).toList();
     if (newQueue.length != _state.musicQueuePadIds.length) {
@@ -629,7 +640,18 @@ class SamplerNotifier extends ChangeNotifier {
           '[LISTENER] pad="${padItem.pad.displayName}" slot=$idx playing=$playing '
           'currentPlayerIndex=${padItem._currentPlayerIndex} isPlaying=${padItem.isPlaying}',
         );
-        if (padItem.pad.isMusicPad) {
+        if (padItem.pad.isAmbiancePad) {
+          // Ambiance : mono-voix en boucle. L'antenne est posée explicitement
+          // par AmbianceController ; seule une fin inattendue la retire ici.
+          if (playing) {
+            padItem._currentPlayerIndex = idx;
+            padItem.isPlaying = true;
+          } else if (padItem._currentPlayerIndex == idx) {
+            padItem.isPlaying = false;
+            padItem._currentPlayerIndex = null;
+            _ambiance._handleAmbiancePlaybackEnded(padItem);
+          }
+        } else if (padItem.pad.isMusicPad) {
           // Musique : mono-voix, la variante courante est la source de vérité.
           if (playing) {
             padItem._currentPlayerIndex = idx;
@@ -764,17 +786,19 @@ class SamplerNotifier extends ChangeNotifier {
     // être disposé par le rechargement du plateau.
     await stopAllNonMusicSounds();
     _music._detachPlayingMusicToOffStage();
+    _ambiance._detachPlayingToOffStage();
     // Annule les téléchargements encore EN FILE des pads qui quittent la scène
     // (bande passante Drive inutile pour un plateau qu'on abandonne). Les tâches
     // déjà démarrées finissent en cache ; le pad musique détaché hors-scène
     // (tapis sonore) est exclu pour poursuivre son éventuel téléchargement.
     final leavingPadIds = _state.pads
         .map((item) => item.pad.id)
-        .where((id) => !_music._isKeptOffStage(id))
+        .where((id) => !_isKeptOffStage(id))
         .toSet();
     _downloadQueue.cancelQueued((key, _) => leavingPadIds.contains(key));
     _lastRemovedPad = null;
     _music.cleanupOffStagePads();
+    _ambiance.cleanupOffStagePads();
     _state = _state.copyWith(selectedBoard: board);
     _activeBoardId = board.id;
     notifyListeners();
@@ -958,11 +982,12 @@ class SamplerNotifier extends ChangeNotifier {
           .toList(growable: false);
 
       for (final pad in pads) {
-        // Ré-adopte un pad musique détaché hors-scène (tapis sonore) si l'on
-        // revient sur son plateau d'origine : évite un second lecteur pour un
-        // son déjà en cours de lecture.
-        final existing =
-            previousItemsById[pad.id] ?? _music._reclaimOffStagePad(pad.id);
+        // Ré-adopte un pad musique/ambiance détaché hors-scène (tapis sonore)
+        // si l'on revient sur son plateau d'origine : évite un second lecteur
+        // pour un son déjà en cours de lecture.
+        final existing = previousItemsById[pad.id] ??
+            _music._reclaimOffStagePad(pad.id) ??
+            _ambiance._reclaimOffStagePad(pad.id);
         if (existing != null) {
           final soundsChanged = _padSoundsChanged(existing, pad);
           existing.pad = pad;
@@ -1001,15 +1026,15 @@ class SamplerNotifier extends ChangeNotifier {
       _syncMultipadNumbers(_padsForMultipadNumbering());
       _state = _state.copyWith(pads: padItems, isLoading: false, error: null);
       final keptIds = padItems.map((item) => item.pad.id).toSet();
-      // Ne pas disposer un pad musique conservé hors-scène : il continue de
-      // jouer en tapis sonore et reste piloté par la régie.
+      // Ne pas disposer un pad musique/ambiance conservé hors-scène : il
+      // continue de jouer en tapis sonore et reste piloté par la régie.
       final removedItems = previousItems
           .where((item) =>
               !keptIds.contains(item.pad.id) &&
-              !_music._isKeptOffStage(item.pad.id))
+              !_isKeptOffStage(item.pad.id))
           .toList();
       _disposePadItems(removedItems);
-      _music._syncMusicStateWithPads();
+      _syncVoicesWithPads();
 
       if (preloadGeneration == _padPreloadGeneration) {
         if (padsToPreload.isNotEmpty) {
@@ -1107,6 +1132,10 @@ class SamplerNotifier extends ChangeNotifier {
       await _music._toggleMusicPad(resolved);
       return;
     }
+    if (resolved.pad.isAmbiancePad) {
+      await _ambiance._toggleAmbiancePad(resolved);
+      return;
+    }
 
     // Pads non-musique : polyphonie. Chaque tap empile un nouveau son (superposé)
     // sans couper les précédents ; sur un multipad la variante suivante est
@@ -1130,6 +1159,10 @@ class SamplerNotifier extends ChangeNotifier {
       // `playMusicNow` coupe ce qui joue puis démarre cette variante — un seul
       // point d'entrée pour changer de musique, quel que soit le déclencheur.
       await _music.playMusicNow(resolved, soundIndex: soundIndex);
+      return;
+    }
+    if (resolved.pad.isAmbiancePad) {
+      await _ambiance.playAmbianceNow(resolved, soundIndex: soundIndex);
       return;
     }
 
@@ -1178,6 +1211,11 @@ class SamplerNotifier extends ChangeNotifier {
   /// Arrête toutes les voix en cours d'un pad (toutes variantes confondues).
   Future<void> stopPadSounds(PadItem padItem) async {
     final resolved = _resolveBoardPadItem(padItem);
+    if (resolved.pad.isAmbiancePad) {
+      await _ambiance._stopPadPlayers(resolved);
+      notifyListeners();
+      return;
+    }
     if (resolved.pad.isMusicPad) {
       await resolved.currentPlayer?.stop();
       resolved.isPlaying = false;
@@ -1189,13 +1227,13 @@ class SamplerNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Coupe tous les pads non-musique en cours (bouton panique « Tout arrêter »).
-  /// Laisse la musique jouer : utile en live pour tuer un bruitage sans casser
-  /// le tapis sonore.
+  /// Coupe tous les bruitages en cours (bouton panique « Tout arrêter »).
+  /// Laisse jouer musique et ambiance : utile en live pour tuer un bruitage
+  /// sans casser le tapis sonore.
   Future<void> stopAllNonMusicSounds() async {
     var changed = false;
     for (final padItem in _state.pads) {
-      if (padItem.pad.isMusicPad) continue;
+      if (padItem.pad.isExclusiveVoicePad) continue;
       if (!padItem.isPlaying) continue;
       await _stopAllSlotPlayers(padItem);
       changed = true;
@@ -1207,10 +1245,10 @@ class SamplerNotifier extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  /// Au moins un pad non-musique joue actuellement, ou une pré-écoute
-  /// (recherche rapide / bibliothèque) est en cours.
+  /// Au moins un bruitage (ni musique ni ambiance) joue actuellement, ou une
+  /// pré-écoute (recherche rapide / bibliothèque) est en cours.
   bool get hasNonMusicSoundsPlaying =>
-      _state.pads.any((p) => !p.pad.isMusicPad && p.isPlaying) ||
+      _state.pads.any((p) => !p.pad.isExclusiveVoicePad && p.isPlaying) ||
       _libraryPreviewSoundId != null ||
       _previewPlayers.isNotEmpty;
 
@@ -1252,6 +1290,7 @@ class SamplerNotifier extends ChangeNotifier {
   Future<void> updateSoundType(int soundId, SoundType type) async {
     await _repository.updateSoundType(soundId, type);
     _searchIndex.patchSound(soundId, (sound) => sound.copyWith(type: type));
+    await _ambiance.refreshOffStageSoundMetadata(soundId);
     await _music.refreshSoundMetadata(soundId);
   }
 
@@ -1623,6 +1662,52 @@ class SamplerNotifier extends ChangeNotifier {
       _music.setMusicVolume(v, smooth: smooth);
   Future<void> toggleMusicMute() => _music.toggleMusicMute();
 
+  Future<PadItem?> playAmbianceBySoundId(int id) =>
+      _ambiance.playAmbianceBySoundId(id);
+  Future<void> stopCurrentAmbiance({
+    Duration fade = AmbianceController.stopFadeDuration,
+  }) =>
+      _ambiance.stopCurrentAmbiance(fade: fade);
+  PadItem? resolveAmbiancePad(int id) => _ambiance.resolveAmbiancePad(id);
+  Future<void> setAmbianceVolume(double v, {bool smooth = false}) =>
+      _ambiance.setAmbianceVolume(v, smooth: smooth);
+  Future<void> toggleAmbianceMute() => _ambiance.toggleAmbianceMute();
+
+  /// Pad conservé hors-scène par la régie (musique ou ambiance) : ne pas le
+  /// disposer au rechargement du plateau.
+  bool _isKeptOffStage(int padId) =>
+      _music._isKeptOffStage(padId) || _ambiance._isKeptOffStage(padId);
+
+  /// Réaligne musique et ambiance à l'antenne sur les pads du plateau.
+  void _syncVoicesWithPads() {
+    _music._syncMusicStateWithPads();
+    _ambiance._syncStateWithPads();
+  }
+
+  /// Crée un pad éphémère hors-scène (id négatif) pour un son lancé depuis la
+  /// régie sans pad sur le plateau, et précharge ses lecteurs.
+  Future<PadItem?> _buildOffStagePad(Sound sound) async {
+    try {
+      final pad = Pad(
+        id: -sound.id,
+        boardId: -1,
+        sortOrder: 0,
+        createdAt: DateTime.now(),
+        sounds: [sound],
+      );
+      final padItem = PadItem(pad: pad);
+      // Sonde le cache local d'abord (comme les pads du plateau) : sinon, en
+      // mode live hors-ligne, `_loadPlayersForPad` saute un slot dont
+      // `appearsReady` est faux, même si le fichier est déjà en cache.
+      await _probePadLocalAvailability(padItem);
+      await _loadPlayersForPad(padItem, pad);
+      return padItem;
+    } catch (e) {
+      debugPrint('Impossible de préparer le son ${sound.id} pour la régie: $e');
+      return null;
+    }
+  }
+
   // ── Paramètres pad ────────────────────────────────────────────────────────
 
   Future<void> updatePadItemSettings(
@@ -1799,6 +1884,7 @@ class SamplerNotifier extends ChangeNotifier {
       if (_music._musicAdvanceLockCount > 0) _music._musicAdvanceLockCount--;
     }
     _music._clearMusicState();
+    await _ambiance._stopImmediately();
     notifyListeners();
   }
 
@@ -1857,7 +1943,7 @@ class SamplerNotifier extends ChangeNotifier {
         _state.pads.where((p) => p != padItem).toList();
     _syncMultipadNumbers(remainingPads);
     _state = _state.copyWith(pads: remainingPads, error: null);
-    _music._syncMusicStateWithPads();
+    _syncVoicesWithPads();
     notifyListeners();
     return true;
   }
@@ -2001,6 +2087,7 @@ class SamplerNotifier extends ChangeNotifier {
       padItem.dispose();
     }
     _music._disposeOffStagePads();
+    _ambiance._disposeOffStagePads();
     super.dispose();
   }
 
@@ -2395,7 +2482,7 @@ class SamplerNotifier extends ChangeNotifier {
     nextPads[draftIndex] = padItem;
     _syncMultipadNumbers(nextPads);
     _state = _state.copyWith(pads: nextPads);
-    _music._syncMusicStateWithPads();
+    _syncVoicesWithPads();
     notifyListeners();
 
     unawaited(_loadPlayersForPadSafe(padItem, createdPad));
