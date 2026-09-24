@@ -28,7 +28,12 @@ class FakeAudioPlayerService implements AudioPlayerService {
   }
 
   @override
-  Future<bool> playFromPosition(Duration position, {double volume = 1.0}) async {
+  Future<bool> playFromPosition(
+    Duration position, {
+    double volume = 1.0,
+    bool looping = false,
+    Duration loopStart = Duration.zero,
+  }) async {
     played = true;
     return true;
   }
@@ -55,7 +60,11 @@ class FakeAudioPlayerService implements AudioPlayerService {
   }
 
   @override
-  Future<void> playAtVolume(double volume, {Duration startOffset = Duration.zero}) async {
+  Future<void> playAtVolume(
+    double volume, {
+    Duration startOffset = Duration.zero,
+    bool looping = false,
+  }) async {
     played = true;
   }
 

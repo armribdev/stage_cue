@@ -1810,11 +1810,25 @@ class _SamplerScreenState extends State<SamplerScreen> {
     );
   }
 
+  /// Voie ambiance de la régie : l'ambiance choisie part tout de suite.
+  Future<void> _openAmbiancePicker() async {
+    await SoundPickerOverlay.showForAmbiance(context, notifier: _notifier);
+  }
+
   Widget _buildMusicPreviewPanel(BuildContext context, SamplerState state) {
     return MusicPreviewPanel(
       state: state,
       musicVolume: _notifier.musicVolume,
       resolveMusicPad: _notifier.resolveMusicPad,
+      ambianceVolume: _notifier.ambianceVolume,
+      onChooseAmbiance: () => unawaited(_openAmbiancePicker()),
+      onStopAmbiance: (fade) => unawaited(
+        _notifier.stopCurrentAmbiance(
+          fade: fade ?? AmbianceController.stopFadeDuration,
+        ),
+      ),
+      onAmbianceVolumeChanged: (value) =>
+          unawaited(_notifier.setAmbianceVolume(value, smooth: true)),
       isAdvanced: _isMusicRegieAdvanced,
       isDesktop: context.prefersDesktopUi,
       onAdvancedChanged: (isAdvanced) =>

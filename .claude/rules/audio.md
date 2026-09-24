@@ -9,4 +9,5 @@
 - Le volume master et le volume par son sont indépendants — ne pas les confondre
 - Les changements d'état audio arrivent via le stream `onPlayerStateChanged` — ne pas polluer
 - Buffer size = 1024 (optimisé low-latency) — ne pas augmenter sans profiling
+- Trois voies : 1 musique, 1 ambiance, N bruitages. Un pad 100 % ambiance (`Pad.isAmbiancePad`) passe par `AmbianceController` — voie exclusive, en boucle depuis le point d'entrée, fondu enchaîné au remplacement — jamais en polyphonie. Pour « voie mono-voix ? », tester `isExclusiveVoicePad`, pas `isMusicPad` seul. Le bouton panique laisse musique **et** ambiance ([décision 0024](../../docs/decisions/0024-voie-ambiance-exclusive-en-boucle.md))
 - En Mode Spectacle (mode live), `_pickSoundIndex` ignore `playMode` et priorise le son le moins joué de la session (`SamplerNotifier.isLiveSessionActive` / `sessionPlayCountFor`) — voir [décision 0014](../../docs/decisions/0014-priorite-au-son-le-moins-joue-en-mode-live.md). Le compteur n'est incrémenté que par `_markPlayedAt` (lecture réelle), jamais par `_markPlayed` seul (pré-écoute) — ne pas déplacer l'incrément

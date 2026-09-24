@@ -72,6 +72,16 @@ class Pad {
       sounds.isNotEmpty &&
       sounds.every((sound) => sound.type == SoundType.music);
 
+  /// Vrai si le pad ne contient que des sons de type ambiance : il passe par
+  /// la voie ambiance de la régie (une seule à la fois, en boucle).
+  bool get isAmbiancePad =>
+      sounds.isNotEmpty &&
+      sounds.every((sound) => sound.type == SoundType.ambiance);
+
+  /// Pad joué sur une voie exclusive mono-voix (musique ou ambiance) plutôt
+  /// qu'en polyphonie comme un bruitage.
+  bool get isExclusiveVoicePad => isMusicPad || isAmbiancePad;
+
   Pad copyWith({
     String? name,
     bool clearName = false,
