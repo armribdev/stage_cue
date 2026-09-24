@@ -381,11 +381,13 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
       isConflicting: conflictingPad != null,
     );
     if (_isCapturingHotkey) {
-      keycap = KeyboardListener(
+      // `Focus` et non `KeyboardListener` : ce dernier ignore le résultat du
+      // handler, l'événement remonterait alors jusqu'aux raccourcis de la
+      // route — Échap déclencherait `DismissIntent` et fermerait la modale.
+      keycap = Focus(
         focusNode: _hotkeyCaptureFocusNode,
         autofocus: true,
-        onKeyEvent: (event) =>
-            _handleHotkeyCaptureKey(_hotkeyCaptureFocusNode, event),
+        onKeyEvent: _handleHotkeyCaptureKey,
         child: keycap,
       );
     }
