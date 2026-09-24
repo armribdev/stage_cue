@@ -1866,6 +1866,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
   /// touche seule assignée ne doit jamais voler une frappe de saisie).
   bool _handlePadHotkeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
+    // Inactif tant que la grille des pads n'est pas la route au sommet de la
+    // pile (détails de pad, réglages, bibliothèque, menu contextuel, recherche-
+    // éclair… toute modale/écran ouvert par-dessus doit couper le raccourci).
+    if (!mounted || ModalRoute.of(context)?.isCurrent != true) return false;
     final keyboard = HardwareKeyboard.instance;
     if (keyboard.isControlPressed ||
         keyboard.isShiftPressed ||
