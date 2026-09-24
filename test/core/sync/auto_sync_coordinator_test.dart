@@ -19,6 +19,7 @@ import 'package:stage_cue/core/database/database.dart' as db;
 import 'package:stage_cue/core/settings/app_preferences.dart';
 import 'package:stage_cue/core/sync/auto_sync_coordinator.dart';
 import 'package:stage_cue/core/sync/drive_client.dart';
+import 'package:stage_cue/features/sampler/data/datasources/local_sound_datasource.dart';
 import 'package:stage_cue/features/sampler/data/models/indexing_progress.dart';
 import 'package:stage_cue/features/sampler/data/repositories/library_repository.dart';
 import 'package:stage_cue/features/sampler/domain/entities/library.dart';
@@ -569,6 +570,28 @@ void main() {
       }
 
       verify(() => syncController.schedulePush(any())).called(1);
+    });
+
+    test('une lecture (last_played_at) ne déclenche pas de push', () async {
+      when(() => repository.getLibraries())
+          .thenAnswer((_) async => [_library(1)]);
+      final soundId = await database.into(database.sounds).insert(
+            db.SoundsCompanion.insert(title: 'Porte', filePath: '/c/porte.wav'),
+          );
+      await runInitialPull();
+      clearInteractions(syncController);
+
+      // `last_played_at` n'est pas exporté dans le snapshot : pousser après
+      // chaque déclenchement ré-uploaderait un contenu identique.
+      final playedAt = DateTime(2026, 9, 24, 21, 30);
+      await LocalSoundDataSource(database).markPlayed(soundId, at: playedAt);
+      await pump();
+
+      verifyNever(() => syncController.schedulePush(any()));
+      final row = await (database.select(database.sounds)
+            ..where((s) => s.id.equals(soundId)))
+          .getSingle();
+      expect(row.lastPlayedAt, playedAt);
     });
   });
 }

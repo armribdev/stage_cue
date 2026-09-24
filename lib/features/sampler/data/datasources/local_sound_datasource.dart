@@ -322,9 +322,22 @@ class LocalSoundDataSource {
   }
 
   /// Enregistre l'instant de dernière lecture (tri par récence).
+  ///
+  /// Écriture **muette** : `customUpdate` sans `updates` n'émet aucun
+  /// événement `tableUpdates`. Via l'API typée, chaque lecture signalait
+  /// « `sounds` modifiée » à `AutoSyncCoordinator`, qui planifiait un push
+  /// Drive (ré-export + upload de tous les snapshots, révisions incrémentées)
+  /// pour un contenu identique : `last_played_at` est une annotation locale,
+  /// absente de l'export du snapshot dossier. Aucun flux `watch()` ne lit
+  /// `sounds` ; l'index de recherche est patché en mémoire par l'appelant.
   Future<void> markPlayed(int id, {DateTime? at}) async {
-    await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
-        .write(db.SoundsCompanion(lastPlayedAt: Value(at ?? DateTime.now())));
+    await _database.customUpdate(
+      'UPDATE sounds SET last_played_at = ? WHERE id = ?',
+      variables: [
+        Variable.withDateTime(at ?? DateTime.now()),
+        Variable.withInt(id),
+      ],
+    );
   }
 
   /// Met à jour les réglages d'un pad pour une board spécifique.

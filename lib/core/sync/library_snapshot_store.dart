@@ -288,6 +288,9 @@ class LibrarySnapshotStore {
     final escaped = _escapePath(targetPath);
     await _database.customStatement("ATTACH DATABASE '$escaped' AS snap");
     try {
+      // Colonnes explicites : `is_favorite` et `last_played_at` sont des
+      // annotations locales qui ne voyagent pas (et `markPlayed` s'écrit sans
+      // déclencher de push en conséquence). Pas de `SELECT *` ici.
       await _database.customStatement('''
         CREATE TABLE snap.sounds AS
         SELECT id, title, display_name, file_path, type, color, volume,
