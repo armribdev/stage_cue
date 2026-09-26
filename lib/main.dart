@@ -18,8 +18,8 @@ void main() {
       WidgetsFlutterBinding.ensureInitialized();
       _installGlobalErrorHandlers();
 
-      // Moteur de pré-écoute (cue) séparé, desktop uniquement : n'initialise
-      // media_kit que là où la sortie cue est supportée (Windows).
+      // Moteur de pré-écoute (cue) séparé, Windows uniquement : n'initialise
+      // media_kit que là où la sortie cue est supportée.
       if (CueAudioService.isSupported) {
         MediaKit.ensureInitialized();
       }

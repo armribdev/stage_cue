@@ -84,7 +84,7 @@ class AppPreferences extends ChangeNotifier {
   ConnectivityMode get connectivityMode => _connectivityMode;
 
   /// Périphérique de sortie de pré-écoute (cue), ou `null` pour « défaut
-  /// système ». Utilisé sur desktop pour router les auditions vers un casque
+  /// système ». Utilisé sur Windows pour router les auditions vers un casque
   /// séparé pendant que la sortie « salle » reste sur le device par défaut.
   String? get cueOutputDeviceId => _cueOutputDeviceId;
 
