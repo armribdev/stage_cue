@@ -14,6 +14,16 @@ import 'update_log.dart';
 /// [holdAppMutexForUpdateDetection] et gère fermeture + relance
 /// (`/CLOSEAPPLICATIONS /RESTARTAPPLICATIONS`), voir `windows/installer/stage_cue.iss`.
 class AppUpdateInstaller {
+  AppUpdateInstaller({
+    http.Client? httpClient,
+    Future<Directory> Function()? getTemporaryDirectoryFn,
+  })  : _httpClient = httpClient,
+        _getTemporaryDirectory =
+            getTemporaryDirectoryFn ?? getTemporaryDirectory;
+
+  final http.Client? _httpClient;
+  final Future<Directory> Function() _getTemporaryDirectory;
+
   /// Écrit en streaming dans un `.part` puis renomme atomiquement vers le nom
   /// final — un téléchargement interrompu ne laisse jamais un exe tronqué
   /// pris pour un installeur valide.
@@ -23,7 +33,7 @@ class AppUpdateInstaller {
   }) async {
     UpdateLog.downloadStarted(info.downloadUrl);
     try {
-      final tempDir = await getTemporaryDirectory();
+      final tempDir = await _getTemporaryDirectory();
       final updateDir = Directory(p.join(tempDir.path, 'stagecue_update'));
       if (!await updateDir.exists()) {
         await updateDir.create(recursive: true);
@@ -31,7 +41,8 @@ class AppUpdateInstaller {
       final finalFile = File(p.join(updateDir.path, info.assetName));
       final partFile = File('${finalFile.path}.part');
 
-      final client = http.Client();
+      final ownedClient = _httpClient == null;
+      final client = _httpClient ?? http.Client();
       try {
         final request = http.Request('GET', Uri.parse(info.downloadUrl));
         final response = await client.send(request);
@@ -58,7 +69,7 @@ class AppUpdateInstaller {
           );
         }
       } finally {
-        client.close();
+        if (ownedClient) client.close();
       }
 
       if (await finalFile.exists()) {

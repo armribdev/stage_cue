@@ -15,7 +15,11 @@ import 'app_update_installer.dart';
 /// et l'installation restent une action explicite de l'utilisateur, jamais
 /// automatique (outil de spectacle live — une installation qui se lance
 /// d'elle-même en pleine représentation serait inacceptable).
-Future<void> runUpdateFlow(BuildContext context, AppUpdateInfo info) async {
+Future<void> runUpdateFlow(
+  BuildContext context,
+  AppUpdateInfo info, {
+  AppUpdateInstaller? installer,
+}) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
@@ -39,7 +43,7 @@ Future<void> runUpdateFlow(BuildContext context, AppUpdateInfo info) async {
 
   if (confirmed != true || !context.mounted) return;
 
-  final installer = AppUpdateInstaller();
+  final resolvedInstaller = installer ?? AppUpdateInstaller();
   final progress = ValueNotifier<double?>(0);
 
   unawaited(
@@ -59,7 +63,7 @@ Future<void> runUpdateFlow(BuildContext context, AppUpdateInfo info) async {
 
   String installerPath;
   try {
-    installerPath = await installer.downloadInstaller(
+    installerPath = await resolvedInstaller.downloadInstaller(
       info,
       onProgress: (received, total) {
         progress.value = (total != null && total > 0)
@@ -81,7 +85,7 @@ Future<void> runUpdateFlow(BuildContext context, AppUpdateInfo info) async {
   Navigator.of(context, rootNavigator: true).pop();
 
   try {
-    await installer.launchInstallerSilently(installerPath);
+    await resolvedInstaller.launchInstallerSilently(installerPath);
   } catch (e) {
     if (context.mounted) {
       showCopyableSnackBar(
