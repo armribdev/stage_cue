@@ -10,6 +10,7 @@ import 'core/app/app_services.dart';
 import 'core/audio/audio_load_log.dart';
 import 'core/audio/cue_audio_service.dart';
 import 'core/audio/soloud_engine.dart';
+import 'core/sync/google_oauth_config.dart';
 import 'core/update/app_mutex_windows.dart';
 
 void main() {
@@ -40,6 +41,10 @@ void main() {
         AudioLoadLog.engineInitFailed(e, stack);
         audioEngineInitError = e;
       }
+
+      // Credentials OAuth saisis au runtime (Windows/Linux) — avant tout
+      // démarrage de sync Drive (AutoSyncCoordinator démarre dans create).
+      await GoogleOAuthConfig.load();
 
       final services = AppServices.create();
       await services.appPreferences.load();
