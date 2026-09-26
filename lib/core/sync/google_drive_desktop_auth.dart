@@ -5,15 +5,13 @@ import 'package:google_sign_in_all_platforms/google_sign_in_all_platforms.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:googleapis_auth/googleapis_auth.dart' as auth;
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'drive_account_profile.dart';
 import 'drive_client.dart';
 import 'google_drive_client.dart';
 import 'google_oauth_config.dart';
+import 'oauth_secure_store.dart';
 import 'sync_log.dart';
 
-const String _kTokenKey = 'token';
 const String _kExpiresAtKey = 'expires_at';
 const Duration _kDefaultAccessTokenLifetime = Duration(minutes: 55);
 
@@ -309,19 +307,13 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
           .add(_kDefaultAccessTokenLifetime)
           .toIso8601String(),
     );
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kTokenKey, jsonEncode(map));
+    await OAuthSecureStore.writeDriveToken(jsonEncode(map));
   }
 
-  static Future<String?> _readStoredToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_kTokenKey);
-  }
+  static Future<String?> _readStoredToken() => OAuthSecureStore.readDriveToken();
 
-  static Future<void> _deleteStoredToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kTokenKey);
-  }
+  static Future<void> _deleteStoredToken() =>
+      OAuthSecureStore.deleteDriveToken();
 
   static Future<_StoredCredentials?> _loadStoredCredentials() async {
     final raw = await _readStoredToken();

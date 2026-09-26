@@ -7,6 +7,7 @@ import Foundation
 
 import custom_mouse_cursor
 import file_picker
+import flutter_secure_storage_darwin
 import google_sign_in_ios
 import package_info_plus
 import screen_retriever_macos
@@ -18,6 +19,7 @@ import window_manager
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   CustomMouseCursorPlugin.register(with: registry.registrar(forPlugin: "CustomMouseCursorPlugin"))
   FilePickerPlugin.register(with: registry.registrar(forPlugin: "FilePickerPlugin"))
+  FlutterSecureStorageDarwinPlugin.register(with: registry.registrar(forPlugin: "FlutterSecureStorageDarwinPlugin"))
   FLTGoogleSignInPlugin.register(with: registry.registrar(forPlugin: "FLTGoogleSignInPlugin"))
   FPPPackageInfoPlusPlugin.register(with: registry.registrar(forPlugin: "FPPPackageInfoPlusPlugin"))
   ScreenRetrieverMacosPlugin.register(with: registry.registrar(forPlugin: "ScreenRetrieverMacosPlugin"))
