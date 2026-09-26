@@ -1,11 +1,11 @@
 {
-    "name": "stage_cue",
-    "short_name": "stage_cue",
+    "name": "Stage Cue",
+    "short_name": "Stage Cue",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Soundboard pour déclenchement audio en live (théâtre, streaming, JDR).",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
