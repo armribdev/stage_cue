@@ -24,7 +24,7 @@ La veille est volontairement bridée : elle applique le delta et tire les snapsh
 
 ## Conséquences
 
-- **La veille ne rescanne jamais.** Ajouter un repli sur `indexDriveFolder` dans le chemin `watch` ferait tourner un scan complet en tâche de fond, potentiellement en pleine représentation. Verrouillé par le test « delta inexploitable : ni scan complet, ni pull ».
+- **La veille ne rescanne jamais.** Ajouter un repli sur `indexDriveFolder` dans le chemin `watch` ferait tourner un scan complet en tâche de fond, potentiellement en pleine représentation. Verrouillé par le test « delta inexploitable : ni scan complet, ni pull ». En revanche, la **greffe d'un dossier neuf** (parent connu) reste sur le chemin delta ([0021](0021-synchronisation-incrementale-par-changes-list.md)) : la veille l'applique comme n'importe quel `DriveSyncApplied`, sans violer cette règle.
 - **Une seule séquence.** Ne pas réintroduire d'orchestration de synchro dans un écran : le bouton « Actualiser » passe par `refreshNow`, qui retourne un `SyncPassReport`. Deux séquences pour le même travail divergent — c'est déjà arrivé une fois.
 - **Le verrou est structurel, pas cosmétique.** `_ignoreUpdates` est un booléen partagé : deux passes concurrentes le verraient rabaissé par la première à finir, rouvrant les push parasites pendant que la seconde fusionne encore.
 - **Une passe partielle ne s'annonce pas comme un succès** : `SyncPassReport.skipped`/`authExpired`/`error` sont distincts, parce que le cas qui compte est celui où l'utilisateur cherche un son qu'il vient d'ajouter et ne le trouve pas.

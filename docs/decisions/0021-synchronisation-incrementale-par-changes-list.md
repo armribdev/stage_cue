@@ -18,8 +18,9 @@ Il retourne `DriveSyncNeedsFullScan` — qui n'est pas un échec mais le mode d�
 - aucun jeton de reprise (première fois, ou jeton invalidé) ;
 - dernier scan complet plus vieux que `_fullScanInterval` (7 jours) ;
 - jeton expiré (410 Gone) ;
-- changement portant sur un **dossier** : le delta ne porte pas la descendance, appliquer un renommage laisserait toute une branche avec des chemins faux ;
-- fichier audio dont le dossier parent n'a pas de nœud local ;
+- changement portant sur un **dossier déjà connu** (renommage, déplacement, suppression) : le delta ne porte pas la descendance, l'appliquer laisserait toute une branche avec des chemins faux ;
+- **création** d'un dossier dont le parent n'est pas dans le cadre local (indiscernable d'une autre bibliothèque sans remonter la chaîne) ;
+- fichier audio dont le dossier parent n'a pas de nœud local (et n'a pas été greffé dans le même delta) ;
 - Drive ne renvoie pas de `newStartPageToken`.
 
 Suivi en base (schéma v37) : `libraries.drive_change_token` et `libraries.last_full_scan_at`.
@@ -37,6 +38,6 @@ Suivi en base (schéma v37) : `libraries.drive_change_token` et `libraries.last_
 - **Le jeton de départ se prend AVANT le scan complet, jamais après.** Pris après, un fichier modifié pendant le scan serait absent à la fois du scan (déjà passé sur son dossier) et du premier delta (antérieur au jeton) : perdu jusqu'au rescan périodique.
 - **Le nouveau jeton ne s'écrit qu'après application complète du delta.** Une interruption avant ce point fait rejouer le même delta au lancement suivant — sans effet, les règles de rapprochement étant idempotentes. L'ordre inverse perdrait des changements.
 - Toutes les pages sont collectées avant d'appliquer quoi que ce soit : un delta à moitié appliqué serait pire que pas de delta.
-- Ajouter un dossier sur Drive provoque un scan complet au lancement suivant. C'est voulu. Ne pas « optimiser » ce cas en remontant la chaîne des parents sans mesurer d'abord qu'il pèse réellement.
+- **Création d'un dossier dont le parent est connu** : greffe ciblée (`_collectDriveAudioFiles` sur ce sous-arbre seulement), sans scan complet ni élagage par différence. C'est ce qui permet à la veille ([0022](0022-veille-drive-en-cours-de-session.md)) de rendre visible un pack ajouté pendant la session. Ne pas généraliser en « remonter la chaîne des parents » pour un parent inconnu — ce cas reste en scan complet.
 - Les ajouts et modifications passent par `syncLibrarySoundsFromDriveIndex`, donc par les **mêmes** règles que l'indexation complète (identité forte, adoption par chemin, invalidation des dérivés sur md5 changé). Ne pas réimplémenter ces règles pour le chemin incrémental.
 - Le flux `changes.list` couvre tout ce que l'app peut voir, pas une seule bibliothèque : filtrer les suppressions sur les identités réellement connues de la bibliothèque traitée.

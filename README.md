@@ -13,7 +13,7 @@ L'application est pensée pour une latence faible, une manipulation rapide, et u
 - **Volume global** : contrôle du volume master de la board active.
 - **Suppression avec annulation** : retire un pad puis annule la dernière suppression.
 - **Bibliothèque locale** : persistance avec SQLite via Drift.
-- **Synchronisation Google Drive** : bibliothèque de sons et boards synchronisés entre appareils, cache local avec éviction LRU (favoris et plateau actif épinglés).
+- **Synchronisation Google Drive** : bibliothèque de sons et boards synchronisés entre appareils, cache local avec éviction LRU (favoris et plateau actif épinglés). Veille en session (delta) : un nouveau dossier déposé sur Drive est greffé automatiquement ; un renommage/déplacement de dossier attend un Actualiser ou le prochain lancement.
 - **Mode Spectacle** : mode live qui priorise le son le moins joué de la session sur les multipads, pour éviter la répétition pendant une représentation.
 - **Sortie cue séparée (Windows)** : pré-écoute sur un device audio distinct de la sortie « salle », pour préparer le prochain son sans le diffuser au public.
 - **Recherche rapide** : recherche-éclair dans la bibliothèque avec placement automatique sur le plateau.
