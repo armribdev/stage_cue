@@ -6,6 +6,7 @@ import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound_board.dart';
 import 'package:stage_cue/features/sampler/domain/usecases/load_sounds_usecase.dart';
 import 'package:stage_cue/features/sampler/data/repositories/sound_repository.dart';
+import 'package:stage_cue/features/sampler/presentation/models/pad_sound_slot.dart';
 import 'package:stage_cue/features/sampler/presentation/providers/sampler_provider.dart';
 
 // ignore: subtype_of_sealed_class
@@ -429,9 +430,7 @@ void main() {
       'résultat qu\'un pad aléatoire à compteurs égaux) : _pickSoundIndex '
       'appelle ce helper AVANT le switch sur playMode, donc son comportement '
       'ne doit dépendre que des compteurs, jamais de playMode — cf. décision '
-      '0014. (Le dispatch réel de _pickSoundIndex n\'est pas exerçable ici : '
-      'il requiert des PadSoundSlot.player, un AudioPlayerService natif '
-      'SoLoud non simulable sans lecteur audio réel.)',
+      '0014.',
       () {
         final n = _notifierForPlayback();
         final pad = _multipad(
@@ -452,5 +451,78 @@ void main() {
         }
       },
     );
+  });
+
+  // ── _pickSoundIndex (dispatch live / random / sequential) ────────────────
+
+  group('debugPickSoundIndex — dispatch', () {
+    PadItem _readyMultipad(
+      List<Sound> sounds, {
+      PadPlayMode playMode = PadPlayMode.random,
+    }) {
+      final pad = _multipad(1, sounds, playMode: playMode);
+      final padItem = PadItem(pad: pad);
+      for (final slot in padItem.slots) {
+        slot.availability = PadSoundAvailability.ready;
+      }
+      return padItem;
+    }
+
+    test('session live : ignore playMode et choisit le compteur le plus bas',
+        () {
+      final n = _notifierForPlayback()
+        ..debugTreatReadyAvailabilityAsEligible = true;
+      final padItem = _readyMultipad(
+        [_sound(10), _sound(11), _sound(12)],
+        playMode: PadPlayMode.sequential,
+      );
+
+      n.startLiveSession();
+      n.debugMarkPlayedAt(padItem, 0);
+      n.debugMarkPlayedAt(padItem, 2);
+
+      for (var i = 0; i < 40; i++) {
+        expect(n.debugPickSoundIndex(padItem), 1);
+      }
+    });
+
+    test('hors live + sequential : avance sur les slots prêts', () {
+      final n = _notifierForPlayback()
+        ..debugTreatReadyAvailabilityAsEligible = true;
+      final padItem = _readyMultipad(
+        [_sound(10), _sound(11), _sound(12)],
+        playMode: PadPlayMode.sequential,
+      );
+
+      expect(n.debugPickSoundIndex(padItem), 0);
+      expect(n.debugPickSoundIndex(padItem), 1);
+      expect(n.debugPickSoundIndex(padItem), 2);
+      expect(n.debugPickSoundIndex(padItem), 0);
+    });
+
+    test('hors live + random : ne rejoue pas un index avant d\'avoir tout '
+        'parcouru', () {
+      final n = _notifierForPlayback()
+        ..debugTreatReadyAvailabilityAsEligible = true;
+      final padItem = _readyMultipad(
+        [_sound(10), _sound(11), _sound(12)],
+      );
+
+      final firstRound = <int>{
+        n.debugPickSoundIndex(padItem),
+        n.debugPickSoundIndex(padItem),
+        n.debugPickSoundIndex(padItem),
+      };
+      expect(firstRound, {0, 1, 2});
+    });
+
+    test('aucun slot éligible → 0', () {
+      final n = _notifierForPlayback()
+        ..debugTreatReadyAvailabilityAsEligible = true;
+      final padItem = PadItem(pad: _multipad(1, [_sound(10), _sound(11)]));
+      // slots restent needsDownload → non éligibles
+
+      expect(n.debugPickSoundIndex(padItem), 0);
+    });
   });
 }

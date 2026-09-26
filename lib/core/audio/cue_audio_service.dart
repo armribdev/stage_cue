@@ -37,8 +37,14 @@ class CueAudioService {
 
   static final CueAudioService instance = CueAudioService._();
 
+  /// Override tests : `true`/`false` force le support ; `null` = détection
+  /// plateforme réelle (Windows hors web).
+  @visibleForTesting
+  static bool? debugOverrideSupported;
+
   /// Sortie séparée disponible uniquement sur Windows.
-  static bool get isSupported => !kIsWeb && Platform.isWindows;
+  static bool get isSupported =>
+      debugOverrideSupported ?? (!kIsWeb && Platform.isWindows);
 
   String? _selectedDeviceId;
   List<CueDevice> _cachedDevices = const [];

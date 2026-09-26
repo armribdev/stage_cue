@@ -1554,8 +1554,12 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   bool _slotEligibleForPlayback(PadItem padItem, int index) {
-    if (!padItem.slots[index].isReady) return false;
-    if (isLiveOfflineMode && !padItem.slots[index].appearsReady) return false;
+    final slot = padItem.slots[index];
+    final ready = slot.isReady ||
+        (debugTreatReadyAvailabilityAsEligible &&
+            slot.availability == PadSoundAvailability.ready);
+    if (!ready) return false;
+    if (isLiveOfflineMode && !slot.appearsReady) return false;
     return true;
   }
 
@@ -2326,6 +2330,16 @@ class SamplerNotifier extends ChangeNotifier {
     List<int> readyIndices,
   ) =>
       _pickLowestSessionCountIndex(padItem, readyIndices);
+
+  /// Quand vrai, un slot `availability == ready` compte comme éligible même
+  /// sans `AudioPlayerService` natif — permet d'exercer [_pickSoundIndex]
+  /// (live / random / sequential) en test unitaire.
+  @visibleForTesting
+  bool debugTreatReadyAvailabilityAsEligible = false;
+
+  /// Dispatch complet de [_pickSoundIndex] (voir [debugTreatReadyAvailabilityAsEligible]).
+  @visibleForTesting
+  int debugPickSoundIndex(PadItem padItem) => _pickSoundIndex(padItem);
 
   Future<QuickSearchPrepareResult> prepareSoundFromQuickSearch(
     int soundId,

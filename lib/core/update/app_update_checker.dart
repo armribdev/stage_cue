@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'app_update_info.dart';
@@ -12,16 +13,27 @@ class AppUpdateChecker {
   static const _latestReleaseUrl =
       'https://api.github.com/repos/$_repoSlug/releases/latest';
 
+  AppUpdateChecker({http.Client? httpClient}) : _http = httpClient;
+
+  /// Client injecté (tests) ; `null` ⇒ `http.get` par défaut.
+  final http.Client? _http;
+
   /// `null` si déjà à jour, si le check échoue silencieusement en amont (voir
   /// l'appelant), ou si la release n'a pas d'asset installeur exploitable.
   /// Les erreurs réseau/format remontent à l'appelant — c'est lui qui décide
   /// de logguer et d'afficher (ou pas) un message.
   Future<AppUpdateInfo?> checkForUpdate({required String currentVersion}) async {
     UpdateLog.checkStarted();
-    final response = await http.get(
-      Uri.parse(_latestReleaseUrl),
-      headers: const {'Accept': 'application/vnd.github+json'},
-    );
+    final client = _http;
+    final response = client == null
+        ? await http.get(
+            Uri.parse(_latestReleaseUrl),
+            headers: const {'Accept': 'application/vnd.github+json'},
+          )
+        : await client.get(
+            Uri.parse(_latestReleaseUrl),
+            headers: const {'Accept': 'application/vnd.github+json'},
+          );
     if (response.statusCode != 200) {
       throw Exception(
         'Réponse inattendue de GitHub (${response.statusCode})',
@@ -36,7 +48,7 @@ class AppUpdateChecker {
     final remoteVersion =
         tagName.startsWith('v') ? tagName.substring(1) : tagName;
 
-    if (!_isNewer(remoteVersion, currentVersion)) {
+    if (!isNewerVersion(remoteVersion, currentVersion)) {
       UpdateLog.upToDate(currentVersion);
       return null;
     }
@@ -70,7 +82,8 @@ class AppUpdateChecker {
 
   /// Comparateur semver minimal (major.minor.patch) — suffisant pour des tags
   /// `vX.Y.Z` ; un composant non numérique retombe sur 0 plutôt que d'échouer.
-  bool _isNewer(String remote, String current) {
+  @visibleForTesting
+  static bool isNewerVersion(String remote, String current) {
     final remoteParts = _parseVersion(remote);
     final currentParts = _parseVersion(current);
     for (var i = 0; i < 3; i++) {
@@ -81,7 +94,7 @@ class AppUpdateChecker {
     return false;
   }
 
-  List<int> _parseVersion(String version) {
+  static List<int> _parseVersion(String version) {
     final parts = version.split('.');
     return List.generate(3, (i) {
       if (i >= parts.length) return 0;
