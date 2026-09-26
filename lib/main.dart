@@ -3,13 +3,13 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'core/app/app.dart';
 import 'core/app/app_services.dart';
 import 'core/audio/audio_load_log.dart';
 import 'core/audio/cue_audio_service.dart';
+import 'core/audio/soloud_engine.dart';
 import 'core/update/app_mutex_windows.dart';
 
 void main() {
@@ -31,13 +31,14 @@ void main() {
         holdAppMutexForUpdateDetection();
       }
 
+      // En cas d'échec : on démarre quand même pour afficher l'écran de retry
+      // (pas de régie muette avec pads cliquables).
+      Object? audioEngineInitError;
       try {
-        await SoLoud.instance.init(
-          bufferSize: 1024, // Latence réduite pour soundboard réactif
-        );
-        AudioLoadLog.engineReady();
+        await initSoLoudEngine();
       } catch (e, stack) {
         AudioLoadLog.engineInitFailed(e, stack);
+        audioEngineInitError = e;
       }
 
       final services = AppServices.create();
@@ -46,7 +47,12 @@ void main() {
       CueAudioService.instance.init(
         selectedDeviceId: services.appPreferences.cueOutputDeviceId,
       );
-      runApp(SoundboardApp(services: services));
+      runApp(
+        SoundboardApp(
+          services: services,
+          audioEngineInitError: audioEngineInitError,
+        ),
+      );
     },
     (error, stack) {
       if (isBenignSoLoudLoadSideEffect(error)) {

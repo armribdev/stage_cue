@@ -52,7 +52,7 @@ class AudioLoadLog {
 
   static void engineInitFailed(Object error, StackTrace stackTrace) {
     severe(
-      'Impossible d\'initialiser SoLoud — l\'app démarre sans audio : $error',
+      'Impossible d\'initialiser SoLoud — écran de retry affiché : $error',
       error: error,
       stackTrace: stackTrace,
     );
