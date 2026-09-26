@@ -9,6 +9,8 @@ import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:win32/win32.dart' as win32;
 import 'package:window_manager/window_manager.dart';
+import '../audio/audio_load_log.dart';
+import '../audio/soloud_engine.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import '../update/app_update_checker.dart';
@@ -19,14 +21,20 @@ import '../utils/app_snackbar.dart';
 import '../utils/layout_utils.dart';
 import '../../features/sampler/presentation/screens/sampler_screen.dart';
 import 'app_services.dart';
+import 'audio_engine_unavailable_screen.dart';
 
 /// Widget racine de l'application
 class SoundboardApp extends StatefulWidget {
   final AppServices services;
 
+  /// Erreur d'init SoLoud au démarrage — `null` si le moteur est prêt.
+  /// Affiche un écran bloquant avec retry tant que non résolu.
+  final Object? audioEngineInitError;
+
   const SoundboardApp({
     super.key,
     required this.services,
+    this.audioEngineInitError,
   });
 
   @override
@@ -55,9 +63,15 @@ class _SoundboardAppState extends State<SoundboardApp>
   /// et on la restaure en sortant.
   bool _wasMaximizedBeforeFullScreen = false;
 
+  /// Erreur SoLoud courante — `null` une fois le moteur prêt (démarrage ou retry).
+  Object? _audioEngineError;
+
+  bool _isRetryingAudioEngine = false;
+
   @override
   void initState() {
     super.initState();
+    _audioEngineError = widget.audioEngineInitError;
     WidgetsBinding.instance.addObserver(this);
     if (_isWindowsDesktop) {
       HardwareKeyboard.instance.addHandler(_handleKeyEvent);
@@ -70,7 +84,33 @@ class _SoundboardAppState extends State<SoundboardApp>
           }),
         );
       }
-      unawaited(_maybeCheckForUpdateOnLaunch());
+      // Pas de check update tant que l'audio est mort : on priorise le retry.
+      if (_audioEngineError == null) {
+        unawaited(_maybeCheckForUpdateOnLaunch());
+      }
+    }
+  }
+
+  Future<void> _retryAudioEngine() async {
+    if (_isRetryingAudioEngine) return;
+    setState(() => _isRetryingAudioEngine = true);
+    try {
+      await initSoLoudEngine();
+      if (!mounted) return;
+      setState(() {
+        _audioEngineError = null;
+        _isRetryingAudioEngine = false;
+      });
+      if (_isWindowsDesktop) {
+        unawaited(_maybeCheckForUpdateOnLaunch());
+      }
+    } catch (e, stack) {
+      AudioLoadLog.engineInitFailed(e, stack);
+      if (!mounted) return;
+      setState(() {
+        _audioEngineError = e;
+        _isRetryingAudioEngine = false;
+      });
     }
   }
 
@@ -352,14 +392,22 @@ class _SoundboardAppState extends State<SoundboardApp>
           child: child!,
         );
       },
-      home: SamplerScreen(
-        services: widget.services,
-        isWindowsFullScreen:
-            _isWindowsDesktop ? _boundsBeforeFullScreen != null : null,
-        onToggleWindowsFullScreen:
-            _isWindowsDesktop ? () => unawaited(_toggleFullScreen()) : null,
-        onQuitApp: _isWindowsDesktop ? () => unawaited(_quitApp()) : null,
-      ),
+      home: _audioEngineError != null
+          ? AudioEngineUnavailableScreen(
+              error: _audioEngineError!,
+              isRetrying: _isRetryingAudioEngine,
+              onRetry: () => unawaited(_retryAudioEngine()),
+            )
+          : SamplerScreen(
+              services: widget.services,
+              isWindowsFullScreen:
+                  _isWindowsDesktop ? _boundsBeforeFullScreen != null : null,
+              onToggleWindowsFullScreen: _isWindowsDesktop
+                  ? () => unawaited(_toggleFullScreen())
+                  : null,
+              onQuitApp:
+                  _isWindowsDesktop ? () => unawaited(_quitApp()) : null,
+            ),
     );
   }
 }
