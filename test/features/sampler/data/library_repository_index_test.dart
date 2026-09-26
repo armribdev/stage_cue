@@ -557,22 +557,147 @@ void main() {
       expect((outcome as DriveSyncNeedsFullScan).reason, 'jeton expiré');
     });
 
-    test('changement de DOSSIER : scan complet demandé (le delta ne porte pas '
+    test('renommage d\'un dossier CONNU : scan complet (le delta ne porte pas '
         'la descendance)', () async {
-      final client = _FakeDriveClient({'root': []});
+      final client = _FakeDriveClient({
+        'root': [_folder('d1', 'Portes')],
+        'd1': [_audio('f0', 'existant.mp3')],
+      });
+      final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
+
       client.changePages['token-1'] = DriveChangePage(
         changes: [
           DriveChange(
-            fileId: 'd9',
+            fileId: 'd1',
             removed: false,
-            file: _folder('d9', 'Renommé'),
+            file: _folder('d1', 'Renommé'),
             parentId: 'root',
             isFolder: true,
           ),
         ],
         newStartPageToken: 'token-2',
       );
+
+      final outcome = await repository.applyDriveChanges(library: armed());
+
+      expect(outcome, isA<DriveSyncNeedsFullScan>());
+      expect(
+        (outcome as DriveSyncNeedsFullScan).reason,
+        'changement de structure',
+      );
+    });
+
+    test('nouveau dossier sous la racine : greffe ciblée, sons visibles, '
+        'jeton avancé (sans scan complet)', () async {
+      final client = _FakeDriveClient({
+        'root': [_folder('d1', 'Portes')],
+        'd1': [_audio('f0', 'existant.mp3')],
+      });
       final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
+
+      // Pack déposé sur Drive pendant la session.
+      client.tree['root'] = [
+        _folder('d1', 'Portes'),
+        _folder('d2', 'NouveauPack'),
+      ];
+      client.tree['d2'] = [
+        _audio('f1', 'boom.mp3', md5: 'bbb'),
+        _audio('f2', 'crash.mp3', md5: 'ccc'),
+      ];
+      client.changePages['token-1'] = DriveChangePage(
+        changes: [
+          DriveChange(
+            fileId: 'd2',
+            removed: false,
+            file: _folder('d2', 'NouveauPack'),
+            parentId: 'root',
+            isFolder: true,
+          ),
+          audioChange('f1', 'boom.mp3', parentId: 'd2', md5: 'bbb'),
+          audioChange('f2', 'crash.mp3', parentId: 'd2', md5: 'ccc'),
+        ],
+        newStartPageToken: 'token-2',
+      );
+
+      final outcome = await repository.applyDriveChanges(library: armed());
+
+      expect(outcome, isA<DriveSyncApplied>());
+      expect((outcome as DriveSyncApplied).upserted, 2);
+
+      final sounds = await soundsOf(library.id);
+      expect(sounds, hasLength(3));
+      expect(
+        sounds.map((s) => s.relativePath),
+        containsAll(['NouveauPack/boom.mp3', 'NouveauPack/crash.mp3']),
+      );
+
+      final stored = await (database.select(database.libraries)
+            ..where((l) => l.id.equals(library.id)))
+          .getSingle();
+      expect(stored.driveChangeToken, 'token-2');
+    });
+
+    test('nouveau dossier imbriqué (parent neuf + enfant) dans le même delta',
+        () async {
+      final client = _FakeDriveClient({
+        'root': [_audio('f0', 'intro.mp3')],
+      });
+      final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
+
+      client.tree['root'] = [
+        _audio('f0', 'intro.mp3'),
+        _folder('d1', 'Actes'),
+      ];
+      client.tree['d1'] = [_folder('d2', 'Acte 1')];
+      client.tree['d2'] = [_audio('f1', 'pluie.mp3', md5: 'aaa')];
+      client.changePages['token-1'] = DriveChangePage(
+        changes: [
+          // Enfant annoncé avant le parent : la greffe doit réordonner.
+          DriveChange(
+            fileId: 'd2',
+            removed: false,
+            file: _folder('d2', 'Acte 1'),
+            parentId: 'd1',
+            isFolder: true,
+          ),
+          DriveChange(
+            fileId: 'd1',
+            removed: false,
+            file: _folder('d1', 'Actes'),
+            parentId: 'root',
+            isFolder: true,
+          ),
+        ],
+        newStartPageToken: 'token-2',
+      );
+
+      final outcome = await repository.applyDriveChanges(library: armed());
+
+      expect(outcome, isA<DriveSyncApplied>());
+      final sounds = await soundsOf(library.id);
+      expect(
+        sounds.map((s) => s.relativePath),
+        contains('Actes/Acte 1/pluie.mp3'),
+      );
+    });
+
+    test('suppression d\'un dossier connu : scan complet demandé', () async {
+      final client = _FakeDriveClient({
+        'root': [_folder('d1', 'Portes')],
+        'd1': [_audio('f0', 'existant.mp3')],
+      });
+      final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
+
+      client.changePages['token-1'] = const DriveChangePage(
+        changes: [
+          DriveChange(fileId: 'd1', removed: true, isFolder: true),
+        ],
+        newStartPageToken: 'token-2',
+      );
 
       final outcome = await repository.applyDriveChanges(library: armed());
 
