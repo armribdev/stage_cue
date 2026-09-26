@@ -19,36 +19,17 @@ Le workflow [`release.yml`](release.yml) compile Stage Cue sur **Android, iOS, m
 | Plateforme | Fichier                       | Installable tel quel ?                       |
 |------------|-------------------------------|----------------------------------------------|
 | Android    | `app-release.apk` + `.aab`    | APK : oui (sources inconnues). AAB : Play Store. |
-| iOS        | `app-unsigned.ipa`            | ❌ non — signature requise (voir ci-dessous)  |
+| iOS        | `app-unsigned.ipa`            | ❌ non — signature Apple requise              |
 | macOS      | `stage_cue-macos.zip`         | oui, avec avertissement Gatekeeper            |
 | Linux      | `stage_cue-linux-x64.tar.gz`  | oui                                           |
 | Windows    | `stage_cue-windows-x64.zip` + `StageCue-Setup-X.Y.Z.exe` | oui, avec avertissement SmartScreen (installeur : voir `windows/installer/stage_cue.iss`) |
 
-## Signature (à faire plus tard)
+## Signature
 
-Les builds actuels ne sont **pas signés** pour distribution officielle. Pour passer à des
-artefacts publiables, il faudra ajouter des **GitHub Secrets** (Settings → Secrets and
-variables → Actions) et adapter `release.yml`.
+Les builds ne sont **pas** signés pour distribution « officielle » (certificat Authenticode Windows / keystore Play Store / compte Apple). C’est volontaire tant qu’aucun certificat payant n’est prévu :
 
-### Android (pour publier sur le Play Store)
-1. Générer une keystore :
-   `keytool -genkey -v -keystore upload.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload`
-2. Encoder en base64 et créer les secrets : `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`,
-   `KEY_ALIAS`, `KEY_PASSWORD`.
-3. Configurer `android/key.properties` + `android/app/build.gradle` (signingConfigs).
+- **Windows** — SmartScreen (« éditeur inconnu ») reste affiché ; l’installeur et la mise à jour auto fonctionnent quand même (`lib/core/update/`, `windows/installer/stage_cue.iss`).
+- **Android** — APK/AAB signés avec la clé **debug** (OK pour tests, pas pour le Play Store).
+- **iOS / macOS** — iOS en `--no-codesign` ; macOS non notarisé (Gatekeeper).
 
-### iOS / macOS (compte développeur Apple payant requis)
-1. Certificat de distribution + provisioning profile depuis le compte Apple Developer.
-2. Secrets : `APPLE_CERT_BASE64`, `APPLE_CERT_PASSWORD`, `PROVISIONING_PROFILE_BASE64`.
-3. Importer dans le trousseau du runner puis `flutter build ipa` (sans `--no-codesign`).
-   La notarisation macOS demande en plus un mot de passe d'app Apple ID.
-
-### Windows / Linux
-Optionnel : signature de code (certificat EXE) ou packaging `.msix` / `.deb` / AppImage.
-
-Windows dispose déjà d'un mécanisme de mise à jour automatique (check au
-lancement + bouton dans Réglages, téléchargement de `StageCue-Setup-*.exe`
-depuis la dernière Release, installation silencieuse) — voir
-`lib/core/update/` et `windows/installer/stage_cue.iss`. Signer l'exécutable
-resterait utile pour supprimer l'avertissement SmartScreen, mais n'est pas
-requis pour que la mise à jour fonctionne.
+Prévenir les beta-testeurs dans les notes de release (SmartScreen → *Plus d’infos* → *Exécuter quand même*).

@@ -44,8 +44,8 @@ jobs:
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
 
-      # NOTE signature : sans keystore, l'APK est signé avec la clé debug.
-      # Pour un APK/AAB publiable, voir le bloc "Signature Android" en bas de fichier.
+      # APK/AAB signés avec la clé debug (pas de keystore release tant qu'aucun
+      # certificat Play Store n'est prévu — voir workflows/README.md).
       - run: flutter build apk --release
       - run: flutter build appbundle --release
 
