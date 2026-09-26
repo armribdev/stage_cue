@@ -15,13 +15,13 @@ L'application est pensée pour une latence faible, une manipulation rapide, et u
 - **Bibliothèque locale** : persistance avec SQLite via Drift.
 - **Synchronisation Google Drive** : bibliothèque de sons et boards synchronisés entre appareils, cache local avec éviction LRU (favoris et plateau actif épinglés).
 - **Mode Spectacle** : mode live qui priorise le son le moins joué de la session sur les multipads, pour éviter la répétition pendant une représentation.
-- **Sortie cue séparée (desktop)** : pré-écoute sur un device audio distinct de la sortie « salle », pour préparer le prochain son sans le diffuser au public.
+- **Sortie cue séparée (Windows)** : pré-écoute sur un device audio distinct de la sortie « salle », pour préparer le prochain son sans le diffuser au public.
 - **Recherche rapide** : recherche-éclair dans la bibliothèque avec placement automatique sur le plateau.
 
 ## Stack technique
 
 - **Flutter / Dart**
-- **Audio** : `flutter_soloud` (moteur principal), `media_kit` (routage cue desktop uniquement)
+- **Audio** : `flutter_soloud` (moteur principal), `media_kit` (routage cue Windows uniquement)
 - **Base locale** : `drift` + `sqlite3_flutter_libs`
 - **Synchronisation** : Google Drive (`googleapis`, `google_sign_in`)
 - **Fichiers** : `file_picker`, `path_provider`

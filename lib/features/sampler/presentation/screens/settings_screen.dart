@@ -117,7 +117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _appVersion;
   bool _isCheckingForUpdate = false;
 
-  /// Périphériques de sortie de pré-écoute (cue) — desktop uniquement.
+  /// Périphériques de sortie de pré-écoute (cue) — Windows uniquement.
   List<CueDevice> _cueDevices = const [];
   bool _isLoadingCueDevices = false;
   bool _shouldScrollToDriveSection = false;
@@ -2088,7 +2088,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Section « Audio » : choix du périphérique de sortie de pré-écoute (cue).
-  /// Desktop uniquement — permet d'auditionner un son sur un casque séparé
+  /// Windows uniquement — permet d'auditionner un son sur un casque séparé
   /// pendant que la sortie « salle » reste sur le device système.
   Widget _buildAudioSection() {
     final scheme = Theme.of(context).colorScheme;

@@ -5,7 +5,7 @@
 /// - `CuePreviewPlayer` (media_kit) — sortie « cue » sur un device séparé.
 ///
 /// Le routage entre les deux se fait dans `CueAudioService.createPreviewPlayer`
-/// selon le device de pré-écoute configuré (opt-in, desktop uniquement).
+/// selon le device de pré-écoute configuré (opt-in, Windows uniquement).
 abstract interface class PreviewPlayback {
   /// Durée totale de la source (0 si indisponible).
   Duration get duration;

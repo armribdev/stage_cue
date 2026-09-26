@@ -21,7 +21,7 @@ class CueDevice {
   const CueDevice({required this.id, required this.label});
 }
 
-/// Gère la sortie de **pré-écoute (cue)** séparée, sur desktop.
+/// Gère la sortie de **pré-écoute (cue)** séparée, sur Windows.
 ///
 /// flutter_soloud pilote un moteur unique (pads + régie = sortie « salle ») :
 /// impossible d'y router une seconde sortie simultanée. media_kit fournit donc
@@ -30,14 +30,14 @@ class CueDevice {
 ///
 /// Le cue est **opt-in** : tant qu'aucun device n'est choisi
 /// ([selectedDeviceId] `null`), la pré-écoute retombe sur flutter_soloud —
-/// comportement historique, zéro régression. Fonctionnalité Windows d'abord :
+/// comportement historique, zéro régression. Support limité à Windows :
 /// sur les autres plateformes, [isSupported] est faux et le repli s'applique.
 class CueAudioService {
   CueAudioService._();
 
   static final CueAudioService instance = CueAudioService._();
 
-  /// Sortie séparée disponible uniquement sur desktop Windows pour l'instant.
+  /// Sortie séparée disponible uniquement sur Windows.
   static bool get isSupported => !kIsWeb && Platform.isWindows;
 
   String? _selectedDeviceId;
