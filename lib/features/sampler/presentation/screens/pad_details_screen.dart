@@ -656,16 +656,11 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           OutlinedButton(
-            // Le thème global met `minimumSize` à largeur infinie (pensé pour
-            // un bouton seul en pleine largeur) — invisible dans un Row à
-            // plusieurs boutons sans cette borne locale.
-            style: OutlinedButton.styleFrom(minimumSize: const Size(64, 42)),
             onPressed: () => Navigator.of(context).maybePop(),
             child: const Text('Annuler'),
           ),
           const SizedBox(width: AppSpacing.sm),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(minimumSize: const Size(64, 42)),
             onPressed: () => Navigator.of(context).maybePop(),
             child: const Text('Enregistrer'),
           ),

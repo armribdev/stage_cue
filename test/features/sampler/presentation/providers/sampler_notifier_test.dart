@@ -456,7 +456,7 @@ void main() {
   // ── _pickSoundIndex (dispatch live / random / sequential) ────────────────
 
   group('debugPickSoundIndex — dispatch', () {
-    PadItem _readyMultipad(
+    PadItem readyMultipad(
       List<Sound> sounds, {
       PadPlayMode playMode = PadPlayMode.random,
     }) {
@@ -472,7 +472,7 @@ void main() {
         () {
       final n = _notifierForPlayback()
         ..debugTreatReadyAvailabilityAsEligible = true;
-      final padItem = _readyMultipad(
+      final padItem = readyMultipad(
         [_sound(10), _sound(11), _sound(12)],
         playMode: PadPlayMode.sequential,
       );
@@ -489,7 +489,7 @@ void main() {
     test('hors live + sequential : avance sur les slots prêts', () {
       final n = _notifierForPlayback()
         ..debugTreatReadyAvailabilityAsEligible = true;
-      final padItem = _readyMultipad(
+      final padItem = readyMultipad(
         [_sound(10), _sound(11), _sound(12)],
         playMode: PadPlayMode.sequential,
       );
@@ -504,7 +504,7 @@ void main() {
         'parcouru', () {
       final n = _notifierForPlayback()
         ..debugTreatReadyAvailabilityAsEligible = true;
-      final padItem = _readyMultipad(
+      final padItem = readyMultipad(
         [_sound(10), _sound(11), _sound(12)],
       );
 

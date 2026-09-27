@@ -172,13 +172,17 @@ class AppTheme {
           borderSide: const BorderSide(color: AppColors.danger, width: 1.4),
         ),
       ),
+      // Largeur min finie (pas Size.fromHeight) : sinon minWidth=∞ et tout
+      // bouton dans un parent à largeur non bornée (Row imbriqué, overlay…)
+      // explose avec BoxConstraints(w=Infinity, 34.0<=h…) une fois la densité
+      // compacte appliquée (42 − 8). Étirement pleine largeur = stretch / SizedBox.
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.accent,
           foregroundColor: Colors.white,
           disabledBackgroundColor: AppColors.surface2,
           disabledForegroundColor: AppColors.textFaint,
-          minimumSize: const Size.fromHeight(_controlHeight),
+          minimumSize: const Size(64, _controlHeight),
           elevation: 0,
           textStyle: const TextStyle(
             fontFamily: AppFonts.ui,
@@ -192,7 +196,7 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.accent,
           foregroundColor: Colors.white,
-          minimumSize: const Size.fromHeight(_controlHeight),
+          minimumSize: const Size(64, _controlHeight),
           elevation: 0,
           textStyle: const TextStyle(
             fontFamily: AppFonts.ui,
@@ -205,7 +209,7 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: scheme.onSurface,
-          minimumSize: const Size.fromHeight(_controlHeight),
+          minimumSize: const Size(64, _controlHeight),
           shape: solidButtonShape,
           side: AppElevation.border(scheme),
         ),
