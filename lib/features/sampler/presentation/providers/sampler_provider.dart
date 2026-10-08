@@ -251,10 +251,10 @@ class SamplerNotifier extends ChangeNotifier {
     padItem.pad = padItem.pad.copyWith(sounds: sounds);
   }
 
-  /// Calcule et persiste l'enveloppe waveform d'un son musique dont le fichier
-  /// vient d'être chargé, si elle manque encore. Réinjecte ensuite le son (avec
-  /// sa waveform) dans le pad en mémoire et notifie — la régie l'affiche dès
-  /// qu'elle est prête, sans bloquer le démarrage de la lecture.
+  /// Calcule et persiste l'enveloppe waveform d'un son (tout type) dont le
+  /// fichier vient d'être chargé, si elle manque encore. Réinjecte ensuite le
+  /// son (avec sa waveform) dans le pad en mémoire et notifie — la régie
+  /// l'affiche dès qu'elle est prête, sans bloquer le démarrage de la lecture.
   Future<void> _ensureWaveformForSound(
     PadItem padItem,
     int index,
@@ -262,7 +262,7 @@ class SamplerNotifier extends ChangeNotifier {
   ) async {
     if (index < 0 || index >= padItem.pad.sounds.length) return;
     final sound = padItem.pad.sounds[index];
-    if (sound.type != SoundType.music || sound.waveform != null) return;
+    if (sound.waveform != null) return;
     // Échec « format » déjà acté à la génération courante : ne pas re-sonder.
     if (!waveformNeedsProbe(sound.waveformProbeGeneration)) return;
 
