@@ -281,6 +281,11 @@ void main() {
       'intro.mp3',
       'Portes/knock.wav',
     ]));
+    // Un son créé reçoit d'emblée le titre du fichier comme nom affiché.
+    expect(sounds.map((s) => s.displayName), unorderedEquals(<String>[
+      'intro',
+      'knock',
+    ]));
 
     // Un nœud dossier par dossier PORTEUR de fichiers (racine + Portes).
     final folders = await libraryDataSource.getFoldersForLibrary(library.id);

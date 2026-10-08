@@ -393,6 +393,14 @@ class LibrarySnapshotStore {
     }
   }
 
+  /// Nom affiché d'une ligne de snapshot, jamais vide : un snapshot publié par
+  /// un appareil antérieur à v39 peut porter `display_name` à null/vide, et
+  /// l'écraser tel quel ferait revenir un son sans nom affiché.
+  String _displayNameOf(QueryRow row) {
+    final raw = row.read<String?>('display_name')?.trim();
+    return (raw == null || raw.isEmpty) ? row.read<String>('title') : raw;
+  }
+
   Future<void> _importFolderSounds({
     required int folderId,
     required int libraryId,
@@ -450,7 +458,7 @@ class LibrarySnapshotStore {
             .write(
           db.SoundsCompanion(
             title: Value(row.read<String>('title')),
-            displayName: Value(row.read<String?>('display_name')),
+            displayName: Value(_displayNameOf(row)),
             filePath: Value(filePath),
             type: Value(rawType != null ? SoundType.values[rawType] : null),
             color: Value(row.read<int?>('color')),
@@ -471,7 +479,7 @@ class LibrarySnapshotStore {
                 title: row.read<String>('title'),
                 filePath: filePath,
                 type: Value(rawType != null ? SoundType.values[rawType] : null),
-                displayName: Value(row.read<String?>('display_name')),
+                displayName: Value(_displayNameOf(row)),
                 color: Value(row.read<int?>('color')),
                 volume: Value(row.read<double>('volume')),
                 createdAt: Value(row.read<DateTime>('created_at')),

@@ -134,6 +134,38 @@ void main() {
     await database.close();
   });
 
+  test('une base v38 donne le titre du fichier aux sons sans nom affiché, '
+      'et garde les noms personnalisés', () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    Future<int> insert(String title, {String? displayName}) =>
+        database.into(database.sounds).insert(
+              db.SoundsCompanion.insert(
+                title: title,
+                filePath: '/cache/$title.wav',
+                displayName: Value(displayName),
+              ),
+            );
+    final nullId = await insert('porte');
+    final blankId = await insert('vent', displayName: '   ');
+    final customId = await insert('pluie', displayName: 'Averse');
+
+    await database.customStatement('PRAGMA user_version = 38');
+    await database.close();
+
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    Future<String?> nameOf(int id) async => (await (database.select(
+              database.sounds)
+          ..where((s) => s.id.equals(id)))
+        .getSingle())
+        .displayName;
+
+    expect(await nameOf(nullId), 'porte');
+    expect(await nameOf(blankId), 'vent');
+    expect(await nameOf(customId), 'Averse');
+
+    await database.close();
+  });
+
   test('la migration est idempotente : une base à jour rembobinée en v35 '
       'passe sans erreur', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));

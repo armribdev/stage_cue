@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 38;
+  int get schemaVersion => 39;
 
   @override
   MigrationStrategy get migration {
@@ -360,6 +360,16 @@ class AppDatabase extends _$AppDatabase {
           if (!await _columnExists('sounds', 'is_processed')) {
             await m.addColumn(sounds, sounds.isProcessed);
           }
+        }
+        if (from < 39) {
+          // Le nom affiché d'un son n'est plus jamais null/vide : il vaut le
+          // titre du fichier tant que l'utilisateur ne l'a pas personnalisé.
+          // Les noms déjà personnalisés sont conservés. Écriture SQL brute :
+          // pas d'événement `tableUpdates`, donc aucun push Drive déclenché.
+          await customStatement(
+            "UPDATE sounds SET display_name = title "
+            "WHERE display_name IS NULL OR TRIM(display_name) = ''",
+          );
         }
       },
       beforeOpen: (details) async {

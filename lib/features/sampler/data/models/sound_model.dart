@@ -33,7 +33,7 @@ class SoundModel {
   static db.SoundsCompanion toCompanion(domain.Sound sound) {
     return db.SoundsCompanion.insert(
       title: sound.title,
-      displayName: Value(sound.displayName),
+      displayName: Value(sound.displayName ?? sound.title),
       filePath: sound.filePath,
       type: Value(sound.type != null ? _mapSoundTypeToDb(sound.type!) : null),
       color: Value(sound.colorValue),
