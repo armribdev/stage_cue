@@ -305,6 +305,16 @@ class LocalSoundDataSource {
     )..where((s) => s.id.equals(id))).write(companion);
   }
 
+  /// Marque une liste de sons comme traités en une seule requête (validation
+  /// en masse depuis la file « À traiter »). Ne touche à aucun autre réglage.
+  Future<void> markSoundsProcessed(Iterable<int> ids) async {
+    final idList = ids.toList();
+    if (idList.isEmpty) return;
+    await (_database.update(_database.sounds)
+          ..where((s) => s.id.isIn(idList)))
+        .write(const db.SoundsCompanion(isProcessed: Value(true)));
+  }
+
   /// Change le type d'un son (corrige une auto-détection par durée erronée).
   Future<void> updateSoundType(int id, domain.SoundType type) async {
     final dbType = switch (type) {
