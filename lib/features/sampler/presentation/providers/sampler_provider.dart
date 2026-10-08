@@ -11,6 +11,7 @@ import '../../../../core/audio/cue_audio_service.dart';
 import '../../../../core/audio/preview_playback.dart';
 import '../../../../core/audio/audio_file_validation.dart';
 import '../../../../core/audio/local_sound_probe.dart';
+import '../../../../core/audio/loudness_analyzer.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/sync/download_queue.dart';
 import '../../data/repositories/library_repository.dart'
@@ -314,6 +315,19 @@ class SamplerNotifier extends ChangeNotifier {
       await _repository.persistWaveformProbe(sound.id, probe);
     }
     return probe.status;
+  }
+
+  /// Volume « auto » d'un son : mesure sa sonie et renvoie le volume qui la
+  /// ramène à la sonie cible (normalisation). Ne persiste rien — l'appelant
+  /// applique la valeur au formulaire, enregistrée au « Enregistrer » habituel.
+  /// `null` si le fichier ne peut pas être mesuré (moteur non prêt, format non
+  /// décodable, audio silencieux).
+  ///
+  /// Même contrat d'erreur que [regenerateWaveform] (fichier hors ligne).
+  Future<double?> computeAutoVolume(Sound sound) async {
+    final path = await _resolvePlayablePath(sound, downloadIfNeeded: true);
+    final rms = await measureRms(path);
+    return rms == null ? null : autoVolumeForRms(rms);
   }
 
   bool _padSoundsChanged(PadItem existing, Pad updated) {

@@ -113,6 +113,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
   bool _tagsFailed = false;
   bool _isSaving = false;
   bool _isRegeneratingWaveform = false;
+  bool _isMeasuringVolume = false;
   bool _wasDirty = false;
 
   /// Reflète `Sound.isProcessed`, passé à `true` dès le premier enregistrement
@@ -250,6 +251,34 @@ class _SoundEditFormState extends State<SoundEditForm> {
       if (!mounted) return;
       setState(() => _isSaving = false);
       showCopyableSnackBar(context, 'Erreur de sauvegarde : $error');
+    }
+  }
+
+  /// Volume « auto » : mesure la sonie du fichier et règle le curseur pour la
+  /// ramener à la sonie cible. N'enregistre rien — passe par `_update`, donc le
+  /// formulaire devient « modifié » et l'opérateur peut ajuster avant de valider.
+  Future<void> _applyAutoVolume() async {
+    if (_isMeasuringVolume) return;
+    final notifier = widget.notifier;
+    if (notifier == null) return;
+    setState(() => _isMeasuringVolume = true);
+    try {
+      final volume = await notifier.computeAutoVolume(widget.sound);
+      if (!mounted) return;
+      if (volume == null) {
+        showCopyableSnackBar(
+          context,
+          'Mesure impossible (audio silencieux, format non pris en charge ou '
+          'moteur audio non prêt).',
+        );
+        return;
+      }
+      _update(() => _volume = volume);
+    } catch (error) {
+      if (!mounted) return;
+      showCopyableSnackBar(context, 'Échec de la mesure : $error');
+    } finally {
+      if (mounted) setState(() => _isMeasuringVolume = false);
     }
   }
 
@@ -505,6 +534,27 @@ class _SoundEditFormState extends State<SoundEditForm> {
             style: AppFonts.monoStyle(const TextStyle(fontSize: 13)),
           ),
         ),
+        if (widget.notifier != null) ...[
+          const SizedBox(width: 8),
+          Tooltip(
+            message: 'Mesure la sonie du fichier et règle le volume pour '
+                'normaliser',
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(64, 32),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              onPressed: _isMeasuringVolume ? null : _applyAutoVolume,
+              child: _isMeasuringVolume
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Auto'),
+            ),
+          ),
+        ],
       ],
     );
   }
