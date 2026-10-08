@@ -52,7 +52,8 @@ class LocalSoundDataSource {
 
   /// Résout les métadonnées d'un fichier audio local.
   /// Retourne `type: null` si le fichier est absent ou si le probe de durée échoue.
-  /// La waveform n'est calculée que pour les musiques (seul type affiché en régie).
+  /// La waveform est calculée pour tous les types (régie musique, éditeur du
+  /// point d'entrée des bruitages et ambiances).
   Future<
       ({
         db_sounds.SoundType? type,
@@ -71,9 +72,7 @@ class LocalSoundDataSource {
     final probeType = await _probeSoundTypeFromDuration(file);
     final contentHash =
         probeType != null ? await computeQuickHash(file) : null;
-    final probe = probeType == db_sounds.SoundType.music
-        ? await extractWaveform(file.path)
-        : null;
+    final probe = probeType != null ? await extractWaveform(file.path) : null;
     return (
       type: probeType,
       contentHash: contentHash,
@@ -509,9 +508,8 @@ class LocalSoundDataSource {
       final contentHash = probeType != null
           ? await computeQuickHash(file)
           : existing.contentHash;
-      final probe = probeType == db_sounds.SoundType.music
-          ? await extractWaveform(file.path)
-          : null;
+      final probe =
+          probeType != null ? await extractWaveform(file.path) : null;
       await (_database.update(_database.sounds)
             ..where((s) => s.id.equals(soundId)))
           .write(
@@ -528,8 +526,7 @@ class LocalSoundDataSource {
     // Type déjà connu : compléter le hash et/ou la waveform s'ils manquent.
     // La waveform n'est re-sondée que si la génération d'échec est dépassée.
     final needsHash = existing.contentHash == null;
-    final needsWaveform = existing.type == db_sounds.SoundType.music &&
-        existing.waveform == null &&
+    final needsWaveform = existing.waveform == null &&
         waveformNeedsProbe(existing.waveformProbeGeneration);
     if (!needsHash && !needsWaveform) return;
 

@@ -32,7 +32,6 @@ import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../data/models/indexing_progress.dart';
 import '../../domain/entities/library.dart' as domain;
-import '../../domain/entities/sound.dart' show SoundType;
 import '../../domain/entities/watched_path.dart' as domain;
 import '../providers/sync_controller.dart';
 import '../widgets/compact_switch.dart';
@@ -1485,7 +1484,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// Régénère l'enveloppe waveform de tous les sons musique déjà en cache
+  /// Régénère l'enveloppe waveform de tous les sons déjà en cache
   /// local (aucun téléchargement Drive forcé — un son non encore mis en
   /// cache est simplement ignoré). Utile après une amélioration de
   /// l'algorithme d'extraction (cf. `kWaveformOversample`) : les enveloppes
@@ -1494,12 +1493,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _regenerateCachedWaveforms() async {
     if (_isRegeneratingWaveforms) return;
 
-    final musicSounds = (await _repository.getAllSounds())
-        .where((sound) => sound.type == SoundType.music)
-        .toList();
-    if (musicSounds.isEmpty) {
+    final sounds = await _repository.getAllSounds();
+    if (sounds.isEmpty) {
       if (mounted) {
-        AppSnackBar.show(context, 'Aucun son musique dans la bibliothèque');
+        AppSnackBar.show(context, 'Aucun son dans la bibliothèque');
       }
       return;
     }
@@ -1507,7 +1504,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _isRegeneratingWaveforms = true;
       _waveformRegenDone = 0;
-      _waveformRegenTotal = musicSounds.length;
+      _waveformRegenTotal = sounds.length;
     });
 
     var regenerated = 0;
@@ -1515,7 +1512,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     var failed = 0;
     var aborted = false;
 
-    for (final sound in musicSounds) {
+    for (final sound in sounds) {
       if (!mounted) return;
       try {
         final path = await widget.libraryRepository.resolvePlayablePath(
@@ -2153,7 +2150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Régénérer les waveforms des sons musique déjà en cache local, '
+            'Régénérer les waveforms des sons déjà en cache local, '
             'avec l\'algorithme d\'extraction courant. N\'affecte pas les sons '
             'non encore téléchargés.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
