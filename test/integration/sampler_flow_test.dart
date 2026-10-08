@@ -126,6 +126,7 @@ void main() {
     return database.into(database.sounds).insert(
           db.SoundsCompanion.insert(
             title: title,
+            displayName: title,
             filePath: writeFakeWav(title).path,
             type: const Value(SoundType.soundEffect),
           ),

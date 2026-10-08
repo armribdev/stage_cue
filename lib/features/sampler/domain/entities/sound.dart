@@ -4,7 +4,8 @@ import 'dart:typed_data';
 class Sound {
   final int id;
   final String title;
-  final String? displayName;
+  /// Nom affiché : jamais vide, vaut [title] tant que non personnalisé.
+  final String displayName;
   final String filePath;
   final SoundType? type;
   final int? colorValue;
@@ -51,7 +52,7 @@ class Sound {
   Sound({
     required this.id,
     required this.title,
-    this.displayName,
+    String? displayName,
     required this.filePath,
     this.type,
     this.colorValue,
@@ -67,7 +68,7 @@ class Sound {
     this.waveformProbeGeneration,
     this.startOffsetMs = 0,
     this.isProcessed = false,
-  });
+  }) : displayName = displayName ?? title;
 
   /// Copie avec champs remplacés. Les paramètres omis conservent leur valeur :
   /// cette copie ne sait donc pas remettre un champ à `null` — elle sert à

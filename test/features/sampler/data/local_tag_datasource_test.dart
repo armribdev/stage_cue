@@ -35,7 +35,7 @@ void main() {
 
   Future<int> insertSound(String title) =>
       database.into(database.sounds).insert(
-            db.SoundsCompanion.insert(title: title, filePath: '/x/$title.mp3'),
+            db.SoundsCompanion.insert(title: title, displayName: title, filePath: '/x/$title.mp3'),
           );
 
   Future<void> linkSoundTag(int soundId, int tagId) =>

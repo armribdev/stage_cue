@@ -299,9 +299,9 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     final matchInTitle = normalizeForSearch(
       sound.title,
     ).contains(normalizedToken);
-    final matchInDisplayName =
-        sound.displayName != null &&
-        normalizeForSearch(sound.displayName!).contains(normalizedToken);
+    final matchInDisplayName = normalizeForSearch(
+      sound.displayName,
+    ).contains(normalizedToken);
     final matchInPath = normalizeForSearch(
       _displayPath(sound),
     ).contains(normalizedToken);

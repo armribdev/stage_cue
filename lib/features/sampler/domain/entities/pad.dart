@@ -62,7 +62,7 @@ class Pad {
       return number != null ? 'Multipad #$number' : 'Multipad';
     }
     if (sounds.isNotEmpty) {
-      return sounds.first.displayName ?? sounds.first.title;
+      return sounds.first.displayName;
     }
     return 'Pad';
   }

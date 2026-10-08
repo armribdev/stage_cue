@@ -41,6 +41,7 @@ void main() {
     final soundId = await database.into(database.sounds).insert(
           db.SoundsCompanion.insert(
             title: 'knock',
+            displayName: 'knock',
             filePath: '/A/knock.mp3',
             libraryId: Value(lib),
             relativePath: const Value('knock.mp3'),
@@ -74,11 +75,12 @@ void main() {
           ),
         );
     await dbB.into(dbB.sounds).insert(
-          db.SoundsCompanion.insert(title: 'bidon', filePath: '/B/x.mp3'),
+          db.SoundsCompanion.insert(title: 'bidon', displayName: 'bidon', filePath: '/B/x.mp3'),
         );
     final soundBId = await dbB.into(dbB.sounds).insert(
           db.SoundsCompanion.insert(
             title: 'knock',
+            displayName: 'knock',
             filePath: '/B/knock.mp3',
             libraryId: Value(libB),
             relativePath: const Value('knock.mp3'),
@@ -116,6 +118,7 @@ void main() {
     final soundId = await database.into(database.sounds).insert(
           db.SoundsCompanion.insert(
             title: 'knock',
+            displayName: 'knock',
             filePath: '/A/knock.mp3',
             libraryId: Value(lib),
             relativePath: const Value('knock.mp3'),
@@ -140,11 +143,12 @@ void main() {
           db.LibrariesCompanion.insert(name: 'A', localRootPath: '/B'),
         );
     await dbB.into(dbB.sounds).insert(
-          db.SoundsCompanion.insert(title: 'bidon', filePath: '/B/x.mp3'),
+          db.SoundsCompanion.insert(title: 'bidon', displayName: 'bidon', filePath: '/B/x.mp3'),
         );
     final soundBId = await dbB.into(dbB.sounds).insert(
           db.SoundsCompanion.insert(
             title: 'knock',
+            displayName: 'knock',
             filePath: '/B/knock.mp3',
             libraryId: Value(libB),
             relativePath: const Value('knock.mp3'),
@@ -180,6 +184,7 @@ void main() {
       await database.into(database.sounds).insert(
             db.SoundsCompanion.insert(
               title: 'knock',
+              displayName: 'knock',
               filePath: '/A/cache/yy/knock.mp3',
               libraryId: Value(libA),
               relativePath: const Value('yy/knock.mp3'),
@@ -230,6 +235,7 @@ void main() {
       final soundId = await database.into(database.sounds).insert(
             db.SoundsCompanion.insert(
               title: 'knock',
+              displayName: 'knock',
               filePath: '/cache/knock.mp3',
               libraryId: Value(lib),
               relativePath: const Value('knock.mp3'),
@@ -278,6 +284,7 @@ void main() {
       await database.into(database.sounds).insert(
             db.SoundsCompanion.insert(
               title: 'a',
+              displayName: 'a',
               filePath: '/cache/a.mp3',
               libraryId: Value(lib),
               relativePath: const Value('a.mp3'),
@@ -293,6 +300,7 @@ void main() {
       await database.into(database.sounds).insert(
             db.SoundsCompanion.insert(
               title: 'b',
+              displayName: 'b',
               filePath: '/cache/b.mp3',
               libraryId: Value(lib),
               relativePath: const Value('b.mp3'),
@@ -317,6 +325,7 @@ void main() {
       return d.into(d.sounds).insert(
             db.SoundsCompanion.insert(
               title: 'knock',
+              displayName: 'knock',
               filePath: '/knock.mp3',
               libraryId: Value(lib),
               relativePath: const Value('knock.mp3'),
@@ -475,6 +484,7 @@ void main() {
       final sharedSound = await database.into(database.sounds).insert(
             db.SoundsCompanion.insert(
               title: 'rain',
+              displayName: 'rain',
               filePath: '/A/rain.mp3',
               libraryId: Value(libA),
               relativePath: const Value('rain.mp3'),
@@ -508,11 +518,12 @@ void main() {
             db.LibrariesCompanion.insert(name: 'B', localRootPath: '/B2'),
           );
       await dbB.into(dbB.sounds).insert(
-            db.SoundsCompanion.insert(title: 'bidon', filePath: '/x.mp3'),
+            db.SoundsCompanion.insert(title: 'bidon', displayName: 'bidon', filePath: '/x.mp3'),
           );
       final shared2 = await dbB.into(dbB.sounds).insert(
             db.SoundsCompanion.insert(
               title: 'rain',
+              displayName: 'rain',
               filePath: '/A2/rain.mp3',
               libraryId: Value(a2),
               relativePath: const Value('rain.mp3'),

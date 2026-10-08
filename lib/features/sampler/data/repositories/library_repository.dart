@@ -1078,7 +1078,7 @@ class LibraryRepository extends ChangeNotifier {
       return null;
     } catch (e, stack) {
       AudioLoadLog.severe(
-        'Sonde Drive échouée pour ${sound.displayName ?? sound.title}',
+        'Sonde Drive échouée pour ${sound.displayName}',
         error: e,
         stackTrace: stack,
       );

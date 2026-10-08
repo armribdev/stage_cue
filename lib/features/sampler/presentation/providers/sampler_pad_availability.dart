@@ -21,7 +21,7 @@ extension SamplerPadAvailability on SamplerNotifier {
         final file = File(resolved);
         if (!await file.exists()) {
           throw StateError(
-            'Fichier audio introuvable : ${sound.displayName ?? sound.title}',
+            'Fichier audio introuvable : ${sound.displayName}',
           );
         }
         return file.absolute.path;
@@ -33,7 +33,7 @@ extension SamplerPadAvailability on SamplerNotifier {
         final file = File(sound.filePath);
         if (!await file.exists() || !await isPlausibleAudioFile(file)) {
           throw StateError(
-            'Fichier audio introuvable : ${sound.displayName ?? sound.title}',
+            'Fichier audio introuvable : ${sound.displayName}',
           );
         }
         return file.absolute.path;
@@ -43,7 +43,7 @@ extension SamplerPadAvailability on SamplerNotifier {
     final file = File(sound.filePath);
     if (!await file.exists() || !await isPlausibleAudioFile(file)) {
       throw StateError(
-        'Fichier audio introuvable : ${sound.displayName ?? sound.title}',
+        'Fichier audio introuvable : ${sound.displayName}',
       );
     }
     return file.absolute.path;

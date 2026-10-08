@@ -88,7 +88,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
   void initState() {
     super.initState();
     final sound = widget.sound;
-    _displayName = _baseDisplayName = sound.displayName ?? sound.title;
+    _displayName = _baseDisplayName = sound.displayName;
     _nameController = TextEditingController(text: _displayName);
     _colorValue = _baseColorValue = sound.colorValue;
     _volume = _baseVolume = sound.volume.clamp(0.0, 1.0);

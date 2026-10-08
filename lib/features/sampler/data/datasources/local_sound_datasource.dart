@@ -166,7 +166,7 @@ class LocalSoundDataSource {
       return domain.Sound(
         id: row.read<int>('id'),
         title: row.read<String>('title'),
-        displayName: row.read<String?>('display_name'),
+        displayName: row.read<String>('display_name'),
         filePath: row.read<String>('file_path'),
         type: switch (typeValue) {
           0 => domain.SoundType.soundEffect,
@@ -430,7 +430,7 @@ class LocalSoundDataSource {
           .insert(
             db.SoundsCompanion.insert(
               title: title,
-              displayName: Value(title),
+              displayName: title,
               filePath: file.path,
               type: Value(metadata.type),
               contentHash: Value(metadata.contentHash),
@@ -470,7 +470,7 @@ class LocalSoundDataSource {
     await _database.into(_database.sounds).insert(
           db.SoundsCompanion.insert(
             title: title,
-            displayName: Value(title),
+            displayName: title,
             filePath: file.path,
             type: Value(metadata.type),
             libraryId: Value(libraryId),
@@ -786,7 +786,7 @@ class LocalSoundDataSource {
           _database.sounds,
           db.SoundsCompanion.insert(
             title: title,
-            displayName: Value(title),
+            displayName: title,
             filePath: entry.localPath,
             type: Value(metadata.type),
             libraryId: Value(libraryId),
@@ -883,7 +883,7 @@ class LocalSoundDataSource {
               .insert(
                 db.SoundsCompanion.insert(
                   title: title,
-                  displayName: Value(title),
+                  displayName: title,
                   filePath: file.path,
                   type: Value(metadata.type),
                   contentHash: Value(metadata.contentHash),
@@ -1433,7 +1433,7 @@ class LocalPadDataSource {
     return domain.Sound(
       id: row.read<int>('id'),
       title: row.read<String>('title'),
-      displayName: row.read<String?>('display_name'),
+      displayName: row.read<String>('display_name'),
       filePath: row.read<String>('file_path'),
       type: switch (typeValue) {
         0 => domain.SoundType.soundEffect,

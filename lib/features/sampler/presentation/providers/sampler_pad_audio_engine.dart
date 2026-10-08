@@ -60,7 +60,7 @@ extension SamplerPadAudioEngine on SamplerNotifier {
       }
       AudioLoadLog.soundLoadFailed(
         soundId: sound.id,
-        title: sound.displayName ?? sound.title,
+        title: sound.displayName,
         padId: padItem.pad.id,
         resolvedPath: resolvedPath,
         legacyPath: sound.filePath,

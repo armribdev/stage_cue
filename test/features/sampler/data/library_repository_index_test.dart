@@ -397,6 +397,7 @@ void main() {
     await database.into(database.sounds).insert(
           db.SoundsCompanion.insert(
             title: 'knock',
+            displayName: 'knock',
             filePath: '${cacheRoot.path}/Portes/knock.mp3',
             libraryId: Value(library.id),
             relativePath: const Value('Portes/knock.mp3'),
@@ -423,6 +424,7 @@ void main() {
     await database.into(database.sounds).insert(
           db.SoundsCompanion.insert(
             title: 'orphelin',
+            displayName: 'orphelin',
             filePath: '${cacheRoot.path}/orphelin.mp3',
             libraryId: Value(library.id),
             relativePath: const Value('introuvable/orphelin.mp3'),

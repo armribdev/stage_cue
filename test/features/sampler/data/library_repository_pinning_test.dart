@@ -115,6 +115,7 @@ void main() {
     return database.into(database.sounds).insert(
           db.SoundsCompanion.insert(
             title: relativePath,
+            displayName: relativePath,
             filePath: p.join(rootDir.path, relativePath),
             type: const Value(SoundType.soundEffect),
             libraryId: Value(libraryId),

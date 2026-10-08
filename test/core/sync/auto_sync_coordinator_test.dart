@@ -576,7 +576,7 @@ void main() {
       when(() => repository.getLibraries())
           .thenAnswer((_) async => [_library(1)]);
       final soundId = await database.into(database.sounds).insert(
-            db.SoundsCompanion.insert(title: 'Porte', filePath: '/c/porte.wav'),
+            db.SoundsCompanion.insert(title: 'Porte', displayName: 'Porte', filePath: '/c/porte.wav'),
           );
       await runInitialPull();
       clearInteractions(syncController);

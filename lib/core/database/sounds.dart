@@ -111,7 +111,9 @@ class FolderMemberships extends Table {
 class Sounds extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get title => text()(); // Nom de fichier sans extension
-  TextColumn get displayName => text().nullable()(); // Nom affiché sur le pad
+  // Nom affiché sur le pad. Jamais vide : vaut `title` tant que l'utilisateur ne
+  // l'a pas personnalisé. NOT NULL sans défaut (v40) → tout insert doit le fournir.
+  TextColumn get displayName => text()();
   TextColumn get filePath => text()(); // Chemin local (legacy ou cache dérivé)
   IntColumn get type => intEnum<SoundType>().nullable()();
   IntColumn get color => integer().nullable()(); // Couleur personnalisée (ARGB)
