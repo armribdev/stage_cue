@@ -34,6 +34,19 @@ class SoundEditForm extends StatefulWidget {
   /// Notifié à chaque bascule « modifications non enregistrées ».
   final ValueChanged<bool>? onDirtyChanged;
 
+  /// File de traitement active (filtre « À traiter ») : le bouton d'un son non
+  /// traité devient « Valider et suivant » et l'appelant enchaîne sur le son
+  /// suivant dans [onSaved].
+  final bool isQueueMode;
+
+  /// Sons restant à traiter, affiché en pied de formulaire en file de
+  /// traitement. `null` = pas de compteur.
+  final int? queueRemaining;
+
+  /// « Passer » : laisse ce son à traiter et ouvre le suivant. `null` = pas de
+  /// bouton (pas de file, ou plus de son suivant).
+  final VoidCallback? onSkip;
+
   const SoundEditForm({
     super.key,
     required this.sound,
@@ -42,10 +55,28 @@ class SoundEditForm extends StatefulWidget {
     this.notifier,
     this.onSaved,
     this.onDirtyChanged,
+    this.isQueueMode = false,
+    this.queueRemaining,
+    this.onSkip,
+    this.controller,
   });
+
+  /// Permet à un raccourci clavier extérieur (Ctrl+Entrée) de déclencher
+  /// l'enregistrement. Un `GlobalKey` ne conviendrait pas : le formulaire est
+  /// recréé par son (clé de valeur) et un GlobalKey ferait réutiliser l'état.
+  final SoundEditFormController? controller;
 
   @override
   State<SoundEditForm> createState() => _SoundEditFormState();
+}
+
+/// Poignée vers l'action « enregistrer » du [SoundEditForm] actuellement monté.
+class SoundEditFormController {
+  Future<void> Function()? _save;
+
+  /// Enregistre le son affiché ; sans effet si aucun formulaire n'est monté ou
+  /// s'il n'y a rien à enregistrer.
+  Future<void> save() => _save?.call() ?? Future<void>.value();
 }
 
 class _SoundEditFormState extends State<SoundEditForm> {
@@ -84,10 +115,16 @@ class _SoundEditFormState extends State<SoundEditForm> {
   bool _isRegeneratingWaveform = false;
   bool _wasDirty = false;
 
+  /// Reflète `Sound.isProcessed`, passé à `true` dès le premier enregistrement
+  /// (l'entité reçue en `widget.sound` n'est pas rafraîchie après coup).
+  late bool _isProcessed;
+
   @override
   void initState() {
     super.initState();
     final sound = widget.sound;
+    _isProcessed = sound.isProcessed;
+    widget.controller?._save = save;
     _displayName = _baseDisplayName = sound.displayName;
     _nameController = TextEditingController(text: _displayName);
     _colorValue = _baseColorValue = sound.colorValue;
@@ -100,6 +137,12 @@ class _SoundEditFormState extends State<SoundEditForm> {
 
   @override
   void dispose() {
+    // Le nouvel état (autre son) s'attache avant que celui-ci soit démonté :
+    // ne détacher que si la poignée pointe encore sur nous.
+    final controller = widget.controller;
+    if (controller != null && controller._save == save) {
+      controller._save = null;
+    }
     _nameController.dispose();
     super.dispose();
   }
@@ -147,6 +190,17 @@ class _SoundEditFormState extends State<SoundEditForm> {
     return trimmed.isEmpty ? widget.sound.title : trimmed;
   }
 
+  /// Un son non traité s'enregistre même sans modification : « c'est bon tel
+  /// quel » est une décision de traitement à part entière.
+  bool get _canSave => !_isSaving && (_isDirty || !_isProcessed);
+
+  /// Enregistre (et marque le son comme traité). Sans effet si rien à faire :
+  /// appelable depuis un raccourci clavier extérieur.
+  Future<void> save() async {
+    if (!_canSave) return;
+    await _save();
+  }
+
   Future<void> _save() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
@@ -184,6 +238,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
         _baseStartOffsetMs = _startOffsetMs;
         _baseType = _type;
         _baseTagIds = {..._tagIds};
+        _isProcessed = true;
         _isSaving = false;
       });
       if (_wasDirty) {
@@ -280,21 +335,42 @@ class _SoundEditFormState extends State<SoundEditForm> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 640),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  if (widget.isQueueMode && widget.queueRemaining != null)
+                    Text(
+                      '${widget.queueRemaining} à traiter',
+                      style: AppFonts.monoStyle(
+                        TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  const Spacer(),
+                  if (widget.onSkip != null) ...[
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(64, 42),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                      ),
+                      onPressed: _isSaving ? null : widget.onSkip,
+                      child: const Text('Passer'),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(64, 42),
                       padding: const EdgeInsets.symmetric(horizontal: 18),
                     ),
-                    onPressed: _isSaving || !_isDirty ? null : _save,
+                    onPressed: _canSave ? _save : null,
                     child: _isSaving
                         ? const SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Enregistrer'),
+                        : Text(_saveLabel),
                   ),
                 ],
               ),
@@ -303,6 +379,11 @@ class _SoundEditFormState extends State<SoundEditForm> {
         ),
       ],
     );
+  }
+
+  String get _saveLabel {
+    if (_isProcessed) return 'Enregistrer';
+    return widget.isQueueMode ? 'Valider et suivant' : 'Valider';
   }
 
   /// Une section = libellé en petites capitales + contenu, puis un séparateur
@@ -344,7 +425,34 @@ class _SoundEditFormState extends State<SoundEditForm> {
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
         ),
+        if (!_isProcessed) ...[
+          const SizedBox(width: 12),
+          _buildToProcessBadge(),
+        ],
       ],
+    );
+  }
+
+  /// Pastille « À traiter » : même repère que l'accent de la ligne dans la
+  /// liste, pour relier visuellement les deux.
+  Widget _buildToProcessBadge() {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.12),
+        borderRadius: AppRadius.radiusMd,
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        'À TRAITER',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+          color: scheme.primary,
+        ),
+      ),
     );
   }
 

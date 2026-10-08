@@ -102,6 +102,11 @@ class SoundRepository {
     await _soundDataSource.markPlayed(id);
   }
 
+  /// Marque des sons comme « traités » sans les modifier (validation en masse).
+  Future<void> markSoundsProcessed(Iterable<int> ids) async {
+    await _soundDataSource.markSoundsProcessed(ids);
+  }
+
   /// Met à jour les réglages globaux d'un son (hors contexte de board).
   Future<void> updateSoundSettings({
     required int id,

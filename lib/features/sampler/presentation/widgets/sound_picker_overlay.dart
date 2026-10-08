@@ -324,6 +324,11 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   // ── Mode gestion (volet d'édition) ────────────────────────────────────────
   Sound? _editingSound;
   bool _editDirty = false;
+  final _editController = SoundEditFormController();
+
+  /// File de traitement : ne montre que les sons jamais enregistrés depuis la
+  /// bibliothèque (`Sound.isProcessed == false`). Mode gestion uniquement.
+  bool _unprocessedOnly = false;
 
   // ── État du sélecteur de pad ──────────────────────────────────────────────
   Set<int> _padSoundIds = const {};
@@ -398,7 +403,14 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     PadVariantMode() => '',
   };
 
+  /// Sons de toute la bibliothèque encore à traiter (indépendant des filtres et
+  /// de la recherche : c'est le « reste à faire » global).
+  int get _unprocessedCount => _all.where((s) => !s.isProcessed).length;
+
   String get _emptyMessage {
+    if (_isManage && _unprocessedOnly && _query.isEmpty) {
+      return 'Tous les sons sont traités';
+    }
     if (_isQuickSearch) {
       if (_effectiveLocalOnly) return 'Aucun son disponible hors-ligne';
       if (_query.isEmpty && !_favoritesOnly) return 'Tapez pour chercher vos sons';
@@ -417,8 +429,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       '↑↓ sélectionner    ↵ ajouter/retirer',
     LibraryMode() =>
       '↑↓ sélectionner    ↵/tap éditer',
-    ManageMode() =>
-      '↑↓ sélectionner    ↵/tap éditer    ▶ aperçu depuis le point d\'entrée',
+    ManageMode() => _unprocessedOnly && _isSplitLayout
+        ? '↑↓ sélectionner    ↵/tap éditer    ⌘/Ctrl+↵ valider et suivant    '
+            '▶ aperçu depuis le point d\'entrée'
+        : '↑↓ sélectionner    ↵/tap éditer    ▶ aperçu depuis le point d\'entrée',
     PadVariantMode() => '↑↓ sélectionner    ↵/tap jouer',
   };
 
@@ -634,6 +648,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
           !sound.matchesSoundType(_effectiveTypeFilter!)) { continue; }
       if (_favoritesOnly && !sound.isFavorite) { continue; }
       if (_effectiveLocalOnly && !_isLocal(sound)) { continue; }
+      if (_isManage && _unprocessedOnly && sound.isProcessed) { continue; }
 
       int? score;
       if (q.isEmpty) {
@@ -1012,6 +1027,124 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     Navigator.of(context).pop();
   }
 
+  // ── File de traitement (sons « à traiter ») ───────────────────────────────
+
+  /// Active/désactive la file. En volet scindé, l'activer ouvre tout de suite le
+  /// premier son : l'utilisateur n'a plus qu'à valider ou corriger.
+  void _toggleUnprocessedOnly() {
+    final next = !_unprocessedOnly;
+    setState(() {
+      _unprocessedOnly = next;
+      _selectedIndex = 0;
+    });
+    if (!next || !_isSplitLayout) return;
+    final first = _shownResults(_results).firstOrNull;
+    if (first != null) unawaited(_editInPane(first));
+  }
+
+  /// Voisin à ouvrir quand [sound] quitte la liste : le suivant, sinon le
+  /// précédent. `null` si [sound] était le dernier restant.
+  Sound? _neighbourOf(Sound sound) {
+    final shown = _shownResults(_results);
+    final i = shown.indexWhere((s) => s.id == sound.id);
+    if (i < 0) return null;
+    if (i + 1 < shown.length) return shown[i + 1];
+    if (i > 0) return shown[i - 1];
+    return null;
+  }
+
+  /// Après un enregistrement dans le volet : rafraîchit l'index puis, en file de
+  /// traitement, enchaîne sur le son suivant (le validé a quitté la liste).
+  Future<void> _afterPaneSave(Sound saved) async {
+    final next = _unprocessedOnly ? _neighbourOf(saved) : null;
+    await _adoptRefreshedSnapshot();
+    if (!mounted || !_unprocessedOnly) return;
+    if (next == null) {
+      // Plus rien dans la file (ou le son n'en faisait pas partie).
+      if (_unprocessedCount == 0) {
+        setState(() {
+          _editingSound = null;
+          _editDirty = false;
+        });
+        _showLocalSnackBar('Tous les sons sont traités.');
+      }
+      return;
+    }
+    final index =
+        _shownResults(_results).indexWhere((s) => s.id == next.id);
+    setState(() {
+      _editingSound = next;
+      _editDirty = false;
+      _selectedIndex = index < 0 ? 0 : index;
+    });
+    _scrollToSelected();
+  }
+
+  void _scrollToSelected() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _itemKey(_selectedIndex).currentContext;
+      if (!mounted || ctx == null) return;
+      Scrollable.ensureVisible(ctx, duration: Duration.zero);
+    });
+  }
+
+  /// « Passer » : laisse le son à traiter et ouvre le suivant (en boucle).
+  void _skipToNext(List<Sound> shown) {
+    if (shown.length < 2) return;
+    final current = _editingSound;
+    final i = current == null ? -1 : shown.indexWhere((s) => s.id == current.id);
+    final index = (i + 1) % shown.length;
+    setState(() => _selectedIndex = index);
+    _scrollToSelected();
+    unawaited(_editInPane(shown[index]));
+  }
+
+  /// Valide en masse les sons non traités actuellement listés (recherche et
+  /// filtres compris), sans les modifier. C'est l'issue de secours pour la
+  /// bibliothèque déjà organisée : la migration a mis tous les sons existants
+  /// « à traiter ».
+  Future<void> _markShownAsProcessed() async {
+    final mode = _manageMode;
+    if (mode == null) return;
+    final ids = [
+      for (final s in _results)
+        if (!s.isProcessed) s.id,
+    ];
+    if (ids.isEmpty) return;
+    final scope = _query.trim().isEmpty
+        ? ''
+        : '\n\nSeuls les sons correspondant à la recherche sont concernés.';
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: 'Marquer comme traités',
+      message: 'Marquer ${ids.length} son${ids.length > 1 ? 's' : ''} comme '
+          'traité${ids.length > 1 ? 's' : ''} sans les modifier ?$scope',
+      confirmLabel: 'Tout marquer',
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await mode.repository.markSoundsProcessed(ids);
+    } catch (error) {
+      if (mounted) _showLocalSnackBar('Erreur : $error');
+      return;
+    }
+    await _adoptRefreshedSnapshot();
+    if (!mounted) return;
+    setState(() {
+      _selectedIndex = 0;
+      // Le formulaire ouvert porte encore l'ancien état « à traiter » : on le
+      // recrée (clé incluant isProcessed) sauf s'il a des modifications.
+      final editing = _editingSound;
+      if (editing != null && !_editDirty && ids.contains(editing.id)) {
+        _editingSound = _all.where((s) => s.id == editing.id).firstOrNull;
+      }
+    });
+    _showLocalSnackBar(
+      '${ids.length} son${ids.length > 1 ? 's' : ''} marqué'
+      '${ids.length > 1 ? 's' : ''} comme traité${ids.length > 1 ? 's' : ''}.',
+    );
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -1034,6 +1167,13 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         const SingleActivator(LogicalKeyboardKey.enter, meta: true): () =>
             unawaited(_prepareSelectedAndClose()),
       },
+      // Valider le son ouvert depuis la recherche, sans quitter le clavier.
+      if (_isSplitLayout) ...<ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
+            unawaited(_editController.save()),
+        const SingleActivator(LogicalKeyboardKey.enter, meta: true): () =>
+            unawaited(_editController.save()),
+      },
     };
 
     final results = _buildResultsFocusable(scheme, shown, selectedIndex);
@@ -1050,6 +1190,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
             if (!_isPadVariant) ...[
               _buildSearchField(scheme),
               _buildTypeFilters(scheme),
+              if (_isManage) _buildQueueBar(scheme),
               _buildFilterDivider(scheme),
             ],
             Expanded(child: results),
@@ -1069,7 +1210,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
             bindings: shortcuts,
             child: Scaffold(
               body: SafeArea(
-                child: split ? _buildSplit(scheme, listPane) : listPane,
+                child: split ? _buildSplit(scheme, listPane, shown) : listPane,
               ),
             ),
           ),
@@ -1158,7 +1299,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   ///
   /// Le bloc entier est borné en largeur et centré : sur un grand écran, la
   /// liste et le formulaire ne s'étirent pas aux deux bords de la fenêtre.
-  Widget _buildSplit(ColorScheme scheme, Widget listPane) {
+  Widget _buildSplit(ColorScheme scheme, Widget listPane, List<Sound> shown) {
     final border = AppElevation.border(scheme);
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1179,7 +1320,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                   child: listPane,
                 ),
                 Container(width: 1, color: border.color),
-                Expanded(child: _buildEditPane(scheme)),
+                Expanded(child: _buildEditPane(scheme, shown)),
               ],
             ),
           ),
@@ -1188,7 +1329,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     );
   }
 
-  Widget _buildEditPane(ColorScheme scheme) {
+  Widget _buildEditPane(ColorScheme scheme, List<Sound> shown) {
     final sound = _editingSound;
     final mode = _manageMode;
     if (sound == null || mode == null) {
@@ -1203,7 +1344,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Sélectionnez un son pour le modifier',
+              _unprocessedOnly && _unprocessedCount == 0
+                  ? 'Tous les sons sont traités'
+                  : 'Sélectionnez un son pour le modifier',
               style: TextStyle(color: scheme.onSurfaceVariant),
             ),
           ],
@@ -1211,15 +1354,25 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       );
     }
     return SoundEditForm(
-      key: ValueKey(sound.id),
+      // isProcessed dans la clé : la validation en masse doit recréer le
+      // formulaire ouvert, mais un enregistrement normal (l'état local passe
+      // à « traité » sans toucher à `sound`) ne doit pas le réinitialiser.
+      key: ValueKey('${sound.id}-${sound.isProcessed}'),
       sound: sound,
       tagCatalog: _tagCatalog,
       repository: mode.repository,
       notifier: widget.notifier,
+      controller: _editController,
+      isQueueMode: _unprocessedOnly,
+      queueRemaining: _unprocessedOnly ? _unprocessedCount : null,
+      onSkip: _unprocessedOnly && shown.length > 1
+          ? () => _skipToNext(shown)
+          : null,
       onDirtyChanged: (dirty) => setState(() => _editDirty = dirty),
       // Nom, type ou tags ont pu changer : on reconstruit l'index plutôt que
-      // de recharger la seule liste des sons.
-      onSaved: () => unawaited(_adoptRefreshedSnapshot()),
+      // de recharger la seule liste des sons. En file de traitement, on
+      // enchaîne ensuite sur le son suivant.
+      onSaved: () => unawaited(_afterPaneSave(sound)),
     );
   }
 
@@ -1440,6 +1593,97 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     );
   }
 
+  /// Barre de la file de traitement (mode gestion) : bascule « À traiter · N »
+  /// et validation en masse. Masquée tant qu'il n'y a rien à traiter, sauf si
+  /// la file est active (pour pouvoir en sortir).
+  Widget _buildQueueBar(ColorScheme scheme) {
+    final remaining = _unprocessedCount;
+    if (remaining == 0 && !_unprocessedOnly) return const SizedBox.shrink();
+    final active = _unprocessedOnly;
+    final accent = scheme.primary;
+    final canMarkAll = active && _results.any((s) => !s.isProcessed);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 8, 6),
+      child: Row(
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              canRequestFocus: false,
+              borderRadius: AppRadius.radiusMd,
+              onTap: _toggleUnprocessedOnly,
+              child: Container(
+                height: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: active ? accent.withValues(alpha: 0.12) : null,
+                  borderRadius: AppRadius.radiusMd,
+                  border: Border.all(
+                    color: active
+                        ? accent.withValues(alpha: 0.5)
+                        : scheme.outlineVariant.withValues(alpha: 0.6),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: accent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'À traiter',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                        color: active ? accent : scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '$remaining',
+                      style: AppFonts.monoStyle(
+                        TextStyle(
+                          fontSize: 12,
+                          color: active ? accent : scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          if (canMarkAll)
+            ExcludeFocus(
+              child: Tooltip(
+                message: 'Marquer les sons listés comme traités, sans les '
+                    'modifier',
+                child: TextButton.icon(
+                  onPressed: () => unawaited(_markShownAsProcessed()),
+                  icon: const Icon(Icons.done_all_rounded, size: 16),
+                  label: const Text('Tout marquer traité'),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 30),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    textStyle: const TextStyle(fontSize: 12),
+                    foregroundColor: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   /// Ligne de séparation fine et atténuée sous la barre de filtres — un
   /// `Divider` plein-largeur par défaut tranche trop avec les chips arrondis.
   Widget _buildFilterDivider(ColorScheme scheme) {
@@ -1595,8 +1839,20 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               _playPadVariant(padItem, index);
           }
         },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Container(
+          // Accent de 2 px sur les sons à traiter (transparent sinon, pour ne
+          // pas décaler les lignes) : se repère d'un coup d'œil en défilant.
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                width: 2,
+                color: _isManage && !sound.isProcessed
+                    ? scheme.primary
+                    : Colors.transparent,
+              ),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(14, 0, 16, 0),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
