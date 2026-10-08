@@ -30,6 +30,10 @@ extension SamplerLibraryQueries on SamplerNotifier {
   /// écran de chargement, puis appelle [refreshSearchIndex].
   SoundSearchSnapshot? get searchSnapshot => _searchIndex.current;
 
+  /// Nombre de sons encore « à traiter » — pour le badge des menus. Réactif :
+  /// se met à jour à chaque reconstruction de l'index, sans rebuild de l'écran.
+  ValueListenable<int> get unprocessedSoundCount => _searchIndex.unprocessedCount;
+
   /// Charge l'index s'il ne l'est pas encore, sinon rend l'instantané courant.
   Future<SoundSearchSnapshot> ensureSearchIndex() => _searchIndex.ensureLoaded();
 
