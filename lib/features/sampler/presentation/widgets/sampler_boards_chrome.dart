@@ -16,7 +16,11 @@ class BoardsList extends StatelessWidget {
   final Future<void> Function()? onOpenLibrary;
   final Future<void> Function() onOpenSettings;
 
-  const BoardsList({super.key, 
+  /// Sons restant à traiter (pastille sur « Gérer la bibliothèque »).
+  final ValueListenable<int>? unprocessedCount;
+
+  const BoardsList({super.key,
+    this.unprocessedCount,
     required this.boards,
     required this.selectedBoard,
     required this.isBoardsLoading,
@@ -116,6 +120,9 @@ class BoardsList extends StatelessWidget {
         ListTile(
           leading: const Icon(Icons.library_books_rounded),
           title: const Text('Gérer la bibliothèque'),
+          trailing: unprocessedCount == null
+              ? null
+              : UnprocessedCountPill(count: unprocessedCount!),
           onTap: onOpenLibrary == null ? null : () => onOpenLibrary!(),
         ),
         ListTile(
@@ -142,8 +149,10 @@ class BoardsDrawer extends StatelessWidget {
   final VoidCallback onTogglePerformanceMode;
   final Future<void> Function()? onOpenLibrary;
   final Future<void> Function() onOpenSettings;
+  final ValueListenable<int>? unprocessedCount;
 
-  const BoardsDrawer({super.key, 
+  const BoardsDrawer({super.key,
+    this.unprocessedCount,
     required this.boards,
     required this.selectedBoard,
     required this.isBoardsLoading,
@@ -161,6 +170,7 @@ class BoardsDrawer extends StatelessWidget {
     return Drawer(
       child: SafeArea(
         child: BoardsList(
+          unprocessedCount: unprocessedCount,
           boards: boards,
           selectedBoard: selectedBoard,
           isBoardsLoading: isBoardsLoading,

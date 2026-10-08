@@ -330,6 +330,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   /// bibliothèque (`Sound.isProcessed == false`). Mode gestion uniquement.
   bool _unprocessedOnly = false;
 
+  /// En file de traitement (vue scindée), joue le son ouvert depuis son point
+  /// d'entrée : trier se fait à l'oreille. Désactivable depuis la barre.
+  bool _autoPreview = true;
+
   // ── État du sélecteur de pad ──────────────────────────────────────────────
   Set<int> _padSoundIds = const {};
   final Set<int> _addingSoundIds = {};
@@ -1010,6 +1014,15 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       _editingSound = sound;
       _editDirty = false;
     });
+    _autoPreviewIfQueue(sound);
+  }
+
+  /// Lance l'aperçu du son qu'on vient d'ouvrir, en file de traitement
+  /// seulement. Échec silencieux : un son pas encore téléchargé ne doit pas
+  /// noyer la file sous les messages — le ▶ manuel signale l'erreur.
+  void _autoPreviewIfQueue(Sound sound) {
+    if (!_unprocessedOnly || !_autoPreview || !_isSplitLayout) return;
+    unawaited(widget.notifier.toggleLibraryPreview(sound.id));
   }
 
   Future<bool> _confirmDiscardEdits() => AppConfirmDialog.show(
@@ -1078,6 +1091,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       _selectedIndex = index < 0 ? 0 : index;
     });
     _scrollToSelected();
+    _autoPreviewIfQueue(next);
   }
 
   void _scrollToSelected() {
@@ -1660,6 +1674,27 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               ),
             ),
           ),
+          if (active && _isSplitLayout)
+            Tooltip(
+              message: _autoPreview
+                  ? 'Lecture auto à l\'ouverture : activée'
+                  : 'Lecture auto à l\'ouverture : désactivée',
+              child: _roundIconButton(
+                scheme: scheme,
+                icon: _autoPreview
+                    ? Icons.volume_up_rounded
+                    : Icons.volume_off_rounded,
+                iconColor: _autoPreview ? accent : scheme.onSurfaceVariant,
+                active: _autoPreview,
+                flat: true,
+                onPressed: () => setState(() {
+                  _autoPreview = !_autoPreview;
+                  if (!_autoPreview) {
+                    widget.notifier.stopLibraryPreview();
+                  }
+                }),
+              ),
+            ),
           const Spacer(),
           if (canMarkAll)
             ExcludeFocus(
