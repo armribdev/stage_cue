@@ -1,23 +1,18 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
-import '../../../../core/audio/waveform_extractor.dart';
-import '../../../../core/utils/app_snackbar.dart';
+
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
-import '../../domain/entities/tag_item.dart';
 import '../providers/sampler_provider.dart';
-import '../utils/sound_type_ui.dart';
-import '../widgets/sound_type_picker.dart';
-import '../widgets/start_offset_editor.dart';
-import '../widgets/tag_chips_editor.dart';
+import '../widgets/app_form_dialog.dart';
+import '../widgets/sound_edit_form.dart';
 
-/// Écran d'édition d'un son dans la bibliothèque.
+/// Page plein écran d'édition d'un son (mobile). Sur tablette/desktop,
+/// l'écran de gestion de la bibliothèque affiche le même [SoundEditForm] dans
+/// son volet de droite.
 class SoundDetailsScreen extends StatefulWidget {
   final Sound sound;
   final List<TagCategoryWithTags> tagCatalog;
-  final List<TagItem> initialTags;
   final SoundRepository repository;
   final SamplerNotifier? notifier;
 
@@ -25,7 +20,6 @@ class SoundDetailsScreen extends StatefulWidget {
     super.key,
     required this.sound,
     required this.tagCatalog,
-    required this.initialTags,
     required this.repository,
     this.notifier,
   });
@@ -35,323 +29,40 @@ class SoundDetailsScreen extends StatefulWidget {
 }
 
 class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
-  late String _displayNameValue;
-  late int? _selectedColorValue;
-  late double _selectedVolume;
-  late int _startOffsetMs;
-  late Set<int> _selectedTagIds;
-  late SoundType? _selectedType;
-  late Uint8List? _waveform;
-  bool _isSaving = false;
-  bool _isRegeneratingWaveform = false;
+  bool _isDirty = false;
 
-  static const List<Color> _defaultColorChoices = <Color>[
-    Colors.blue,
-    Colors.green,
-    Colors.orange,
-    Colors.purple,
-    Colors.red,
-    Colors.teal,
-    Colors.brown,
-    Colors.grey,
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _displayNameValue = widget.sound.displayName ?? '';
-    _selectedColorValue = widget.sound.colorValue;
-    _selectedVolume = widget.sound.volume.clamp(0.0, 1.0);
-    _startOffsetMs = widget.sound.startOffsetMs;
-    _selectedTagIds = widget.initialTags.map((t) => t.id).toSet();
-    _selectedType = widget.sound.type;
-    _waveform = widget.sound.waveform;
-  }
-
-  Future<void> _regenerateWaveform() async {
-    if (_isRegeneratingWaveform) return;
-    final notifier = widget.notifier;
-    if (notifier == null) return;
-    setState(() => _isRegeneratingWaveform = true);
-    try {
-      final status = await notifier.regenerateWaveform(widget.sound);
-      final updated = await widget.repository.getSoundById(widget.sound.id);
-      if (!mounted) return;
-      switch (status) {
-        case WaveformProbeStatus.success:
-          setState(() => _waveform = updated?.waveform ?? _waveform);
-          showCopyableSnackBar(context, 'Waveform régénérée.');
-        case WaveformProbeStatus.unsupported:
-          showCopyableSnackBar(
-            context,
-            'Format non pris en charge pour l\'extraction de waveform.',
-          );
-        case WaveformProbeStatus.transient:
-          showCopyableSnackBar(
-            context,
-            'Moteur audio non prêt — réessayez dans un instant.',
-          );
-      }
-    } catch (error) {
-      if (!mounted) return;
-      showCopyableSnackBar(context, 'Échec de la régénération : $error');
-    } finally {
-      if (mounted) setState(() => _isRegeneratingWaveform = false);
-    }
-  }
-
-  String? _normalizedDisplayNameOrNull(String value) {
-    final trimmed = value.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
-  Future<void> _save() async {
-    if (_isSaving) return;
-    setState(() => _isSaving = true);
-    try {
-      await widget.repository.updateSoundSettings(
-        id: widget.sound.id,
-        colorValue: _selectedColorValue,
-        updateColor: true,
-        displayName: _normalizedDisplayNameOrNull(_displayNameValue),
-        updateDisplayName: true,
-        volume: _selectedVolume,
-        startOffsetMs: _startOffsetMs,
-      );
-      await widget.repository.setTagsForSound(
-        widget.sound.id,
-        _selectedTagIds.toList(),
-      );
-      if (_selectedType != null && _selectedType != widget.sound.type) {
-        await widget.repository.updateSoundType(
-          widget.sound.id,
-          _selectedType!,
-        );
-      }
-      await widget.notifier?.refreshSoundMetadata(widget.sound.id);
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } catch (error) {
-      if (!mounted) return;
-      showCopyableSnackBar(context, 'Erreur de sauvegarde: $error');
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
+  Future<void> _confirmDiscard() async {
+    final discard = await AppConfirmDialog.show(
+      context,
+      title: 'Abandonner les modifications',
+      message: 'Les modifications de ce son ne sont pas enregistrées.',
+      confirmLabel: 'Abandonner',
+      isDestructive: true,
+    );
+    if (!discard || !mounted) return;
+    setState(() => _isDirty = false);
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Édition du son "${widget.sound.title}"'),
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Enregistrer'),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSoundTypeHeader(context),
-            const SizedBox(height: 24),
-            Text(
-              'Nom affiché',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              initialValue: _displayNameValue,
-              onChanged: (value) => _displayNameValue = value,
-              decoration: InputDecoration(
-                hintText: widget.sound.title,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Type de son',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 8),
-            SoundTypePicker(
-              selected: _selectedType,
-              onChanged: (type) => setState(() => _selectedType = type),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Couleur par défaut',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                _buildColorChoice(
-                  context: context,
-                  label: 'D',
-                  color: null,
-                  isSelected: _selectedColorValue == null,
-                  onTap: () => setState(() => _selectedColorValue = null),
-                ),
-                for (final color in _defaultColorChoices)
-                  _buildColorChoice(
-                    context: context,
-                    color: color,
-                    isSelected: _selectedColorValue == color.toARGB32(),
-                    onTap: () =>
-                        setState(() => _selectedColorValue = color.toARGB32()),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Volume par défaut',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-                Text('${(_selectedVolume * 100).round()}%'),
-              ],
-            ),
-            Slider(
-              value: _selectedVolume,
-              min: 0.0,
-              max: 1.0,
-              label: '${(_selectedVolume * 100).round()}%',
-              onChanged: (value) =>
-                  setState(() => _selectedVolume = value.clamp(0.0, 1.0)),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Point d\'entrée',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-                if (widget.notifier != null)
-                  TextButton.icon(
-                    onPressed:
-                        _isRegeneratingWaveform ? null : _regenerateWaveform,
-                    icon: _isRegeneratingWaveform
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh, size: 18),
-                    label: const Text('Régénérer la waveform'),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'La lecture démarre à ce point au lieu du début du fichier.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            StartOffsetEditor(
-              filePath: widget.sound.filePath,
-              waveform: _waveform,
-              initialOffsetMs: _startOffsetMs,
-              onChanged: (ms) => setState(() => _startOffsetMs = ms),
-            ),
-            const SizedBox(height: 16),
-            Text('Tags', style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: 8),
-            TagChipsEditor(
-              tagCatalog: widget.tagCatalog,
-              selectedTagIds: _selectedTagIds,
-              onTagAdded: (id) => setState(() => _selectedTagIds.add(id)),
-              onTagRemoved: (id) => setState(() => _selectedTagIds.remove(id)),
-            ),
-          ],
+    return PopScope(
+      canPop: !_isDirty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: Scaffold(
+        appBar: AppBar(title: Text('Édition du son "${widget.sound.title}"')),
+        body: SoundEditForm(
+          key: ValueKey(widget.sound.id),
+          sound: widget.sound,
+          tagCatalog: widget.tagCatalog,
+          repository: widget.repository,
+          notifier: widget.notifier,
+          onDirtyChanged: (dirty) => setState(() => _isDirty = dirty),
+          onSaved: () => Navigator.of(context).pop(true),
         ),
       ),
-    );
-  }
-
-  Widget _buildColorChoice({
-    required BuildContext context,
-    Color? color,
-    required bool isSelected,
-    required VoidCallback onTap,
-    String? label,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    final effectiveColor = color ?? scheme.surfaceContainerHighest;
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: 38,
-        height: 38,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: effectiveColor,
-          border: Border.all(
-            color: isSelected ? scheme.primary : scheme.outlineVariant,
-            width: isSelected ? 3 : 1,
-          ),
-        ),
-        child: isSelected
-            ? Icon(
-                Icons.check,
-                size: 18,
-                color: color == null
-                    ? scheme.onSurfaceVariant
-                    : _getCheckmarkColor(effectiveColor),
-              )
-            : (label != null
-                ? Text(
-                    label,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  )
-                : null),
-      ),
-    );
-  }
-
-  Color _getCheckmarkColor(Color color) =>
-      color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
-
-  Widget _buildSoundTypeHeader(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        SoundTypeAvatar(
-          type: _selectedType,
-          colorValue: _selectedColorValue,
-          radius: 32,
-          iconSize: 32,
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Text(
-            widget.sound.title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ],
     );
   }
 }
