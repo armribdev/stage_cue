@@ -45,6 +45,9 @@ class Sound {
   /// ici au lieu du sample 0. 0 = début du fichier.
   final int startOffsetMs;
 
+  /// Enregistré au moins une fois depuis la bibliothèque (son « traité »).
+  final bool isProcessed;
+
   Sound({
     required this.id,
     required this.title,
@@ -63,6 +66,7 @@ class Sound {
     this.waveform,
     this.waveformProbeGeneration,
     this.startOffsetMs = 0,
+    this.isProcessed = false,
   });
 
   /// Copie avec champs remplacés. Les paramètres omis conservent leur valeur :
@@ -79,6 +83,7 @@ class Sound {
     bool? isFavorite,
     DateTime? lastPlayedAt,
     int? startOffsetMs,
+    bool? isProcessed,
   }) {
     return Sound(
       id: id,
@@ -98,6 +103,7 @@ class Sound {
       waveform: waveform,
       waveformProbeGeneration: waveformProbeGeneration,
       startOffsetMs: startOffsetMs ?? this.startOffsetMs,
+      isProcessed: isProcessed ?? this.isProcessed,
     );
   }
 }

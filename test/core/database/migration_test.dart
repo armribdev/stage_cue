@@ -105,6 +105,35 @@ void main() {
     await database.close();
   });
 
+  test('une base v37 gagne is_processed, à false pour les sons existants',
+      () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    final soundId = await database.into(database.sounds).insert(
+          db.SoundsCompanion.insert(title: 'porte', filePath: '/cache/porte.wav'),
+        );
+
+    await database.customStatement('ALTER TABLE sounds DROP COLUMN is_processed');
+    await database.customStatement('PRAGMA user_version = 37');
+    await database.close();
+
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    final row = await (database.select(database.sounds)
+          ..where((s) => s.id.equals(soundId)))
+        .getSingle();
+
+    expect(row.title, 'porte', reason: 'les données doivent survivre');
+    // Tous les sons existants démarrent « à traiter ».
+    expect(row.isProcessed, isFalse);
+
+    await (database.update(database.sounds)
+          ..where((s) => s.id.equals(soundId)))
+        .write(const db.SoundsCompanion(isProcessed: Value(true)));
+    final updated = await database.select(database.sounds).getSingle();
+    expect(updated.isProcessed, isTrue);
+
+    await database.close();
+  });
+
   test('la migration est idempotente : une base à jour rembobinée en v35 '
       'passe sans erreur', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));

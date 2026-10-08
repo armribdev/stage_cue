@@ -161,6 +161,10 @@ class Sounds extends Table {
   /// tout déclenchement (bruitage ou régie musique) démarre ici au lieu du
   /// sample 0. 0 = début du fichier. Propriété de contenu comme [waveform].
   IntColumn get startOffsetMs => integer().withDefault(const Constant(0))();
+  /// Son « traité » : passe à true au premier « Enregistrer » depuis la fiche
+  /// de la bibliothèque, ne revient jamais à false. Annotation locale comme
+  /// [isFavorite] : absente de l'export du snapshot dossier.
+  BoolColumn get isProcessed => boolean().withDefault(const Constant(false))();
 }
 
 class SoundBoards extends Table {
