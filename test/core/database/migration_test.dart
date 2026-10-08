@@ -109,7 +109,7 @@ void main() {
       () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));
     final soundId = await database.into(database.sounds).insert(
-          db.SoundsCompanion.insert(title: 'porte', filePath: '/cache/porte.wav'),
+          db.SoundsCompanion.insert(title: 'porte', displayName: 'porte', filePath: '/cache/porte.wav'),
         );
 
     await database.customStatement('ALTER TABLE sounds DROP COLUMN is_processed');
@@ -134,37 +134,95 @@ void main() {
     await database.close();
   });
 
-  test('une base v38 donne le titre du fichier aux sons sans nom affiché, '
-      'et garde les noms personnalisés', () async {
-    var database = db.AppDatabase.forTesting(NativeDatabase(file));
-    Future<int> insert(String title, {String? displayName}) =>
-        database.into(database.sounds).insert(
-              db.SoundsCompanion.insert(
-                title: title,
-                filePath: '/cache/$title.wav',
-                displayName: Value(displayName),
-              ),
-            );
-    final nullId = await insert('porte');
-    final blankId = await insert('vent', displayName: '   ');
-    final customId = await insert('pluie', displayName: 'Averse');
+  // `display_name` est NOT NULL depuis v40. Pour fabriquer une base d'AVANT, on
+  // relâche la contrainte dans le schéma stocké (SQLite ne sait pas la retirer
+  // autrement), puis on rouvre pour que `onUpgrade` tourne pour de vrai.
+  Future<void> allowNullDisplayName(db.AppDatabase database) async {
+    await database.customStatement('PRAGMA writable_schema = ON');
+    await database.customStatement(
+      "UPDATE sqlite_master SET sql = replace(sql, "
+      "'\"display_name\" TEXT NOT NULL', '\"display_name\" TEXT NULL') "
+      "WHERE type = 'table' AND name = 'sounds'",
+    );
+    await database.customStatement('PRAGMA writable_schema = OFF');
+  }
 
-    await database.customStatement('PRAGMA user_version = 38');
-    await database.close();
+  for (final fromVersion in [38, 39]) {
+    test('une base v$fromVersion passe display_name en NOT NULL : titre du '
+        'fichier aux noms nuls/vides, noms personnalisés et liens conservés',
+        () async {
+      var database = db.AppDatabase.forTesting(NativeDatabase(file));
+      await database.customStatement('SELECT 1');
+      await allowNullDisplayName(database);
+      await database.close();
 
-    database = db.AppDatabase.forTesting(NativeDatabase(file));
-    Future<String?> nameOf(int id) async => (await (database.select(
-              database.sounds)
-          ..where((s) => s.id.equals(id)))
-        .getSingle())
-        .displayName;
+      // Réouverture à la version courante : le schéma relâché est rechargé, sans
+      // migration. Insertions SQL brutes (la Companion exige désormais un nom).
+      database = db.AppDatabase.forTesting(NativeDatabase(file));
+      Future<int> insert(String title, String? displayName) async {
+        await database.customStatement(
+          'INSERT INTO sounds (title, file_path, display_name) VALUES (?, ?, ?)',
+          [title, '/cache/$title.wav', displayName],
+        );
+        final row = await database
+            .customSelect('SELECT id FROM sounds WHERE title = ?',
+                variables: [Variable<String>(title)])
+            .getSingle();
+        return row.read<int>('id');
+      }
 
-    expect(await nameOf(nullId), 'porte');
-    expect(await nameOf(blankId), 'vent');
-    expect(await nameOf(customId), 'Averse');
+      final nullId = await insert('porte', null);
+      final blankId = await insert('vent', '   ');
+      final customId = await insert('pluie', 'Averse');
 
-    await database.close();
-  });
+      // Données liées : la recréation de `sounds` ne doit pas les cascader.
+      final boardId = await database.into(database.soundBoards).insert(
+            db.SoundBoardsCompanion.insert(name: 'Scène'),
+          );
+      final padId = await database.into(database.pads).insert(
+            db.PadsCompanion.insert(boardId: boardId),
+          );
+      await database.into(database.padSounds).insert(
+            db.PadSoundsCompanion.insert(padId: padId, soundId: customId),
+          );
+
+      await database.customStatement('PRAGMA user_version = $fromVersion');
+      await database.close();
+
+      database = db.AppDatabase.forTesting(NativeDatabase(file));
+      Future<String> nameOf(int id) async => (await (database.select(
+                  database.sounds)
+              ..where((s) => s.id.equals(id)))
+            .getSingle())
+          .displayName;
+
+      expect(await nameOf(nullId), 'porte');
+      expect(await nameOf(blankId), 'vent');
+      expect(await nameOf(customId), 'Averse');
+
+      // Garde-fou de données : les clés étrangères sont désactivées dans l'app
+      // (donc ici aussi), ce test ne prouve PAS la tenue sous FK activées.
+      expect(await database.select(database.padSounds).get(), hasLength(1),
+          reason: 'les liens pad_sounds doivent survivre à la recréation');
+
+      // La contrainte est bien posée, et l'index d'unicité recréé à la main
+      // n'a pas été emporté avec l'ancienne table.
+      await expectLater(
+        database.customStatement(
+          'INSERT INTO sounds (title, file_path, display_name) '
+          "VALUES ('x', '/x.wav', NULL)",
+        ),
+        throwsA(anything),
+      );
+      final indexes = await database
+          .customSelect("SELECT name FROM sqlite_master "
+              "WHERE type = 'index' AND name = 'idx_sounds_drive_file_id'")
+          .get();
+      expect(indexes, hasLength(1));
+
+      await database.close();
+    });
+  }
 
   test('la migration est idempotente : une base à jour rembobinée en v35 '
       'passe sans erreur', () async {

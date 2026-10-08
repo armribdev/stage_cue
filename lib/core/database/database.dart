@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 39;
+  int get schemaVersion => 40;
 
   @override
   MigrationStrategy get migration {
@@ -83,10 +83,14 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(sounds, sounds.volume);
         }
         if (from < 6) {
-          await m.addColumn(
-            sounds,
-            sounds.displayName as GeneratedColumn<Object>,
-          );
+          // Colonne NOT NULL depuis v40 : SQLite refuse un ADD COLUMN NOT NULL
+          // sans défaut, donc SQL brut avec défaut '' (les vides sont réparés
+          // par v39/v40). Gardé : un upgrade depuis < 2 recrée déjà `sounds`.
+          if (!await _columnExists('sounds', 'display_name')) {
+            await customStatement(
+              "ALTER TABLE sounds ADD COLUMN display_name TEXT NOT NULL DEFAULT ''",
+            );
+          }
         }
         if (from < 7) {
           await m.createTable(tagCategories);
@@ -194,6 +198,11 @@ class AppDatabase extends _$AppDatabase {
                 sounds.type: const CustomExpression<int>(
                   'CASE WHEN type_detected = 0 AND type_manually_set = 0'
                   ' THEN NULL ELSE type END',
+                ),
+                // `display_name` est NOT NULL depuis v40 : la copie vers la
+                // nouvelle table ne doit pas échouer sur un nom null/vide.
+                sounds.displayName: const CustomExpression<String>(
+                  "COALESCE(NULLIF(TRIM(display_name), ''), title)",
                 ),
               },
             ),
@@ -370,6 +379,29 @@ class AppDatabase extends _$AppDatabase {
             "UPDATE sounds SET display_name = title "
             "WHERE display_name IS NULL OR TRIM(display_name) = ''",
           );
+        }
+        if (from < 40) {
+          // `display_name` passe NOT NULL : SQLite ne sait pas modifier une
+          // contrainte, donc recréation de la table (précédent : v23). Le
+          // transformer répare au passage tout résidu null/vide — après v39 il
+          // ne devrait plus y en avoir, mais une contrainte NOT NULL ne
+          // pardonne pas. Aucun `PRAGMA foreign_keys` n'est posé dans l'app
+          // (SQLite : désactivé), donc le DROP de l'ancienne table ne cascade
+          // ni pad_sounds ni sound_tags. Si les clés étrangères étaient un jour
+          // activées, revalider cette étape.
+          await m.alterTable(
+            TableMigration(
+              sounds,
+              columnTransformer: {
+                sounds.displayName: const CustomExpression<String>(
+                  "COALESCE(NULLIF(TRIM(display_name), ''), title)",
+                ),
+              },
+            ),
+          );
+          // Index créé à la main (pas déclaré sur la table) : emporté par la
+          // recréation, il faut le reposer.
+          await _createGlobalIdentityIndexes();
         }
       },
       beforeOpen: (details) async {

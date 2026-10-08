@@ -1,7 +1,6 @@
 // Le nom affiché d'un son n'est jamais vide : un nom vide retombe sur le titre
 // du fichier, garanti par la couche données (pas seulement par le formulaire).
 
-import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stage_cue/core/database/database.dart' as db;
@@ -19,7 +18,7 @@ void main() {
           db.SoundsCompanion.insert(
             title: 'porte',
             filePath: '/cache/porte.wav',
-            displayName: const Value('Porte grinçante'),
+            displayName: 'Porte grinçante',
           ),
         );
   });

@@ -640,13 +640,13 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         score = 0;
       } else if (tokens.isEmpty) {
         // Requête sans token valide (ex : 1 char) → fuzzy entier + tag fallback.
-        final name = normalizeForSearch(sound.displayName ?? sound.title);
+        final name = normalizeForSearch(sound.displayName);
         score = fuzzyMatchScore(name, q);
         if (score == null && _tagMatchSetsPerToken.isNotEmpty &&
             _tagMatchSetsPerToken[0].contains(sound.id)) { score = 200; }
       } else {
         // Logique AND par token : chaque token doit matcher titre OU tag.
-        final name = normalizeForSearch(sound.displayName ?? sound.title);
+        final name = normalizeForSearch(sound.displayName);
         var total = 0;
         var allMatch = true;
         for (var i = 0; i < tokens.length; i++) {
@@ -1622,7 +1622,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                       ScrollingTextSpan(
                         animate: isSelected || _hoveredIndex == index,
                         span: buildHighlightedSpan(
-                          sound.displayName ?? sound.title,
+                          sound.displayName,
                           _highlightTokens,
                         ),
                       ),

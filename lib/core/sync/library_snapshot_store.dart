@@ -479,7 +479,7 @@ class LibrarySnapshotStore {
                 title: row.read<String>('title'),
                 filePath: filePath,
                 type: Value(rawType != null ? SoundType.values[rawType] : null),
-                displayName: Value(_displayNameOf(row)),
+                displayName: _displayNameOf(row),
                 color: Value(row.read<int?>('color')),
                 volume: Value(row.read<double>('volume')),
                 createdAt: Value(row.read<DateTime>('created_at')),

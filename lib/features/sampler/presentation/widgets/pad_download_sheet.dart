@@ -87,7 +87,7 @@ class _PadDownloadSheetState extends State<PadDownloadSheet> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        sound.displayName ?? sound.title,
+                        sound.displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),

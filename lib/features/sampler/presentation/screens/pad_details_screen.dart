@@ -986,7 +986,7 @@ class _SoundRowState extends State<_SoundRow> {
                   children: [
                     ScrollingTextSpan(
                       animate: _hovered,
-                      span: TextSpan(text: sound.displayName ?? sound.title),
+                      span: TextSpan(text: sound.displayName),
                     ),
                     _buildSubtitle(
                       scheme,
