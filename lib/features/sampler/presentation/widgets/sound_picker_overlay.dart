@@ -7,14 +7,18 @@ import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/string_utils.dart';
+import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../providers/sampler_provider.dart';
 import '../providers/sound_search_index.dart';
+import '../screens/sound_details_screen.dart';
 import '../utils/quick_search_prepare.dart';
 import '../utils/sound_type_ui.dart';
+import 'app_form_dialog.dart';
 import 'scrolling_text.dart';
+import 'sound_edit_form.dart';
 
 // ── Modes ─────────────────────────────────────────────────────────────────────
 
@@ -70,16 +74,13 @@ final class LibraryMode extends SoundPickerMode {
   const LibraryMode();
 }
 
-/// Gestion de la bibliothèque : tap ouvre le formulaire d'édition du son.
-/// L'overlay reste ouvert entre les éditions.
+/// Gestion de la bibliothèque : écran plein écran. Large (tablette/desktop) :
+/// sons à gauche, formulaire d'édition du son sélectionné à droite. Étroit
+/// (mobile) : le tap ouvre la page d'édition.
 final class ManageMode extends SoundPickerMode {
-  final Future<void> Function(
-    BuildContext context,
-    Sound sound,
-    List<TagCategoryWithTags> tagCatalog,
-  ) onTap;
+  final SoundRepository repository;
 
-  ManageMode({required this.onTap});
+  const ManageMode({required this.repository});
 }
 
 /// Sélecteur de variante d'un multipad : choisir précisément quel son parmi
@@ -205,24 +206,20 @@ class SoundPickerOverlay extends StatefulWidget {
         : _showDialog<QuickSearchPrepareResult?>(context, w);
   }
 
-  /// Gestion de bibliothèque — l'overlay reste ouvert, tap appelle [onTap].
+  /// Gestion de bibliothèque — toujours en page plein écran (jamais en modale) :
+  /// le volet scindé de l'édition a besoin de la place d'un écran entier.
   static Future<void> showForManage(
     BuildContext context, {
     required SamplerNotifier notifier,
-    required Future<void> Function(
-      BuildContext context,
-      Sound sound,
-      List<TagCategoryWithTags> tagCatalog,
-    ) onTap,
+    required SoundRepository repository,
     VoidCallback? onReconnect,
   }) {
-    final mobile = _isMobile(context);
     final w = SoundPickerOverlay._(
         notifier: notifier,
-        mode: ManageMode(onTap: onTap),
-        isFullPage: mobile,
+        mode: ManageMode(repository: repository),
+        isFullPage: true,
         onReconnect: onReconnect);
-    return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
+    return _showPage<void>(context, w);
   }
 
   /// Variante d'un multipad — liste ses sons déjà assignés, sans recherche
@@ -324,6 +321,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   int _selectedIndex = 0;
   int? _hoveredIndex;
 
+  // ── Mode gestion (volet d'édition) ────────────────────────────────────────
+  Sound? _editingSound;
+  bool _editDirty = false;
+
   // ── État du sélecteur de pad ──────────────────────────────────────────────
   Set<int> _padSoundIds = const {};
   final Set<int> _addingSoundIds = {};
@@ -337,6 +338,11 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   bool get _isPadPicker => widget.mode is PadPickerMode;
   bool get _isLibrary => widget.mode is LibraryMode;
   bool get _isManage => widget.mode is ManageMode;
+
+  /// Gestion en volet scindé (liste + édition) : tablette et desktop, mêmes
+  /// seuil de largeur que le reste des sélecteurs.
+  bool get _isSplitLayout =>
+      _isManage && !SoundPickerOverlay._isMobile(context);
   bool get _isPadVariant => widget.mode is PadVariantMode;
 
   /// Bibliothèque du board actif : null = board local. Un board rattaché à une
@@ -690,6 +696,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   static const _itemExtent = 72.0;
   static const _actionButtonSize = 30.0;
   static const _overlayMaxWidth = 720.0;
+  static const _splitMaxWidth = 1280.0;
   static const _maxVisibleTags = 3;
 
   void _moveSelection(int delta) {
@@ -955,12 +962,54 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   }
 
   // Manage
+  /// Large écran : le son s'édite dans le volet de droite. Étroit : page
+  /// d'édition poussée par-dessus la liste.
   Future<void> _handleManageTap(Sound sound) async {
-    await _manageMode!.onTap(context, sound, _tagCatalog);
+    final mode = _manageMode;
+    if (mode == null) return;
+    if (_isSplitLayout) {
+      await _editInPane(sound);
+      return;
+    }
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SoundDetailsScreen(
+          sound: sound,
+          tagCatalog: _tagCatalog,
+          repository: mode.repository,
+          notifier: widget.notifier,
+        ),
+      ),
+    );
     if (!mounted) return;
     // L'édition a pu changer le nom, le type ou les tags : on reconstruit
     // l'index plutôt que de recharger la seule liste des sons.
     await _adoptRefreshedSnapshot();
+  }
+
+  Future<void> _editInPane(Sound sound) async {
+    if (_editingSound?.id == sound.id) return;
+    if (_editDirty && !await _confirmDiscardEdits()) return;
+    if (!mounted) return;
+    setState(() {
+      _editingSound = sound;
+      _editDirty = false;
+    });
+  }
+
+  Future<bool> _confirmDiscardEdits() => AppConfirmDialog.show(
+    context,
+    title: 'Abandonner les modifications',
+    message: 'Les modifications de ce son ne sont pas enregistrées.',
+    confirmLabel: 'Abandonner',
+    isDestructive: true,
+  );
+
+  /// Fermeture de l'écran avec des modifications en cours (retour, Échap).
+  Future<void> _confirmDiscardAndClose() async {
+    if (!await _confirmDiscardEdits() || !mounted) return;
+    setState(() => _editDirty = false);
+    Navigator.of(context).pop();
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -975,8 +1024,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     final selectedIndex = _clampSelectedIndex(shown.length);
 
     final shortcuts = <ShortcutActivator, VoidCallback>{
+      // maybePop (et non pop) : respecte le PopScope du mode gestion, qui
+      // demande confirmation s'il reste des modifications non enregistrées.
       const SingleActivator(LogicalKeyboardKey.escape): () =>
-          Navigator.of(context).pop(),
+          unawaited(Navigator.of(context).maybePop()),
       if (_isQuickSearch) ...<ShortcutActivator, VoidCallback>{
         const SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
             unawaited(_prepareSelectedAndClose()),
@@ -993,24 +1044,32 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     // par défaut d'EditableText.onTapOutside). Le champ garde ainsi le focus
     // en continu, quoi que l'utilisateur clique dans l'overlay.
     if (widget._isFullPage) {
+      final listPane = TextFieldTapRegion(
+        child: Column(
+          children: [
+            if (!_isPadVariant) ...[
+              _buildSearchField(scheme),
+              _buildTypeFilters(scheme),
+              _buildFilterDivider(scheme),
+            ],
+            Expanded(child: results),
+            _buildHints(scheme, shown.isNotEmpty),
+          ],
+        ),
+      );
+      final split = _isSplitLayout;
       return ScaffoldMessenger(
         key: _messengerKey,
-        child: CallbackShortcuts(
-          bindings: shortcuts,
-          child: Scaffold(
-            body: SafeArea(
-              child: TextFieldTapRegion(
-                child: Column(
-                  children: [
-                    if (!_isPadVariant) ...[
-                      _buildSearchField(scheme),
-                      _buildTypeFilters(scheme),
-                      _buildFilterDivider(scheme),
-                    ],
-                    Expanded(child: results),
-                    _buildHints(scheme, shown.isNotEmpty),
-                  ],
-                ),
+        child: PopScope(
+          canPop: !(split && _editDirty),
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) unawaited(_confirmDiscardAndClose());
+          },
+          child: CallbackShortcuts(
+            bindings: shortcuts,
+            child: Scaffold(
+              body: SafeArea(
+                child: split ? _buildSplit(scheme, listPane) : listPane,
               ),
             ),
           ),
@@ -1095,6 +1154,75 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     );
   }
 
+  /// Gestion en volet scindé : sons à gauche, infos du son sélectionné à droite.
+  ///
+  /// Le bloc entier est borné en largeur et centré : sur un grand écran, la
+  /// liste et le formulaire ne s'étirent pas aux deux bords de la fenêtre.
+  Widget _buildSplit(ColorScheme scheme, Widget listPane) {
+    final border = AppElevation.border(scheme);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.clamp(0.0, _splitMaxWidth);
+        final isCapped = constraints.maxWidth > _splitMaxWidth;
+        return Center(
+          child: Container(
+            width: width,
+            height: constraints.maxHeight,
+            decoration: BoxDecoration(
+              // Filets latéraux seulement quand le bloc flotte au centre.
+              border: isCapped ? Border.symmetric(vertical: border) : null,
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: (width * 0.4).clamp(320.0, 460.0),
+                  child: listPane,
+                ),
+                Container(width: 1, color: border.color),
+                Expanded(child: _buildEditPane(scheme)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEditPane(ColorScheme scheme) {
+    final sound = _editingSound;
+    final mode = _manageMode;
+    if (sound == null || mode == null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.tune_rounded,
+              size: 32,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Sélectionnez un son pour le modifier',
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      );
+    }
+    return SoundEditForm(
+      key: ValueKey(sound.id),
+      sound: sound,
+      tagCatalog: _tagCatalog,
+      repository: mode.repository,
+      notifier: widget.notifier,
+      onDirtyChanged: (dirty) => setState(() => _editDirty = dirty),
+      // Nom, type ou tags ont pu changer : on reconstruit l'index plutôt que
+      // de recharger la seule liste des sons.
+      onSaved: () => unawaited(_adoptRefreshedSnapshot()),
+    );
+  }
+
   /// Sans champ de recherche (variante de pad), on rattache [_focusNode] ici
   /// pour garder la navigation clavier (↑↓, Entrée).
   Widget _buildResultsFocusable(
@@ -1118,7 +1246,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
             ExcludeFocus(
               child: IconButton(
                 icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () => unawaited(Navigator.of(context).maybePop()),
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
               ),
@@ -1431,8 +1559,11 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         (variantMode.padItem.slots[index].player?.isPlaying ?? false);
     final tags = _soundTags[sound.id] ?? const <TagItem>[];
 
+    // Son affiché dans le volet d'édition (mode gestion scindé).
+    final isEditing = _isSplitLayout && _editingSound?.id == sound.id;
+
     Color? bgColor;
-    if (onAir || queued || isCurrentVariant) {
+    if (onAir || queued || isCurrentVariant || isEditing) {
       bgColor = scheme.primaryContainer.withValues(alpha: isSelected ? 0.55 : 0.35);
     } else if (isSelected) {
       bgColor = scheme.primary.withValues(alpha: 0.10);
