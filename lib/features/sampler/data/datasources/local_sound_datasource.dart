@@ -268,7 +268,8 @@ class LocalSoundDataSource {
     )..where((s) => s.id.equals(id))).go();
   }
 
-  /// Met à jour les réglages d'un son (couleur, volume, point d'entrée)
+  /// Met à jour les réglages d'un son (couleur, volume, point d'entrée) ;
+  /// [isProcessed] marque le son comme traité (`null` = inchangé).
   Future<void> updateSoundSettings({
     required int id,
     int? colorValue,
@@ -277,6 +278,7 @@ class LocalSoundDataSource {
     bool updateDisplayName = false,
     double? volume,
     int? startOffsetMs,
+    bool? isProcessed,
   }) async {
     final companion = db.SoundsCompanion(
       color: updateColor ? Value(colorValue) : const Value.absent(),
@@ -286,6 +288,8 @@ class LocalSoundDataSource {
       volume: volume != null ? Value(volume) : const Value.absent(),
       startOffsetMs:
           startOffsetMs != null ? Value(startOffsetMs) : const Value.absent(),
+      isProcessed:
+          isProcessed != null ? Value(isProcessed) : const Value.absent(),
     );
     await (_database.update(
       _database.sounds,

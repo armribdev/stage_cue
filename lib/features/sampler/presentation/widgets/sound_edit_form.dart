@@ -152,6 +152,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
         updateDisplayName: true,
         volume: _volume,
         startOffsetMs: _startOffsetMs,
+        isProcessed: true,
       );
       if (_tagsLoaded) {
         await repository.setTagsForSound(id, _tagIds.toList());

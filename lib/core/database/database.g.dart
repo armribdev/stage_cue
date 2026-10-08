@@ -1867,6 +1867,21 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _isProcessedMeta = const VerificationMeta(
+    'isProcessed',
+  );
+  @override
+  late final GeneratedColumn<bool> isProcessed = GeneratedColumn<bool>(
+    'is_processed',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_processed" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1888,6 +1903,7 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     waveform,
     waveformProbeGeneration,
     startOffsetMs,
+    isProcessed,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2031,6 +2047,15 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         ),
       );
     }
+    if (data.containsKey('is_processed')) {
+      context.handle(
+        _isProcessedMeta,
+        isProcessed.isAcceptableOrUnknown(
+          data['is_processed']!,
+          _isProcessedMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2118,6 +2143,10 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.int,
         data['${effectivePrefix}start_offset_ms'],
       )!,
+      isProcessed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_processed'],
+      )!,
     );
   }
 
@@ -2172,6 +2201,11 @@ class Sound extends DataClass implements Insertable<Sound> {
   /// tout déclenchement (bruitage ou régie musique) démarre ici au lieu du
   /// sample 0. 0 = début du fichier. Propriété de contenu comme [waveform].
   final int startOffsetMs;
+
+  /// Son « traité » : passe à true au premier « Enregistrer » depuis la fiche
+  /// de la bibliothèque, ne revient jamais à false. Annotation locale comme
+  /// [isFavorite] : absente de l'export du snapshot dossier.
+  final bool isProcessed;
   const Sound({
     required this.id,
     required this.title,
@@ -2192,6 +2226,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     this.waveform,
     this.waveformProbeGeneration,
     required this.startOffsetMs,
+    required this.isProcessed,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2239,6 +2274,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       map['waveform_probe_generation'] = Variable<int>(waveformProbeGeneration);
     }
     map['start_offset_ms'] = Variable<int>(startOffsetMs);
+    map['is_processed'] = Variable<bool>(isProcessed);
     return map;
   }
 
@@ -2285,6 +2321,7 @@ class Sound extends DataClass implements Insertable<Sound> {
           ? const Value.absent()
           : Value(waveformProbeGeneration),
       startOffsetMs: Value(startOffsetMs),
+      isProcessed: Value(isProcessed),
     );
   }
 
@@ -2317,6 +2354,7 @@ class Sound extends DataClass implements Insertable<Sound> {
         json['waveformProbeGeneration'],
       ),
       startOffsetMs: serializer.fromJson<int>(json['startOffsetMs']),
+      isProcessed: serializer.fromJson<bool>(json['isProcessed']),
     );
   }
   @override
@@ -2346,6 +2384,7 @@ class Sound extends DataClass implements Insertable<Sound> {
         waveformProbeGeneration,
       ),
       'startOffsetMs': serializer.toJson<int>(startOffsetMs),
+      'isProcessed': serializer.toJson<bool>(isProcessed),
     };
   }
 
@@ -2369,6 +2408,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     Value<Uint8List?> waveform = const Value.absent(),
     Value<int?> waveformProbeGeneration = const Value.absent(),
     int? startOffsetMs,
+    bool? isProcessed,
   }) => Sound(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -2391,6 +2431,7 @@ class Sound extends DataClass implements Insertable<Sound> {
         ? waveformProbeGeneration.value
         : this.waveformProbeGeneration,
     startOffsetMs: startOffsetMs ?? this.startOffsetMs,
+    isProcessed: isProcessed ?? this.isProcessed,
   );
   Sound copyWithCompanion(SoundsCompanion data) {
     return Sound(
@@ -2429,6 +2470,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       startOffsetMs: data.startOffsetMs.present
           ? data.startOffsetMs.value
           : this.startOffsetMs,
+      isProcessed: data.isProcessed.present
+          ? data.isProcessed.value
+          : this.isProcessed,
     );
   }
 
@@ -2453,7 +2497,8 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('lastPlayedAt: $lastPlayedAt, ')
           ..write('waveform: $waveform, ')
           ..write('waveformProbeGeneration: $waveformProbeGeneration, ')
-          ..write('startOffsetMs: $startOffsetMs')
+          ..write('startOffsetMs: $startOffsetMs, ')
+          ..write('isProcessed: $isProcessed')
           ..write(')'))
         .toString();
   }
@@ -2479,6 +2524,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     $driftBlobEquality.hash(waveform),
     waveformProbeGeneration,
     startOffsetMs,
+    isProcessed,
   );
   @override
   bool operator ==(Object other) =>
@@ -2502,7 +2548,8 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.lastPlayedAt == this.lastPlayedAt &&
           $driftBlobEquality.equals(other.waveform, this.waveform) &&
           other.waveformProbeGeneration == this.waveformProbeGeneration &&
-          other.startOffsetMs == this.startOffsetMs);
+          other.startOffsetMs == this.startOffsetMs &&
+          other.isProcessed == this.isProcessed);
 }
 
 class SoundsCompanion extends UpdateCompanion<Sound> {
@@ -2525,6 +2572,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<Uint8List?> waveform;
   final Value<int?> waveformProbeGeneration;
   final Value<int> startOffsetMs;
+  final Value<bool> isProcessed;
   const SoundsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -2545,6 +2593,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.waveform = const Value.absent(),
     this.waveformProbeGeneration = const Value.absent(),
     this.startOffsetMs = const Value.absent(),
+    this.isProcessed = const Value.absent(),
   });
   SoundsCompanion.insert({
     this.id = const Value.absent(),
@@ -2566,6 +2615,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.waveform = const Value.absent(),
     this.waveformProbeGeneration = const Value.absent(),
     this.startOffsetMs = const Value.absent(),
+    this.isProcessed = const Value.absent(),
   }) : title = Value(title),
        filePath = Value(filePath);
   static Insertable<Sound> custom({
@@ -2588,6 +2638,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<Uint8List>? waveform,
     Expression<int>? waveformProbeGeneration,
     Expression<int>? startOffsetMs,
+    Expression<bool>? isProcessed,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2610,6 +2661,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (waveformProbeGeneration != null)
         'waveform_probe_generation': waveformProbeGeneration,
       if (startOffsetMs != null) 'start_offset_ms': startOffsetMs,
+      if (isProcessed != null) 'is_processed': isProcessed,
     });
   }
 
@@ -2633,6 +2685,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<Uint8List?>? waveform,
     Value<int?>? waveformProbeGeneration,
     Value<int>? startOffsetMs,
+    Value<bool>? isProcessed,
   }) {
     return SoundsCompanion(
       id: id ?? this.id,
@@ -2655,6 +2708,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       waveformProbeGeneration:
           waveformProbeGeneration ?? this.waveformProbeGeneration,
       startOffsetMs: startOffsetMs ?? this.startOffsetMs,
+      isProcessed: isProcessed ?? this.isProcessed,
     );
   }
 
@@ -2722,6 +2776,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     if (startOffsetMs.present) {
       map['start_offset_ms'] = Variable<int>(startOffsetMs.value);
     }
+    if (isProcessed.present) {
+      map['is_processed'] = Variable<bool>(isProcessed.value);
+    }
     return map;
   }
 
@@ -2746,7 +2803,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('lastPlayedAt: $lastPlayedAt, ')
           ..write('waveform: $waveform, ')
           ..write('waveformProbeGeneration: $waveformProbeGeneration, ')
-          ..write('startOffsetMs: $startOffsetMs')
+          ..write('startOffsetMs: $startOffsetMs, ')
+          ..write('isProcessed: $isProcessed')
           ..write(')'))
         .toString();
   }
@@ -8075,6 +8133,7 @@ typedef $$SoundsTableCreateCompanionBuilder =
       Value<Uint8List?> waveform,
       Value<int?> waveformProbeGeneration,
       Value<int> startOffsetMs,
+      Value<bool> isProcessed,
     });
 typedef $$SoundsTableUpdateCompanionBuilder =
     SoundsCompanion Function({
@@ -8097,6 +8156,7 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<Uint8List?> waveform,
       Value<int?> waveformProbeGeneration,
       Value<int> startOffsetMs,
+      Value<bool> isProcessed,
     });
 
 final class $$SoundsTableReferences
@@ -8286,6 +8346,11 @@ class $$SoundsTableFilterComposer
 
   ColumnFilters<int> get startOffsetMs => $composableBuilder(
     column: $table.startOffsetMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isProcessed => $composableBuilder(
+    column: $table.isProcessed,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8505,6 +8570,11 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isProcessed => $composableBuilder(
+    column: $table.isProcessed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LibrariesTableOrderingComposer get libraryId {
     final $$LibrariesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -8625,6 +8695,11 @@ class $$SoundsTableAnnotationComposer
 
   GeneratedColumn<int> get startOffsetMs => $composableBuilder(
     column: $table.startOffsetMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isProcessed => $composableBuilder(
+    column: $table.isProcessed,
     builder: (column) => column,
   );
 
@@ -8803,6 +8878,7 @@ class $$SoundsTableTableManager
                 Value<Uint8List?> waveform = const Value.absent(),
                 Value<int?> waveformProbeGeneration = const Value.absent(),
                 Value<int> startOffsetMs = const Value.absent(),
+                Value<bool> isProcessed = const Value.absent(),
               }) => SoundsCompanion(
                 id: id,
                 title: title,
@@ -8823,6 +8899,7 @@ class $$SoundsTableTableManager
                 waveform: waveform,
                 waveformProbeGeneration: waveformProbeGeneration,
                 startOffsetMs: startOffsetMs,
+                isProcessed: isProcessed,
               ),
           createCompanionCallback:
               ({
@@ -8845,6 +8922,7 @@ class $$SoundsTableTableManager
                 Value<Uint8List?> waveform = const Value.absent(),
                 Value<int?> waveformProbeGeneration = const Value.absent(),
                 Value<int> startOffsetMs = const Value.absent(),
+                Value<bool> isProcessed = const Value.absent(),
               }) => SoundsCompanion.insert(
                 id: id,
                 title: title,
@@ -8865,6 +8943,7 @@ class $$SoundsTableTableManager
                 waveform: waveform,
                 waveformProbeGeneration: waveformProbeGeneration,
                 startOffsetMs: startOffsetMs,
+                isProcessed: isProcessed,
               ),
           withReferenceMapper: (p0) => p0
               .map(

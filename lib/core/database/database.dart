@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 37;
+  int get schemaVersion => 38;
 
   @override
   MigrationStrategy get migration {
@@ -350,6 +350,15 @@ class AppDatabase extends _$AppDatabase {
           }
           if (!await _columnExists('libraries', 'last_full_scan_at')) {
             await m.addColumn(libraries, libraries.lastFullScanAt);
+          }
+        }
+        if (from < 38) {
+          // Marque « son traité » (enregistré depuis la bibliothèque). Défaut
+          // false : tous les sons existants démarrent « à traiter ». Gardé par
+          // un test d'existence : un upgrade depuis < 10 recrée déjà les tables
+          // au schéma courant.
+          if (!await _columnExists('sounds', 'is_processed')) {
+            await m.addColumn(sounds, sounds.isProcessed);
           }
         }
       },
