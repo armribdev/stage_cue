@@ -280,10 +280,19 @@ class LocalSoundDataSource {
     int? startOffsetMs,
     bool? isProcessed,
   }) async {
+    // Le nom affiché n'est jamais vide : un nom vide retombe sur le titre du
+    // fichier (invariant garanti ici, pas seulement par le formulaire).
+    String? resolvedName = displayName?.trim();
+    if (updateDisplayName && (resolvedName == null || resolvedName.isEmpty)) {
+      final row = await (_database.select(_database.sounds)
+            ..where((s) => s.id.equals(id)))
+          .getSingleOrNull();
+      resolvedName = row?.title;
+    }
     final companion = db.SoundsCompanion(
       color: updateColor ? Value(colorValue) : const Value.absent(),
-      displayName: updateDisplayName
-          ? Value(displayName)
+      displayName: updateDisplayName && resolvedName != null
+          ? Value(resolvedName)
           : const Value.absent(),
       volume: volume != null ? Value(volume) : const Value.absent(),
       startOffsetMs:
@@ -421,6 +430,7 @@ class LocalSoundDataSource {
           .insert(
             db.SoundsCompanion.insert(
               title: title,
+              displayName: Value(title),
               filePath: file.path,
               type: Value(metadata.type),
               contentHash: Value(metadata.contentHash),
@@ -460,6 +470,7 @@ class LocalSoundDataSource {
     await _database.into(_database.sounds).insert(
           db.SoundsCompanion.insert(
             title: title,
+            displayName: Value(title),
             filePath: file.path,
             type: Value(metadata.type),
             libraryId: Value(libraryId),
@@ -770,10 +781,12 @@ class LocalSoundDataSource {
       for (var i = 0; i < creations.length; i++) {
         final entry = creations[i];
         final metadata = creationMetadata[i];
+        final title = p.basenameWithoutExtension(entry.relativePath);
         batch.insert(
           _database.sounds,
           db.SoundsCompanion.insert(
-            title: p.basenameWithoutExtension(entry.relativePath),
+            title: title,
+            displayName: Value(title),
             filePath: entry.localPath,
             type: Value(metadata.type),
             libraryId: Value(libraryId),
@@ -870,6 +883,7 @@ class LocalSoundDataSource {
               .insert(
                 db.SoundsCompanion.insert(
                   title: title,
+                  displayName: Value(title),
                   filePath: file.path,
                   type: Value(metadata.type),
                   contentHash: Value(metadata.contentHash),

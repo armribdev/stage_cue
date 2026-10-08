@@ -62,6 +62,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
 
   // Valeurs courantes.
   late String _displayName;
+  late final TextEditingController _nameController;
   late int? _colorValue;
   late double _volume;
   late int _startOffsetMs;
@@ -87,13 +88,20 @@ class _SoundEditFormState extends State<SoundEditForm> {
   void initState() {
     super.initState();
     final sound = widget.sound;
-    _displayName = _baseDisplayName = sound.displayName ?? '';
+    _displayName = _baseDisplayName = sound.displayName ?? sound.title;
+    _nameController = TextEditingController(text: _displayName);
     _colorValue = _baseColorValue = sound.colorValue;
     _volume = _baseVolume = sound.volume.clamp(0.0, 1.0);
     _startOffsetMs = _baseStartOffsetMs = sound.startOffsetMs;
     _type = _baseType = sound.type;
     _waveform = sound.waveform;
     _loadTags();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadTags() async {
@@ -133,9 +141,10 @@ class _SoundEditFormState extends State<SoundEditForm> {
     }
   }
 
-  String? _normalizedOrNull(String value) {
-    final trimmed = value.trim();
-    return trimmed.isEmpty ? null : trimmed;
+  /// Nom à enregistrer : le champ vidé retombe sur le titre du fichier.
+  String get _resolvedName {
+    final trimmed = _displayName.trim();
+    return trimmed.isEmpty ? widget.sound.title : trimmed;
   }
 
   Future<void> _save() async {
@@ -144,11 +153,12 @@ class _SoundEditFormState extends State<SoundEditForm> {
     try {
       final repository = widget.repository;
       final id = widget.sound.id;
+      final name = _resolvedName;
       await repository.updateSoundSettings(
         id: id,
         colorValue: _colorValue,
         updateColor: true,
-        displayName: _normalizedOrNull(_displayName),
+        displayName: name,
         updateDisplayName: true,
         volume: _volume,
         startOffsetMs: _startOffsetMs,
@@ -164,7 +174,11 @@ class _SoundEditFormState extends State<SoundEditForm> {
       await widget.notifier?.refreshSoundMetadata(id);
       if (!mounted) return;
       setState(() {
-        _baseDisplayName = _displayName;
+        // Le champ affiche désormais le nom effectivement enregistré (le titre
+        // du fichier s'il était vide).
+        _displayName = name;
+        if (_nameController.text != name) _nameController.text = name;
+        _baseDisplayName = name;
         _baseColorValue = _colorValue;
         _baseVolume = _volume;
         _baseStartOffsetMs = _startOffsetMs;
@@ -336,7 +350,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
 
   Widget _buildNameField() {
     return TextFormField(
-      initialValue: _displayName,
+      controller: _nameController,
       onChanged: (v) => _update(() => _displayName = v),
       decoration: InputDecoration(hintText: widget.sound.title),
     );
