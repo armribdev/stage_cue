@@ -15,7 +15,12 @@ import '../../../../core/audio/loudness_analyzer.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/sync/download_queue.dart';
 import '../../data/repositories/library_repository.dart'
-    show LibraryRepository, SoundNotAvailableLocallyException;
+    show
+        LibraryRepository,
+        LibraryRepositoryDriveSession,
+        LibraryRepositoryLibraries,
+        LibraryRepositoryPlayback,
+        SoundNotAvailableLocallyException;
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/library.dart';
 import '../../domain/entities/pad.dart';
