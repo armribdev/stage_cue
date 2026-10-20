@@ -58,6 +58,7 @@ dependencies:
   window_manager: ^0.5.2
   win32: ^5.15.0
   ffi: ^2.2.0
+  crypto: ^3.0.7
   package_info_plus: ^8.3.0
   flutter_secure_storage: ^10.3.4
 

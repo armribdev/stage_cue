@@ -15,6 +15,8 @@ void main() {
         version: '0.0.0',
         downloadUrl: 'https://example.com/x.exe',
         assetName: 'x.exe',
+        sha256:
+            '0000000000000000000000000000000000000000000000000000000000000000',
       ),
     );
   });
@@ -23,6 +25,7 @@ void main() {
     version: '0.2.0',
     downloadUrl: 'https://example.com/StageCue-Setup.exe',
     assetName: 'StageCue-Setup.exe',
+    sha256: '0000000000000000000000000000000000000000000000000000000000000000',
   );
 
   testWidgets('Plus tard annule sans télécharger', (tester) async {

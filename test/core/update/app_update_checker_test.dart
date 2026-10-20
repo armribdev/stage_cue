@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:stage_cue/core/update/app_update_checker.dart';
+import 'package:stage_cue/core/update/app_update_info.dart';
 
 void main() {
   group('AppUpdateChecker.isNewerVersion', () {
@@ -34,10 +35,49 @@ void main() {
       List<Map<String, dynamic>> assets = const [],
     }) => {'tag_name': tag, 'assets': assets};
 
+    const hex =
+        '168993d4dc06bca17fda7408ae50f0867a1010d561ac4aa8fe88d8597f1f6f81';
+
     Map<String, dynamic> exeAsset({
       String name = 'StageCue-Setup-0.2.0.exe',
       String url = 'https://example.com/StageCue-Setup-0.2.0.exe',
-    }) => {'name': name, 'browser_download_url': url};
+      Object? digest = 'sha256:$hex',
+    }) => {'name': name, 'browser_download_url': url, 'digest': ?digest};
+
+    Future<AppUpdateInfo?> checkWith(Map<String, dynamic> asset) {
+      final client = MockClient(
+        (_) async => http.Response(
+          jsonEncode(releaseBody(tag: 'v0.2.0', assets: [asset])),
+          200,
+        ),
+      );
+      return AppUpdateChecker(
+        httpClient: client,
+      ).checkForUpdate(currentVersion: '0.1.0');
+    }
+
+    test('expose l\'empreinte SHA-256 du digest GitHub', () async {
+      final info = await checkWith(exeAsset());
+      expect(info!.sha256, hex);
+    });
+
+    test('digest en majuscules → normalisé en minuscules', () async {
+      final info = await checkWith(
+        exeAsset(digest: 'sha256:${hex.toUpperCase()}'),
+      );
+      expect(info!.sha256, hex);
+    });
+
+    test('digest absent → null (mise à jour non proposée)', () async {
+      expect(await checkWith(exeAsset(digest: null)), isNull);
+    });
+
+    test('digest mal formé ou d\'un autre algorithme → null', () async {
+      expect(await checkWith(exeAsset(digest: 'sha256:abc')), isNull);
+      expect(await checkWith(exeAsset(digest: 'sha512:$hex')), isNull);
+      expect(await checkWith(exeAsset(digest: hex)), isNull);
+      expect(await checkWith(exeAsset(digest: 42)), isNull);
+    });
 
     test(
       'retourne AppUpdateInfo si remote plus récent avec asset .exe',
@@ -157,14 +197,14 @@ void main() {
                   'name': 'README.txt',
                   'browser_download_url': 'https://example.com/README.txt',
                 },
-                {
-                  'name': 'StageCue.EXE',
-                  'browser_download_url': 'https://example.com/StageCue.EXE',
-                },
-                {
-                  'name': 'other.exe',
-                  'browser_download_url': 'https://example.com/other.exe',
-                },
+                exeAsset(
+                  name: 'StageCue.EXE',
+                  url: 'https://example.com/StageCue.EXE',
+                ),
+                exeAsset(
+                  name: 'other.exe',
+                  url: 'https://example.com/other.exe',
+                ),
               ],
             ),
           ),

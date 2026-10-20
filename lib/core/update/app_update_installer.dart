@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -51,12 +52,17 @@ class AppUpdateInstaller {
         }
 
         final sink = partFile.openWrite();
+        // Empreinte calculée au fil du flux : pas de seconde lecture du fichier.
+        final digestSink = _DigestCapture();
+        final hasher = sha256.startChunkedConversion(digestSink);
         var received = 0;
         await for (final chunk in response.stream) {
           sink.add(chunk);
+          hasher.add(chunk);
           received += chunk.length;
           onProgress?.call(received, response.contentLength);
         }
+        hasher.close();
         await sink.close();
 
         final expectedLength = response.contentLength;
@@ -64,6 +70,18 @@ class AppUpdateInstaller {
           await partFile.delete();
           throw Exception(
             'Taille inattendue ($received/$expectedLength octets)',
+          );
+        }
+
+        // Le `.part` n'est jamais renommé tant que l'empreinte ne correspond
+        // pas : un installeur altéré ou corrompu ne peut pas être lancé
+        // (décision 0026).
+        final actual = digestSink.value?.toString();
+        if (actual != info.sha256.toLowerCase()) {
+          await partFile.delete();
+          throw Exception(
+            'Empreinte SHA-256 de l\'installeur inattendue '
+            '(attendue ${info.sha256}, reçue $actual)',
           );
         }
       } finally {
@@ -98,4 +116,15 @@ class AppUpdateInstaller {
       rethrow;
     }
   }
+}
+
+/// Récupère le [Digest] émis à la fermeture d'une conversion `crypto` par blocs.
+class _DigestCapture implements Sink<Digest> {
+  Digest? value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
 }
