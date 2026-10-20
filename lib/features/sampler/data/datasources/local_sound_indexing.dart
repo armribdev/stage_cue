@@ -3,7 +3,6 @@ part of 'local_sound_datasource.dart';
 /// Indexation des fichiers audio (local, SAF, Drive) vers la base.
 /// Méthodes de [LocalSoundDataSource] extraites via extension dans le même `part`.
 extension LocalSoundIndexing on LocalSoundDataSource {
-
   /// Indexe un fichier audio
   Future<void> indexAudioFile(File file) async {
     try {
@@ -52,19 +51,21 @@ extension LocalSoundIndexing on LocalSoundDataSource {
     required String relativePath,
   }) async {
     // Déduplication par (bibliothèque, chemin relatif).
-    final existing = await (_database.select(_database.sounds)
-          ..where(
-            (s) =>
-                s.libraryId.equals(libraryId) &
-                s.relativePath.equals(relativePath),
-          ))
-        .get();
+    final existing =
+        await (_database.select(_database.sounds)..where(
+              (s) =>
+                  s.libraryId.equals(libraryId) &
+                  s.relativePath.equals(relativePath),
+            ))
+            .get();
     if (existing.isNotEmpty) return false;
 
     final title = p.basenameWithoutExtension(file.path);
     final metadata = await _resolveMetadataForFile(file);
 
-    await _database.into(_database.sounds).insert(
+    await _database
+        .into(_database.sounds)
+        .insert(
           db.SoundsCompanion.insert(
             title: title,
             displayName: title,
@@ -85,9 +86,9 @@ extension LocalSoundIndexing on LocalSoundDataSource {
     required int soundId,
     required File file,
   }) async {
-    final existing = await (_database.select(_database.sounds)
-          ..where((s) => s.id.equals(soundId)))
-        .getSingleOrNull();
+    final existing = await (_database.select(
+      _database.sounds,
+    )..where((s) => s.id.equals(soundId))).getSingleOrNull();
     if (existing == null) return;
     if (!await isPlausibleAudioFile(file)) return;
 
@@ -96,11 +97,10 @@ extension LocalSoundIndexing on LocalSoundDataSource {
       final contentHash = probeType != null
           ? await computeQuickHash(file)
           : existing.contentHash;
-      final probe =
-          probeType != null ? await extractWaveform(file.path) : null;
-      await (_database.update(_database.sounds)
-            ..where((s) => s.id.equals(soundId)))
-          .write(
+      final probe = probeType != null ? await extractWaveform(file.path) : null;
+      await (_database.update(
+        _database.sounds,
+      )..where((s) => s.id.equals(soundId))).write(
         db.SoundsCompanion(
           type: Value(probeType),
           contentHash: Value(contentHash),
@@ -114,7 +114,8 @@ extension LocalSoundIndexing on LocalSoundDataSource {
     // Type déjà connu : compléter le hash et/ou la waveform s'ils manquent.
     // La waveform n'est re-sondée que si la génération d'échec est dépassée.
     final needsHash = existing.contentHash == null;
-    final needsWaveform = existing.waveform == null &&
+    final needsWaveform =
+        existing.waveform == null &&
         waveformNeedsProbe(existing.waveformProbeGeneration);
     if (!needsHash && !needsWaveform) return;
 
@@ -122,15 +123,16 @@ extension LocalSoundIndexing on LocalSoundDataSource {
     // Un échec transitoire (moteur non prêt) ne doit rien écrire : on retentera.
     final persistProbe =
         probe != null && probe.status != WaveformProbeStatus.transient;
-    await (_database.update(_database.sounds)
-          ..where((s) => s.id.equals(soundId)))
-        .write(
+    await (_database.update(
+      _database.sounds,
+    )..where((s) => s.id.equals(soundId))).write(
       db.SoundsCompanion(
         contentHash: needsHash
             ? Value(await computeQuickHash(file))
             : const Value.absent(),
-        waveform:
-            persistProbe ? Value(probe.waveformValue) : const Value.absent(),
+        waveform: persistProbe
+            ? Value(probe.waveformValue)
+            : const Value.absent(),
         waveformProbeGeneration: persistProbe
             ? Value(probe.generationValue)
             : const Value.absent(),
@@ -143,13 +145,13 @@ extension LocalSoundIndexing on LocalSoundDataSource {
     required int libraryId,
     required String relativePath,
   }) async {
-    final existing = await (_database.select(_database.sounds)
-          ..where(
-            (s) =>
-                s.libraryId.equals(libraryId) &
-                s.relativePath.equals(relativePath),
-          ))
-        .get();
+    final existing =
+        await (_database.select(_database.sounds)..where(
+              (s) =>
+                  s.libraryId.equals(libraryId) &
+                  s.relativePath.equals(relativePath),
+            ))
+            .get();
     return existing.isNotEmpty;
   }
 
@@ -159,21 +161,21 @@ extension LocalSoundIndexing on LocalSoundDataSource {
     required String relativePath,
     required String localPath,
   }) async {
-    await (_database.update(_database.sounds)
-          ..where((s) => s.id.equals(soundId)))
-        .write(
-          db.SoundsCompanion(
-            relativePath: Value(relativePath),
-            filePath: Value(localPath),
-          ),
-        );
+    await (_database.update(
+      _database.sounds,
+    )..where((s) => s.id.equals(soundId))).write(
+      db.SoundsCompanion(
+        relativePath: Value(relativePath),
+        filePath: Value(localPath),
+      ),
+    );
   }
 
   /// Met à jour le chemin local cache d'un son de bibliothèque si nécessaire.
   Future<void> syncLibrarySoundLocalPath(int soundId, String localPath) async {
-    final row = await (_database.select(_database.sounds)
-          ..where((s) => s.id.equals(soundId)))
-        .getSingleOrNull();
+    final row = await (_database.select(
+      _database.sounds,
+    )..where((s) => s.id.equals(soundId))).getSingleOrNull();
     if (row == null || row.filePath == localPath) return;
 
     await (_database.update(_database.sounds)
@@ -245,7 +247,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
   /// nouveaux sons sont résolues AVANT le batch : elles font des I/O fichier
   /// (probe SoLoud) qui n'ont pas leur place dans une transaction.
   Future<({int createdCount, List<String> contentChangedPaths})>
-      syncLibrarySoundsFromDriveIndex({
+  syncLibrarySoundsFromDriveIndex({
     required int libraryId,
     required List<DriveIndexEntry> entries,
   }) async {
@@ -257,17 +259,17 @@ extension LocalSoundIndexing on LocalSoundDataSource {
     //    Identité forte : lookup GLOBAL (l'index d'unicité l'est), pour repérer
     //    un fichier possédé par une AUTRE bibliothèque — à ne ni dupliquer ni
     //    réécrire.
-    final withDriveId = await (_database.select(_database.sounds)
-          ..where((s) => s.driveFileId.isNotNull()))
-        .get();
+    final withDriveId = await (_database.select(
+      _database.sounds,
+    )..where((s) => s.driveFileId.isNotNull())).get();
     final byDriveFileId = {
       for (final row in withDriveId) row.driveFileId!: row,
     };
     //    Repli par chemin : limité à CETTE bibliothèque, comme l'étape 2 de la
     //    version unitaire. `putIfAbsent` reproduit son `.first` sur doublons.
-    final ofLibrary = await (_database.select(_database.sounds)
-          ..where((s) => s.libraryId.equals(libraryId)))
-        .get();
+    final ofLibrary = await (_database.select(
+      _database.sounds,
+    )..where((s) => s.libraryId.equals(libraryId))).get();
     final byRelativePath = <String, db.Sound>{};
     for (final row in ofLibrary) {
       final path = row.relativePath;
@@ -293,12 +295,14 @@ extension LocalSoundIndexing on LocalSoundDataSource {
         // Édition en place : contenu écrasé à ID constant. Affirmé seulement si
         // une marque était DÉJÀ connue (sinon simple backfill) et qu'elle
         // diffère de la marque distante.
-        final contentChanged = entry.driveMd5 != null &&
+        final contentChanged =
+            entry.driveMd5 != null &&
             row.driveMd5 != null &&
             row.driveMd5 != entry.driveMd5;
         if (contentChanged) contentChangedPaths.add(entry.relativePath);
 
-        final needsWrite = row.relativePath != entry.relativePath ||
+        final needsWrite =
+            row.relativePath != entry.relativePath ||
             row.filePath != entry.localPath ||
             row.folderId != entry.folderId ||
             row.driveMd5 != entry.driveMd5;
@@ -313,13 +317,16 @@ extension LocalSoundIndexing on LocalSoundDataSource {
               driveMd5: entry.driveMd5 != null
                   ? Value(entry.driveMd5)
                   : const Value.absent(),
-              waveform:
-                  contentChanged ? const Value(null) : const Value.absent(),
+              waveform: contentChanged
+                  ? const Value(null)
+                  : const Value.absent(),
               // Contenu écrasé : re-sonder le nouveau contenu depuis zéro.
-              waveformProbeGeneration:
-                  contentChanged ? const Value(null) : const Value.absent(),
-              contentHash:
-                  contentChanged ? const Value(null) : const Value.absent(),
+              waveformProbeGeneration: contentChanged
+                  ? const Value(null)
+                  : const Value.absent(),
+              contentHash: contentChanged
+                  ? const Value(null)
+                  : const Value.absent(),
             ),
           ));
         }
@@ -351,13 +358,15 @@ extension LocalSoundIndexing on LocalSoundDataSource {
     // 3. Métadonnées des nouveaux sons, hors transaction. Court-circuit rapide
     //    quand le fichier n'est pas encore en cache (cas normal : l'indexation
     //    est métadonnées-only), donc pas de probe SoLoud dans ce cas.
-    final creationMetadata = <
-        ({
-          db_sounds.SoundType? type,
-          String? contentHash,
-          Uint8List? waveform,
-          int? waveformProbeGeneration,
-        })>[];
+    final creationMetadata =
+        <
+          ({
+            db_sounds.SoundType? type,
+            String? contentHash,
+            Uint8List? waveform,
+            int? waveformProbeGeneration,
+          })
+        >[];
     for (final entry in creations) {
       creationMetadata.add(
         await _resolveMetadataForFile(File(entry.localPath)),
@@ -483,7 +492,9 @@ extension LocalSoundIndexing on LocalSoundDataSource {
                   type: Value(metadata.type),
                   contentHash: Value(metadata.contentHash),
                   waveform: Value(metadata.waveform),
-              waveformProbeGeneration: Value(metadata.waveformProbeGeneration),
+                  waveformProbeGeneration: Value(
+                    metadata.waveformProbeGeneration,
+                  ),
                 ),
               );
           indexedCount++;
@@ -634,13 +645,11 @@ extension LocalSoundIndexing on LocalSoundDataSource {
 
   /// Retourne tous les sons appartenant à une bibliothèque Drive (relativePath non nul).
   Future<List<domain.Sound>> getSoundsForLibrary(int libraryId) async {
-    final rows = await (_database.select(_database.sounds)
-          ..where(
-            (s) =>
-                s.libraryId.equals(libraryId) &
-                s.relativePath.isNotNull(),
-          ))
-        .get();
+    final rows =
+        await (_database.select(_database.sounds)..where(
+              (s) => s.libraryId.equals(libraryId) & s.relativePath.isNotNull(),
+            ))
+            .get();
     // Mapper de référence, et surtout PAS une recopie champ par champ : celle
     // qui vivait ici omettait `driveFileId`, si bien que le téléchargement de
     // masse repassait sur la résolution par NOM (fragile aux accents, doublons

@@ -17,9 +17,9 @@ class AppUpdateInstaller {
   AppUpdateInstaller({
     http.Client? httpClient,
     Future<Directory> Function()? getTemporaryDirectoryFn,
-  })  : _httpClient = httpClient,
-        _getTemporaryDirectory =
-            getTemporaryDirectoryFn ?? getTemporaryDirectory;
+  }) : _httpClient = httpClient,
+       _getTemporaryDirectory =
+           getTemporaryDirectoryFn ?? getTemporaryDirectory;
 
   final http.Client? _httpClient;
   final Future<Directory> Function() _getTemporaryDirectory;
@@ -47,9 +47,7 @@ class AppUpdateInstaller {
         final request = http.Request('GET', Uri.parse(info.downloadUrl));
         final response = await client.send(request);
         if (response.statusCode != 200) {
-          throw Exception(
-            'Téléchargement échoué (${response.statusCode})',
-          );
+          throw Exception('Téléchargement échoué (${response.statusCode})');
         }
 
         final sink = partFile.openWrite();
@@ -87,17 +85,13 @@ class AppUpdateInstaller {
   /// courant continue de tourner jusqu'à ce qu'Inno le ferme lui-même.
   Future<void> launchInstallerSilently(String installerPath) async {
     try {
-      await Process.start(
-        installerPath,
-        const [
-          '/VERYSILENT',
-          '/SUPPRESSMSGBOXES',
-          '/NORESTART',
-          '/CLOSEAPPLICATIONS',
-          '/RESTARTAPPLICATIONS',
-        ],
-        mode: ProcessStartMode.detached,
-      );
+      await Process.start(installerPath, const [
+        '/VERYSILENT',
+        '/SUPPRESSMSGBOXES',
+        '/NORESTART',
+        '/CLOSEAPPLICATIONS',
+        '/RESTARTAPPLICATIONS',
+      ], mode: ProcessStartMode.detached);
       UpdateLog.installLaunched(installerPath);
     } catch (e) {
       UpdateLog.installLaunchFailed(e);

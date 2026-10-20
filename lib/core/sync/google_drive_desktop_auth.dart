@@ -86,7 +86,7 @@ const List<String> _kDriveScopes = [
 /// Authentification Google Drive sur Windows/Linux via OAuth navigateur.
 class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
   GoogleDriveDesktopAuthenticator({GoogleSignIn? googleSignIn})
-      : _googleSignIn = googleSignIn;
+    : _googleSignIn = googleSignIn;
 
   final GoogleSignIn? _googleSignIn;
   GoogleSignIn? _resolvedSignIn;
@@ -184,9 +184,11 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
     GoogleSignInCredentials credentials, {
     DateTime? accessTokenExpiry,
   }) {
-    final scopes =
-        credentials.scopes.isEmpty ? _kDriveScopes : credentials.scopes;
-    final expiry = accessTokenExpiry ??
+    final scopes = credentials.scopes.isEmpty
+        ? _kDriveScopes
+        : credentials.scopes;
+    final expiry =
+        accessTokenExpiry ??
         DateTime.now().toUtc().subtract(const Duration(seconds: 1));
     final refreshToken = credentials.refreshToken;
 
@@ -310,7 +312,8 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
     await OAuthSecureStore.writeDriveToken(jsonEncode(map));
   }
 
-  static Future<String?> _readStoredToken() => OAuthSecureStore.readDriveToken();
+  static Future<String?> _readStoredToken() =>
+      OAuthSecureStore.readDriveToken();
 
   static Future<void> _deleteStoredToken() =>
       OAuthSecureStore.deleteDriveToken();
@@ -461,8 +464,9 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
         return null;
       }
       final normalized = base64Url.normalize(parts[1]);
-      final payload = jsonDecode(utf8.decode(base64Url.decode(normalized)))
-          as Map<String, dynamic>;
+      final payload =
+          jsonDecode(utf8.decode(base64Url.decode(normalized)))
+              as Map<String, dynamic>;
       final email = payload['email'] as String?;
       if (email == null || email.isEmpty) {
         return null;

@@ -18,11 +18,7 @@ class AppLog {
 
   static void warn(String message) => _emit(LogLevel.warn, message);
 
-  static void severe(
-    String message, {
-    Object? error,
-    StackTrace? stackTrace,
-  }) =>
+  static void severe(String message, {Object? error, StackTrace? stackTrace}) =>
       _emit(LogLevel.severe, message, error: error, stackTrace: stackTrace);
 
   /// Erreur non gérée, toutes origines confondues. [source] dit par quel
@@ -33,11 +29,7 @@ class AppLog {
     Object error,
     StackTrace? stackTrace,
   ) {
-    severe(
-      'Erreur non gérée ($source)',
-      error: error,
-      stackTrace: stackTrace,
-    );
+    severe('Erreur non gérée ($source)', error: error, stackTrace: stackTrace);
   }
 
   static void _emit(
@@ -57,8 +49,8 @@ class AppLog {
   }
 
   static int _developerLevel(LogLevel level) => switch (level) {
-        LogLevel.trace || LogLevel.info => 800,
-        LogLevel.warn => 900,
-        LogLevel.severe => 1000,
-      };
+    LogLevel.trace || LogLevel.info => 800,
+    LogLevel.warn => 900,
+    LogLevel.severe => 1000,
+  };
 }

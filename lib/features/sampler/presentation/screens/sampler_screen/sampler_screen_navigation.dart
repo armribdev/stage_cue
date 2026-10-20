@@ -7,7 +7,6 @@ part of '../sampler_screen.dart';
 /// Ouverture des écrans (bibliothèque, réglages, recherche), raccourcis et reconnexion Drive.
 /// Méthodes de [_SamplerScreenState] extraites via extension dans le même `part`.
 extension _SamplerScreenNavigation on _SamplerScreenState {
-
   /// Ouvre la bibliothèque sans fermer de drawer (base method).
   Future<void> _openLibrary() async {
     await SoundLibraryManageScreen.open(
@@ -73,8 +72,11 @@ extension _SamplerScreenNavigation on _SamplerScreenState {
       if (mounted) AppSnackBar.show(context, 'Session Google renouvelée');
     } on GoogleOAuthNotConfiguredException catch (e) {
       if (mounted) {
-        AppSnackBar.show(context, e.message,
-            duration: const Duration(seconds: 8));
+        AppSnackBar.show(
+          context,
+          e.message,
+          duration: const Duration(seconds: 8),
+        );
       }
     } catch (e) {
       if (mounted) {

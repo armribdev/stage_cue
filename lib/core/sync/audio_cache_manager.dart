@@ -65,10 +65,10 @@ class AudioCacheManager {
     int Function()? clock,
     Future<Set<String>> Function(Library library)? pinnedPaths,
     Future<int?> Function(String rootPath)? availableDiskBytes,
-  })  : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _pinnedPaths = pinnedPaths,
-        _availableDiskBytes =
-            availableDiskBytes ?? disk_space.availableDiskBytes;
+  }) : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
+       _pinnedPaths = pinnedPaths,
+       _availableDiskBytes =
+           availableDiskBytes ?? disk_space.availableDiskBytes;
 
   /// Chemin local (dans le cache de la bibliothèque) d'un chemin relatif.
   /// Les chemins relatifs utilisent toujours `/` (portables) ; la conversion
@@ -90,8 +90,9 @@ class AudioCacheManager {
     required String relativePath,
     String? driveFileId,
   }) async {
-    final normalizedPath =
-        LibrarySoundPaths.normalizeRelativePath(relativePath);
+    final normalizedPath = LibrarySoundPaths.normalizeRelativePath(
+      relativePath,
+    );
     var cachePath = normalizedPath;
     final localPath = localPathFor(library, cachePath);
     final cachedPath =
@@ -139,7 +140,10 @@ class AudioCacheManager {
 
     final downloadPath = localPathFor(library, cachePath);
     await File(downloadPath).parent.create(recursive: true);
-    await client.downloadToFile(fileId: remote.id, destinationPath: downloadPath);
+    await client.downloadToFile(
+      fileId: remote.id,
+      destinationPath: downloadPath,
+    );
 
     final materialized =
         await PathUnicode.canonicalizeLocalPath(downloadPath) ?? downloadPath;
@@ -205,7 +209,10 @@ class AudioCacheManager {
 
     var reclaimed = 0;
     try {
-      await for (final entity in root.list(recursive: true, followLinks: false)) {
+      await for (final entity in root.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entity is! File || !entity.path.endsWith('.part')) continue;
         try {
           final size = await entity.length();
@@ -257,8 +264,9 @@ class AudioCacheManager {
           ) !=
           null;
     }
-    final normalizedPath =
-        LibrarySoundPaths.normalizeRelativePath(relativePath);
+    final normalizedPath = LibrarySoundPaths.normalizeRelativePath(
+      relativePath,
+    );
     if (await _resolveRemote(client, library, normalizedPath) != null) {
       return true;
     }
@@ -628,7 +636,8 @@ class _AccessIndex {
     final file = File(indexPath);
     if (await file.exists()) {
       try {
-        final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+        final json =
+            jsonDecode(await file.readAsString()) as Map<String, dynamic>;
         final raw = (json['entries'] as Map<String, dynamic>?) ?? const {};
         final entries = <String, _AccessEntry>{};
         raw.forEach((key, value) {
@@ -643,9 +652,7 @@ class _AccessIndex {
         // Index corrompu : on repart d'un index vide plutôt que de planter.
         // Conséquence à ne pas taire — l'éviction perd tout son historique
         // d'accès et redevient arbitraire jusqu'à ce que l'index se reconstitue.
-        SyncLog.warn(
-          'Index LRU illisible ($indexPath), repart à vide — $e',
-        );
+        SyncLog.warn('Index LRU illisible ($indexPath), repart à vide — $e');
       }
     }
     return _AccessIndex(file, {});

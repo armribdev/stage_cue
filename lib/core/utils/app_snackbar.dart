@@ -28,14 +28,13 @@ class AppSnackBar {
     SnackBarAction? action,
     bool copyable = false,
     Duration duration = const Duration(seconds: 4),
-  }) =>
-      showOn(
-        ScaffoldMessenger.of(context),
-        message,
-        action: action,
-        copyable: copyable,
-        duration: duration,
-      );
+  }) => showOn(
+    ScaffoldMessenger.of(context),
+    message,
+    action: action,
+    copyable: copyable,
+    duration: duration,
+  );
 
   /// Affiche sur un [messenger] explicite — typiquement le `ScaffoldMessenger`
   /// local d'un overlay, hors du `Scaffold` de l'écran.

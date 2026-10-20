@@ -7,7 +7,6 @@ part of '../sampler_screen.dart';
 /// Gestion des scènes : sélection, création, renommage, duplication, suppression.
 /// Méthodes de [_SamplerScreenState] extraites via extension dans le même `part`.
 extension _SamplerScreenBoards on _SamplerScreenState {
-
   /// Sélectionne un board et ferme le drawer (mobile).
   Future<void> _selectBoard(SoundBoard board) async {
     Navigator.pop(context);

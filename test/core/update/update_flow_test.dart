@@ -34,7 +34,8 @@ void main() {
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
-              onPressed: () => runUpdateFlow(context, info, installer: installer),
+              onPressed: () =>
+                  runUpdateFlow(context, info, installer: installer),
               child: const Text('check'),
             ),
           ),
@@ -53,7 +54,9 @@ void main() {
     verifyNever(() => installer.launchInstallerSilently(any()));
   });
 
-  testWidgets('Installer télécharge puis lance silencieusement', (tester) async {
+  testWidgets('Installer télécharge puis lance silencieusement', (
+    tester,
+  ) async {
     final installer = _MockInstaller();
     when(
       () => installer.downloadInstaller(
@@ -61,8 +64,9 @@ void main() {
         onProgress: any(named: 'onProgress'),
       ),
     ).thenAnswer((_) async => r'C:\Temp\StageCue-Setup.exe');
-    when(() => installer.launchInstallerSilently(any()))
-        .thenAnswer((_) async {});
+    when(
+      () => installer.launchInstallerSilently(any()),
+    ).thenAnswer((_) async {});
 
     await tester.pumpWidget(
       MaterialApp(
@@ -70,7 +74,8 @@ void main() {
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
-              onPressed: () => runUpdateFlow(context, info, installer: installer),
+              onPressed: () =>
+                  runUpdateFlow(context, info, installer: installer),
               child: const Text('check'),
             ),
           ),

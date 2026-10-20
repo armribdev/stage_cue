@@ -54,7 +54,9 @@ class LocalLibraryDataSource {
     String? sharedDriveId,
     bool autoDownload = false,
   }) async {
-    final id = await _database.into(_database.libraries).insert(
+    final id = await _database
+        .into(_database.libraries)
+        .insert(
           LibraryModel.toInsertCompanion(
             name: name,
             localRootPath: localRootPath,
@@ -78,13 +80,15 @@ class LocalLibraryDataSource {
     DateTime? lastSyncedAt,
   }) async {
     final companion = db.LibrariesCompanion(
-      driveFolderId:
-          updateDriveFolderId ? Value(driveFolderId) : const Value.absent(),
+      driveFolderId: updateDriveFolderId
+          ? Value(driveFolderId)
+          : const Value.absent(),
       lastSyncedRevision: lastSyncedRevision != null
           ? Value(lastSyncedRevision)
           : const Value.absent(),
-      lastSyncedAt:
-          lastSyncedAt != null ? Value(lastSyncedAt) : const Value.absent(),
+      lastSyncedAt: lastSyncedAt != null
+          ? Value(lastSyncedAt)
+          : const Value.absent(),
     );
     await (_database.update(
       _database.libraries,
@@ -111,9 +115,9 @@ class LocalLibraryDataSource {
   /// seul le propriétaire pousse/tire le `.stagecue` d'un nœud. Un dossier
   /// simplement VU (recouvrement) n'apparaît pas ici — cf. [getMemberFolderIds].
   Future<List<db.LibraryFolder>> getFoldersForLibrary(int libraryId) {
-    return (_database.select(_database.libraryFolders)
-          ..where((f) => f.libraryId.equals(libraryId)))
-        .get();
+    return (_database.select(
+      _database.libraryFolders,
+    )..where((f) => f.libraryId.equals(libraryId))).get();
   }
 
   /// Rattache une bibliothèque à un nœud dossier (VUE PARTAGÉE). Idempotent :
@@ -160,7 +164,9 @@ class LocalLibraryDataSource {
       for (final entry in wanted.entries) {
         final row = byDriveId[entry.key];
         if (row == null) {
-          resolved[entry.key] = await _database.into(_database.libraryFolders).insert(
+          resolved[entry.key] = await _database
+              .into(_database.libraryFolders)
+              .insert(
                 db.LibraryFoldersCompanion.insert(
                   libraryId: libraryId,
                   driveFolderId: entry.key,
@@ -173,11 +179,11 @@ class LocalLibraryDataSource {
         // PROPRIÉTAIRE : une bibliothèque invitée verrait le dossier sous un
         // autre préfixe et corromprait son cadre de chemins.
         if (row.libraryId == libraryId && row.relativePath != entry.value) {
-          await (_database.update(_database.libraryFolders)
-                ..where((f) => f.id.equals(row.id)))
-              .write(db.LibraryFoldersCompanion(
-            relativePath: Value(entry.value),
-          ));
+          await (_database.update(
+            _database.libraryFolders,
+          )..where((f) => f.id.equals(row.id))).write(
+            db.LibraryFoldersCompanion(relativePath: Value(entry.value)),
+          );
         }
         resolved[entry.key] = row.id;
       }
@@ -210,16 +216,16 @@ class LocalLibraryDataSource {
   /// Ids des nœuds dossier VISIBLES par une bibliothèque (possédés OU vus via un
   /// recouvrement de liens). Sert à scoper l'affichage et le recâblage des boards.
   Future<Set<int>> getMemberFolderIds(int libraryId) async {
-    final rows = await (_database.select(_database.folderMemberships)
-          ..where((m) => m.libraryId.equals(libraryId)))
-        .get();
+    final rows = await (_database.select(
+      _database.folderMemberships,
+    )..where((m) => m.libraryId.equals(libraryId))).get();
     return {for (final row in rows) row.folderId};
   }
 
   Future<db.LibraryFolder?> getFolderById(int id) {
-    return (_database.select(_database.libraryFolders)
-          ..where((f) => f.id.equals(id)))
-        .getSingleOrNull();
+    return (_database.select(
+      _database.libraryFolders,
+    )..where((f) => f.id.equals(id))).getSingleOrNull();
   }
 
   /// Met à jour la révision de snapshot connue pour un nœud dossier.
@@ -228,13 +234,16 @@ class LocalLibraryDataSource {
     required int lastSyncedRevision,
     DateTime? lastSyncedAt,
   }) async {
-    await (_database.update(_database.libraryFolders)
-          ..where((f) => f.id.equals(id)))
-        .write(db.LibraryFoldersCompanion(
-      lastSyncedRevision: Value(lastSyncedRevision),
-      lastSyncedAt:
-          lastSyncedAt != null ? Value(lastSyncedAt) : const Value.absent(),
-    ));
+    await (_database.update(
+      _database.libraryFolders,
+    )..where((f) => f.id.equals(id))).write(
+      db.LibraryFoldersCompanion(
+        lastSyncedRevision: Value(lastSyncedRevision),
+        lastSyncedAt: lastSyncedAt != null
+            ? Value(lastSyncedAt)
+            : const Value.absent(),
+      ),
+    );
   }
 
   /// Mémorise le jeton de reprise du parcours des changements Drive.
@@ -247,13 +256,16 @@ class LocalLibraryDataSource {
     required String? driveChangeToken,
     DateTime? lastFullScanAt,
   }) async {
-    await (_database.update(_database.libraries)..where((l) => l.id.equals(id)))
-        .write(db.LibrariesCompanion(
-      driveChangeToken: Value(driveChangeToken),
-      lastFullScanAt: lastFullScanAt != null
-          ? Value(lastFullScanAt)
-          : const Value.absent(),
-    ));
+    await (_database.update(
+      _database.libraries,
+    )..where((l) => l.id.equals(id))).write(
+      db.LibrariesCompanion(
+        driveChangeToken: Value(driveChangeToken),
+        lastFullScanAt: lastFullScanAt != null
+            ? Value(lastFullScanAt)
+            : const Value.absent(),
+      ),
+    );
   }
 
   /// Mémorise le jeton de sonde du manifest observé au dernier pull concluant
@@ -266,15 +278,15 @@ class LocalLibraryDataSource {
     required int id,
     required String? probeToken,
   }) async {
-    final current = await (_database.select(_database.libraryFolders)
-          ..where((f) => f.id.equals(id)))
-        .getSingleOrNull();
+    final current = await (_database.select(
+      _database.libraryFolders,
+    )..where((f) => f.id.equals(id))).getSingleOrNull();
     if (current == null || current.manifestProbeToken == probeToken) return;
 
-    await (_database.update(_database.libraryFolders)
-          ..where((f) => f.id.equals(id)))
-        .write(db.LibraryFoldersCompanion(
-      manifestProbeToken: Value(probeToken),
-    ));
+    await (_database.update(
+      _database.libraryFolders,
+    )..where((f) => f.id.equals(id))).write(
+      db.LibraryFoldersCompanion(manifestProbeToken: Value(probeToken)),
+    );
   }
 }

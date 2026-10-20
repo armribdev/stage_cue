@@ -19,31 +19,31 @@ enum ConnectivityMode {
 
 extension ConnectivityModeUi on ConnectivityMode {
   String get label => switch (this) {
-        ConnectivityMode.connected => 'Connecté',
-        ConnectivityMode.liveOffline => 'Live',
-        ConnectivityMode.offline => 'Hors ligne',
-      };
+    ConnectivityMode.connected => 'Connecté',
+    ConnectivityMode.liveOffline => 'Live',
+    ConnectivityMode.offline => 'Hors ligne',
+  };
 
   String get description => switch (this) {
-        ConnectivityMode.connected =>
-          'Synchronisation Drive et téléchargements actifs.',
-        ConnectivityMode.liveOffline =>
-          'Mode scène : seuls les pads en cache local sont affichés et jouables.',
-        ConnectivityMode.offline =>
-          'Aucune synchro ni téléchargement, mais tous les pads restent visibles.',
-      };
+    ConnectivityMode.connected =>
+      'Synchronisation Drive et téléchargements actifs.',
+    ConnectivityMode.liveOffline =>
+      'Mode scène : seuls les pads en cache local sont affichés et jouables.',
+    ConnectivityMode.offline =>
+      'Aucune synchro ni téléchargement, mais tous les pads restent visibles.',
+  };
 
   String get storageKey => switch (this) {
-        ConnectivityMode.connected => 'connected',
-        ConnectivityMode.liveOffline => 'live_offline',
-        ConnectivityMode.offline => 'offline',
-      };
+    ConnectivityMode.connected => 'connected',
+    ConnectivityMode.liveOffline => 'live_offline',
+    ConnectivityMode.offline => 'offline',
+  };
 
   static ConnectivityMode fromStorageKey(String? raw) => switch (raw) {
-        'connected' => ConnectivityMode.connected,
-        'offline' => ConnectivityMode.offline,
-        _ => ConnectivityMode.liveOffline,
-      };
+    'connected' => ConnectivityMode.connected,
+    'offline' => ConnectivityMode.offline,
+    _ => ConnectivityMode.liveOffline,
+  };
 }
 
 /// Préférences applicatives persistées hors Drift (réglages sampler, etc.).
@@ -105,8 +105,7 @@ class AppPreferences extends ChangeNotifier {
   int? hotkeyForPad(int padId) => _padHotkeys[padId];
 
   /// Synchro Drive automatique (push débouncé, pull au lancement).
-  bool get allowsNetworkSync =>
-      _connectivityMode == ConnectivityMode.connected;
+  bool get allowsNetworkSync => _connectivityMode == ConnectivityMode.connected;
 
   /// Spectacle local : masque les pads sans son en cache.
   bool get isLiveOfflineMode =>
@@ -134,8 +133,7 @@ class AppPreferences extends ChangeNotifier {
           data[_keyConnectivityMode] as String?,
         );
         _cueOutputDeviceId = data[_keyCueOutputDeviceId] as String?;
-        _isWindowsFullScreen =
-            (data[_keyWindowsFullScreen] as bool?) ?? false;
+        _isWindowsFullScreen = (data[_keyWindowsFullScreen] as bool?) ?? false;
         final lastUpdateCheckRaw = data[_keyLastUpdateCheckAt] as String?;
         _lastUpdateCheckAt = lastUpdateCheckRaw == null
             ? null

@@ -7,7 +7,6 @@ part of '../settings_screen.dart';
 /// Sections de l'écran : audio, Drive, maintenance, mise à jour.
 /// Méthodes de [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsSections on _SettingsScreenState {
-
   // Pas de Card : la direction "Console Linear" pose les sections à plat
   // (label + séparateur) plutôt qu'en cartes empilées façon Material.
   Widget _buildSettingsSectionCard({
@@ -147,8 +146,10 @@ extension _SettingsSections on _SettingsScreenState {
                   isExpanded: true,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     isDense: true,
                   ),
                   items: [
@@ -275,7 +276,6 @@ extension _SettingsSections on _SettingsScreenState {
     );
   }
 
-
   Widget _buildSettingsBody() {
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 240),
@@ -354,23 +354,24 @@ extension _SettingsSections on _SettingsScreenState {
             'Régénérer les waveforms des sons déjà en cache local, '
             'avec l\'algorithme d\'extraction courant. N\'affecte pas les sons '
             'non encore téléchargés.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
           ),
           if (_isRegeneratingWaveforms) ...[
             const SizedBox(height: 8),
             Text(
               'En cours… $_waveformRegenDone / $_waveformRegenTotal',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ],
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed:
-                _isRegeneratingWaveforms ? null : _regenerateCachedWaveforms,
+            onPressed: _isRegeneratingWaveforms
+                ? null
+                : _regenerateCachedWaveforms,
             icon: _isRegeneratingWaveforms
                 ? const SizedBox(
                     width: 16,
@@ -402,9 +403,9 @@ extension _SettingsSections on _SettingsScreenState {
               _appVersion == null
                   ? 'Version…'
                   : 'Version installée : $_appVersion',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
           const SizedBox(width: 12),
@@ -424,14 +425,14 @@ extension _SettingsSections on _SettingsScreenState {
     );
   }
 
-
   /// Bouton « Actualiser depuis Drive » : relit les dossiers Drive liés et
   /// indexe les fichiers ajoutés directement sur Drive. Absent tant qu'aucune
   /// bibliothèque Drive n'est connectée ; devient un indicateur d'activité
   /// pendant l'actualisation.
   Widget? _buildDriveRefreshAction() {
-    final hasDriveLibrary =
-        _libraries.any((library) => library.isConnectedToDrive);
+    final hasDriveLibrary = _libraries.any(
+      (library) => library.isConnectedToDrive,
+    );
     if (!hasDriveLibrary) return null;
 
     if (_isSyncBusy) {

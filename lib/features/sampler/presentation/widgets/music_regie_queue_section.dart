@@ -153,9 +153,9 @@ class _QueueRow extends StatelessWidget {
                   padItem.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
               _RegieDownloadRing(padItem: padItem, size: 26),
@@ -181,10 +181,7 @@ class _QueueRow extends StatelessWidget {
               index: listIndex,
               child: content,
             )
-          : ReorderableDragStartListener(
-              index: listIndex,
-              child: content,
-            );
+          : ReorderableDragStartListener(index: listIndex, child: content);
     }
 
     if (!enableSwipeToRemove || onRemove == null) {
@@ -218,10 +215,7 @@ class _PadColorChip extends StatelessWidget {
   final PadItem padItem;
   final double size;
 
-  const _PadColorChip({
-    required this.padItem,
-    required this.size,
-  });
+  const _PadColorChip({required this.padItem, required this.size});
 
   @override
   Widget build(BuildContext context) {
@@ -229,8 +223,8 @@ class _PadColorChip extends StatelessWidget {
     final color = padItem.pad.colorValue != null
         ? Color(padItem.pad.colorValue!)
         : padItem.pad.sounds.isNotEmpty
-            ? soundEffectiveColor(padItem.pad.sounds.first, scheme)
-            : scheme.surfaceContainerHighest;
+        ? soundEffectiveColor(padItem.pad.sounds.first, scheme)
+        : scheme.surfaceContainerHighest;
 
     return Container(
       width: size,
@@ -288,4 +282,3 @@ Widget _queueDragProxyDecorator(
     child: child,
   );
 }
-

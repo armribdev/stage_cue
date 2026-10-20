@@ -12,21 +12,17 @@ class MockSoundRepository extends Mock implements SoundRepository {}
 
 class MockLoadSoundsUseCase extends Mock implements LoadSoundsUseCase {}
 
-Pad _pad(int id) => Pad(
-      id: id,
-      boardId: 1,
-      sortOrder: id,
-      createdAt: DateTime(2026),
-    );
+Pad _pad(int id) =>
+    Pad(id: id, boardId: 1, sortOrder: id, createdAt: DateTime(2026));
 
 Sound _sound(int id) => Sound(
-      id: id,
-      title: 'Son $id',
-      filePath: '/tmp/son_$id.mp3',
-      type: SoundType.music,
-      volume: 1.0,
-      createdAt: DateTime(2026),
-    );
+  id: id,
+  title: 'Son $id',
+  filePath: '/tmp/son_$id.mp3',
+  type: SoundType.music,
+  volume: 1.0,
+  createdAt: DateTime(2026),
+);
 
 SamplerNotifier _notifier() {
   final repo = MockSoundRepository();
@@ -238,22 +234,25 @@ void main() {
       expect(n.consumeLastMusicPlaybackError(), isNull);
     });
 
-    test('retourne et efface le message après un échec de chargement', () async {
-      final repo = MockSoundRepository();
-      final useCase = MockLoadSoundsUseCase();
-      // getSoundById renvoie null → _setMusicLoadError est appelé
-      when(() => repo.getSoundById(any())).thenAnswer((_) async => null);
-      when(() => useCase.call(any())).thenAnswer((_) async => []);
-      final n = SamplerNotifier(repo, useCase);
+    test(
+      'retourne et efface le message après un échec de chargement',
+      () async {
+        final repo = MockSoundRepository();
+        final useCase = MockLoadSoundsUseCase();
+        // getSoundById renvoie null → _setMusicLoadError est appelé
+        when(() => repo.getSoundById(any())).thenAnswer((_) async => null);
+        when(() => useCase.call(any())).thenAnswer((_) async => []);
+        final n = SamplerNotifier(repo, useCase);
 
-      await n.playMusicBySoundId(99);
+        await n.playMusicBySoundId(99);
 
-      final error = n.consumeLastMusicPlaybackError();
-      expect(error, isNotNull);
+        final error = n.consumeLastMusicPlaybackError();
+        expect(error, isNotNull);
 
-      // Un second appel doit retourner null (message consommé)
-      expect(n.consumeLastMusicPlaybackError(), isNull);
-    });
+        // Un second appel doit retourner null (message consommé)
+        expect(n.consumeLastMusicPlaybackError(), isNull);
+      },
+    );
   });
 
   // ── Résolution pad musique par son ───────────────────────────────────────
@@ -268,16 +267,18 @@ void main() {
       when(() => repo.getSoundById(any())).thenAnswer(
         (invocation) async => soundsById[invocation.positionalArguments[0]],
       );
-      when(() => repo.getSoundIdToFirstPadIdInBoard(any()))
-          .thenAnswer((_) async => {});
+      when(
+        () => repo.getSoundIdToFirstPadIdInBoard(any()),
+      ).thenAnswer((_) async => {});
       when(() => useCase.call(any())).thenAnswer((_) async => pads);
       final n = SamplerNotifier(repo, useCase);
-      await n.selectBoard(SoundBoard(id: 1, name: 'A', createdAt: DateTime(2026)));
+      await n.selectBoard(
+        SoundBoard(id: 1, name: 'A', createdAt: DateTime(2026)),
+      );
       return n;
     }
 
-    test(
-        'ne résout pas un multipad pour un de ses sons — seuls les pads '
+    test('ne résout pas un multipad pour un de ses sons — seuls les pads '
         'simples (un son) sont liés', () async {
       final multi = Pad(
         id: 10,
@@ -304,8 +305,7 @@ void main() {
       expect(resolved?.pad.id, 11);
     });
 
-    test(
-        'jouer une musique de multipad depuis la recherche crée un pad '
+    test('jouer une musique de multipad depuis la recherche crée un pad '
         'hors-scène pour ce son précis, sans toucher au multipad', () async {
       final multi = Pad(
         id: 20,
@@ -333,8 +333,7 @@ void main() {
   // ── File d'attente de pistes hors-scène ──────────────────────────────────
 
   group('enqueueMusicBySoundId — plusieurs pistes hors-scène', () {
-    test(
-        'ajouter une 2e piste ne fait pas disparaître la 1re de la file '
+    test('ajouter une 2e piste ne fait pas disparaître la 1re de la file '
         '(régression cleanupOffStagePads)', () async {
       final repo = MockSoundRepository();
       final useCase = MockLoadSoundsUseCase();
@@ -362,11 +361,16 @@ void main() {
       final repo = MockSoundRepository();
       final useCase = MockLoadSoundsUseCase();
       when(() => repo.getSoundById(any())).thenAnswer((_) async => null);
-      when(() => repo.getSoundBoards())
-          .thenAnswer((_) async => [SoundBoard(id: 1, name: 'A', createdAt: DateTime(2026))]);
-      when(() => repo.createSoundBoard(any(),
-              color: any(named: 'color'), libraryId: any(named: 'libraryId')))
-          .thenAnswer((_) async => 1);
+      when(() => repo.getSoundBoards()).thenAnswer(
+        (_) async => [SoundBoard(id: 1, name: 'A', createdAt: DateTime(2026))],
+      );
+      when(
+        () => repo.createSoundBoard(
+          any(),
+          color: any(named: 'color'),
+          libraryId: any(named: 'libraryId'),
+        ),
+      ).thenAnswer((_) async => 1);
       when(() => useCase.call(any())).thenAnswer((_) async => []);
       final n = SamplerNotifier(repo, useCase);
 
@@ -374,7 +378,9 @@ void main() {
       // Aucune exception attendue
       expect(() async {
         await n.loadBoards();
-        await n.selectBoard(SoundBoard(id: 1, name: 'A', createdAt: DateTime(2026)));
+        await n.selectBoard(
+          SoundBoard(id: 1, name: 'A', createdAt: DateTime(2026)),
+        );
       }, returnsNormally);
     });
   });

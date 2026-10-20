@@ -32,12 +32,12 @@ class SoundSearchSnapshot {
   List<TagItem> tagsFor(int soundId) => tagsBySound[soundId] ?? const [];
 
   SoundSearchSnapshot withSounds(List<Sound> next) => SoundSearchSnapshot(
-        sounds: next,
-        tagsBySound: tagsBySound,
-        tagCatalog: tagCatalog,
-        locallyAvailableSoundIds: locallyAvailableSoundIds,
-        probedAt: probedAt,
-      );
+    sounds: next,
+    tagsBySound: tagsBySound,
+    tagCatalog: tagCatalog,
+    locallyAvailableSoundIds: locallyAvailableSoundIds,
+    probedAt: probedAt,
+  );
 }
 
 /// Cache mémoire de la bibliothèque pour la recherche de sons.
@@ -125,7 +125,8 @@ class SoundSearchIndex {
     final sounds = results[0] as List<Sound>;
 
     final now = DateTime.now();
-    final probeIsFresh = previous != null &&
+    final probeIsFresh =
+        previous != null &&
         !forceLocalProbe &&
         now.difference(previous.probedAt) < _localProbeTtl;
 

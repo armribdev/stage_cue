@@ -35,8 +35,7 @@ class Pad {
   /// volume par défaut du son. Défensif face aux listes désalignées (brouillons).
   double effectiveVolume(int index) {
     if (index < 0 || index >= sounds.length) return 1.0;
-    final override =
-        index < soundVolumes.length ? soundVolumes[index] : null;
+    final override = index < soundVolumes.length ? soundVolumes[index] : null;
     return override ?? sounds[index].volume;
   }
 

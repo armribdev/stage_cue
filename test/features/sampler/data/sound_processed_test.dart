@@ -16,7 +16,9 @@ void main() {
     dataSource = LocalSoundDataSource(database);
     ids = [
       for (final name in ['porte', 'pluie', 'orage'])
-        await database.into(database.sounds).insert(
+        await database
+            .into(database.sounds)
+            .insert(
               db.SoundsCompanion.insert(
                 title: name,
                 filePath: '/cache/$name.wav',
@@ -29,9 +31,9 @@ void main() {
   tearDown(() => database.close());
 
   Future<Map<int, bool>> processedById() async => {
-        for (final s in await database.select(database.sounds).get())
-          s.id: s.isProcessed,
-      };
+    for (final s in await database.select(database.sounds).get())
+      s.id: s.isProcessed,
+  };
 
   test('un son nouveau est « à traiter » par défaut', () async {
     expect((await processedById()).values, everyElement(isFalse));
@@ -53,9 +55,9 @@ void main() {
 
     await dataSource.markSoundsProcessed([ids[0]]);
 
-    final row = await (database.select(database.sounds)
-          ..where((s) => s.id.equals(ids[0])))
-        .getSingle();
+    final row = await (database.select(
+      database.sounds,
+    )..where((s) => s.id.equals(ids[0]))).getSingle();
     expect(row.displayName, 'Porte grinçante');
     expect(row.volume, 0.4);
     expect(row.isProcessed, isTrue);
@@ -67,12 +69,14 @@ void main() {
     expect((await processedById()).values, everyElement(isFalse));
   });
 
-  test('updateSoundSettings sans isProcessed ne change pas le statut',
-      () async {
-    await dataSource.markSoundsProcessed([ids[1]]);
+  test(
+    'updateSoundSettings sans isProcessed ne change pas le statut',
+    () async {
+      await dataSource.markSoundsProcessed([ids[1]]);
 
-    await dataSource.updateSoundSettings(id: ids[1], volume: 0.7);
+      await dataSource.updateSoundSettings(id: ids[1], volume: 0.7);
 
-    expect((await processedById())[ids[1]], isTrue);
-  });
+      expect((await processedById())[ids[1]], isTrue);
+    },
+  );
 }

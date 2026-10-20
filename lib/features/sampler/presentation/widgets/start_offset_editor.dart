@@ -142,8 +142,9 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
     return '$minutes:${seconds.toString().padLeft(2, '0')}.$tenths';
   }
 
-  double _handleHitHalfWidth() =>
-      isNativeDesktopPlatform() ? _kHandleHitHalfWidthDesktop : _kHandleHitHalfWidthMobile;
+  double _handleHitHalfWidth() => isNativeDesktopPlatform()
+      ? _kHandleHitHalfWidthDesktop
+      : _kHandleHitHalfWidthMobile;
 
   bool _isNearHandle(double dx, double width, double fraction) {
     if (width <= 0) return false;
@@ -196,14 +197,18 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
         ),
         child: Row(
           children: [
-            Icon(Icons.info_outline_rounded,
-                size: 18, color: scheme.onSurfaceVariant),
+            Icon(
+              Icons.info_outline_rounded,
+              size: 18,
+              color: scheme.onSurfaceVariant,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Téléchargez le son pour régler son point d\'entrée.',
-                style: textTheme.bodySmall
-                    ?.copyWith(color: scheme.onSurfaceVariant),
+                style: textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
           ],
@@ -217,8 +222,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
         : (_offsetMs / _duration.inMilliseconds).clamp(0.0, 1.0);
     final playheadFraction = _duration.inMilliseconds == 0
         ? 0.0
-        : (_playhead.inMilliseconds / _duration.inMilliseconds)
-            .clamp(0.0, 1.0);
+        : (_playhead.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -282,10 +286,12 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
                       painter: _OffsetWaveformPainter(
                         bars: bars,
                         offsetFraction: fraction,
-                        playheadFraction:
-                            _isPreviewing ? playheadFraction : null,
-                        skippedColor:
-                            scheme.onSurfaceVariant.withValues(alpha: 0.28),
+                        playheadFraction: _isPreviewing
+                            ? playheadFraction
+                            : null,
+                        skippedColor: scheme.onSurfaceVariant.withValues(
+                          alpha: 0.28,
+                        ),
                         keptColor: scheme.primary,
                         handleColor: scheme.primary,
                         playheadColor: scheme.tertiary,
@@ -305,17 +311,16 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
             IconButton.filledTonal(
               onPressed: _togglePreview,
               icon: Icon(
-                _isPreviewing
-                    ? Icons.stop_rounded
-                    : Icons.play_arrow_rounded,
+                _isPreviewing ? Icons.stop_rounded : Icons.play_arrow_rounded,
               ),
               tooltip: _isPreviewing ? 'Arrêter' : 'Aperçu depuis le point',
             ),
             const SizedBox(width: 4),
             _NudgeButton(
               icon: Icons.fast_rewind_rounded,
-              onPressed:
-                  _offsetMs > 0 ? () => _nudge(-_nudgeStep.inMilliseconds) : null,
+              onPressed: _offsetMs > 0
+                  ? () => _nudge(-_nudgeStep.inMilliseconds)
+                  : null,
               tooltip: '-0,1 s',
             ),
             _NudgeButton(
@@ -419,7 +424,10 @@ class _OffsetWaveformPainter extends CustomPainter {
       canvas.drawLine(Offset(0, centerY), Offset(offsetX, centerY), baseline);
       baseline.color = keptColor;
       canvas.drawLine(
-          Offset(offsetX, centerY), Offset(size.width, centerY), baseline);
+        Offset(offsetX, centerY),
+        Offset(size.width, centerY),
+        baseline,
+      );
     }
 
     // Tête de lecture (aperçu).
@@ -440,7 +448,10 @@ class _OffsetWaveformPainter extends CustomPainter {
       ..color = handleColor
       ..strokeWidth = handleHovered ? 2.5 : 2;
     canvas.drawLine(
-        Offset(offsetX, 0), Offset(offsetX, size.height), handlePaint);
+      Offset(offsetX, 0),
+      Offset(offsetX, size.height),
+      handlePaint,
+    );
     final knobRadius = handleHovered ? 5.5 : 4.0;
     canvas.drawCircle(Offset(offsetX, 6), knobRadius, handlePaint);
     if (handleHovered) {

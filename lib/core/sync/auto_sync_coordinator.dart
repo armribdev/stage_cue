@@ -174,7 +174,8 @@ class AutoSyncCoordinator {
   void onAppResumed() {
     _isBackgrounded = false;
     final last = _lastWatchPassAt;
-    if (last != null && DateTime.now().difference(last) < _watchResumeThrottle) {
+    if (last != null &&
+        DateTime.now().difference(last) < _watchResumeThrottle) {
       SyncLog.trace('veille : reprise trop rapprochée, sonde sautée');
       return;
     }
@@ -200,8 +201,9 @@ class AutoSyncCoordinator {
     //   exports portent sur `sounds`, `sound_boards` et `pads`), donc une
     //   écriture qui ne touche qu'elles n'a par construction rien à pousser.
     const bookkeepingTables = {'libraries', 'library_folders'};
-    final touchesUserData =
-        updates.any((u) => !bookkeepingTables.contains(u.table));
+    final touchesUserData = updates.any(
+      (u) => !bookkeepingTables.contains(u.table),
+    );
     if (!touchesUserData) return;
 
     final libraries = await _connectedLibraries();
@@ -260,8 +262,10 @@ class AutoSyncCoordinator {
       SyncLog.trace('passe ${trigger.name} : rejoint la passe en cours');
       return inFlight;
     }
-    final pass = _runPass(trigger, onIndexProgress: onIndexProgress)
-        .whenComplete(() => _passInFlight = null);
+    final pass = _runPass(
+      trigger,
+      onIndexProgress: onIndexProgress,
+    ).whenComplete(() => _passInFlight = null);
     _passInFlight = pass;
     return pass;
   }
@@ -365,10 +369,7 @@ class AutoSyncCoordinator {
                   skipped++;
                   continue;
                 }
-                SyncLog.fullScanRequired(
-                  library: library.name,
-                  reason: reason,
-                );
+                SyncLog.fullScanRequired(library: library.name, reason: reason);
                 final result = await _repository
                     .indexDriveFolder(
                       library: library,
@@ -445,7 +446,9 @@ class AutoSyncCoordinator {
   /// bibliothèque, la raison étant stable d'un tick à l'autre.
   void _reportWatchFullScanDeferred(Library library, String reason) {
     if (!_fullScanDeferredReported.add(library.id)) {
-      SyncLog.trace('${library.name} : veille — scan complet toujours différé.');
+      SyncLog.trace(
+        '${library.name} : veille — scan complet toujours différé.',
+      );
       return;
     }
     SyncLog.watchFullScanDeferred(library: library.name, reason: reason);

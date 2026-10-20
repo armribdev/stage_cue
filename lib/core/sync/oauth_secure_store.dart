@@ -28,7 +28,7 @@ abstract class OAuthSecretStore {
 /// Backend [FlutterSecureStorage] (DPAPI / Keychain / Keystore selon OS).
 class FlutterOAuthSecretStore implements OAuthSecretStore {
   FlutterOAuthSecretStore({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
 

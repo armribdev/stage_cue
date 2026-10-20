@@ -4,10 +4,13 @@ part of 'sampler_provider.dart';
 enum PadUnavailabilityReason {
   /// Sons présents en DB mais fichiers non encore téléchargés (connexion disponible).
   needsDownload,
+
   /// Appareil hors-ligne et fichiers absents du cache local.
   offline,
+
   /// Fichier local introuvable (supprimé ou déplacé).
   missingFile,
+
   /// Fichier présent mais format non décodable par SoLoud sur cette plateforme.
   unsupportedFormat,
 }
@@ -25,12 +28,16 @@ class SamplerState {
   final String? boardsError;
   final PadItem? currentMusicPad;
   final List<int> musicQueuePadIds;
+
   /// Ambiance à l'antenne (voie exclusive en boucle), ou `null`.
   final PadItem? currentAmbiancePad;
+
   /// true pendant la préparation hors-ligne du board (téléchargements en cours).
   final bool isBoardPreparing;
+
   /// Nombre de pads déjà téléchargés pendant la préparation.
   final int boardPrepareDone;
+
   /// Nombre total de pads à télécharger pendant la préparation.
   final int boardPrepareTotal;
 
@@ -132,11 +139,13 @@ class PadPlaybackTicket {
 /// Item de pad — un [PadSoundSlot] par son, index aligné sur [Pad.sounds].
 class PadItem {
   Pad pad;
+
   /// Numéro du multipad sur le plateau (1-based), null si pad simple.
   int? multipadNumber;
   final List<PadSoundSlot> slots;
   bool isPlaying;
   int _nextSoundIndex;
+
   /// Indices déjà joués en mode aléatoire pendant la session courante du pad.
   final Set<int> _playedSoundIndices = {};
   int? _currentPlayerIndex;
@@ -152,6 +161,7 @@ class PadItem {
   bool isDownloading = false;
   int downloadDone = 0;
   int downloadTotal = 0;
+
   /// Index du slot en cours de téléchargement (détail pad, variante unique).
   int? downloadingSlotIndex;
 
@@ -178,8 +188,8 @@ class PadItem {
     this.isPlaying = false,
     int nextSoundIndex = 0,
     this.unavailabilityReason,
-  })  : slots = slots ?? [],
-        _nextSoundIndex = nextSoundIndex {
+  }) : slots = slots ?? [],
+       _nextSoundIndex = nextSoundIndex {
     syncSlotCount();
   }
 
@@ -212,8 +222,7 @@ class PadItem {
   bool get appearsReady => slots.any((s) => s.appearsReady);
 
   bool get isFullyReady =>
-      pad.sounds.isNotEmpty &&
-      slots.every((s) => s.isReady || s.isCached);
+      pad.sounds.isNotEmpty && slots.every((s) => s.isReady || s.isCached);
 
   bool get isPartiallyReady => appearsReady && !isFullyReady;
 
@@ -225,10 +234,10 @@ class PadItem {
       .length;
 
   bool get hasMissingFileSlot => slots.any(
-        (s) =>
-            s.availability == PadSoundAvailability.missingFile ||
-            s.availability == PadSoundAvailability.unsupportedFormat,
-      );
+    (s) =>
+        s.availability == PadSoundAvailability.missingFile ||
+        s.availability == PadSoundAvailability.unsupportedFormat,
+  );
 
   /// Pad visuellement bloqué (fichier introuvable / hors-ligne).
   bool get isBlockedForPlayback {
@@ -253,9 +262,8 @@ class PadItem {
   bool get showsRegieDownloadProgress => isDownloading;
 
   /// Progression normalisée [0–1] pendant le téléchargement, sinon null.
-  double? get regieDownloadProgress => isDownloading && downloadTotal > 0
-      ? downloadDone / downloadTotal
-      : null;
+  double? get regieDownloadProgress =>
+      isDownloading && downloadTotal > 0 ? downloadDone / downloadTotal : null;
 
   /// Lecteur actuellement actif (celui qui joue ou vient de jouer).
   AudioPlayerService? get currentPlayer {
@@ -274,7 +282,9 @@ class PadItem {
       return slots[idx].player;
     }
     final paused = pausedPlayerIndex;
-    if (paused != null && paused < slots.length && slots[paused].player != null) {
+    if (paused != null &&
+        paused < slots.length &&
+        slots[paused].player != null) {
       return slots[paused].player;
     }
     for (final slot in slots) {
@@ -313,7 +323,10 @@ class PadItem {
 
   /// Enregistre une nouvelle voix (barre de progression) de [duration] et
   /// programme son auto-suppression. [onExpire] est appelé à la fin du son.
-  int addPlaybackTicket(Duration duration, {required void Function() onExpire}) {
+  int addPlaybackTicket(
+    Duration duration, {
+    required void Function() onExpire,
+  }) {
     final id = ++_ticketSeq;
     playbackTickets.add(
       PadPlaybackTicket(id: id, duration: duration, startedAt: DateTime.now()),

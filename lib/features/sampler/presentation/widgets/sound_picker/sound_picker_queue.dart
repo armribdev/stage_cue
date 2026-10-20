@@ -7,7 +7,6 @@ part of '../sound_picker_overlay.dart';
 /// File de traitement des sons « à traiter » (mode gestion) et sa barre.
 /// Méthodes de [_SoundPickerOverlayState] extraites via extension dans le même `part`.
 extension _SoundPickerQueue on _SoundPickerOverlayState {
-
   // ── File de traitement (sons « à traiter ») ───────────────────────────────
 
   /// Active/désactive la file. En volet scindé, l'activer ouvre tout de suite le
@@ -51,8 +50,7 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
       }
       return;
     }
-    final index =
-        _shownResults(_results).indexWhere((s) => s.id == next.id);
+    final index = _shownResults(_results).indexWhere((s) => s.id == next.id);
     setState(() {
       _editingSound = next;
       _editDirty = false;
@@ -74,7 +72,9 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
   void _skipToNext(List<Sound> shown) {
     if (shown.length < 2) return;
     final current = _editingSound;
-    final i = current == null ? -1 : shown.indexWhere((s) => s.id == current.id);
+    final i = current == null
+        ? -1
+        : shown.indexWhere((s) => s.id == current.id);
     final index = (i + 1) % shown.length;
     setState(() => _selectedIndex = index);
     _scrollToSelected();
@@ -99,7 +99,8 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
     final confirmed = await AppConfirmDialog.show(
       context,
       title: 'Marquer comme traités',
-      message: 'Marquer ${ids.length} son${ids.length > 1 ? 's' : ''} comme '
+      message:
+          'Marquer ${ids.length} son${ids.length > 1 ? 's' : ''} comme '
           'traité${ids.length > 1 ? 's' : ''} sans les modifier ?$scope',
       confirmLabel: 'Tout marquer',
     );
@@ -219,7 +220,8 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
           if (canMarkAll)
             ExcludeFocus(
               child: Tooltip(
-                message: 'Marquer les sons listés comme traités, sans les '
+                message:
+                    'Marquer les sons listés comme traités, sans les '
                     'modifier',
                 child: TextButton.icon(
                   onPressed: () => unawaited(_markShownAsProcessed()),

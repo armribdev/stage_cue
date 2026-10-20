@@ -79,9 +79,7 @@ void main() {
   });
 
   test('status HTTP non 200 → exception', () async {
-    final client = MockClient(
-      (_) async => http.Response('erreur', 404),
-    );
+    final client = MockClient((_) async => http.Response('erreur', 404));
     final installer = AppUpdateInstaller(
       httpClient: client,
       getTemporaryDirectoryFn: () async => tempRoot,
@@ -93,32 +91,31 @@ void main() {
     );
   });
 
-  test('taille reçue ≠ Content-Length → exception et pas de .part orphelin',
-      () async {
-    final client = _MismatchLengthClient(body: List<int>.filled(10, 0), claimedLength: 99);
-    final installer = AppUpdateInstaller(
-      httpClient: client,
-      getTemporaryDirectoryFn: () async => tempRoot,
-    );
-
-    await expectLater(
-      installer.downloadInstaller(info),
-      throwsA(isA<Exception>()),
-    );
-
-    final updateDir = Directory(p.join(tempRoot.path, 'stagecue_update'));
-    if (await updateDir.exists()) {
-      final leftovers = await updateDir.list().toList();
-      expect(
-        leftovers.where((e) => e.path.endsWith('.part')),
-        isEmpty,
+  test(
+    'taille reçue ≠ Content-Length → exception et pas de .part orphelin',
+    () async {
+      final client = _MismatchLengthClient(
+        body: List<int>.filled(10, 0),
+        claimedLength: 99,
       );
-      expect(
-        leftovers.where((e) => e.path.endsWith('.exe')),
-        isEmpty,
+      final installer = AppUpdateInstaller(
+        httpClient: client,
+        getTemporaryDirectoryFn: () async => tempRoot,
       );
-    }
-  });
+
+      await expectLater(
+        installer.downloadInstaller(info),
+        throwsA(isA<Exception>()),
+      );
+
+      final updateDir = Directory(p.join(tempRoot.path, 'stagecue_update'));
+      if (await updateDir.exists()) {
+        final leftovers = await updateDir.list().toList();
+        expect(leftovers.where((e) => e.path.endsWith('.part')), isEmpty);
+        expect(leftovers.where((e) => e.path.endsWith('.exe')), isEmpty);
+      }
+    },
+  );
 }
 
 /// `MockClient` aligne toujours `contentLength` sur le corps ; on force un

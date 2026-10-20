@@ -11,10 +11,7 @@ class DriveSharedDrive {
   final String id;
   final String name;
 
-  const DriveSharedDrive({
-    required this.id,
-    required this.name,
-  });
+  const DriveSharedDrive({required this.id, required this.name});
 }
 
 /// Référence vers un fichier ou dossier distant.

@@ -3,7 +3,6 @@ part of 'library_repository.dart';
 /// Réalignement des chemins relatifs sur les fichiers réellement présents sur Drive.
 /// Méthodes de [LibraryRepository] extraites via extension dans le même `part`.
 extension LibraryRepositoryPathReconcile on LibraryRepository {
-
   /// Réaligne les chemins issus d'un snapshot sur les fichiers réellement
   /// présents sur Drive (déplacement, renommage, préfixe legacy `sounds/`).
   Future<void> _reconcileOrphanedSoundPaths({
@@ -30,8 +29,10 @@ extension LibraryRepositoryPathReconcile on LibraryRepository {
       final candidates = byBasename[p.basename(current).toLowerCase()];
       if (candidates == null || candidates.isEmpty) continue;
 
-      final corrected =
-          ReconcilePathMatcher.pickBestCandidate(current, candidates);
+      final corrected = ReconcilePathMatcher.pickBestCandidate(
+        current,
+        candidates,
+      );
       if (corrected == null) continue;
       await _soundDataSource.updateSoundRelativePath(
         soundId: sound.id,
@@ -63,8 +64,10 @@ extension LibraryRepositoryPathReconcile on LibraryRepository {
     );
     if (matches.isEmpty) return relativePath;
 
-    final corrected =
-        ReconcilePathMatcher.pickBestCandidate(relativePath, matches);
+    final corrected = ReconcilePathMatcher.pickBestCandidate(
+      relativePath,
+      matches,
+    );
     if (corrected == null || corrected == relativePath) return relativePath;
 
     await _soundDataSource.updateSoundRelativePath(
@@ -120,10 +123,7 @@ extension LibraryRepositoryPathReconcile on LibraryRepository {
       sharedDriveId: sharedDriveId,
     );
     for (final child in children) {
-      if (PathUnicode.sameName(
-        child.name.toLowerCase(),
-        name.toLowerCase(),
-      )) {
+      if (PathUnicode.sameName(child.name.toLowerCase(), name.toLowerCase())) {
         return child;
       }
     }

@@ -169,9 +169,7 @@ class _TagPickerPanelState extends State<_TagPickerPanel> {
 
   List<TagCategoryWithTags> get _activeCategories {
     final ids = widget.availableTags.map((t) => t.categoryId).toSet();
-    return widget.tagCatalog
-        .where((c) => ids.contains(c.category.id))
-        .toList();
+    return widget.tagCatalog.where((c) => ids.contains(c.category.id)).toList();
   }
 
   Color? _categoryColor(int categoryId) {
@@ -221,8 +219,7 @@ class _TagPickerPanelState extends State<_TagPickerPanel> {
                         isDense: true,
                         hintText: 'Rechercher un tag...',
                         prefixIcon: const Icon(Icons.search, size: 18),
-                        contentPadding:
-                            const EdgeInsets.symmetric(vertical: 8),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
                       ),
                       onChanged: (v) => setState(() => _query = v),
                     ),
@@ -256,10 +253,9 @@ class _TagPickerPanelState extends State<_TagPickerPanel> {
                         color: Color(cat.category.color),
                         selected: _categoryFilter == cat.category.id,
                         onTap: () => setState(() {
-                          _categoryFilter =
-                              _categoryFilter == cat.category.id
-                                  ? null
-                                  : cat.category.id;
+                          _categoryFilter = _categoryFilter == cat.category.id
+                              ? null
+                              : cat.category.id;
                         }),
                       ),
                   ],
@@ -302,7 +298,8 @@ class _TagPickerPanelState extends State<_TagPickerPanel> {
                                   height: 8,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: _categoryColor(tag.categoryId) ??
+                                    color:
+                                        _categoryColor(tag.categoryId) ??
                                         scheme.outlineVariant,
                                   ),
                                 ),

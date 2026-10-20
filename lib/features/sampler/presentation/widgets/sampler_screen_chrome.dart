@@ -26,7 +26,8 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onQuickSearch;
   final Widget stopAllButton;
 
-  const SamplerAppBar({super.key, 
+  const SamplerAppBar({
+    super.key,
     required this.selectedBoard,
     required this.isPerformanceMode,
     required this.onOpenMenu,
@@ -53,10 +54,7 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: BoardTitleLabel(board: selectedBoard),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
-        child: Container(
-          color: AppElevation.border(scheme).color,
-          height: 1,
-        ),
+        child: Container(color: AppElevation.border(scheme).color, height: 1),
       ),
       actions: [
         // Vumètre de sortie : uniquement là où la barre a la place (tablette+).
@@ -116,7 +114,9 @@ class StopAllButton extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   borderRadius: AppRadius.radiusMd,
-                  border: Border.all(color: scheme.error.withValues(alpha: 0.5)),
+                  border: Border.all(
+                    color: scheme.error.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -149,7 +149,8 @@ class StopAllButton extends StatelessWidget {
 class LiveModeActiveIcon extends StatefulWidget {
   final IconData baseIcon;
 
-  const LiveModeActiveIcon({super.key}) : baseIcon = Icons.theater_comedy_rounded;
+  const LiveModeActiveIcon({super.key})
+    : baseIcon = Icons.theater_comedy_rounded;
 
   @override
   State<LiveModeActiveIcon> createState() => _LiveModeActiveIconState();
@@ -167,15 +168,17 @@ class _LiveModeActiveIconState extends State<LiveModeActiveIcon>
       vsync: this,
       duration: const Duration(milliseconds: 850),
     );
-    _pulse = Tween<double>(begin: 0.35, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _pulse = Tween<double>(
+      begin: 0.35,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     if (reduceMotion) {
       _controller.stop();
       _controller.value = 1.0;
@@ -248,7 +251,8 @@ class SamplerDesktopAppBar extends StatelessWidget
   /// Sons restant à traiter (badge du menu). `null` = pas de badge.
   final ValueListenable<int>? unprocessedCount;
 
-  const SamplerDesktopAppBar({super.key,
+  const SamplerDesktopAppBar({
+    super.key,
     this.unprocessedCount,
     required this.selectedBoard,
     required this.boards,
@@ -300,10 +304,7 @@ class SamplerDesktopAppBar extends StatelessWidget
       ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
-        child: Container(
-          color: AppElevation.border(scheme).color,
-          height: 1,
-        ),
+        child: Container(color: AppElevation.border(scheme).color, height: 1),
       ),
       actions: [
         stopAllButton,
@@ -339,7 +340,8 @@ class SamplerDesktopMenuButton extends StatelessWidget {
   /// sur le bouton menu. `null` = pas de badge.
   final ValueListenable<int>? unprocessedCount;
 
-  const SamplerDesktopMenuButton({super.key,
+  const SamplerDesktopMenuButton({
+    super.key,
     this.unprocessedCount,
     required this.isPerformanceMode,
     required this.onTogglePerformanceMode,
@@ -447,9 +449,7 @@ class SamplerDesktopMenuButton extends StatelessWidget {
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Text(
-                  fullScreen == true
-                      ? 'Quitter le plein écran'
-                      : 'Plein écran',
+                  fullScreen == true ? 'Quitter le plein écran' : 'Plein écran',
                 ),
               ],
             ),

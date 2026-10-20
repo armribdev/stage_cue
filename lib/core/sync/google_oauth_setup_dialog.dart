@@ -105,8 +105,8 @@ class _GoogleOAuthCredentialsDialogState
                   'identifiants ci-dessous. Ils sont stockés de façon sécurisée '
                   'sur cet appareil — pas besoin de recompiler.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurface.withValues(alpha: 0.8),
-                      ),
+                    color: scheme.onSurface.withValues(alpha: 0.8),
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 TextFormField(
@@ -141,8 +141,8 @@ class _GoogleOAuthCredentialsDialogState
                       onPressed: _saving
                           ? null
                           : () => setState(
-                                () => _obscureSecret = !_obscureSecret,
-                              ),
+                              () => _obscureSecret = !_obscureSecret,
+                            ),
                       icon: Icon(
                         _obscureSecret
                             ? Icons.visibility_outlined

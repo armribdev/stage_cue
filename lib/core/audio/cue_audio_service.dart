@@ -164,7 +164,7 @@ class CuePreviewPlayer implements PreviewPlayback {
   bool _paused = false;
 
   CuePreviewPlayer._(this._player, this._duration)
-      : _stateController = StreamController<bool>.broadcast() {
+    : _stateController = StreamController<bool>.broadcast() {
     // `playing` reflète l'état audible : true à la lecture, false à l'arrêt,
     // à la pause et en fin de piste — même sémantique que le lecteur soloud.
     _playingSub = _player.stream.playing.listen(_stateController.add);

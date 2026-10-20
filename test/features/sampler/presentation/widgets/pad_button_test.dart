@@ -10,8 +10,7 @@ import 'package:stage_cue/features/sampler/presentation/providers/sampler_provid
 import 'package:stage_cue/features/sampler/presentation/widgets/pad_button.dart';
 
 class FakeAudioPlayerService implements AudioPlayerService {
-  final StreamController<bool> _controller =
-      StreamController<bool>.broadcast();
+  final StreamController<bool> _controller = StreamController<bool>.broadcast();
 
   @override
   Duration get duration => const Duration(milliseconds: 500);
@@ -37,8 +36,7 @@ class FakeAudioPlayerService implements AudioPlayerService {
     double volume = 1.0,
     bool looping = false,
     Duration loopStart = Duration.zero,
-  }) async =>
-      true;
+  }) async => true;
 
   @override
   Duration get position => Duration.zero;
@@ -69,8 +67,7 @@ class FakeAudioPlayerService implements AudioPlayerService {
   Future<bool> playOverlapping({
     double volume = 1.0,
     Duration startOffset = Duration.zero,
-  }) async =>
-      true;
+  }) async => true;
 
   @override
   void fadeVolumeTo(double to, Duration duration) {}
@@ -122,10 +119,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: PadButton(
-            padItem: padItem,
-            onTap: () {},
-          ),
+          body: PadButton(padItem: padItem, onTap: () {}),
         ),
       ),
     );
@@ -142,10 +136,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: PadButton(
-            padItem: padItem,
-            onTap: () {},
-          ),
+          body: PadButton(padItem: padItem, onTap: () {}),
         ),
       ),
     );
@@ -193,19 +184,15 @@ void main() {
         tester.getSize(rest).width,
         greaterThan(tester.getSize(firstLine).width),
       );
-      expect(
-        tester.getTopLeft(rest).dx,
-        tester.getTopLeft(firstLine).dx,
-      );
+      expect(tester.getTopLeft(rest).dx, tester.getTopLeft(firstLine).dx);
       // Interligne constant : les icônes, plus hautes qu'une ligne, ne
       // doivent pas repousser la 2e ligne.
-      expect(
-        tester.getTopLeft(rest).dy,
-        tester.getBottomLeft(firstLine).dy,
-      );
+      expect(tester.getTopLeft(rest).dy, tester.getBottomLeft(firstLine).dy);
       expect(
         tester.getTopRight(firstLine).dx,
-        lessThanOrEqualTo(tester.getTopLeft(find.byIcon(Icons.edit_outlined)).dx),
+        lessThanOrEqualTo(
+          tester.getTopLeft(find.byIcon(Icons.edit_outlined)).dx,
+        ),
       );
     },
   );

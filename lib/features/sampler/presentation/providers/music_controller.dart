@@ -92,8 +92,9 @@ class MusicController {
   }
 
   void _removeFromMusicQueue(int padId) {
-    final nextQueue =
-        _o._state.musicQueuePadIds.where((id) => id != padId).toList();
+    final nextQueue = _o._state.musicQueuePadIds
+        .where((id) => id != padId)
+        .toList();
     if (nextQueue.length == _o._state.musicQueuePadIds.length) return;
     _o._state = _o._state.copyWith(musicQueuePadIds: nextQueue);
     _o._notify();
@@ -182,7 +183,8 @@ class MusicController {
       // Même pad ET même variante déjà en cours (ex. simple pad relancé, ou
       // ré-appui sur la variante déjà jouée dans le picker) : pas de coupure,
       // `_playMusicPad` ci-dessous relance ce même lecteur.
-      final sameSlot = current.pad.id == target.pad.id &&
+      final sameSlot =
+          current.pad.id == target.pad.id &&
           (soundIndex == null || soundIndex == current.currentSoundIndex);
       if (!sameSlot) {
         if (current.isPlaying) {
@@ -644,11 +646,7 @@ class MusicController {
     var started = await player.playFromPosition(startPos, volume: volume);
     if (!started) {
       // Source SoLoud peut avoir été invalidée (ex. éditeur de point d'entrée).
-      await _o._loadSlotAtIndex(
-        padItem,
-        index,
-        downloadIfNeeded: true,
-      );
+      await _o._loadSlotAtIndex(padItem, index, downloadIfNeeded: true);
       _o._attachPlayerListeners(padItem);
       final reloaded = padItem.slots[index].player;
       if (reloaded == null) {
@@ -745,7 +743,10 @@ class MusicController {
   /// de reprise (contrairement à [fadeOutCurrentMusic]) : le pad repart de
   /// zéro — et pioche un nouveau son via [_pickSoundIndex] pour un multipad —
   /// au prochain tap plutôt que de reprendre en pause.
-  Future<void> _fadeOutAndStopMusicPad(PadItem padItem, Duration duration) async {
+  Future<void> _fadeOutAndStopMusicPad(
+    PadItem padItem,
+    Duration duration,
+  ) async {
     final player = padItem.currentPlayer;
     if (duration == Duration.zero || player == null) {
       await _stopMusicPad(padItem, manual: true);
@@ -806,8 +807,9 @@ class MusicController {
 
     final boardId = _o._activeBoardId;
     if (boardId != null) {
-      final padIdBySound =
-          await _o._repository.getSoundIdToFirstPadIdInBoard(boardId);
+      final padIdBySound = await _o._repository.getSoundIdToFirstPadIdInBoard(
+        boardId,
+      );
       if (padIdBySound.containsKey(soundId)) {
         await _o.loadSounds(boardId: boardId);
         existing = _findSimpleMusicPadForSound(soundId);
@@ -842,7 +844,8 @@ class MusicController {
   bool _isMusicPadPermanentlyUnavailable(PadItem padItem) {
     return padItem.unavailabilityReason == PadUnavailabilityReason.offline ||
         padItem.unavailabilityReason == PadUnavailabilityReason.missingFile ||
-        padItem.unavailabilityReason == PadUnavailabilityReason.unsupportedFormat;
+        padItem.unavailabilityReason ==
+            PadUnavailabilityReason.unsupportedFormat;
   }
 
   void _scheduleMusicPadDownload(PadItem padItem) {
@@ -888,13 +891,13 @@ class MusicController {
     // pour ne pas envoyer l'opérateur vérifier une connexion pourtant active.
     if ((reason == PadUnavailabilityReason.offline || reason == null) &&
         _o.driveSessionExpired) {
-      _lastPlaybackError =
-          'Session Google expirée — touchez « Reconnecter ».';
+      _lastPlaybackError = 'Session Google expirée — touchez « Reconnecter ».';
     } else {
       _lastPlaybackError = switch (reason) {
         PadUnavailabilityReason.offline => 'Son indisponible hors-ligne.',
         PadUnavailabilityReason.missingFile => 'Fichier audio introuvable.',
-        PadUnavailabilityReason.unsupportedFormat => 'Format audio non supporté.',
+        PadUnavailabilityReason.unsupportedFormat =>
+          'Format audio non supporté.',
         _ => 'Fichier audio introuvable ou indisponible hors-ligne.',
       };
     }

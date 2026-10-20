@@ -7,10 +7,7 @@ class IndexedFolderLabels {
   final String title;
   final String subtitle;
 
-  const IndexedFolderLabels({
-    required this.title,
-    required this.subtitle,
-  });
+  const IndexedFolderLabels({required this.title, required this.subtitle});
 
   /// Dossier local ou cloud indexé via [WatchedPaths].
   factory IndexedFolderLabels.forWatchedPath({
@@ -34,10 +31,7 @@ class IndexedFolderLabels {
       );
     }
 
-    return IndexedFolderLabels(
-      title: p.basename(path),
-      subtitle: path,
-    );
+    return IndexedFolderLabels(title: p.basename(path), subtitle: path);
   }
 
   /// Bibliothèque Drive indexée via [Libraries].

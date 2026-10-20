@@ -85,7 +85,9 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       _notify();
       return true;
     } catch (e) {
-      AudioLoadLog.warn('Aperçu bibliothèque échoué pour « ${sound.title} » : $e');
+      AudioLoadLog.warn(
+        'Aperçu bibliothèque échoué pour « ${sound.title} » : $e',
+      );
       stopLibraryPreview(notify: false);
       return false;
     }
@@ -166,7 +168,10 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
   void endLiveSession() {
     final startedAt = _liveSessionStartedAt;
     if (_isLiveSessionActive && startedAt != null) {
-      final totalPlays = _sessionPlayCounts.values.fold<int>(0, (a, b) => a + b);
+      final totalPlays = _sessionPlayCounts.values.fold<int>(
+        0,
+        (a, b) => a + b,
+      );
       final duration = DateTime.now().difference(startedAt);
       AppLog.info(
         'Mode Spectacle désactivé — durée ${_formatSessionDuration(duration)}, '
@@ -201,8 +206,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
   int debugPickLowestSessionCountIndex(
     PadItem padItem,
     List<int> readyIndices,
-  ) =>
-      _pickLowestSessionCountIndex(padItem, readyIndices);
+  ) => _pickLowestSessionCountIndex(padItem, readyIndices);
 
   /// Dispatch complet de [_pickSoundIndex] (voir [debugTreatReadyAvailabilityAsEligible]).
   @visibleForTesting
@@ -287,10 +291,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     return draftId;
   }
 
-  Future<void> updateDraftPadSounds(
-    int draftPadId,
-    List<int> soundIds,
-  ) async {
+  Future<void> updateDraftPadSounds(int draftPadId, List<int> soundIds) async {
     final item = findPadItemById(draftPadId);
     if (item == null || !item.isDraft) return;
 
@@ -313,8 +314,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     if (item == null || !item.isDraft) return;
 
     item.dispose();
-    final pads =
-        _state.pads.where((pad) => pad.pad.id != draftPadId).toList();
+    final pads = _state.pads.where((pad) => pad.pad.id != draftPadId).toList();
     _syncMultipadNumbers(pads);
     _state = _state.copyWith(pads: pads);
     _notify();

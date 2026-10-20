@@ -3,7 +3,6 @@ part of 'library_repository.dart';
 /// Indexation complète de l'arborescence Drive (métadonnées seules, ADR 0005, 0019).
 /// Méthodes de [LibraryRepository] extraites via extension dans le même `part`.
 extension LibraryRepositoryDriveIndex on LibraryRepository {
-
   Future<DriveIndexResult> _indexDriveFolder({
     required DriveClient client,
     required Library library,
@@ -108,8 +107,10 @@ extension LibraryRepositoryDriveIndex on LibraryRepository {
             for (final audio in chunk)
               DriveIndexEntry(
                 relativePath: audio.relativePath,
-                localPath:
-                    _cacheManager.localPathFor(library, audio.relativePath),
+                localPath: _cacheManager.localPathFor(
+                  library,
+                  audio.relativePath,
+                ),
                 driveFileId: audio.driveFileId,
                 driveMd5: audio.driveMd5,
                 folderId: folderIds[audio.folderDriveId],
@@ -226,26 +227,32 @@ extension LibraryRepositoryDriveIndex on LibraryRepository {
   /// aussi ce qui permet à `AutoSyncCoordinator` de sauter le pull d'une
   /// bibliothèque mal indexée (cf. décision 0005).
   Future<
-      List<
+    List<
+      ({
+        String relativePath,
+        String driveFileId,
+        String? driveMd5,
+        String folderDriveId,
+        String folderRelativePath,
+      })
+    >
+  >
+  _collectDriveAudioFiles(
+    DriveClient client,
+    String rootFolderId,
+    String rootPrefix, {
+    String? sharedDriveId,
+  }) async {
+    final results =
+        <
           ({
             String relativePath,
             String driveFileId,
             String? driveMd5,
             String folderDriveId,
             String folderRelativePath,
-          })>> _collectDriveAudioFiles(
-    DriveClient client,
-    String rootFolderId,
-    String rootPrefix, {
-    String? sharedDriveId,
-  }) async {
-    final results = <({
-      String relativePath,
-      String driveFileId,
-      String? driveMd5,
-      String folderDriveId,
-      String folderRelativePath,
-    })>[];
+          })
+        >[];
 
     var level = <({String id, String prefix})>[
       (id: rootFolderId, prefix: rootPrefix),

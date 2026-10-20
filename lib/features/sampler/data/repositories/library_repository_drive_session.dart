@@ -3,7 +3,6 @@ part of 'library_repository.dart';
 /// Session Drive : obtention du client, renouvellement de token, (re)connexion.
 /// Méthodes de [LibraryRepository] extraites via extension dans le même `part`.
 extension LibraryRepositoryDriveSession on LibraryRepository {
-
   /// Identifiant Drive d'un dossier choisi via le sélecteur SAF Android.
   ///
   /// SAF expose parfois l'ID directement ; sinon on le déduit via l'API Drive

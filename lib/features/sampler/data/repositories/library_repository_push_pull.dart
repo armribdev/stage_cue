@@ -3,7 +3,6 @@ part of 'library_repository.dart';
 /// Corps de la poussée et du tirage des snapshots (ordre imposé : ADR 0003, 0008, 0020).
 /// Méthodes de [LibraryRepository] extraites via extension dans le même `part`.
 extension LibraryRepositoryPushPull on LibraryRepository {
-
   Future<PushOutcome> _pushLibrary({
     required DriveClient client,
     required Library library,

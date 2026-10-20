@@ -19,7 +19,8 @@ class BoardsList extends StatelessWidget {
   /// Sons restant à traiter (pastille sur « Gérer la bibliothèque »).
   final ValueListenable<int>? unprocessedCount;
 
-  const BoardsList({super.key,
+  const BoardsList({
+    super.key,
     this.unprocessedCount,
     required this.boards,
     required this.selectedBoard,
@@ -57,9 +58,7 @@ class BoardsList extends StatelessWidget {
     // d'éditable ni de navigable — on préserve le verrouillage anti-modif du
     // live, tout en gardant l'unique porte de sortie accessible.
     if (isPerformanceMode) {
-      return Column(
-        children: [const SizedBox(height: 8), liveTile],
-      );
+      return Column(children: [const SizedBox(height: 8), liveTile]);
     }
 
     return Column(
@@ -151,7 +150,8 @@ class BoardsDrawer extends StatelessWidget {
   final Future<void> Function() onOpenSettings;
   final ValueListenable<int>? unprocessedCount;
 
-  const BoardsDrawer({super.key,
+  const BoardsDrawer({
+    super.key,
     this.unprocessedCount,
     required this.boards,
     required this.selectedBoard,
@@ -199,7 +199,8 @@ class BoardSceneSelector extends StatelessWidget {
   final Future<void> Function(SoundBoard board, Offset position)
   onBoardContextMenu;
 
-  const BoardSceneSelector({super.key, 
+  const BoardSceneSelector({
+    super.key,
     required this.boards,
     required this.selectedBoard,
     required this.isBoardsLoading,
@@ -323,7 +324,10 @@ class BoardTitleLabel extends StatelessWidget {
         : scheme.onSurfaceVariant.withValues(alpha: 0.5);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm + 2, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm + 2,
+        vertical: 6,
+      ),
       decoration: BoxDecoration(
         color: scheme.surfaceContainer,
         borderRadius: AppRadius.radiusMd,
@@ -386,10 +390,7 @@ class BoardsListSkeleton extends StatelessWidget {
         children: [
           for (int i = 0; i < 5; i++)
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
                   const SkeletonBox(

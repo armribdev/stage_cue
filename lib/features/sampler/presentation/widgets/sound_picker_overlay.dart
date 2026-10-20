@@ -69,10 +69,11 @@ class SoundPickerOverlay extends StatefulWidget {
   }) {
     final mobile = _isMobile(context);
     final w = SoundPickerOverlay._(
-        notifier: notifier,
-        mode: QuickSearchMode(initialTypeFilter: initialTypeFilter),
-        isFullPage: mobile,
-        onReconnect: onReconnect);
+      notifier: notifier,
+      mode: QuickSearchMode(initialTypeFilter: initialTypeFilter),
+      isFullPage: mobile,
+      onReconnect: onReconnect,
+    );
     return mobile
         ? _showPage<QuickSearchPrepareResult?>(context, w)
         : _showDialog<QuickSearchPrepareResult?>(context, w);
@@ -86,9 +87,10 @@ class SoundPickerOverlay extends StatefulWidget {
   }) {
     final mobile = _isMobile(context);
     final w = SoundPickerOverlay._(
-        notifier: notifier,
-        mode: MusicPickerMode(playNow: playNow),
-        isFullPage: mobile);
+      notifier: notifier,
+      mode: MusicPickerMode(playNow: playNow),
+      isFullPage: mobile,
+    );
     return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
   }
 
@@ -99,9 +101,10 @@ class SoundPickerOverlay extends StatefulWidget {
   }) {
     final mobile = _isMobile(context);
     final w = SoundPickerOverlay._(
-        notifier: notifier,
-        mode: const AmbiancePickerMode(),
-        isFullPage: mobile);
+      notifier: notifier,
+      mode: const AmbiancePickerMode(),
+      isFullPage: mobile,
+    );
     return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
   }
 
@@ -136,10 +139,11 @@ class SoundPickerOverlay extends StatefulWidget {
   }) {
     final mobile = _isMobile(context);
     final w = SoundPickerOverlay._(
-        notifier: notifier,
-        mode: const LibraryMode(),
-        isFullPage: mobile,
-        onReconnect: onReconnect);
+      notifier: notifier,
+      mode: const LibraryMode(),
+      isFullPage: mobile,
+      onReconnect: onReconnect,
+    );
     return mobile
         ? _showPage<QuickSearchPrepareResult?>(context, w)
         : _showDialog<QuickSearchPrepareResult?>(context, w);
@@ -154,10 +158,11 @@ class SoundPickerOverlay extends StatefulWidget {
     VoidCallback? onReconnect,
   }) {
     final w = SoundPickerOverlay._(
-        notifier: notifier,
-        mode: ManageMode(repository: repository),
-        isFullPage: true,
-        onReconnect: onReconnect);
+      notifier: notifier,
+      mode: ManageMode(repository: repository),
+      isFullPage: true,
+      onReconnect: onReconnect,
+    );
     return _showPage<void>(context, w);
   }
 
@@ -177,31 +182,35 @@ class SoundPickerOverlay extends StatefulWidget {
     return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
   }
 
-  static Future<T?> _showPage<T>(BuildContext context, SoundPickerOverlay child) =>
-      Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => child));
+  static Future<T?> _showPage<T>(
+    BuildContext context,
+    SoundPickerOverlay child,
+  ) => Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => child));
 
-  static Future<T?> _showDialog<T>(BuildContext context, SoundPickerOverlay child) =>
-      showGeneralDialog<T>(
-        context: context,
-        barrierDismissible: true,
-        barrierLabel: 'Fermer',
-        barrierColor: Colors.black.withValues(alpha: 0.4),
-        transitionDuration: const Duration(milliseconds: 120),
-        pageBuilder: (ctx, _, _) => child,
-        transitionBuilder: (ctx, anim, _, child) {
-          final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-          return FadeTransition(
-            opacity: curved,
-            child: SlideTransition(
-              position: Tween(
-                begin: const Offset(0, 0.03),
-                end: Offset.zero,
-              ).animate(curved),
-              child: child,
-            ),
-          );
-        },
+  static Future<T?> _showDialog<T>(
+    BuildContext context,
+    SoundPickerOverlay child,
+  ) => showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Fermer',
+    barrierColor: Colors.black.withValues(alpha: 0.4),
+    transitionDuration: const Duration(milliseconds: 120),
+    pageBuilder: (ctx, _, _) => child,
+    transitionBuilder: (ctx, anim, _, child) {
+      final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween(
+            begin: const Offset(0, 0.03),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
       );
+    },
+  );
 
   @override
   State<SoundPickerOverlay> createState() => _SoundPickerOverlayState();
@@ -344,7 +353,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     return _localIds!.contains(s.id);
   }
 
-  bool get _awaitingLocalIds => _isQuickSearch && _effectiveLocalOnly && _localIds == null;
+  bool get _awaitingLocalIds =>
+      _isQuickSearch && _effectiveLocalOnly && _localIds == null;
 
   String get _hintText => switch (widget.mode) {
     QuickSearchMode() => 'Chercher un son…',
@@ -375,17 +385,15 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     QuickSearchMode() =>
       '↑↓ sélectionner    ↵ jouer    ⌘/Ctrl+↵ préparer    tap audition',
     MusicPickerMode(playNow: true) => '↑↓ sélectionner    ↵/tap jouer',
-    MusicPickerMode() =>
-      '↑↓ sélectionner    ↵/tap ajouter à la file',
+    MusicPickerMode() => '↑↓ sélectionner    ↵/tap ajouter à la file',
     AmbiancePickerMode() => '↑↓ sélectionner    ↵/tap lancer',
-    PadPickerMode() =>
-      '↑↓ sélectionner    ↵ ajouter/retirer',
-    LibraryMode() =>
-      '↑↓ sélectionner    ↵/tap éditer',
-    ManageMode() => _unprocessedOnly && _isSplitLayout
-        ? '↑↓ sélectionner    ↵/tap éditer    ⌘/Ctrl+↵ valider et suivant    '
-            '▶ aperçu depuis le point d\'entrée'
-        : '↑↓ sélectionner    ↵/tap éditer    ▶ aperçu depuis le point d\'entrée',
+    PadPickerMode() => '↑↓ sélectionner    ↵ ajouter/retirer',
+    LibraryMode() => '↑↓ sélectionner    ↵/tap éditer',
+    ManageMode() =>
+      _unprocessedOnly && _isSplitLayout
+          ? '↑↓ sélectionner    ↵/tap éditer    ⌘/Ctrl+↵ valider et suivant    '
+                '▶ aperçu depuis le point d\'entrée'
+          : '↑↓ sélectionner    ↵/tap éditer    ▶ aperçu depuis le point d\'entrée',
     PadVariantMode() => '↑↓ sélectionner    ↵/tap jouer',
   };
 
@@ -479,8 +487,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   Future<void> _loadBoardScope() async {
     final scopeLibraryId = _boardLibraryId;
     if (scopeLibraryId == null || _isManage) return;
-    final scopeIds =
-        await widget.notifier.getSoundIdsVisibleToLibrary(scopeLibraryId);
+    final scopeIds = await widget.notifier.getSoundIdsVisibleToLibrary(
+      scopeLibraryId,
+    );
     if (!mounted) return;
     setState(() => _scopeIds = scopeIds);
   }
@@ -617,8 +626,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                   ),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth:
-                          (mq.size.width - 24).clamp(320.0, _overlayMaxWidth),
+                      maxWidth: (mq.size.width - 24).clamp(
+                        320.0,
+                        _overlayMaxWidth,
+                      ),
                       maxHeight: mq.size.height * 0.7,
                     ),
                     // Absorbe les taps sur la carte pour qu'ils n'atteignent pas

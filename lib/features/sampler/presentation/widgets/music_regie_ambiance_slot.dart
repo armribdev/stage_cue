@@ -194,7 +194,9 @@ class _AmbianceSlot extends StatelessWidget {
           icon: onAir != null
               ? Icons.swap_horiz_rounded
               : SoundType.ambiance.icon,
-          tooltip: onAir != null ? 'Changer d\'ambiance' : 'Lancer une ambiance',
+          tooltip: onAir != null
+              ? 'Changer d\'ambiance'
+              : 'Lancer une ambiance',
           onPressed: onChoose,
         ),
         if (onAir != null) _stopButton(scheme),

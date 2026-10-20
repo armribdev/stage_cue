@@ -60,12 +60,14 @@ class LocalSoundDataSource {
   /// La waveform est calculée pour tous les types (régie musique, éditeur du
   /// point d'entrée des bruitages et ambiances).
   Future<
-      ({
-        db_sounds.SoundType? type,
-        String? contentHash,
-        Uint8List? waveform,
-        int? waveformProbeGeneration,
-      })> _resolveMetadataForFile(File file) async {
+    ({
+      db_sounds.SoundType? type,
+      String? contentHash,
+      Uint8List? waveform,
+      int? waveformProbeGeneration,
+    })
+  >
+  _resolveMetadataForFile(File file) async {
     if (!await file.exists() || await file.length() <= 0) {
       return (
         type: null,
@@ -75,8 +77,7 @@ class LocalSoundDataSource {
       );
     }
     final probeType = await _probeSoundTypeFromDuration(file);
-    final contentHash =
-        probeType != null ? await computeQuickHash(file) : null;
+    final contentHash = probeType != null ? await computeQuickHash(file) : null;
     final probe = probeType != null ? await extractWaveform(file.path) : null;
     return (
       type: probeType,
@@ -107,8 +108,8 @@ class LocalSoundDataSource {
 
   db_sounds.SoundType _typeFromDuration(Duration duration) =>
       duration > _musicThreshold
-          ? db_sounds.SoundType.music
-          : db_sounds.SoundType.soundEffect;
+      ? db_sounds.SoundType.music
+      : db_sounds.SoundType.soundEffect;
 
   Future<Duration?> _readDurationViaSoLoud(File file) async {
     AudioSource? source;

@@ -7,7 +7,6 @@ part of '../sampler_screen.dart';
 /// Contenu central : bandeau de préparation, régie musique et ambiance.
 /// Méthodes de [_SamplerScreenState] extraites via extension dans le même `part`.
 extension _SamplerScreenContent on _SamplerScreenState {
-
   Widget _buildSamplerContent(BuildContext context, SamplerState state) {
     final selectedBoard = state.selectedBoard;
     final isBoardsLoading = state.isBoardsLoading;
@@ -268,8 +267,7 @@ extension _SamplerScreenContent on _SamplerScreenState {
           unawaited(_notifier.fadeOutCurrentMusic(duration)),
       onTransitionToNext: (duration) =>
           unawaited(_notifier.crossfadeToNextMusic(duration)),
-      onSeekMusic: (position) =>
-          unawaited(_notifier.seekPausedMusic(position)),
+      onSeekMusic: (position) => unawaited(_notifier.seekPausedMusic(position)),
       onOccupiedHeightChanged: context.prefersDesktopUi
           ? null
           : (height) {

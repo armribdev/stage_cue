@@ -3,7 +3,6 @@ part of 'library_repository.dart';
 /// Cycle de vie des bibliothèques : liaison à Drive, propriétaire, liste, suppression.
 /// Méthodes de [LibraryRepository] extraites via extension dans le même `part`.
 extension LibraryRepositoryLibraries on LibraryRepository {
-
   /// Ids des sons dont le fichier est déjà présent localement.
   ///
   /// Sonde de masse destinée à la recherche : voir
@@ -22,8 +21,9 @@ extension LibraryRepositoryLibraries on LibraryRepository {
   /// Bibliothèque Drive unique liée, si une seule est configurée.
   Future<int?> singleConnectedLibraryId() async {
     final libraries = await getLibraries();
-    final connected =
-        libraries.where((library) => library.isConnectedToDrive).toList();
+    final connected = libraries
+        .where((library) => library.isConnectedToDrive)
+        .toList();
     if (connected.length != 1) return null;
     return connected.first.id;
   }
@@ -38,9 +38,7 @@ extension LibraryRepositoryLibraries on LibraryRepository {
     return _withDriveClient((client) async {
       final folders = await client.listSharedWithMeFolders();
       return folders
-        ..sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        );
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     });
   }
 
@@ -55,9 +53,7 @@ extension LibraryRepositoryLibraries on LibraryRepository {
         sharedDriveId: sharedDriveId,
       );
       return children.where((file) => file.isFolder).toList()
-        ..sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        );
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     });
   }
 
@@ -181,10 +177,7 @@ extension LibraryRepositoryLibraries on LibraryRepository {
     if (client == null || folderId == null) {
       throw StateError('Bibliothèque non connectée à Drive');
     }
-    return client.listFolder(
-      folderId,
-      sharedDriveId: library.sharedDriveId,
-    );
+    return client.listFolder(folderId, sharedDriveId: library.sharedDriveId);
   }
 
   /// Indique si le dossier Drive possède déjà un snapshot `.stagecue/library.db`.

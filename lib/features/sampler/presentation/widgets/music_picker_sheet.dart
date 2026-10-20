@@ -13,6 +13,5 @@ class MusicPickerSheet {
     // repository conservé pour ne pas casser les callers existants
     SoundRepository? repository,
     required SamplerNotifier notifier,
-  }) =>
-      SoundPickerOverlay.showForMusic(context, notifier: notifier);
+  }) => SoundPickerOverlay.showForMusic(context, notifier: notifier);
 }

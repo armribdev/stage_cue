@@ -26,9 +26,7 @@ class UnprocessedCountPill extends StatelessWidget {
           ),
           child: Text(
             '$value à traiter',
-            style: AppFonts.monoStyle(
-              TextStyle(fontSize: 11, color: accent),
-            ),
+            style: AppFonts.monoStyle(TextStyle(fontSize: 11, color: accent)),
           ),
         );
       },

@@ -7,8 +7,11 @@ part of '../sound_picker_overlay.dart';
 /// Liste des résultats : lignes, sous-titres, actions de fin de ligne.
 /// Méthodes de [_SoundPickerOverlayState] extraites via extension dans le même `part`.
 extension _SoundPickerResults on _SoundPickerOverlayState {
-
-  Widget _buildResults(ColorScheme scheme, List<Sound> shown, int selectedIndex) {
+  Widget _buildResults(
+    ColorScheme scheme,
+    List<Sound> shown,
+    int selectedIndex,
+  ) {
     if (_loading || _awaitingLocalIds) {
       return _buildLoadingSkeleton();
     }
@@ -49,8 +52,12 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
               itemExtent: _itemExtent,
               padding: EdgeInsets.zero,
               itemCount: shown.length,
-              itemBuilder: (context, index) =>
-                  _buildItem(shown[index], index, index == selectedIndex, scheme),
+              itemBuilder: (context, index) => _buildItem(
+                shown[index],
+                index,
+                index == selectedIndex,
+                scheme,
+              ),
             ),
           ),
         ),
@@ -102,8 +109,14 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
     );
   }
 
-  Widget _buildItem(Sound sound, int index, bool isSelected, ColorScheme scheme) {
-    final onAir = (_isMusicPicker && _isMusicOnAir(sound)) ||
+  Widget _buildItem(
+    Sound sound,
+    int index,
+    bool isSelected,
+    ColorScheme scheme,
+  ) {
+    final onAir =
+        (_isMusicPicker && _isMusicOnAir(sound)) ||
         (_isAmbiancePicker && _isAmbianceOnAir(sound));
     final queued = _isMusicPicker && _isMusicQueued(sound);
     final onPad = _isPadPicker && _padSoundIds.contains(sound.id);
@@ -112,7 +125,8 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
     // Polyphonie : plusieurs variantes du pad peuvent jouer en même temps, donc
     // on regarde l'état du lecteur de CE slot plutôt que le seul index le plus
     // récemment déclenché (`currentSoundIndex`, qui ne reflète que le dernier).
-    final isCurrentVariant = variantMode != null &&
+    final isCurrentVariant =
+        variantMode != null &&
         index < variantMode.padItem.slots.length &&
         (variantMode.padItem.slots[index].player?.isPlaying ?? false);
     final tags = _soundTags[sound.id] ?? const <TagItem>[];
@@ -122,7 +136,9 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
 
     Color? bgColor;
     if (onAir || queued || isCurrentVariant || isEditing) {
-      bgColor = scheme.primaryContainer.withValues(alpha: isSelected ? 0.55 : 0.35);
+      bgColor = scheme.primaryContainer.withValues(
+        alpha: isSelected ? 0.55 : 0.35,
+      );
     } else if (isSelected) {
       bgColor = scheme.primary.withValues(alpha: 0.10);
     }
@@ -196,11 +212,14 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                           _highlightTokens,
                         ),
                       ),
-                      _buildSubtitle(sound, scheme,
-                          onAir: onAir,
-                          queued: queued,
-                          inBoard: inBoard,
-                          isCurrentVariant: isCurrentVariant),
+                      _buildSubtitle(
+                        sound,
+                        scheme,
+                        onAir: onAir,
+                        queued: queued,
+                        inBoard: inBoard,
+                        isCurrentVariant: isCurrentVariant,
+                      ),
                       if (tags.isNotEmpty) ...[
                         const SizedBox(height: 3),
                         _buildTagRow(scheme, tags),
@@ -210,13 +229,16 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                 ),
               ),
               const SizedBox(width: 8),
-              _buildTrailing(sound, scheme,
-                  onAir: onAir,
-                  queued: queued,
-                  onPad: onPad,
-                  inBoard: inBoard,
-                  isCurrentVariant: isCurrentVariant,
-                  index: index),
+              _buildTrailing(
+                sound,
+                scheme,
+                onAir: onAir,
+                queued: queued,
+                onPad: onPad,
+                inBoard: inBoard,
+                isCurrentVariant: isCurrentVariant,
+                index: index,
+              ),
             ],
           ),
         ),
@@ -324,13 +346,18 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
               SizedBox(
                 width: _actionButtonSize,
                 height: _actionButtonSize,
-                child: Icon(Icons.star_rounded, size: 18, color: scheme.primary),
+                child: Icon(
+                  Icons.star_rounded,
+                  size: 18,
+                  color: scheme.primary,
+                ),
               ),
               const SizedBox(width: 4),
             ],
             if (playedInSession) ...[
               Tooltip(
-                message: 'Joué ${widget.notifier.sessionPlayCountFor(sound.id)} '
+                message:
+                    'Joué ${widget.notifier.sessionPlayCountFor(sound.id)} '
                     'fois cette session',
                 child: SizedBox(
                   width: _actionButtonSize,
@@ -360,11 +387,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         return SizedBox(
           width: _actionButtonSize,
           height: _actionButtonSize,
-          child: Icon(
-            Icons.sensors_rounded,
-            size: 18,
-            color: scheme.primary,
-          ),
+          child: Icon(Icons.sensors_rounded, size: 18, color: scheme.primary),
         );
 
       case MusicPickerMode():
@@ -416,9 +439,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
       case ManageMode():
         final isPlaying = widget.notifier.libraryPreviewIsPlaying(sound.id);
         return Tooltip(
-          message: isPlaying
-              ? 'Pause'
-              : 'Aperçu depuis le point d\'entrée',
+          message: isPlaying ? 'Pause' : 'Aperçu depuis le point d\'entrée',
           child: _roundIconButton(
             scheme: scheme,
             icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,

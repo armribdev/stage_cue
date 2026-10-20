@@ -18,7 +18,9 @@ extension SamplerPadDownloads on SamplerNotifier {
   /// l'attente et l'enfilage, on retombe sur la déduplication — fenêtre étroite,
   /// et sans conséquence pire que le comportement d'avant.
   Future<void>? _inFlightPadDownload(PadItem padItem) {
-    final pending = _downloadQueue.inFlight(_resolveBoardPadItem(padItem).pad.id);
+    final pending = _downloadQueue.inFlight(
+      _resolveBoardPadItem(padItem).pad.id,
+    );
     // L'échec ou l'annulation de la tâche en cours ne doit pas empêcher la
     // reprise : on ne consomme que son achèvement.
     return pending?.catchError((_) {});

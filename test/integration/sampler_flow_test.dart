@@ -123,7 +123,9 @@ void main() {
   }
 
   Future<int> insertSound(String title) {
-    return database.into(database.sounds).insert(
+    return database
+        .into(database.sounds)
+        .insert(
           db.SoundsCompanion.insert(
             title: title,
             displayName: title,
@@ -167,14 +169,14 @@ void main() {
   /// Pad portant [padName]. Pas de `find.text` : le titre d'un pad est coupé
   /// en deux `Text` (1re ligne à côté des icônes, suite pleine largeur).
   Finder padNamed(String padName) => find.byWidgetPredicate(
-        (widget) => widget is PadCard && widget.padItem.displayName == padName,
-      );
+    (widget) => widget is PadCard && widget.padItem.displayName == padName,
+  );
 
   /// Croix de suppression du pad portant [padName].
   Finder removeCrossOf(String padName) => find.descendant(
-        of: padNamed(padName),
-        matching: find.byIcon(Icons.close),
-      );
+    of: padNamed(padName),
+    matching: find.byIcon(Icons.close),
+  );
 
   /// Glisse le pad [from] sur la position du pad [to].
   ///
@@ -319,27 +321,26 @@ void main() {
       },
     );
 
-    testDesktopWidgets(
-      'un second Ctrl+Z ne duplique pas le pad restauré',
-      (tester) async {
-        await pumpSampler(tester);
-        final boardId = await firstBoardId();
-        await addPad(boardId, name: 'Porte qui claque', soundTitle: 'porte');
-        await pumpSampler(tester);
+    testDesktopWidgets('un second Ctrl+Z ne duplique pas le pad restauré', (
+      tester,
+    ) async {
+      await pumpSampler(tester);
+      final boardId = await firstBoardId();
+      await addPad(boardId, name: 'Porte qui claque', soundTitle: 'porte');
+      await pumpSampler(tester);
 
-        await tester.tap(removeCrossOf('Porte qui claque'));
-        await flushIo(tester);
+      await tester.tap(removeCrossOf('Porte qui claque'));
+      await flushIo(tester);
 
-        await pressCtrlZ(tester);
-        await pressCtrlZ(tester);
+      await pressCtrlZ(tester);
+      await pressCtrlZ(tester);
 
-        // Le snapshot est consommé par la première annulation : la seconde ne
-        // doit rien recréer, sous peine de doublons à chaque frappe répétée.
-        expect(padNamed('Porte qui claque'), findsOneWidget);
-        final pads = await database.select(database.pads).get();
-        expect(pads.where((pad) => pad.name == 'Porte qui claque'), hasLength(1));
-      },
-    );
+      // Le snapshot est consommé par la première annulation : la seconde ne
+      // doit rien recréer, sous peine de doublons à chaque frappe répétée.
+      expect(padNamed('Porte qui claque'), findsOneWidget);
+      final pads = await database.select(database.pads).get();
+      expect(pads.where((pad) => pad.name == 'Porte qui claque'), hasLength(1));
+    });
   });
 
   group('Réorganisation', () {

@@ -19,10 +19,7 @@ Sound _sound({
   );
 }
 
-Library _library({
-  String? drivePath,
-  String? ownerEmail,
-}) {
+Library _library({String? drivePath, String? ownerEmail}) {
   return Library(
     id: 10,
     name: 'Scène 2',
@@ -37,38 +34,27 @@ void main() {
   group('SoundDisplayPaths', () {
     test('son local : conserve filePath', () {
       expect(
-        SoundDisplayPaths.forSound(
-          _sound(filePath: r'D:\Sons\door.wav'),
-        ),
+        SoundDisplayPaths.forSound(_sound(filePath: r'D:\Sons\door.wav')),
         r'D:\Sons\door.wav',
       );
     });
 
     test('son Drive : chemin propriétaire + bibliothèque + relatif', () {
       final path = SoundDisplayPaths.forSound(
-        _sound(
-          libraryId: 10,
-          relativePath: 'Effets/Pistolet 4.mp3',
-        ),
+        _sound(libraryId: 10, relativePath: 'Effets/Pistolet 4.mp3'),
         library: _library(
           drivePath: 'Mon Projet / Scène 2',
           ownerEmail: 'owner@gmail.com',
         ),
       );
 
-      expect(
-        path,
-        'owner@gmail.com/Mon Projet/Scène 2/Effets/Pistolet 4.mp3',
-      );
+      expect(path, 'owner@gmail.com/Mon Projet/Scène 2/Effets/Pistolet 4.mp3');
     });
 
     test('son Drive sans propriétaire : chemin relatif seulement', () {
       expect(
         SoundDisplayPaths.forSound(
-          _sound(
-            libraryId: 10,
-            relativePath: 'Ambiance/pluie.mp3',
-          ),
+          _sound(libraryId: 10, relativePath: 'Ambiance/pluie.mp3'),
           library: _library(drivePath: 'Théâtre'),
         ),
         'Théâtre/Ambiance/pluie.mp3',

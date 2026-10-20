@@ -56,10 +56,7 @@ class _PickerEntry {
     );
   }
 
-  factory _PickerEntry.folder(
-    DriveFile folder, {
-    String? sharedDriveId,
-  }) {
+  factory _PickerEntry.folder(DriveFile folder, {String? sharedDriveId}) {
     return _PickerEntry(
       kind: _PickerEntryKind.folder,
       id: folder.id,
@@ -85,10 +82,7 @@ class _BreadcrumbEntry {
 
 /// Navigateur de dossiers Google Drive (Mon Drive, drives partagés, partagés avec moi).
 class DriveFolderPicker extends StatefulWidget {
-  const DriveFolderPicker({
-    super.key,
-    required this.repository,
-  });
+  const DriveFolderPicker({super.key, required this.repository});
 
   final LibraryRepository repository;
 
@@ -158,8 +152,8 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
     try {
       if (_isHome) {
         final sharedDrives = await widget.repository.listDriveSharedDrives();
-        final sharedWithMe =
-            await widget.repository.listDriveSharedWithMeFolders();
+        final sharedWithMe = await widget.repository
+            .listDriveSharedWithMeFolders();
         if (!mounted) {
           return;
         }
@@ -205,11 +199,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
   }) {
     setState(() {
       _breadcrumb.add(
-        _BreadcrumbEntry(
-          id: id,
-          name: name,
-          sharedDriveId: sharedDriveId,
-        ),
+        _BreadcrumbEntry(id: id, name: name, sharedDriveId: sharedDriveId),
       );
     });
     _loadContent();
@@ -298,10 +288,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
             ],
           ),
           const SizedBox(height: 8),
-          SizedBox(
-            height: 320,
-            child: _buildList(),
-          ),
+          SizedBox(height: 320, child: _buildList()),
         ],
       ),
       actions: [
@@ -354,7 +341,9 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
           'Aucun sous-dossier.\n'
           'Utilisez « Sélectionner ce dossier » pour indexer « ${_current.name} ».',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -379,7 +368,9 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
       return Center(
         child: Text(
           'Aucun emplacement Drive accessible.',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -389,7 +380,8 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
     var sharedWithMeHeaderShown = false;
 
     for (final entry in _homeEntries) {
-      if (entry.kind == _PickerEntryKind.sharedDrive && !sharedDriveHeaderShown) {
+      if (entry.kind == _PickerEntryKind.sharedDrive &&
+          !sharedDriveHeaderShown) {
         sharedDriveHeaderShown = true;
         children.add(_sectionHeader('Drives partagés'));
       }

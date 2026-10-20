@@ -14,7 +14,9 @@ void main() {
   setUp(() async {
     database = db.AppDatabase.forTesting(NativeDatabase.memory());
     dataSource = LocalSoundDataSource(database);
-    soundId = await database.into(database.sounds).insert(
+    soundId = await database
+        .into(database.sounds)
+        .insert(
           db.SoundsCompanion.insert(
             title: 'porte',
             filePath: '/cache/porte.wav',
@@ -26,10 +28,8 @@ void main() {
   tearDown(() => database.close());
 
   Future<String?> displayName() async => (await (database.select(
-              database.sounds)
-          ..where((s) => s.id.equals(soundId)))
-        .getSingle())
-      .displayName;
+    database.sounds,
+  )..where((s) => s.id.equals(soundId))).getSingle()).displayName;
 
   test('un nom vide ou blanc retombe sur le titre du fichier', () async {
     for (final blank in <String?>['', '   ', null]) {

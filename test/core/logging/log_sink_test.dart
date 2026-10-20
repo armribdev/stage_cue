@@ -41,16 +41,18 @@ void main() {
   });
 
   group('format', () {
-    test('une ligne par événement, horodatage local avec millisecondes',
-        () async {
-      await start();
-      LogSink.log('Audio', LogLevel.warn, 'message');
-      await LogSink.flush();
-      expect(
-        readCurrent(),
-        contains('2026-10-19T21:04:11.482 WARN  Audio  message\n'),
-      );
-    });
+    test(
+      'une ligne par événement, horodatage local avec millisecondes',
+      () async {
+        await start();
+        LogSink.log('Audio', LogLevel.warn, 'message');
+        await LogSink.flush();
+        expect(
+          readCurrent(),
+          contains('2026-10-19T21:04:11.482 WARN  Audio  message\n'),
+        );
+      },
+    );
 
     test('la stack trace est indentée sous la ligne', () async {
       await start();
@@ -90,14 +92,16 @@ void main() {
       );
     });
 
-    test('un severe précoce force l\'écriture sans attendre l\'en-tête',
-        () async {
-      await start(withHeader: false);
-      LogSink.log('App', LogLevel.severe, 'crash précoce');
-      await LogSink.flush();
-      expect(readCurrent(), contains('crash précoce'));
-      expect(readCurrent(), contains('en-tête non encore disponible'));
-    });
+    test(
+      'un severe précoce force l\'écriture sans attendre l\'en-tête',
+      () async {
+        await start(withHeader: false);
+        LogSink.log('App', LogLevel.severe, 'crash précoce');
+        await LogSink.flush();
+        expect(readCurrent(), contains('crash précoce'));
+        expect(readCurrent(), contains('en-tête non encore disponible'));
+      },
+    );
   });
 
   group('flush', () {
@@ -121,51 +125,59 @@ void main() {
   });
 
   group('rotation', () {
-    test('au démarrage : courant → .1 → .2, la plus ancienne disparaît',
-        () async {
-      for (final marker in ['A', 'B', 'C', 'D']) {
-        File(p.join(dir.path, 'stage-cue.log')).writeAsStringSync('$marker\n');
-        await start();
-        await LogSink.flush();
-        await LogSink.resetForTest();
-      }
-      final names = dir.listSync().map((e) => p.basename(e.path)).toSet();
-      expect(
-        names,
-        containsAll(['stage-cue.log', 'stage-cue.1.log', 'stage-cue.2.log']),
-      );
-      expect(names, isNot(contains('stage-cue.3.log')));
-    });
+    test(
+      'au démarrage : courant → .1 → .2, la plus ancienne disparaît',
+      () async {
+        for (final marker in ['A', 'B', 'C', 'D']) {
+          File(
+            p.join(dir.path, 'stage-cue.log'),
+          ).writeAsStringSync('$marker\n');
+          await start();
+          await LogSink.flush();
+          await LogSink.resetForTest();
+        }
+        final names = dir.listSync().map((e) => p.basename(e.path)).toSet();
+        expect(
+          names,
+          containsAll(['stage-cue.log', 'stage-cue.1.log', 'stage-cue.2.log']),
+        );
+        expect(names, isNot(contains('stage-cue.3.log')));
+      },
+    );
 
-    test('au dépassement de taille, le fichier tourne et reste borné',
-        () async {
-      await start(maxFileBytes: 400);
-      for (var i = 0; i < 30; i++) {
-        LogSink.log('Audio', LogLevel.info, 'ligne numéro $i ${'x' * 40}');
-        await LogSink.flush();
-      }
-      final files = LogSink.logFiles();
-      expect(files.length, lessThanOrEqualTo(3));
-      for (final f in files) {
-        expect(f.lengthSync(), lessThan(400 + 200));
-      }
-      expect(readCurrent(), contains('ligne numéro 29'));
-    });
+    test(
+      'au dépassement de taille, le fichier tourne et reste borné',
+      () async {
+        await start(maxFileBytes: 400);
+        for (var i = 0; i < 30; i++) {
+          LogSink.log('Audio', LogLevel.info, 'ligne numéro $i ${'x' * 40}');
+          await LogSink.flush();
+        }
+        final files = LogSink.logFiles();
+        expect(files.length, lessThanOrEqualTo(3));
+        for (final f in files) {
+          expect(f.lengthSync(), lessThan(400 + 200));
+        }
+        expect(readCurrent(), contains('ligne numéro 29'));
+      },
+    );
   });
 
   group('erreurs d\'écriture', () {
-    test('un disque en échec ne lève jamais et compte les lignes perdues',
-        () async {
-      await start(
-        writer: (file, text) async =>
-            throw const FileSystemException('disque plein'),
-      );
-      LogSink.log('App', LogLevel.info, 'a');
-      LogSink.log('App', LogLevel.info, 'b');
-      await expectLater(LogSink.flush(), completes);
-      // En-tête (1) + 2 lignes.
-      expect(LogSink.lostLines, 3);
-    });
+    test(
+      'un disque en échec ne lève jamais et compte les lignes perdues',
+      () async {
+        await start(
+          writer: (file, text) async =>
+              throw const FileSystemException('disque plein'),
+        );
+        LogSink.log('App', LogLevel.info, 'a');
+        LogSink.log('App', LogLevel.info, 'b');
+        await expectLater(LogSink.flush(), completes);
+        // En-tête (1) + 2 lignes.
+        expect(LogSink.lostLines, 3);
+      },
+    );
 
     test('la perte est signalée à la prochaine écriture réussie', () async {
       var fail = true;
@@ -194,27 +206,29 @@ void main() {
   });
 
   group('confidentialité', () {
-    test('masque jetons OAuth et e-mails dans message, erreur et stack',
-        () async {
-      await start();
-      LogSink.log(
-        'Sync',
-        LogLevel.severe,
-        'échec avec ya29.a0AfH6SMBxyz_123-abc pour moi@example.com',
-        error: Exception('Authorization: Bearer abc.def-ghi'),
-        stackTrace: StackTrace.fromString(
-          '#0 f (refresh_token=1//0gAbCdEfGhIjKlMnOpQrStUv)',
-        ),
-      );
-      await LogSink.flush();
-      final out = readCurrent();
-      expect(out, isNot(contains('a0AfH6SMBxyz')));
-      expect(out, isNot(contains('moi@example.com')));
-      expect(out, isNot(contains('abc.def-ghi')));
-      expect(out, isNot(contains('0gAbCdEfGhIjKlMnOpQrStUv')));
-      expect(out, contains('ya29.[masqué]'));
-      expect(out, contains('[e-mail masqué]'));
-    });
+    test(
+      'masque jetons OAuth et e-mails dans message, erreur et stack',
+      () async {
+        await start();
+        LogSink.log(
+          'Sync',
+          LogLevel.severe,
+          'échec avec ya29.a0AfH6SMBxyz_123-abc pour moi@example.com',
+          error: Exception('Authorization: Bearer abc.def-ghi'),
+          stackTrace: StackTrace.fromString(
+            '#0 f (refresh_token=1//0gAbCdEfGhIjKlMnOpQrStUv)',
+          ),
+        );
+        await LogSink.flush();
+        final out = readCurrent();
+        expect(out, isNot(contains('a0AfH6SMBxyz')));
+        expect(out, isNot(contains('moi@example.com')));
+        expect(out, isNot(contains('abc.def-ghi')));
+        expect(out, isNot(contains('0gAbCdEfGhIjKlMnOpQrStUv')));
+        expect(out, contains('ya29.[masqué]'));
+        expect(out, contains('[e-mail masqué]'));
+      },
+    );
 
     test('masque client_secret, access_token et ID token JWT', () {
       expect(
@@ -259,23 +273,25 @@ void main() {
       );
     });
 
-    test('l\'export commence par l\'en-tête, le tail borne les lignes',
-        () async {
-      await start();
-      for (var i = 0; i < 10; i++) {
-        LogSink.log('App', LogLevel.info, 'evt $i');
-      }
-      final full = await LogExport.buildFullExport();
-      // L'en-tête est déjà dans le fichier : une seule occurrence, en tête.
-      expect('Version : test'.allMatches(full).length, 1);
-      expect(full.split('\n').first, contains('Version : test'));
-      expect(full, contains('evt 9'));
+    test(
+      'l\'export commence par l\'en-tête, le tail borne les lignes',
+      () async {
+        await start();
+        for (var i = 0; i < 10; i++) {
+          LogSink.log('App', LogLevel.info, 'evt $i');
+        }
+        final full = await LogExport.buildFullExport();
+        // L'en-tête est déjà dans le fichier : une seule occurrence, en tête.
+        expect('Version : test'.allMatches(full).length, 1);
+        expect(full.split('\n').first, contains('Version : test'));
+        expect(full, contains('evt 9'));
 
-      final tail = await LogExport.tail(lineCount: 3);
-      expect(tail.split('\n').length, 3);
-      expect(tail, contains('evt 9'));
-      expect(tail, isNot(contains('evt 0')));
-    });
+        final tail = await LogExport.tail(lineCount: 3);
+        expect(tail.split('\n').length, 3);
+        expect(tail, contains('evt 9'));
+        expect(tail, isNot(contains('evt 0')));
+      },
+    );
   });
 
   group('session', () {

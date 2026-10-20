@@ -10,4 +10,3 @@ class PlaySoundUseCase {
     await _audioPlayer.play();
   }
 }
-

@@ -10,18 +10,12 @@ class SoundDisplayPaths {
   SoundDisplayPaths._();
 
   /// Chemin à afficher pour [sound] (Drive ou local).
-  static String forSound(
-    Sound sound, {
-    Library? library,
-  }) {
+  static String forSound(Sound sound, {Library? library}) {
     final relativePath = sound.relativePath?.trim();
     if (sound.libraryId != null &&
         relativePath != null &&
         relativePath.isNotEmpty) {
-      return drivePathForSound(
-        relativePath: relativePath,
-        library: library,
-      );
+      return drivePathForSound(relativePath: relativePath, library: library);
     }
     return sound.filePath;
   }

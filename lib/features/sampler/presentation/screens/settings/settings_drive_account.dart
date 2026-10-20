@@ -7,7 +7,6 @@ part of '../settings_screen.dart';
 /// Compte Google : connexion, renouvellement, déconnexion et en-tête.
 /// Méthodes de [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsDriveAccount on _SettingsScreenState {
-
   Future<void> _connectDriveAccount() async {
     if (!await ensureGoogleOAuthConfigured(context)) {
       return;
@@ -180,11 +179,7 @@ extension _SettingsDriveAccount on _SettingsScreenState {
           return initialsAvatar();
         }
         return Skeleton(
-          child: SkeletonBox(
-            width: size,
-            height: size,
-            shape: BoxShape.circle,
-          ),
+          child: SkeletonBox(width: size, height: size, shape: BoxShape.circle),
         );
       },
     );

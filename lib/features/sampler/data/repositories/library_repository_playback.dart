@@ -3,7 +3,6 @@ part of 'library_repository.dart';
 /// Résolution du chemin jouable d'un son, sondes de cache et de présence distante.
 /// Méthodes de [LibraryRepository] extraites via extension dans le même `part`.
 extension LibraryRepositoryPlayback on LibraryRepository {
-
   /// Efface les marqueurs de blocage local pour un son de bibliothèque (retry).
   Future<void> clearPlaybackBlockForSound(Sound sound) async {
     final libraryId = sound.libraryId;
@@ -13,8 +12,9 @@ extension LibraryRepositoryPlayback on LibraryRepository {
         rawRelativePath.isEmpty) {
       return;
     }
-    final relativePath =
-        LibrarySoundPaths.normalizeRelativePath(rawRelativePath);
+    final relativePath = LibrarySoundPaths.normalizeRelativePath(
+      rawRelativePath,
+    );
     final library = await _dataSource.getLibraryById(libraryId);
     if (library == null) return;
 
@@ -42,8 +42,9 @@ extension LibraryRepositoryPlayback on LibraryRepository {
       return LocalSoundProbeResult.needsDownload;
     }
 
-    final relativePath =
-        LibrarySoundPaths.normalizeRelativePath(rawRelativePath);
+    final relativePath = LibrarySoundPaths.normalizeRelativePath(
+      rawRelativePath,
+    );
     final library = await _dataSource.getLibraryById(libraryId);
     if (library == null) {
       return LocalSoundProbeResult.needsDownload;
@@ -109,8 +110,9 @@ extension LibraryRepositoryPlayback on LibraryRepository {
     final library = await _dataSource.getLibraryById(libraryId);
     if (library == null) return null;
 
-    final relativePath =
-        LibrarySoundPaths.normalizeRelativePath(rawRelativePath);
+    final relativePath = LibrarySoundPaths.normalizeRelativePath(
+      rawRelativePath,
+    );
     try {
       return await _cacheManager
           .existsOnDrive(
@@ -153,15 +155,19 @@ extension LibraryRepositoryPlayback on LibraryRepository {
         throw SoundNotAvailableLocallyException(isOffline: false);
       }
 
-      final relativePath =
-          LibrarySoundPaths.normalizeRelativePath(rawRelativePath);
+      final relativePath = LibrarySoundPaths.normalizeRelativePath(
+        rawRelativePath,
+      );
       if (relativePath != rawRelativePath) {
         final libraryForUpdate = await _dataSource.getLibraryById(libraryId);
         if (libraryForUpdate != null) {
           await _soundDataSource.updateSoundRelativePath(
             soundId: sound.id,
             relativePath: relativePath,
-            localPath: _cacheManager.localPathFor(libraryForUpdate, relativePath),
+            localPath: _cacheManager.localPathFor(
+              libraryForUpdate,
+              relativePath,
+            ),
           );
         }
       }
@@ -179,7 +185,10 @@ extension LibraryRepositoryPlayback on LibraryRepository {
       if (await localFile.exists()) {
         if (await isPlausibleAudioFile(localFile)) {
           final resolvedPath = p.normalize(localFile.absolute.path);
-          await _soundDataSource.syncLibrarySoundLocalPath(sound.id, resolvedPath);
+          await _soundDataSource.syncLibrarySoundLocalPath(
+            sound.id,
+            resolvedPath,
+          );
           // Fire-and-forget : le backfill (hash/waveform) est un best-effort qui
           // ne doit jamais bloquer la résolution du chemin — une simple sonde de
           // disponibilité (recherche) ne doit pas attendre un décodage natif lent
@@ -279,7 +288,8 @@ extension LibraryRepositoryPlayback on LibraryRepository {
     }
 
     final legacyPath =
-        await PathUnicode.canonicalizeLocalPath(sound.filePath) ?? sound.filePath;
+        await PathUnicode.canonicalizeLocalPath(sound.filePath) ??
+        sound.filePath;
     final legacyFile = File(legacyPath);
     if (!await legacyFile.exists()) {
       throw SoundNotAvailableLocallyException(isOffline: false);

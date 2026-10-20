@@ -18,7 +18,9 @@ void main() {
   setUp(() async {
     database = db.AppDatabase.forTesting(NativeDatabase.memory());
     repository = SoundRepository.fromDatabase(database);
-    soundId = await database.into(database.sounds).insert(
+    soundId = await database
+        .into(database.sounds)
+        .insert(
           db.SoundsCompanion.insert(
             title: 'porte',
             filePath: '/introuvable/porte.wav',
@@ -30,12 +32,12 @@ void main() {
   tearDown(() => database.close());
 
   Sound soundOf({required bool processed}) => Sound(
-        id: soundId,
-        title: 'porte',
-        filePath: '/introuvable/porte.wav',
-        createdAt: DateTime(2026, 10, 8),
-        isProcessed: processed,
-      );
+    id: soundId,
+    title: 'porte',
+    filePath: '/introuvable/porte.wav',
+    createdAt: DateTime(2026, 10, 8),
+    isProcessed: processed,
+  );
 
   Future<void> pumpForm(
     WidgetTester tester, {
@@ -66,14 +68,14 @@ void main() {
     await tester.pump();
   }
 
-  Finder button(String label) =>
-      find.widgetWithText(ElevatedButton, label);
+  Finder button(String label) => find.widgetWithText(ElevatedButton, label);
 
   bool isEnabled(WidgetTester tester, String label) =>
       tester.widget<ElevatedButton>(button(label)).onPressed != null;
 
-  testWidgets('son à traiter : « Valider » actif sans aucune modification',
-      (tester) async {
+  testWidgets('son à traiter : « Valider » actif sans aucune modification', (
+    tester,
+  ) async {
     await pumpForm(tester, processed: false);
 
     expect(button('Valider'), findsOneWidget);
@@ -81,34 +83,39 @@ void main() {
     expect(find.text('À TRAITER'), findsOneWidget);
   });
 
-  testWidgets('son déjà traité : « Enregistrer » inactif tant que rien ne change',
-      (tester) async {
-    await pumpForm(tester, processed: true);
+  testWidgets(
+    'son déjà traité : « Enregistrer » inactif tant que rien ne change',
+    (tester) async {
+      await pumpForm(tester, processed: true);
 
-    expect(button('Enregistrer'), findsOneWidget);
-    expect(isEnabled(tester, 'Enregistrer'), isFalse);
-    expect(find.text('À TRAITER'), findsNothing);
-  });
+      expect(button('Enregistrer'), findsOneWidget);
+      expect(isEnabled(tester, 'Enregistrer'), isFalse);
+      expect(find.text('À TRAITER'), findsNothing);
+    },
+  );
 
-  testWidgets('file de traitement : « Valider et suivant », compteur et Passer',
-      (tester) async {
-    var skipped = 0;
-    await pumpForm(
-      tester,
-      processed: false,
-      isQueueMode: true,
-      onSkip: () => skipped++,
-    );
+  testWidgets(
+    'file de traitement : « Valider et suivant », compteur et Passer',
+    (tester) async {
+      var skipped = 0;
+      await pumpForm(
+        tester,
+        processed: false,
+        isQueueMode: true,
+        onSkip: () => skipped++,
+      );
 
-    expect(button('Valider et suivant'), findsOneWidget);
-    expect(find.text('12 à traiter'), findsOneWidget);
+      expect(button('Valider et suivant'), findsOneWidget);
+      expect(find.text('12 à traiter'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(TextButton, 'Passer'));
-    expect(skipped, 1);
-  });
+      await tester.tap(find.widgetWithText(TextButton, 'Passer'));
+      expect(skipped, 1);
+    },
+  );
 
-  testWidgets('hors file, pas de bouton « Passer » ni de compteur',
-      (tester) async {
+  testWidgets('hors file, pas de bouton « Passer » ni de compteur', (
+    tester,
+  ) async {
     await pumpForm(tester, processed: false);
 
     expect(find.text('Passer'), findsNothing);
@@ -127,9 +134,9 @@ void main() {
     await tester.pump();
 
     final row = await tester.runAsync(
-      () => (database.select(database.sounds)
-            ..where((s) => s.id.equals(soundId)))
-          .getSingle(),
+      () => (database.select(
+        database.sounds,
+      )..where((s) => s.id.equals(soundId))).getSingle(),
     );
     expect(row?.isProcessed, isTrue);
     expect(saved, 1);
@@ -139,8 +146,9 @@ void main() {
     expect(find.text('À TRAITER'), findsNothing);
   });
 
-  testWidgets('le contrôleur déclenche l\'enregistrement (Ctrl+Entrée)',
-      (tester) async {
+  testWidgets('le contrôleur déclenche l\'enregistrement (Ctrl+Entrée)', (
+    tester,
+  ) async {
     final controller = SoundEditFormController();
     await pumpForm(tester, processed: false, controller: controller);
 
@@ -150,9 +158,9 @@ void main() {
     await tester.pump();
 
     final row = await tester.runAsync(
-      () => (database.select(database.sounds)
-            ..where((s) => s.id.equals(soundId)))
-          .getSingle(),
+      () => (database.select(
+        database.sounds,
+      )..where((s) => s.id.equals(soundId))).getSingle(),
     );
     expect(row?.isProcessed, isTrue);
   });

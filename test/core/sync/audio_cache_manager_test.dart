@@ -65,12 +65,13 @@ void main() {
 
   /// Stub de téléchargement : écrit [size] octets à la destination demandée.
   void stubDownloadWriting(int size) {
-    when(() => client.downloadToFile(
-          fileId: any(named: 'fileId'),
-          destinationPath: any(named: 'destinationPath'),
-        )).thenAnswer((invocation) async {
-      final dest =
-          invocation.namedArguments[#destinationPath] as String;
+    when(
+      () => client.downloadToFile(
+        fileId: any(named: 'fileId'),
+        destinationPath: any(named: 'destinationPath'),
+      ),
+    ).thenAnswer((invocation) async {
+      final dest = invocation.namedArguments[#destinationPath] as String;
       final f = File(dest);
       await f.parent.create(recursive: true);
       await f.writeAsBytes(List.filled(size, 1));
@@ -96,18 +97,19 @@ void main() {
     );
 
     expect(result, localPath);
-    verifyNever(() => client.downloadToFile(
-          fileId: any(named: 'fileId'),
-          destinationPath: any(named: 'destinationPath'),
-        ));
+    verifyNever(
+      () => client.downloadToFile(
+        fileId: any(named: 'fileId'),
+        destinationPath: any(named: 'destinationPath'),
+      ),
+    );
   });
 
   test('ensureCached normalise le préfixe legacy sounds/', () async {
     final manager = AudioCacheManager();
-    when(() => client.findInFolder(
-          parentId: 'folder-root',
-          name: 'porte.wav',
-        )).thenAnswer((_) async => file('remote', 'porte.wav'));
+    when(
+      () => client.findInFolder(parentId: 'folder-root', name: 'porte.wav'),
+    ).thenAnswer((_) async => file('remote', 'porte.wav'));
     stubDownloadWriting(50);
 
     final result = await manager.ensureCached(
@@ -120,106 +122,120 @@ void main() {
     expect(await File(result).exists(), isTrue);
   });
 
-  test('ensureCached : repli insensible à la casse sur le nom de fichier',
-      () async {
-    final manager = AudioCacheManager();
-    when(() => client.findInFolder(
+  test(
+    'ensureCached : repli insensible à la casse sur le nom de fichier',
+    () async {
+      final manager = AudioCacheManager();
+      when(
+        () => client.findInFolder(
           parentId: any(named: 'parentId'),
           name: any(named: 'name'),
-        )).thenAnswer((invocation) async {
-      final parentId = invocation.namedArguments[#parentId] as String;
-      final name = invocation.namedArguments[#name] as String;
-      if (parentId == 'folder-root' && name == '08 Green Hornet.m4a') {
+        ),
+      ).thenAnswer((invocation) async {
+        final parentId = invocation.namedArguments[#parentId] as String;
+        final name = invocation.namedArguments[#name] as String;
+        if (parentId == 'folder-root' && name == '08 Green Hornet.m4a') {
+          return null;
+        }
         return null;
-      }
-      return null;
-    });
-    when(() => client.listFolder(
+      });
+      when(
+        () => client.listFolder(
           any(),
           sharedDriveId: any(named: 'sharedDriveId'),
-        )).thenAnswer((invocation) async {
-      final folderId = invocation.positionalArguments[0] as String;
-      if (folderId == 'folder-root') {
-        return [file('remote', '08 Green Hornet.M4A')];
-      }
-      return [];
-    });
-    stubDownloadWriting(50);
+        ),
+      ).thenAnswer((invocation) async {
+        final folderId = invocation.positionalArguments[0] as String;
+        if (folderId == 'folder-root') {
+          return [file('remote', '08 Green Hornet.M4A')];
+        }
+        return [];
+      });
+      stubDownloadWriting(50);
 
-    final result = await manager.ensureCached(
-      client: client,
-      library: library,
-      relativePath: '08 Green Hornet.m4a',
-    );
+      final result = await manager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: '08 Green Hornet.m4a',
+      );
 
-    expect(result, p.join(rootDir.path, '08 Green Hornet.m4a'));
-    expect(await File(result).exists(), isTrue);
-  });
+      expect(result, p.join(rootDir.path, '08 Green Hornet.m4a'));
+      expect(await File(result).exists(), isTrue);
+    },
+  );
 
-  test('ensureCached : repli par nom de fichier si chemin dossier incorrect',
-      () async {
-    final manager = AudioCacheManager();
-    when(() => client.findInFolder(
+  test(
+    'ensureCached : repli par nom de fichier si chemin dossier incorrect',
+    () async {
+      final manager = AudioCacheManager();
+      when(
+        () => client.findInFolder(
           parentId: any(named: 'parentId'),
           name: any(named: 'name'),
-        )).thenAnswer((invocation) async {
-      final parentId = invocation.namedArguments[#parentId] as String;
-      final name = invocation.namedArguments[#name] as String;
-      if (parentId == 'folder-root' && name == 'Ancien dossier') {
-        return null;
-      }
-      if (parentId == 'folder-root' && name == 'porte.wav') {
-        return null;
-      }
-      if (parentId == 'sub-folder' && name == 'porte.wav') {
-        return file('remote', 'porte.wav');
-      }
-      if (parentId == 'folder-root' && name == 'Nouveau dossier') {
-        return DriveFile(
-          id: 'sub-folder',
-          name: 'Nouveau dossier',
-          mimeType: driveFolderMimeType,
-        );
-      }
-      return null;
-    });
-    when(() => client.listFolder(
-          any(),
-          sharedDriveId: any(named: 'sharedDriveId'),
-        )).thenAnswer((invocation) async {
-      final folderId = invocation.positionalArguments[0] as String;
-      if (folderId == 'folder-root') {
-        return [
-          DriveFile(
+        ),
+      ).thenAnswer((invocation) async {
+        final parentId = invocation.namedArguments[#parentId] as String;
+        final name = invocation.namedArguments[#name] as String;
+        if (parentId == 'folder-root' && name == 'Ancien dossier') {
+          return null;
+        }
+        if (parentId == 'folder-root' && name == 'porte.wav') {
+          return null;
+        }
+        if (parentId == 'sub-folder' && name == 'porte.wav') {
+          return file('remote', 'porte.wav');
+        }
+        if (parentId == 'folder-root' && name == 'Nouveau dossier') {
+          return DriveFile(
             id: 'sub-folder',
             name: 'Nouveau dossier',
             mimeType: driveFolderMimeType,
-          ),
-        ];
-      }
-      if (folderId == 'sub-folder') {
-        return [file('remote', 'porte.wav')];
-      }
-      return [];
-    });
-    stubDownloadWriting(50);
+          );
+        }
+        return null;
+      });
+      when(
+        () => client.listFolder(
+          any(),
+          sharedDriveId: any(named: 'sharedDriveId'),
+        ),
+      ).thenAnswer((invocation) async {
+        final folderId = invocation.positionalArguments[0] as String;
+        if (folderId == 'folder-root') {
+          return [
+            DriveFile(
+              id: 'sub-folder',
+              name: 'Nouveau dossier',
+              mimeType: driveFolderMimeType,
+            ),
+          ];
+        }
+        if (folderId == 'sub-folder') {
+          return [file('remote', 'porte.wav')];
+        }
+        return [];
+      });
+      stubDownloadWriting(50);
 
-    final result = await manager.ensureCached(
-      client: client,
-      library: library,
-      relativePath: 'Ancien dossier/porte.wav',
-    );
+      final result = await manager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: 'Ancien dossier/porte.wav',
+      );
 
-    expect(result, p.join(rootDir.path, 'Nouveau dossier', 'porte.wav'));
-    expect(await File(result).exists(), isTrue);
-  });
+      expect(result, p.join(rootDir.path, 'Nouveau dossier', 'porte.wav'));
+      expect(await File(result).exists(), isTrue);
+    },
+  );
 
   test('ensureCached : fichier absent, télécharge depuis Drive', () async {
     final manager = AudioCacheManager();
-    when(() => client.findInFolder(
-          parentId: any(named: 'parentId'),
-          name: any(named: 'name'),
-        )).thenAnswer((_) async => file('remote', 'a.wav'));
+    when(
+      () => client.findInFolder(
+        parentId: any(named: 'parentId'),
+        name: any(named: 'name'),
+      ),
+    ).thenAnswer((_) async => file('remote', 'a.wav'));
     stubDownloadWriting(50);
 
     final result = await manager.ensureCached(
@@ -229,30 +245,35 @@ void main() {
     );
 
     expect(await File(result).exists(), isTrue);
-    verify(() => client.downloadToFile(
-          fileId: 'remote',
-          destinationPath: result,
-        )).called(1);
+    verify(
+      () => client.downloadToFile(fileId: 'remote', destinationPath: result),
+    ).called(1);
   });
 
   test('importFile : upload Drive + copie dans le cache local', () async {
     final manager = AudioCacheManager();
     // Sous-dossier "sounds" : absent puis créé.
-    when(() => client.findInFolder(parentId: 'folder-root', name: 'sounds'))
-        .thenAnswer((_) async => null);
-    when(() => client.createFolder(name: 'sounds', parentId: 'folder-root'))
-        .thenAnswer((_) async => DriveFile(
-              id: 'sounds-folder',
-              name: 'sounds',
-              mimeType: driveFolderMimeType,
-            ));
-    when(() => client.uploadFile(
-          name: any(named: 'name'),
-          parentId: any(named: 'parentId'),
-          data: any(named: 'data'),
-          length: any(named: 'length'),
-          mimeType: any(named: 'mimeType'),
-        )).thenAnswer((_) async => file('uploaded', 'porte.wav'));
+    when(
+      () => client.findInFolder(parentId: 'folder-root', name: 'sounds'),
+    ).thenAnswer((_) async => null);
+    when(
+      () => client.createFolder(name: 'sounds', parentId: 'folder-root'),
+    ).thenAnswer(
+      (_) async => DriveFile(
+        id: 'sounds-folder',
+        name: 'sounds',
+        mimeType: driveFolderMimeType,
+      ),
+    );
+    when(
+      () => client.uploadFile(
+        name: any(named: 'name'),
+        parentId: any(named: 'parentId'),
+        data: any(named: 'data'),
+        length: any(named: 'length'),
+        mimeType: any(named: 'mimeType'),
+      ),
+    ).thenAnswer((_) async => file('uploaded', 'porte.wav'));
 
     final source = File(p.join(rootDir.path, 'source.wav'));
     await source.writeAsBytes(List.filled(10, 7));
@@ -269,44 +290,56 @@ void main() {
     // Le fichier a bien été copié dans le cache local.
     final cached = manager.localPathFor(library, 'sounds/porte.wav');
     expect(await File(cached).exists(), isTrue);
-    verify(() => client.uploadFile(
-          name: 'porte.wav',
-          parentId: 'sounds-folder',
-          data: any(named: 'data'),
-          length: 10,
-          mimeType: 'audio/wav',
-        )).called(1);
+    verify(
+      () => client.uploadFile(
+        name: 'porte.wav',
+        parentId: 'sounds-folder',
+        data: any(named: 'data'),
+        length: 10,
+        mimeType: 'audio/wav',
+      ),
+    ).called(1);
   });
 
-  test('éviction LRU : le fichier le moins récemment utilisé est supprimé',
-      () async {
-    var tick = 0;
-    final manager = AudioCacheManager(
-      minFreeDiskBytes: _simulatedDiskCapacity - 100,
-      availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
-      clock: () => ++tick, // horloge déterministe et croissante
-    );
-    when(() => client.findInFolder(
+  test(
+    'éviction LRU : le fichier le moins récemment utilisé est supprimé',
+    () async {
+      var tick = 0;
+      final manager = AudioCacheManager(
+        minFreeDiskBytes: _simulatedDiskCapacity - 100,
+        availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
+        clock: () => ++tick, // horloge déterministe et croissante
+      );
+      when(
+        () => client.findInFolder(
           parentId: any(named: 'parentId'),
           name: any(named: 'name'),
-        )).thenAnswer((_) async => file('remote', 'x'));
-    stubDownloadWriting(80);
+        ),
+      ).thenAnswer((_) async => file('remote', 'x'));
+      stubDownloadWriting(80);
 
-    // a.wav (tick 1), puis b.wav (tick 2) -> total 160 > 100 -> évince a.
-    await manager.ensureCached(
-      client: client,
-      library: library,
-      relativePath: 'a.wav',
-    );
-    await manager.ensureCached(
-      client: client,
-      library: library,
-      relativePath: 'b.wav',
-    );
+      // a.wav (tick 1), puis b.wav (tick 2) -> total 160 > 100 -> évince a.
+      await manager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: 'a.wav',
+      );
+      await manager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: 'b.wav',
+      );
 
-    expect(await File(manager.localPathFor(library, 'a.wav')).exists(), isFalse);
-    expect(await File(manager.localPathFor(library, 'b.wav')).exists(), isTrue);
-  });
+      expect(
+        await File(manager.localPathFor(library, 'a.wav')).exists(),
+        isFalse,
+      );
+      expect(
+        await File(manager.localPathFor(library, 'b.wav')).exists(),
+        isTrue,
+      );
+    },
+  );
 
   test('éviction LRU : une entrée dont le fichier a déjà disparu ne compte pas '
       'comme espace libéré', () async {
@@ -316,10 +349,12 @@ void main() {
       availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
       clock: () => ++tick,
     );
-    when(() => client.findInFolder(
-          parentId: any(named: 'parentId'),
-          name: any(named: 'name'),
-        )).thenAnswer((_) async => file('remote', 'x'));
+    when(
+      () => client.findInFolder(
+        parentId: any(named: 'parentId'),
+        name: any(named: 'name'),
+      ),
+    ).thenAnswer((_) async => file('remote', 'x'));
     stubDownloadWriting(80);
 
     await manager.ensureCached(
@@ -345,50 +380,60 @@ void main() {
 
     // 160 o réellement sur disque pour un budget de 100 : la passe doit avoir
     // évincé b.wav pour de bon, sans se satisfaire de l'entrée fantôme.
-    expect(await File(manager.localPathFor(library, 'b.wav')).exists(), isFalse);
+    expect(
+      await File(manager.localPathFor(library, 'b.wav')).exists(),
+      isFalse,
+    );
     expect(await File(manager.localPathFor(library, 'c.wav')).exists(), isTrue);
   });
 
-  test('éviction LRU : un fichier non supprimable GARDE son entrée d\'index',
-      () async {
-    var tick = 0;
-    final manager = AudioCacheManager(
-      minFreeDiskBytes: _simulatedDiskCapacity - 100,
-      availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
-      clock: () => ++tick,
-    );
-    when(() => client.findInFolder(
+  test(
+    'éviction LRU : un fichier non supprimable GARDE son entrée d\'index',
+    () async {
+      var tick = 0;
+      final manager = AudioCacheManager(
+        minFreeDiskBytes: _simulatedDiskCapacity - 100,
+        availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
+        clock: () => ++tick,
+      );
+      when(
+        () => client.findInFolder(
           parentId: any(named: 'parentId'),
           name: any(named: 'name'),
-        )).thenAnswer((_) async => file('remote', 'x'));
-    stubDownloadWriting(80);
+        ),
+      ).thenAnswer((_) async => file('remote', 'x'));
+      stubDownloadWriting(80);
 
-    await manager.ensureCached(
-      client: client,
-      library: library,
-      relativePath: 'a.wav',
-    );
-    // Remplace le fichier par un DOSSIER non vide : sa suppression échoue comme
-    // le ferait un verrou système, sans dépendre des ACL de la machine de test.
-    final aPath = manager.localPathFor(library, 'a.wav');
-    await File(aPath).delete();
-    await Directory(aPath).create();
-    await File(p.join(aPath, 'verrou')).writeAsString('x');
+      await manager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: 'a.wav',
+      );
+      // Remplace le fichier par un DOSSIER non vide : sa suppression échoue comme
+      // le ferait un verrou système, sans dépendre des ACL de la machine de test.
+      final aPath = manager.localPathFor(library, 'a.wav');
+      await File(aPath).delete();
+      await Directory(aPath).create();
+      await File(p.join(aPath, 'verrou')).writeAsString('x');
 
-    await manager.ensureCached(
-      client: client,
-      library: library,
-      relativePath: 'b.wav',
-    );
+      await manager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: 'b.wav',
+      );
 
-    // L'entrée doit survivre dans l'index : sortie de l'index, elle ne serait
-    // plus jamais reprise et l'espace resterait perdu.
-    final indexRaw = await File(
-      p.join(rootDir.path, '.cache_access.json'),
-    ).readAsString();
-    expect(indexRaw, contains('a.wav'),
-        reason: 'un fichier non supprimable ne doit pas sortir de l\'index');
-  });
+      // L'entrée doit survivre dans l'index : sortie de l'index, elle ne serait
+      // plus jamais reprise et l'espace resterait perdu.
+      final indexRaw = await File(
+        p.join(rootDir.path, '.cache_access.json'),
+      ).readAsString();
+      expect(
+        indexRaw,
+        contains('a.wav'),
+        reason: 'un fichier non supprimable ne doit pas sortir de l\'index',
+      );
+    },
+  );
 
   test('éviction LRU : un favori épinglé n\'est jamais évincé', () async {
     var tick = 0;
@@ -398,78 +443,116 @@ void main() {
       clock: () => ++tick,
       pinnedPaths: (_) async => {'a.wav'}, // a.wav = favori épinglé
     );
-    when(() => client.findInFolder(
-          parentId: any(named: 'parentId'),
-          name: any(named: 'name'),
-        )).thenAnswer((_) async => file('remote', 'x'));
+    when(
+      () => client.findInFolder(
+        parentId: any(named: 'parentId'),
+        name: any(named: 'name'),
+      ),
+    ).thenAnswer((_) async => file('remote', 'x'));
     stubDownloadWriting(80);
 
     // a (tick1), b (tick2), c (tick3) ; budget 100, 80 chacun.
     await manager.ensureCached(
-        client: client, library: library, relativePath: 'a.wav');
+      client: client,
+      library: library,
+      relativePath: 'a.wav',
+    );
     await manager.ensureCached(
-        client: client, library: library, relativePath: 'b.wav');
+      client: client,
+      library: library,
+      relativePath: 'b.wav',
+    );
     await manager.ensureCached(
-        client: client, library: library, relativePath: 'c.wav');
+      client: client,
+      library: library,
+      relativePath: 'c.wav',
+    );
 
     // a.wav est le plus ancien mais épinglé -> conservé ; b évincé à sa place.
     expect(await File(manager.localPathFor(library, 'a.wav')).exists(), isTrue);
-    expect(await File(manager.localPathFor(library, 'b.wav')).exists(), isFalse);
+    expect(
+      await File(manager.localPathFor(library, 'b.wav')).exists(),
+      isFalse,
+    );
     expect(await File(manager.localPathFor(library, 'c.wav')).exists(), isTrue);
   });
 
-  test('éviction LRU : un épinglé au chemin BRUT est reconnu (préfixe legacy)',
-      () async {
-    var tick = 0;
-    final manager = AudioCacheManager(
-      minFreeDiskBytes: _simulatedDiskCapacity - 100,
-      availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
-      clock: () => ++tick,
-      // La base rend les chemins bruts : préfixe `sounds/` legacy, forme NFD…
-      // L'index, lui, est normalisé. Sans conversion des deux côtés, cet
-      // épinglage ne correspondrait à rien et le favori serait évincé.
-      pinnedPaths: (_) async => {'sounds/a.wav'},
-    );
-    when(() => client.findInFolder(
+  test(
+    'éviction LRU : un épinglé au chemin BRUT est reconnu (préfixe legacy)',
+    () async {
+      var tick = 0;
+      final manager = AudioCacheManager(
+        minFreeDiskBytes: _simulatedDiskCapacity - 100,
+        availableDiskBytes: simulatedDiskProbe(_simulatedDiskCapacity),
+        clock: () => ++tick,
+        // La base rend les chemins bruts : préfixe `sounds/` legacy, forme NFD…
+        // L'index, lui, est normalisé. Sans conversion des deux côtés, cet
+        // épinglage ne correspondrait à rien et le favori serait évincé.
+        pinnedPaths: (_) async => {'sounds/a.wav'},
+      );
+      when(
+        () => client.findInFolder(
           parentId: any(named: 'parentId'),
           name: any(named: 'name'),
-        )).thenAnswer((_) async => file('remote', 'x'));
-    stubDownloadWriting(80);
+        ),
+      ).thenAnswer((_) async => file('remote', 'x'));
+      stubDownloadWriting(80);
 
-    // Trois fichiers : le dernier est protégé en tant que fichier courant, donc
-    // seul b.wav est évinçable — sauf si l'épinglage de a.wav est perdu.
-    await manager.ensureCached(
-        client: client, library: library, relativePath: 'a.wav');
-    await manager.ensureCached(
-        client: client, library: library, relativePath: 'b.wav');
-    await manager.ensureCached(
-        client: client, library: library, relativePath: 'c.wav');
+      // Trois fichiers : le dernier est protégé en tant que fichier courant, donc
+      // seul b.wav est évinçable — sauf si l'épinglage de a.wav est perdu.
+      await manager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: 'a.wav',
+      );
+      await manager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: 'b.wav',
+      );
+      await manager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: 'c.wav',
+      );
 
-    expect(await File(manager.localPathFor(library, 'a.wav')).exists(), isTrue);
-    expect(await File(manager.localPathFor(library, 'b.wav')).exists(), isFalse);
-    expect(await File(manager.localPathFor(library, 'c.wav')).exists(), isTrue);
-  });
+      expect(
+        await File(manager.localPathFor(library, 'a.wav')).exists(),
+        isTrue,
+      );
+      expect(
+        await File(manager.localPathFor(library, 'b.wav')).exists(),
+        isFalse,
+      );
+      expect(
+        await File(manager.localPathFor(library, 'c.wav')).exists(),
+        isTrue,
+      );
+    },
+  );
 
-  test('cleanupPartialDownloads : purge les .part, épargne les fichiers audio',
-      () async {
-    final manager = AudioCacheManager();
-    // Résidus d'un process tué en plein téléchargement : jamais renommés, donc
-    // absents de l'index LRU et jamais évincés.
-    final orphan = File(p.join(rootDir.path, 'a.wav.part'));
-    await orphan.writeAsBytes(List.filled(40, 1));
-    final nested = File(p.join(rootDir.path, 'sfx', 'b.wav.part'));
-    await nested.parent.create(recursive: true);
-    await nested.writeAsBytes(List.filled(60, 1));
-    final keep = File(p.join(rootDir.path, 'c.wav'));
-    await keep.writeAsBytes(List.filled(10, 1));
+  test(
+    'cleanupPartialDownloads : purge les .part, épargne les fichiers audio',
+    () async {
+      final manager = AudioCacheManager();
+      // Résidus d'un process tué en plein téléchargement : jamais renommés, donc
+      // absents de l'index LRU et jamais évincés.
+      final orphan = File(p.join(rootDir.path, 'a.wav.part'));
+      await orphan.writeAsBytes(List.filled(40, 1));
+      final nested = File(p.join(rootDir.path, 'sfx', 'b.wav.part'));
+      await nested.parent.create(recursive: true);
+      await nested.writeAsBytes(List.filled(60, 1));
+      final keep = File(p.join(rootDir.path, 'c.wav'));
+      await keep.writeAsBytes(List.filled(10, 1));
 
-    final reclaimed = await manager.cleanupPartialDownloads(library);
+      final reclaimed = await manager.cleanupPartialDownloads(library);
 
-    expect(reclaimed, 100);
-    expect(await orphan.exists(), isFalse);
-    expect(await nested.exists(), isFalse); // y compris en sous-dossier
-    expect(await keep.exists(), isTrue);
-  });
+      expect(reclaimed, 100);
+      expect(await orphan.exists(), isFalse);
+      expect(await nested.exists(), isFalse); // y compris en sous-dossier
+      expect(await keep.exists(), isTrue);
+    },
+  );
 
   test('cleanupPartialDownloads : racine absente -> ne lève pas', () async {
     final manager = AudioCacheManager();
@@ -484,32 +567,48 @@ void main() {
     expect(await manager.cleanupPartialDownloads(missing), 0);
   });
 
-  test('evictCachedFile : supprime le fichier et libère le budget LRU',
-      () async {
-    final manager = AudioCacheManager(clock: () => 1);
-    when(() => client.findInFolder(
+  test(
+    'evictCachedFile : supprime le fichier et libère le budget LRU',
+    () async {
+      final manager = AudioCacheManager(clock: () => 1);
+      when(
+        () => client.findInFolder(
           parentId: any(named: 'parentId'),
           name: any(named: 'name'),
-        )).thenAnswer((_) async => file('remote', 'x'));
-    stubDownloadWriting(80);
+        ),
+      ).thenAnswer((_) async => file('remote', 'x'));
+      stubDownloadWriting(80);
 
-    await manager.ensureCached(
-        client: client, library: library, relativePath: 'gone.wav');
-    expect(
-        await File(manager.localPathFor(library, 'gone.wav')).exists(), isTrue);
+      await manager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: 'gone.wav',
+      );
+      expect(
+        await File(manager.localPathFor(library, 'gone.wav')).exists(),
+        isTrue,
+      );
 
-    await manager.evictCachedFile(library, 'gone.wav');
+      await manager.evictCachedFile(library, 'gone.wav');
 
-    // Fichier supprimé.
-    expect(await File(manager.localPathFor(library, 'gone.wav')).exists(),
-        isFalse);
-    // Budget LRU libéré : un nouveau fichier de 80 octets tient sans évincer.
-    stubDownloadWriting(80);
-    await manager.ensureCached(
-        client: client, library: library, relativePath: 'fresh.wav');
-    expect(await File(manager.localPathFor(library, 'fresh.wav')).exists(),
-        isTrue);
-  });
+      // Fichier supprimé.
+      expect(
+        await File(manager.localPathFor(library, 'gone.wav')).exists(),
+        isFalse,
+      );
+      // Budget LRU libéré : un nouveau fichier de 80 octets tient sans évincer.
+      stubDownloadWriting(80);
+      await manager.ensureCached(
+        client: client,
+        library: library,
+        relativePath: 'fresh.wav',
+      );
+      expect(
+        await File(manager.localPathFor(library, 'fresh.wav')).exists(),
+        isTrue,
+      );
+    },
+  );
 
   test('evictCachedFile : sans fichier ni entrée LRU, ne lève pas', () async {
     final manager = AudioCacheManager();

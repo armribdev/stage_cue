@@ -130,8 +130,7 @@ class PadButton extends StatelessWidget {
     final colorValue = padItem.pad.colorValue;
     final customColor = colorValue != null ? Color(colorValue) : null;
     final hasCustomColor = customColor != null;
-    final defaultColor =
-        scheme.surfaceContainerHighest.withValues(alpha: 0.75);
+    final defaultColor = scheme.surfaceContainerHighest.withValues(alpha: 0.75);
     final baseColor = customColor ?? defaultColor;
     // En lecture sans couleur perso : glacis violet (accent) plutôt qu'un gris
     // neutre — repère "à l'antenne" cohérent avec la régie musique.
@@ -157,19 +156,19 @@ class PadButton extends StatelessWidget {
           color: padItem.isPlaying
               ? scheme.primary.withValues(alpha: 0.5)
               : padItem.isPaused
-                  ? scheme.primary.withValues(alpha: 0.3)
-                  : padItem.isPartiallyReady
-                      ? scheme.tertiary.withValues(alpha: 0.45)
-                      : scheme.outlineVariant.withValues(alpha: 0.45),
+              ? scheme.primary.withValues(alpha: 0.3)
+              : padItem.isPartiallyReady
+              ? scheme.tertiary.withValues(alpha: 0.45)
+              : scheme.outlineVariant.withValues(alpha: 0.45),
         ),
       ),
       color: padItem.isPlaying
           ? playingColor
           : padItem.isPaused
-              ? (hasCustomColor
-                  ? customColor.withValues(alpha: 0.35)
-                  : scheme.surfaceContainerHigh.withValues(alpha: 0.6))
-              : baseColor,
+          ? (hasCustomColor
+                ? customColor.withValues(alpha: 0.35)
+                : scheme.surfaceContainerHigh.withValues(alpha: 0.6))
+          : baseColor,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -244,8 +243,9 @@ class PadButton extends StatelessWidget {
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
     )..layout(maxWidth: firstLineWidth);
-    var firstLineEnd =
-        painter.getLineBoundary(const TextPosition(offset: 0)).end;
+    var firstLineEnd = painter
+        .getLineBoundary(const TextPosition(offset: 0))
+        .end;
     final lineHeight = painter.preferredLineHeight;
     painter.dispose();
 
@@ -409,15 +409,18 @@ class PadButton extends StatelessWidget {
   ({Color icon, Color border}) _iconStyle(ColorScheme scheme) {
     final colorValue = padItem.pad.colorValue;
     if (colorValue == null) {
-      return (icon: AppColors.textDim, border: AppElevation.border(scheme).color);
+      return (
+        icon: AppColors.textDim,
+        border: AppElevation.border(scheme).color,
+      );
     }
 
     final customColor = Color(colorValue);
     final alpha = padItem.isPlaying
         ? 0.75
         : padItem.isPaused
-            ? 0.35
-            : 1.0;
+        ? 0.35
+        : 1.0;
     final effective = Color.alphaBlend(
       customColor.withValues(alpha: alpha),
       scheme.surface,
@@ -434,8 +437,9 @@ class PadButton extends StatelessWidget {
         .withLightness(isDarkBackground ? 0.88 : 0.16)
         .toColor();
     final icon = tinted.withValues(alpha: isDarkBackground ? 0.9 : 0.75);
-    final border = (isDarkBackground ? Colors.white : Colors.black)
-        .withValues(alpha: 0.18);
+    final border = (isDarkBackground ? Colors.white : Colors.black).withValues(
+      alpha: 0.18,
+    );
     return (icon: icon, border: border);
   }
 
@@ -447,11 +451,11 @@ class PadButton extends StatelessWidget {
   /// est arbitraire (voir maquette : icônes éditer/fermer sur la même ligne
   /// que le titre, jamais flottantes dessus).
   List<(IconData, double, VoidCallback?)> get _iconClusterEntries => [
-        if (padItem.totalSoundCount > 1 && onShowSounds != null)
-          (Icons.queue_music_rounded, 14.0, onShowSounds),
-        if (isEditable && onEdit != null) (Icons.edit_outlined, 14.0, onEdit),
-        if (isEditable && onRemove != null) (Icons.close, 16.0, onRemove),
-      ];
+    if (padItem.totalSoundCount > 1 && onShowSounds != null)
+      (Icons.queue_music_rounded, 14.0, onShowSounds),
+    if (isEditable && onEdit != null) (Icons.edit_outlined, 14.0, onEdit),
+    if (isEditable && onRemove != null) (Icons.close, 16.0, onRemove),
+  ];
 
   int get _iconClusterEntryCount => _iconClusterEntries.length;
 
@@ -479,9 +483,7 @@ class PadButton extends StatelessWidget {
           border: Border(
             top: BorderSide(color: style.border),
             bottom: BorderSide(color: style.border),
-            left: isFirst
-                ? BorderSide(color: style.border)
-                : BorderSide.none,
+            left: isFirst ? BorderSide(color: style.border) : BorderSide.none,
             right: BorderSide(color: style.border),
           ),
         ),
@@ -492,28 +494,29 @@ class PadButton extends StatelessWidget {
         child: IconButton(
           icon: Icon(icon, size: size),
           onPressed: onPressed,
-          style: IconButton.styleFrom(
-            foregroundColor: style.icon,
-            backgroundColor: Colors.transparent,
-            shape: RoundedRectangleBorder(borderRadius: borderRadius),
-            padding: EdgeInsets.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ).copyWith(
-            // Overlay neutre (blanc translucide) plutôt que dérivé de
-            // `style.icon` : cette teinte est calée sur la couleur du pad et
-            // devient quasi invisible sur certains pads, alors que le fond du
-            // segment (noir translucide) reste lui toujours neutre.
-            overlayColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.pressed)) {
-                return Colors.white.withValues(alpha: 0.24);
-              }
-              if (states.contains(WidgetState.hovered) ||
-                  states.contains(WidgetState.focused)) {
-                return Colors.white.withValues(alpha: 0.16);
-              }
-              return null;
-            }),
-          ),
+          style:
+              IconButton.styleFrom(
+                foregroundColor: style.icon,
+                backgroundColor: Colors.transparent,
+                shape: RoundedRectangleBorder(borderRadius: borderRadius),
+                padding: EdgeInsets.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ).copyWith(
+                // Overlay neutre (blanc translucide) plutôt que dérivé de
+                // `style.icon` : cette teinte est calée sur la couleur du pad et
+                // devient quasi invisible sur certains pads, alors que le fond du
+                // segment (noir translucide) reste lui toujours neutre.
+                overlayColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.pressed)) {
+                    return Colors.white.withValues(alpha: 0.24);
+                  }
+                  if (states.contains(WidgetState.hovered) ||
+                      states.contains(WidgetState.focused)) {
+                    return Colors.white.withValues(alpha: 0.16);
+                  }
+                  return null;
+                }),
+              ),
           constraints: const BoxConstraints(
             minWidth: _iconSegmentSize,
             minHeight: _iconSegmentSize,
@@ -524,9 +527,7 @@ class PadButton extends StatelessWidget {
 
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < entries.length; i++) segment(i),
-      ],
+      children: [for (var i = 0; i < entries.length; i++) segment(i)],
     );
   }
 
@@ -616,8 +617,8 @@ class PadButton extends StatelessWidget {
     final (icon, hint) = isMissing
         ? (Icons.warning_amber_rounded, 'fichier introuvable')
         : isUnsupportedFormat
-            ? (Icons.block_outlined, 'format non supporté')
-            : (Icons.cloud_off_outlined, 'hors-ligne');
+        ? (Icons.block_outlined, 'format non supporté')
+        : (Icons.cloud_off_outlined, 'hors-ligne');
     final iconCluster = _buildIconCluster(scheme);
 
     return Card(
@@ -730,10 +731,7 @@ class _MusicProgressBar extends StatefulWidget {
   final PadItem padItem;
   final Color color;
 
-  const _MusicProgressBar({
-    required this.padItem,
-    required this.color,
-  });
+  const _MusicProgressBar({required this.padItem, required this.color});
 
   @override
   State<_MusicProgressBar> createState() => _MusicProgressBarState();
@@ -770,17 +768,22 @@ class _MusicProgressBarState extends State<_MusicProgressBar>
   /// - arrêté : ramène à zéro (barre masquée).
   void _syncToPlayback() {
     final pad = widget.padItem;
-    final totalMs = (pad.progressPlayer?.duration ?? Duration.zero).inMilliseconds;
+    final totalMs =
+        (pad.progressPlayer?.duration ?? Duration.zero).inMilliseconds;
 
     if (pad.isPlaying && totalMs > 0) {
-      final posMs =
-          (pad.progressPlayer?.position.inMilliseconds ?? 0).clamp(0, totalMs);
+      final posMs = (pad.progressPlayer?.position.inMilliseconds ?? 0).clamp(
+        0,
+        totalMs,
+      );
       _controller.duration = Duration(milliseconds: totalMs);
       _controller.value = posMs / totalMs;
       _controller.forward();
     } else if (pad.isPaused && totalMs > 0) {
-      final posMs =
-          (pad.pausedPlaybackPosition?.inMilliseconds ?? 0).clamp(0, totalMs);
+      final posMs = (pad.pausedPlaybackPosition?.inMilliseconds ?? 0).clamp(
+        0,
+        totalMs,
+      );
       _controller.stop();
       _controller.value = posMs / totalMs;
     } else {
@@ -848,8 +851,9 @@ class _PolyphonicProgressBarState extends State<_PolyphonicProgressBar>
     final total = widget.ticket.duration;
     final elapsed = DateTime.now().difference(widget.ticket.startedAt);
     final totalMs = total.inMilliseconds;
-    final startValue =
-        totalMs > 0 ? (elapsed.inMilliseconds / totalMs).clamp(0.0, 1.0) : 1.0;
+    final startValue = totalMs > 0
+        ? (elapsed.inMilliseconds / totalMs).clamp(0.0, 1.0)
+        : 1.0;
     _controller = AnimationController(
       vsync: this,
       duration: total > Duration.zero ? total : const Duration(milliseconds: 1),
@@ -892,26 +896,21 @@ Widget padSoundAvailabilityIcon(
   double size = 18,
 }) {
   final (icon, color) = switch (availability) {
-    PadSoundAvailability.ready || PadSoundAvailability.cached => (
-        Icons.check_circle_outline,
-        scheme.primary,
-      ),
+    PadSoundAvailability.ready ||
+    PadSoundAvailability.cached => (Icons.check_circle_outline, scheme.primary),
     PadSoundAvailability.needsDownload => (
-        Icons.cloud_download_outlined,
-        scheme.onSurfaceVariant,
-      ),
+      Icons.cloud_download_outlined,
+      scheme.onSurfaceVariant,
+    ),
     PadSoundAvailability.offline => (
-        Icons.cloud_off_outlined,
-        scheme.onSurfaceVariant.withValues(alpha: 0.7),
-      ),
-    PadSoundAvailability.missingFile => (
-        Icons.error_outline,
-        scheme.error,
-      ),
+      Icons.cloud_off_outlined,
+      scheme.onSurfaceVariant.withValues(alpha: 0.7),
+    ),
+    PadSoundAvailability.missingFile => (Icons.error_outline, scheme.error),
     PadSoundAvailability.unsupportedFormat => (
-        Icons.block_outlined,
-        scheme.error,
-      ),
+      Icons.block_outlined,
+      scheme.error,
+    ),
   };
   return Icon(icon, size: size, color: color);
 }

@@ -30,8 +30,7 @@ class Skeleton extends StatefulWidget {
 
   /// Animation partagée par les placeholders descendants.
   static Animation<double> of(BuildContext context) {
-    final scope = context
-        .dependOnInheritedWidgetOfExactType<_SkeletonScope>();
+    final scope = context.dependOnInheritedWidgetOfExactType<_SkeletonScope>();
     assert(
       scope != null,
       'SkeletonBox/SkeletonLine doivent avoir un ancêtre Skeleton.',
@@ -140,11 +139,7 @@ class SkeletonLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final box = SkeletonBox(
-      width: width,
-      height: height,
-      intensity: intensity,
-    );
+    final box = SkeletonBox(width: width, height: height, intensity: intensity);
     if (widthFactor == null) return box;
     return Align(
       alignment: Alignment.centerLeft,

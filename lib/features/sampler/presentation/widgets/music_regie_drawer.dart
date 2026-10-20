@@ -35,9 +35,9 @@ class _MusicRegieDrawer extends StatefulWidget {
   final VoidCallback onChooseMusic;
   final VoidCallback onChooseMusicToPlay;
   final void Function({required bool isPlaying, required bool hasCurrent})
-      onPauseToggle;
+  onPauseToggle;
   final void Function({required bool isPlaying, required bool hasQueue})
-      onSkipNext;
+  onSkipNext;
   final VoidCallback? onEjectMusic;
   final ValueChanged<int>? onRemoveFromQueue;
   final void Function(int oldIndex, int newIndex)? onReorderMusicQueue;
@@ -150,14 +150,10 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
       transitionProgress: widget.transitionProgress,
       transitionBlinkOpacity: widget.transitionBlinkOpacity,
       onChooseMusic: widget.onChooseMusicToPlay,
-      onTogglePlayPause: () => widget.onPauseToggle(
-        isPlaying: isPlaying,
-        hasCurrent: hasCurrent,
-      ),
-      onSkipNext: () => widget.onSkipNext(
-        isPlaying: isPlaying,
-        hasQueue: hasQueue,
-      ),
+      onTogglePlayPause: () =>
+          widget.onPauseToggle(isPlaying: isPlaying, hasCurrent: hasCurrent),
+      onSkipNext: () =>
+          widget.onSkipNext(isPlaying: isPlaying, hasQueue: hasQueue),
       onEjectMusic: widget.onEjectMusic,
     );
   }
@@ -215,10 +211,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
         const SizedBox(height: 14),
         const Divider(height: 1),
         const SizedBox(height: 10),
-        Text(
-          'AMBIANCE',
-          style: AppTextStyles.sectionLabel(context),
-        ),
+        Text('AMBIANCE', style: AppTextStyles.sectionLabel(context)),
         const SizedBox(height: 4),
         _buildAmbianceSlot(layout: _AmbianceSlotLayout.row),
       ],
@@ -293,11 +286,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        leftColumn,
-        const SizedBox(height: 12),
-        queueSection,
-      ],
+      children: [leftColumn, const SizedBox(height: 12), queueSection],
     );
   }
 
@@ -421,14 +410,10 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
       transitionProgress: widget.transitionProgress,
       transitionBlinkOpacity: widget.transitionBlinkOpacity,
       onChooseMusic: widget.onChooseMusicToPlay,
-      onTogglePlayPause: () => widget.onPauseToggle(
-        isPlaying: isPlaying,
-        hasCurrent: hasCurrent,
-      ),
-      onSkipNext: () => widget.onSkipNext(
-        isPlaying: isPlaying,
-        hasQueue: hasQueue,
-      ),
+      onTogglePlayPause: () =>
+          widget.onPauseToggle(isPlaying: isPlaying, hasCurrent: hasCurrent),
+      onSkipNext: () =>
+          widget.onSkipNext(isPlaying: isPlaying, hasQueue: hasQueue),
     );
 
     final currentTitleStyle = TextStyle(
@@ -532,9 +517,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
     // Voie ambiance : glissée dans la même rangée (jamais sur une ligne à
     // elle), pastille complète si la largeur le permet, sinon icône seule.
     final ambianceSlot = _buildAmbianceSlot(
-      layout: comfortable
-          ? _AmbianceSlotLayout.pill
-          : _AmbianceSlotLayout.icon,
+      layout: comfortable ? _AmbianceSlotLayout.pill : _AmbianceSlotLayout.icon,
     );
 
     return Row(

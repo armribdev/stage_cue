@@ -22,7 +22,10 @@ class ScrollingTextSpan extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (!constraints.hasBoundedWidth) {
-          return Text.rich(TextSpan(style: style, children: [span]), maxLines: 1);
+          return Text.rich(
+            TextSpan(style: style, children: [span]),
+            maxLines: 1,
+          );
         }
 
         final richSpan = TextSpan(style: style, children: [span]);
@@ -104,7 +107,8 @@ class _ScrollingTextSpanBodyState extends State<_ScrollingTextSpanBody>
     // contrôleur qui démarre (nouvelle sélection, ouverture de l'overlay...)
     // marque toujours cette pause avant de défiler.
     final startPauseT =
-        (scrollDuration + _pauseAtEnd).inMicroseconds / totalDuration.inMicroseconds;
+        (scrollDuration + _pauseAtEnd).inMicroseconds /
+        totalDuration.inMicroseconds;
 
     if (_controller == null) {
       _scrollDuration = scrollDuration;
@@ -130,7 +134,8 @@ class _ScrollingTextSpanBodyState extends State<_ScrollingTextSpanBody>
   /// puis revient d'un coup au début et marque une pause avant de redéfiler.
   double _progressFor(double t) {
     final total = _scrollDuration + _pauseAtEnd + _pauseAtStart;
-    final scrollFraction = _scrollDuration.inMicroseconds / total.inMicroseconds;
+    final scrollFraction =
+        _scrollDuration.inMicroseconds / total.inMicroseconds;
     final endPauseFraction = _pauseAtEnd.inMicroseconds / total.inMicroseconds;
 
     if (t < scrollFraction) {

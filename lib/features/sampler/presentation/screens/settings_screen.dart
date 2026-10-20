@@ -164,7 +164,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final url = account.photoUrlForDisplay(sizePx: _kAvatarCacheSizePx);
     if (url == null) return Future.value(null);
     return _avatarFutures.putIfAbsent(account.email, () async {
-      final file = await _avatarCache.resolve(identity: account.email, url: url);
+      final file = await _avatarCache.resolve(
+        identity: account.email,
+        url: url,
+      );
       if (file != null) {
         _resolvedAvatars[account.email] = file;
       }
@@ -214,17 +217,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       syncController: widget.syncController,
       onTap: _onSyncPillTap,
     );
-    final actions = <Widget>[
-      ?_buildDriveRefreshAction(),
-      syncPill,
-    ];
+    final actions = <Widget>[?_buildDriveRefreshAction(), syncPill];
 
     if (widget.isModal) {
-      return AppModalShell(
-        title: 'Paramètres',
-        actions: actions,
-        body: body,
-      );
+      return AppModalShell(title: 'Paramètres', actions: actions, body: body);
     }
 
     return Scaffold(
@@ -232,5 +228,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: body,
     );
   }
-
 }

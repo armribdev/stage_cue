@@ -152,7 +152,8 @@ class _OnAirControls extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
-        final comfortable = MediaQuery.sizeOf(context).width >=
+        final comfortable =
+            MediaQuery.sizeOf(context).width >=
             _GroupedPlaybackControls.comfortableWidthThreshold;
         // Cellules agrandies réservées au confort tactile — sans souris
         // desktop, la taille compacte suffit même sur écran large (voir
@@ -160,7 +161,8 @@ class _OnAirControls extends StatelessWidget {
         final roomyPicker = comfortable && !keyboardEnabled;
         // Coupe sèche explicite dès que le groupe complet (4 cellules) tient
         // dans la largeur disponible — sinon repli sur les trois durées.
-        final showCut = maxWidth >=
+        final showCut =
+            maxWidth >=
             _GroupedPlaybackControls.resolvedMinWidth(
               roomyPicker,
               withCut: true,
@@ -212,10 +214,7 @@ class _OnAirControls extends StatelessWidget {
           );
         }
 
-        return SizedBox(
-          width: maxWidth,
-          child: controls,
-        );
+        return SizedBox(width: maxWidth, child: controls);
       },
     );
   }
@@ -331,8 +330,9 @@ class _GroupedPlaybackControls extends StatelessWidget {
           backgroundColor: filled ? scheme.primary : null,
           disabledBackgroundColor: filled ? scheme.surfaceContainerHigh : null,
           foregroundColor: filled ? scheme.onPrimary : null,
-          disabledForegroundColor:
-              filled ? scheme.onSurfaceVariant.withValues(alpha: 0.4) : null,
+          disabledForegroundColor: filled
+              ? scheme.onSurfaceVariant.withValues(alpha: 0.4)
+              : null,
         ),
         constraints: const BoxConstraints(
           minWidth: _actionButtonSize,
@@ -345,10 +345,7 @@ class _GroupedPlaybackControls extends StatelessWidget {
     );
 
     if (showTransitionFeedback && transitionBlinkOpacity != null) {
-      button = FadeTransition(
-        opacity: transitionBlinkOpacity!,
-        child: button,
-      );
+      button = FadeTransition(opacity: transitionBlinkOpacity!, child: button);
     }
 
     if (!showTransitionFeedback || transitionProgress == null) {
@@ -371,8 +368,9 @@ class _GroupedPlaybackControls extends StatelessWidget {
                 return CircularProgressIndicator(
                   value: transitionProgress!.value,
                   strokeWidth: 1.5,
-                  backgroundColor:
-                      scheme.outlineVariant.withValues(alpha: 0.25),
+                  backgroundColor: scheme.outlineVariant.withValues(
+                    alpha: 0.25,
+                  ),
                   valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
                 );
               },
@@ -390,10 +388,8 @@ class _GroupedPlaybackControls extends StatelessWidget {
     final comfortable =
         MediaQuery.sizeOf(context).width >= comfortableWidthThreshold &&
         !isDesktop;
-    final playFeedback =
-        activeTransitionKind == _MusicTransitionKind.fadeOut;
-    final skipFeedback =
-        activeTransitionKind == _MusicTransitionKind.crossfade;
+    final playFeedback = activeTransitionKind == _MusicTransitionKind.fadeOut;
+    final skipFeedback = activeTransitionKind == _MusicTransitionKind.crossfade;
     final transitionInProgress = activeTransitionKind != null;
 
     // Pas de pilule bordée autour du groupe — les commandes flottent

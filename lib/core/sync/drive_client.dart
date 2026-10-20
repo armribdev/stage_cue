@@ -16,10 +16,7 @@ abstract class DriveClient {
   /// Liste les enfants directs d'un dossier (fichiers et sous-dossiers).
   ///
   /// [sharedDriveId] requis pour parcourir la racine d'un drive d'équipe.
-  Future<List<DriveFile>> listFolder(
-    String folderId, {
-    String? sharedDriveId,
-  });
+  Future<List<DriveFile>> listFolder(String folderId, {String? sharedDriveId});
 
   /// Cherche un enfant direct par nom dans un dossier. Null si absent.
   Future<DriveFile?> findInFolder({
@@ -80,10 +77,7 @@ abstract class DriveClient {
   });
 
   /// Métadonnées d'un fichier (révision, taille, md5…). Null si introuvable.
-  Future<DriveFile?> getFile(
-    String fileId, {
-    String? sharedDriveId,
-  });
+  Future<DriveFile?> getFile(String fileId, {String? sharedDriveId});
 
   /// Télécharge le contenu complet en mémoire (réservé aux petits fichiers :
   /// manifest, snapshot DB). Pour l'audio, utiliser [downloadToFile].
@@ -163,24 +157,28 @@ class DriveRequestException implements Exception {
 
   /// Réseau injoignable — cas le plus courant en tournée.
   const DriveRequestException.offline()
-      : message = 'Pas de connexion — vos modifications restent locales et '
-            'seront synchronisées au retour du réseau.',
-        transient = true;
+    : message =
+          'Pas de connexion — vos modifications restent locales et '
+          'seront synchronisées au retour du réseau.',
+      transient = true;
 
   const DriveRequestException.quota()
-      : message = 'Quota Google Drive atteint — la synchronisation reprendra '
-            'dans quelques minutes.',
-        transient = true;
+    : message =
+          'Quota Google Drive atteint — la synchronisation reprendra '
+          'dans quelques minutes.',
+      transient = true;
 
   const DriveRequestException.unavailable()
-      : message = 'Google Drive est momentanément indisponible — nouvelle '
-            'tentative plus tard.',
-        transient = true;
+    : message =
+          'Google Drive est momentanément indisponible — nouvelle '
+          'tentative plus tard.',
+      transient = true;
 
   const DriveRequestException.denied()
-      : message = 'Accès refusé par Google Drive — vérifiez les droits du '
-            'dossier partagé.',
-        transient = false;
+    : message =
+          'Accès refusé par Google Drive — vérifiez les droits du '
+          'dossier partagé.',
+      transient = false;
 
   @override
   String toString() => message;

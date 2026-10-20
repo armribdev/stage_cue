@@ -74,7 +74,5 @@ String formatBytes(int? bytes) {
     value /= 1024;
     unit++;
   }
-  return unit == 0
-      ? '$bytes o'
-      : '${value.toStringAsFixed(1)} ${units[unit]}';
+  return unit == 0 ? '$bytes o' : '${value.toStringAsFixed(1)} ${units[unit]}';
 }

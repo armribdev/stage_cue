@@ -20,9 +20,7 @@ extension SamplerPadAvailability on SamplerNotifier {
         );
         final file = File(resolved);
         if (!await file.exists()) {
-          throw StateError(
-            'Fichier audio introuvable : ${sound.displayName}',
-          );
+          throw StateError('Fichier audio introuvable : ${sound.displayName}');
         }
         return file.absolute.path;
       } on SoundNotAvailableLocallyException {
@@ -32,9 +30,7 @@ extension SamplerPadAvailability on SamplerNotifier {
         if (sound.libraryId != null && sound.relativePath != null) rethrow;
         final file = File(sound.filePath);
         if (!await file.exists() || !await isPlausibleAudioFile(file)) {
-          throw StateError(
-            'Fichier audio introuvable : ${sound.displayName}',
-          );
+          throw StateError('Fichier audio introuvable : ${sound.displayName}');
         }
         return file.absolute.path;
       }
@@ -42,9 +38,7 @@ extension SamplerPadAvailability on SamplerNotifier {
 
     final file = File(sound.filePath);
     if (!await file.exists() || !await isPlausibleAudioFile(file)) {
-      throw StateError(
-        'Fichier audio introuvable : ${sound.displayName}',
-      );
+      throw StateError('Fichier audio introuvable : ${sound.displayName}');
     }
     return file.absolute.path;
   }
@@ -78,7 +72,8 @@ extension SamplerPadAvailability on SamplerNotifier {
     return switch (availability) {
       PadSoundAvailability.ready => null,
       PadSoundAvailability.cached => null,
-      PadSoundAvailability.needsDownload => PadUnavailabilityReason.needsDownload,
+      PadSoundAvailability.needsDownload =>
+        PadUnavailabilityReason.needsDownload,
       PadSoundAvailability.offline => PadUnavailabilityReason.offline,
       PadSoundAvailability.missingFile => PadUnavailabilityReason.missingFile,
       PadSoundAvailability.unsupportedFormat =>
@@ -103,7 +98,8 @@ extension SamplerPadAvailability on SamplerNotifier {
     };
   }
 
-  void _blockSoundDriveRetry(int soundId) => _driveNotFoundSoundIds.add(soundId);
+  void _blockSoundDriveRetry(int soundId) =>
+      _driveNotFoundSoundIds.add(soundId);
 
   bool _isRetryableMissingLibrarySound(Sound sound) =>
       sound.libraryId != null &&
@@ -196,9 +192,10 @@ extension SamplerPadAvailability on SamplerNotifier {
       PadUnavailabilityReason.missingFile => 'fichier introuvable',
       PadUnavailabilityReason.unsupportedFormat =>
         'format audio non pris en charge',
-      null => driveSessionExpired
-          ? 'session Google expirée, fichier non téléchargé'
-          : 'aucun lecteur chargé (préchargement en cours ou échoué)',
+      null =>
+        driveSessionExpired
+            ? 'session Google expirée, fichier non téléchargé'
+            : 'aucun lecteur chargé (préchargement en cours ou échoué)',
     };
   }
 

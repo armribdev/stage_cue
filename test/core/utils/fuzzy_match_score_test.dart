@@ -33,27 +33,33 @@ void main() {
       expect(motDebut, greaterThan(sousChaine));
     });
 
-    test('sous-séquence dispersée matche mais score plus bas qu\'une sous-chaîne',
-        () {
-      final sousChaine = fuzzyMatchScore('porte', 'por')!;
-      final dispersee = fuzzyMatchScore('pomme rouge', 'por')!; // p..o..r
-      expect(dispersee, isNotNull);
-      expect(sousChaine, greaterThan(dispersee));
-    });
+    test(
+      'sous-séquence dispersée matche mais score plus bas qu\'une sous-chaîne',
+      () {
+        final sousChaine = fuzzyMatchScore('porte', 'por')!;
+        final dispersee = fuzzyMatchScore('pomme rouge', 'por')!; // p..o..r
+        expect(dispersee, isNotNull);
+        expect(sousChaine, greaterThan(dispersee));
+      },
+    );
 
     test('normalisation des accents : "tele" matche "Télé"', () {
       expect(
-        fuzzyMatchScore(normalizeForSearch('Téléphone'),
-            normalizeForSearch('tele')),
+        fuzzyMatchScore(
+          normalizeForSearch('Téléphone'),
+          normalizeForSearch('tele'),
+        ),
         isNotNull,
       );
     });
 
     test('classement réaliste : préfixe exact en tête', () {
-      final ranked = _rank(
-        ['Grosse porte', 'Porte qui claque', 'Aéroport', 'Sirène'],
-        'porte',
-      );
+      final ranked = _rank([
+        'Grosse porte',
+        'Porte qui claque',
+        'Aéroport',
+        'Sirène',
+      ], 'porte');
       expect(ranked.first, 'Porte qui claque');
       expect(ranked.contains('Sirène'), isFalse); // ne matche pas
     });
@@ -82,21 +88,25 @@ void main() {
     });
   });
 
-  group('buildHighlightedSpan (via fuzzyMatchScore + surlignage approximatif)', () {
-    test('une faute de frappe met en évidence la fenêtre correspondante', () {
-      final span = buildHighlightedSpan('Grosse Explosion', ['epxlosion']);
-      final bold = <String>[];
-      void collect(InlineSpan s) {
-        if (s is TextSpan) {
-          if (s.style?.fontWeight == FontWeight.bold && s.text != null) {
-            bold.add(s.text!);
+  group(
+    'buildHighlightedSpan (via fuzzyMatchScore + surlignage approximatif)',
+    () {
+      test('une faute de frappe met en évidence la fenêtre correspondante', () {
+        final span = buildHighlightedSpan('Grosse Explosion', ['epxlosion']);
+        final bold = <String>[];
+        void collect(InlineSpan s) {
+          if (s is TextSpan) {
+            if (s.style?.fontWeight == FontWeight.bold && s.text != null) {
+              bold.add(s.text!);
+            }
+            s.children?.forEach(collect);
           }
-          s.children?.forEach(collect);
         }
-      }
-      collect(span);
-      expect(bold, isNotEmpty);
-      expect(bold.first.toLowerCase(), 'explosion');
-    });
-  });
+
+        collect(span);
+        expect(bold, isNotEmpty);
+        expect(bold.first.toLowerCase(), 'explosion');
+      });
+    },
+  );
 }

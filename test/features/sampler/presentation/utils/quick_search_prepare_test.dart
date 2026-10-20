@@ -49,13 +49,17 @@ void main() {
     });
 
     test('ignore les multipads contenant le son', () {
-      final pads = [_ref(padId: 11, soundIds: [42, 99])];
+      final pads = [
+        _ref(padId: 11, soundIds: [42, 99]),
+      ];
 
       expect(findDedicatedOnStagePadId(pads, 42), isNull);
     });
 
     test('ignore les pads brouillon', () {
-      final pads = [_ref(padId: 10, isDraft: true, soundIds: [42])];
+      final pads = [
+        _ref(padId: 10, isDraft: true, soundIds: [42]),
+      ];
 
       expect(findDedicatedOnStagePadId(pads, 42), isNull);
     });
@@ -95,13 +99,10 @@ void main() {
     });
 
     test('forceNewRow → nouvelle ligne après la dernière existante', () {
-      final placement = computeLastRowAppendPlacement(
-        [
-          _pad(id: 1, rowIndex: 0, sortOrder: 0),
-          _pad(id: 2, rowIndex: 0, sortOrder: 1),
-        ],
-        forceNewRow: true,
-      );
+      final placement = computeLastRowAppendPlacement([
+        _pad(id: 1, rowIndex: 0, sortOrder: 0),
+        _pad(id: 2, rowIndex: 0, sortOrder: 1),
+      ], forceNewRow: true);
 
       expect(placement.rowIndex, 1);
       expect(placement.insertionPositionInRow, 0);
@@ -144,10 +145,7 @@ void main() {
       final result = await prepareSfxOnBoard(
         soundId: 7,
         padsOnBoard: [
-          (
-            pad: _pad(id: 55, sounds: [_sound(7), _sound(8)]),
-            isDraft: false,
-          ),
+          (pad: _pad(id: 55, sounds: [_sound(7), _sound(8)]), isDraft: false),
         ],
         createPad: (placement) async {
           captured = placement;
@@ -183,36 +181,62 @@ void main() {
       expect(result.highlightPadId, 200);
     });
 
-    test('nouveau pad en fin de dernière ligne sur plateau multi-lignes', () async {
-      LastRowPadPlacement? captured;
-      await prepareSfxOnBoard(
-        soundId: 9,
-        padsOnBoard: [
-          (pad: _pad(id: 1, rowIndex: 0, sortOrder: 0, sounds: [_sound(1)]), isDraft: false),
-          (pad: _pad(id: 2, rowIndex: 1, sortOrder: 1, sounds: [_sound(2)]), isDraft: false),
-        ],
-        createPad: (placement) async {
-          captured = placement;
-          return 300;
-        },
-        reloadPads: () async => [
-          (pad: _pad(id: 1, rowIndex: 0, sortOrder: 0, sounds: [_sound(1)]), isDraft: false),
-          (pad: _pad(id: 2, rowIndex: 1, sortOrder: 1, sounds: [_sound(2)]), isDraft: false),
-          (pad: _pad(id: 300, rowIndex: 1, sortOrder: 2, sounds: [_sound(9)]), isDraft: false),
-        ],
-      );
+    test(
+      'nouveau pad en fin de dernière ligne sur plateau multi-lignes',
+      () async {
+        LastRowPadPlacement? captured;
+        await prepareSfxOnBoard(
+          soundId: 9,
+          padsOnBoard: [
+            (
+              pad: _pad(id: 1, rowIndex: 0, sortOrder: 0, sounds: [_sound(1)]),
+              isDraft: false,
+            ),
+            (
+              pad: _pad(id: 2, rowIndex: 1, sortOrder: 1, sounds: [_sound(2)]),
+              isDraft: false,
+            ),
+          ],
+          createPad: (placement) async {
+            captured = placement;
+            return 300;
+          },
+          reloadPads: () async => [
+            (
+              pad: _pad(id: 1, rowIndex: 0, sortOrder: 0, sounds: [_sound(1)]),
+              isDraft: false,
+            ),
+            (
+              pad: _pad(id: 2, rowIndex: 1, sortOrder: 1, sounds: [_sound(2)]),
+              isDraft: false,
+            ),
+            (
+              pad: _pad(
+                id: 300,
+                rowIndex: 1,
+                sortOrder: 2,
+                sounds: [_sound(9)],
+              ),
+              isDraft: false,
+            ),
+          ],
+        );
 
-      expect(captured?.rowIndex, 1);
-      expect(captured?.insertionPositionInRow, 1);
-      expect(captured?.globalSortOrder, 2);
-    });
+        expect(captured?.rowIndex, 1);
+        expect(captured?.insertionPositionInRow, 1);
+        expect(captured?.globalSortOrder, 2);
+      },
+    );
 
     test('forceNewRow → placement transmis au createPad', () async {
       LastRowPadPlacement? captured;
       await prepareSfxOnBoard(
         soundId: 9,
         padsOnBoard: [
-          (pad: _pad(id: 1, rowIndex: 0, sortOrder: 0, sounds: [_sound(1)]), isDraft: false),
+          (
+            pad: _pad(id: 1, rowIndex: 0, sortOrder: 0, sounds: [_sound(1)]),
+            isDraft: false,
+          ),
         ],
         forceNewRow: true,
         createPad: (placement) async {
@@ -220,8 +244,14 @@ void main() {
           return 300;
         },
         reloadPads: () async => [
-          (pad: _pad(id: 1, rowIndex: 0, sortOrder: 0, sounds: [_sound(1)]), isDraft: false),
-          (pad: _pad(id: 300, rowIndex: 1, sortOrder: 1, sounds: [_sound(9)]), isDraft: false),
+          (
+            pad: _pad(id: 1, rowIndex: 0, sortOrder: 0, sounds: [_sound(1)]),
+            isDraft: false,
+          ),
+          (
+            pad: _pad(id: 300, rowIndex: 1, sortOrder: 1, sounds: [_sound(9)]),
+            isDraft: false,
+          ),
         ],
       );
 

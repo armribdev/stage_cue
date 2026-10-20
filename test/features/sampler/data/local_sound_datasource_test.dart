@@ -24,70 +24,77 @@ void main() {
   });
 
   Future<int> insertLibrary({String name = 'Lib', String root = '/cache'}) =>
-      database.into(database.libraries).insert(
+      database
+          .into(database.libraries)
+          .insert(
             db.LibrariesCompanion.insert(name: name, localRootPath: root),
           );
 
-  Future<List<db.Sound>> soundsOf(int libraryId) =>
-      (database.select(database.sounds)
-            ..where((s) => s.libraryId.equals(libraryId)))
-          .get();
+  Future<List<db.Sound>> soundsOf(int libraryId) => (database.select(
+    database.sounds,
+  )..where((s) => s.libraryId.equals(libraryId))).get();
 
-  test('un fichier renommé/déplacé sur Drive (même ID) ne crée pas de doublon',
-      () async {
-    final libraryId = await insertLibrary();
+  test(
+    'un fichier renommé/déplacé sur Drive (même ID) ne crée pas de doublon',
+    () async {
+      final libraryId = await insertLibrary();
 
-    final created1 = await dataSource.syncLibrarySoundFromDriveIndex(
-      libraryId: libraryId,
-      relativePath: 'Portes/knock.mp3',
-      localPath: '/cache/Portes/knock.mp3',
-      driveFileId: 'F1',
-    );
-    expect(created1.created, isTrue);
+      final created1 = await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'Portes/knock.mp3',
+        localPath: '/cache/Portes/knock.mp3',
+        driveFileId: 'F1',
+      );
+      expect(created1.created, isTrue);
 
-    // Déplacement + renommage côté Drive, même ID de fichier.
-    final created2 = await dataSource.syncLibrarySoundFromDriveIndex(
-      libraryId: libraryId,
-      relativePath: 'SFX/knock-2.mp3',
-      localPath: '/cache/SFX/knock-2.mp3',
-      driveFileId: 'F1',
-    );
-    expect(created2.created, isFalse);
+      // Déplacement + renommage côté Drive, même ID de fichier.
+      final created2 = await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'SFX/knock-2.mp3',
+        localPath: '/cache/SFX/knock-2.mp3',
+        driveFileId: 'F1',
+      );
+      expect(created2.created, isFalse);
 
-    final sounds = await soundsOf(libraryId);
-    expect(sounds, hasLength(1));
-    expect(sounds.first.relativePath, 'SFX/knock-2.mp3');
-    expect(sounds.first.filePath, '/cache/SFX/knock-2.mp3');
-    expect(sounds.first.driveFileId, 'F1');
-  });
+      final sounds = await soundsOf(libraryId);
+      expect(sounds, hasLength(1));
+      expect(sounds.first.relativePath, 'SFX/knock-2.mp3');
+      expect(sounds.first.filePath, '/cache/SFX/knock-2.mp3');
+      expect(sounds.first.driveFileId, 'F1');
+    },
+  );
 
-  test('un son legacy (sans driveFileId) adopte l\'identité forte au rescan',
-      () async {
-    final libraryId = await insertLibrary();
+  test(
+    'un son legacy (sans driveFileId) adopte l\'identité forte au rescan',
+    () async {
+      final libraryId = await insertLibrary();
 
-    // Son indexé avant l'introduction de l'identité forte.
-    await database.into(database.sounds).insert(
-          db.SoundsCompanion.insert(
-            title: 'knock',
-            displayName: 'knock',
-            filePath: '/cache/knock.mp3',
-            libraryId: Value(libraryId),
-            relativePath: const Value('knock.mp3'),
-          ),
-        );
+      // Son indexé avant l'introduction de l'identité forte.
+      await database
+          .into(database.sounds)
+          .insert(
+            db.SoundsCompanion.insert(
+              title: 'knock',
+              displayName: 'knock',
+              filePath: '/cache/knock.mp3',
+              libraryId: Value(libraryId),
+              relativePath: const Value('knock.mp3'),
+            ),
+          );
 
-    final created = await dataSource.syncLibrarySoundFromDriveIndex(
-      libraryId: libraryId,
-      relativePath: 'knock.mp3',
-      localPath: '/cache/knock.mp3',
-      driveFileId: 'F1',
-    );
-    expect(created.created, isFalse);
+      final created = await dataSource.syncLibrarySoundFromDriveIndex(
+        libraryId: libraryId,
+        relativePath: 'knock.mp3',
+        localPath: '/cache/knock.mp3',
+        driveFileId: 'F1',
+      );
+      expect(created.created, isFalse);
 
-    final sounds = await soundsOf(libraryId);
-    expect(sounds, hasLength(1));
-    expect(sounds.first.driveFileId, 'F1');
-  });
+      final sounds = await soundsOf(libraryId);
+      expect(sounds, hasLength(1));
+      expect(sounds.first.driveFileId, 'F1');
+    },
+  );
 
   test('deux fichiers Drive distincts donnent deux sons', () async {
     final libraryId = await insertLibrary();
@@ -110,38 +117,39 @@ void main() {
 
   group('identité globale (dossiers imbriqués liés séparément)', () {
     test(
-        'le même fichier Drive lié via deux bibliothèques ne crée pas de doublon',
-        () async {
-      final parentLib = await insertLibrary(name: 'Parent', root: '/parent');
-      final childLib = await insertLibrary(name: 'Child', root: '/child');
+      'le même fichier Drive lié via deux bibliothèques ne crée pas de doublon',
+      () async {
+        final parentLib = await insertLibrary(name: 'Parent', root: '/parent');
+        final childLib = await insertLibrary(name: 'Child', root: '/child');
 
-      // La bibliothèque Parent indexe le fichier (vu sous Child/knock.mp3).
-      final createdInParent = await dataSource.syncLibrarySoundFromDriveIndex(
-        libraryId: parentLib,
-        relativePath: 'Child/knock.mp3',
-        localPath: '/parent/Child/knock.mp3',
-        driveFileId: 'F1',
-      );
-      expect(createdInParent.created, isTrue);
+        // La bibliothèque Parent indexe le fichier (vu sous Child/knock.mp3).
+        final createdInParent = await dataSource.syncLibrarySoundFromDriveIndex(
+          libraryId: parentLib,
+          relativePath: 'Child/knock.mp3',
+          localPath: '/parent/Child/knock.mp3',
+          driveFileId: 'F1',
+        );
+        expect(createdInParent.created, isTrue);
 
-      // La bibliothèque Child (racine = le sous-dossier) indexe le MÊME fichier
-      // Drive, vu à sa racine (knock.mp3). Aucun doublon ne doit être créé.
-      final createdInChild = await dataSource.syncLibrarySoundFromDriveIndex(
-        libraryId: childLib,
-        relativePath: 'knock.mp3',
-        localPath: '/child/knock.mp3',
-        driveFileId: 'F1',
-      );
-      expect(createdInChild.created, isFalse);
+        // La bibliothèque Child (racine = le sous-dossier) indexe le MÊME fichier
+        // Drive, vu à sa racine (knock.mp3). Aucun doublon ne doit être créé.
+        final createdInChild = await dataSource.syncLibrarySoundFromDriveIndex(
+          libraryId: childLib,
+          relativePath: 'knock.mp3',
+          localPath: '/child/knock.mp3',
+          driveFileId: 'F1',
+        );
+        expect(createdInChild.created, isFalse);
 
-      final all = await database.select(database.sounds).get();
-      expect(all, hasLength(1), reason: 'un fichier physique = une ligne');
-      // Le son reste dans le cadre de chemins de son propriétaire (Parent) —
-      // il n'est pas réécrit vers la racine de Child.
-      expect(all.first.libraryId, parentLib);
-      expect(all.first.relativePath, 'Child/knock.mp3');
-      expect(all.first.filePath, '/parent/Child/knock.mp3');
-    });
+        final all = await database.select(database.sounds).get();
+        expect(all, hasLength(1), reason: 'un fichier physique = une ligne');
+        // Le son reste dans le cadre de chemins de son propriétaire (Parent) —
+        // il n'est pas réécrit vers la racine de Child.
+        expect(all.first.libraryId, parentLib);
+        expect(all.first.relativePath, 'Child/knock.mp3');
+        expect(all.first.filePath, '/parent/Child/knock.mp3');
+      },
+    );
 
     test('driveFileId est unique en base (index global)', () async {
       final libraryId = await insertLibrary();
@@ -154,7 +162,9 @@ void main() {
 
       // Tentative d'insertion directe d'un second son au même driveFileId.
       expect(
-        () => database.into(database.sounds).insert(
+        () => database
+            .into(database.sounds)
+            .insert(
               db.SoundsCompanion.insert(
                 title: 'dup',
                 displayName: 'dup',
@@ -168,159 +178,178 @@ void main() {
       );
     });
 
-    test('vue partagée : la bibliothèque invitée voit les sons du dossier partagé',
-        () async {
-      final libraryDataSource = LocalLibraryDataSource(database);
-      final parentLib = await insertLibrary(name: 'Parent', root: '/parent');
-      final childLib = await insertLibrary(name: 'Child', root: '/child');
+    test(
+      'vue partagée : la bibliothèque invitée voit les sons du dossier partagé',
+      () async {
+        final libraryDataSource = LocalLibraryDataSource(database);
+        final parentLib = await insertLibrary(name: 'Parent', root: '/parent');
+        final childLib = await insertLibrary(name: 'Child', root: '/child');
 
-      // Sous-dossier partagé : un nœud global unique, possédé par Parent (home).
-      final sharedFolder = await libraryDataSource.ensureFolder(
-        libraryId: parentLib,
-        driveFolderId: 'FOLDER_SUB',
-        relativePath: 'sub',
-      );
-      await dataSource.syncLibrarySoundFromDriveIndex(
-        libraryId: parentLib,
-        relativePath: 'sub/knock.mp3',
-        localPath: '/parent/sub/knock.mp3',
-        driveFileId: 'F1',
-        folderId: sharedFolder,
-      );
+        // Sous-dossier partagé : un nœud global unique, possédé par Parent (home).
+        final sharedFolder = await libraryDataSource.ensureFolder(
+          libraryId: parentLib,
+          driveFolderId: 'FOLDER_SUB',
+          relativePath: 'sub',
+        );
+        await dataSource.syncLibrarySoundFromDriveIndex(
+          libraryId: parentLib,
+          relativePath: 'sub/knock.mp3',
+          localPath: '/parent/sub/knock.mp3',
+          driveFileId: 'F1',
+          folderId: sharedFolder,
+        );
 
-      // L'indexation de chaque bibliothèque atteignant ce dossier l'y rattache.
-      await libraryDataSource.ensureMembership(
-        libraryId: parentLib,
-        folderId: sharedFolder,
-      );
-      await libraryDataSource.ensureMembership(
-        libraryId: childLib,
-        folderId: sharedFolder,
-      );
+        // L'indexation de chaque bibliothèque atteignant ce dossier l'y rattache.
+        await libraryDataSource.ensureMembership(
+          libraryId: parentLib,
+          folderId: sharedFolder,
+        );
+        await libraryDataSource.ensureMembership(
+          libraryId: childLib,
+          folderId: sharedFolder,
+        );
 
-      final ownedByParent = await soundsOf(parentLib);
-      final visibleToChild =
-          await dataSource.getSoundIdsVisibleToLibrary(childLib);
-      expect(
-        visibleToChild,
-        {ownedByParent.single.id},
-        reason: 'la biblio invitée voit le son partagé (sans doublon)',
-      );
-      expect(
-        await database.select(database.sounds).get(),
-        hasLength(1),
-        reason: 'un fichier physique = une ligne, même partagé',
-      );
-    });
+        final ownedByParent = await soundsOf(parentLib);
+        final visibleToChild = await dataSource.getSoundIdsVisibleToLibrary(
+          childLib,
+        );
+        expect(
+          visibleToChild,
+          {ownedByParent.single.id},
+          reason: 'la biblio invitée voit le son partagé (sans doublon)',
+        );
+        expect(
+          await database.select(database.sounds).get(),
+          hasLength(1),
+          reason: 'un fichier physique = une ligne, même partagé',
+        );
+      },
+    );
 
-    test('ensureFolder partage un nœud globalement entre bibliothèques',
-        () async {
-      final libraryDataSource = LocalLibraryDataSource(database);
-      final parentLib = await insertLibrary(name: 'Parent', root: '/parent');
-      final childLib = await insertLibrary(name: 'Child', root: '/child');
+    test(
+      'ensureFolder partage un nœud globalement entre bibliothèques',
+      () async {
+        final libraryDataSource = LocalLibraryDataSource(database);
+        final parentLib = await insertLibrary(name: 'Parent', root: '/parent');
+        final childLib = await insertLibrary(name: 'Child', root: '/child');
 
-      final fromParent = await libraryDataSource.ensureFolder(
-        libraryId: parentLib,
-        driveFolderId: 'FOLDER_YY',
-        relativePath: 'yy',
-      );
-      final fromChild = await libraryDataSource.ensureFolder(
-        libraryId: childLib,
-        driveFolderId: 'FOLDER_YY',
-        relativePath: '',
-      );
-      expect(fromChild, fromParent, reason: 'un seul nœud par dossier Drive');
+        final fromParent = await libraryDataSource.ensureFolder(
+          libraryId: parentLib,
+          driveFolderId: 'FOLDER_YY',
+          relativePath: 'yy',
+        );
+        final fromChild = await libraryDataSource.ensureFolder(
+          libraryId: childLib,
+          driveFolderId: 'FOLDER_YY',
+          relativePath: '',
+        );
+        expect(fromChild, fromParent, reason: 'un seul nœud par dossier Drive');
 
-      final nodes = await database.select(database.libraryFolders).get();
-      expect(nodes, hasLength(1));
-      // Le relativePath du propriétaire (Parent) n'est pas écrasé par Child.
-      expect(nodes.first.libraryId, parentLib);
-      expect(nodes.first.relativePath, 'yy');
-    });
+        final nodes = await database.select(database.libraryFolders).get();
+        expect(nodes, hasLength(1));
+        // Le relativePath du propriétaire (Parent) n'est pas écrasé par Child.
+        expect(nodes.first.libraryId, parentLib);
+        expect(nodes.first.relativePath, 'yy');
+      },
+    );
   });
 
   group('modèle par-dossier (LibraryFolders)', () {
-    test('ensureFolder partage un nœud par (libraryId, driveFolderId)',
-        () async {
-      final libraryDataSource = LocalLibraryDataSource(database);
-      final libraryId = await insertLibrary();
+    test(
+      'ensureFolder partage un nœud par (libraryId, driveFolderId)',
+      () async {
+        final libraryDataSource = LocalLibraryDataSource(database);
+        final libraryId = await insertLibrary();
 
-      final first = await libraryDataSource.ensureFolder(
-        libraryId: libraryId,
-        driveFolderId: 'FOLDER_YY',
-        relativePath: 'yy',
-      );
-      // Deuxième lien (ex : bibliothèque imbriquée) sur le même dossier Drive.
-      final second = await libraryDataSource.ensureFolder(
-        libraryId: libraryId,
-        driveFolderId: 'FOLDER_YY',
-        relativePath: 'yy',
-      );
-      expect(second, first, reason: 'un seul nœud pour le même dossier Drive');
+        final first = await libraryDataSource.ensureFolder(
+          libraryId: libraryId,
+          driveFolderId: 'FOLDER_YY',
+          relativePath: 'yy',
+        );
+        // Deuxième lien (ex : bibliothèque imbriquée) sur le même dossier Drive.
+        final second = await libraryDataSource.ensureFolder(
+          libraryId: libraryId,
+          driveFolderId: 'FOLDER_YY',
+          relativePath: 'yy',
+        );
+        expect(
+          second,
+          first,
+          reason: 'un seul nœud pour le même dossier Drive',
+        );
 
-      final nodes = await database.select(database.libraryFolders).get();
-      expect(nodes, hasLength(1));
-    });
+        final nodes = await database.select(database.libraryFolders).get();
+        expect(nodes, hasLength(1));
+      },
+    );
 
-    test('ensureFolder met à jour relativePath si le dossier est déplacé',
-        () async {
-      final libraryDataSource = LocalLibraryDataSource(database);
-      final libraryId = await insertLibrary();
+    test(
+      'ensureFolder met à jour relativePath si le dossier est déplacé',
+      () async {
+        final libraryDataSource = LocalLibraryDataSource(database);
+        final libraryId = await insertLibrary();
 
-      final id = await libraryDataSource.ensureFolder(
-        libraryId: libraryId,
-        driveFolderId: 'FOLDER_YY',
-        relativePath: 'yy',
-      );
-      await libraryDataSource.ensureFolder(
-        libraryId: libraryId,
-        driveFolderId: 'FOLDER_YY',
-        relativePath: 'sfx/yy',
-      );
+        final id = await libraryDataSource.ensureFolder(
+          libraryId: libraryId,
+          driveFolderId: 'FOLDER_YY',
+          relativePath: 'yy',
+        );
+        await libraryDataSource.ensureFolder(
+          libraryId: libraryId,
+          driveFolderId: 'FOLDER_YY',
+          relativePath: 'sfx/yy',
+        );
 
-      final node = await (database.select(database.libraryFolders)
-            ..where((f) => f.id.equals(id)))
-          .getSingle();
-      expect(node.relativePath, 'sfx/yy');
-    });
+        final node = await (database.select(
+          database.libraryFolders,
+        )..where((f) => f.id.equals(id))).getSingle();
+        expect(node.relativePath, 'sfx/yy');
+      },
+    );
 
-    test('un fichier déplacé vers un autre dossier réassigne son folderId',
-        () async {
-      final libraryDataSource = LocalLibraryDataSource(database);
-      final libraryId = await insertLibrary();
+    test(
+      'un fichier déplacé vers un autre dossier réassigne son folderId',
+      () async {
+        final libraryDataSource = LocalLibraryDataSource(database);
+        final libraryId = await insertLibrary();
 
-      final folderA = await libraryDataSource.ensureFolder(
-        libraryId: libraryId,
-        driveFolderId: 'FOLDER_A',
-        relativePath: 'a',
-      );
-      await dataSource.syncLibrarySoundFromDriveIndex(
-        libraryId: libraryId,
-        relativePath: 'a/knock.mp3',
-        localPath: '/cache/a/knock.mp3',
-        driveFileId: 'F1',
-        folderId: folderA,
-      );
+        final folderA = await libraryDataSource.ensureFolder(
+          libraryId: libraryId,
+          driveFolderId: 'FOLDER_A',
+          relativePath: 'a',
+        );
+        await dataSource.syncLibrarySoundFromDriveIndex(
+          libraryId: libraryId,
+          relativePath: 'a/knock.mp3',
+          localPath: '/cache/a/knock.mp3',
+          driveFileId: 'F1',
+          folderId: folderA,
+        );
 
-      final folderB = await libraryDataSource.ensureFolder(
-        libraryId: libraryId,
-        driveFolderId: 'FOLDER_B',
-        relativePath: 'b',
-      );
-      final created = await dataSource.syncLibrarySoundFromDriveIndex(
-        libraryId: libraryId,
-        relativePath: 'b/knock.mp3',
-        localPath: '/cache/b/knock.mp3',
-        driveFileId: 'F1',
-        folderId: folderB,
-      );
+        final folderB = await libraryDataSource.ensureFolder(
+          libraryId: libraryId,
+          driveFolderId: 'FOLDER_B',
+          relativePath: 'b',
+        );
+        final created = await dataSource.syncLibrarySoundFromDriveIndex(
+          libraryId: libraryId,
+          relativePath: 'b/knock.mp3',
+          localPath: '/cache/b/knock.mp3',
+          driveFileId: 'F1',
+          folderId: folderB,
+        );
 
-      expect(created.created, isFalse, reason: 'même fichier Drive, pas de doublon');
-      final sounds = await soundsOf(libraryId);
-      expect(sounds, hasLength(1));
-      expect(sounds.first.folderId, folderB);
-      expect(sounds.first.relativePath, 'b/knock.mp3');
-    });
+        expect(
+          created.created,
+          isFalse,
+          reason: 'même fichier Drive, pas de doublon',
+        );
+        final sounds = await soundsOf(libraryId);
+        expect(sounds, hasLength(1));
+        expect(sounds.first.folderId, folderB);
+        expect(sounds.first.relativePath, 'b/knock.mp3');
+      },
+    );
   });
 
   group('élagage des sons supprimés directement sur Drive', () {
@@ -345,8 +374,9 @@ void main() {
         keptDriveFileIds: {'F1'},
       );
 
-      expect(pruned, ['b.mp3'],
-          reason: 'retourne le relativePath du son élagué');
+      expect(pruned, [
+        'b.mp3',
+      ], reason: 'retourne le relativePath du son élagué');
       final sounds = await soundsOf(libraryId);
       expect(sounds, hasLength(1));
       expect(sounds.first.driveFileId, 'F1');
@@ -354,7 +384,9 @@ void main() {
 
     test('épargne les sons legacy sans driveFileId', () async {
       final libraryId = await insertLibrary();
-      await database.into(database.sounds).insert(
+      await database
+          .into(database.sounds)
+          .insert(
             db.SoundsCompanion.insert(
               title: 'legacy',
               displayName: 'legacy',
@@ -374,24 +406,26 @@ void main() {
       expect(await soundsOf(libraryId), hasLength(1));
     });
 
-    test('scan vide supprime tous les sons à identité de la bibliothèque',
-        () async {
-      final libraryId = await insertLibrary();
-      await dataSource.syncLibrarySoundFromDriveIndex(
-        libraryId: libraryId,
-        relativePath: 'a.mp3',
-        localPath: '/cache/a.mp3',
-        driveFileId: 'F1',
-      );
+    test(
+      'scan vide supprime tous les sons à identité de la bibliothèque',
+      () async {
+        final libraryId = await insertLibrary();
+        await dataSource.syncLibrarySoundFromDriveIndex(
+          libraryId: libraryId,
+          relativePath: 'a.mp3',
+          localPath: '/cache/a.mp3',
+          driveFileId: 'F1',
+        );
 
-      final pruned = await dataSource.pruneLibrarySoundsAbsentFromDrive(
-        libraryId: libraryId,
-        keptDriveFileIds: const {},
-      );
+        final pruned = await dataSource.pruneLibrarySoundsAbsentFromDrive(
+          libraryId: libraryId,
+          keptDriveFileIds: const {},
+        );
 
-      expect(pruned, ['a.mp3']);
-      expect(await soundsOf(libraryId), isEmpty);
-    });
+        expect(pruned, ['a.mp3']);
+        expect(await soundsOf(libraryId), isEmpty);
+      },
+    );
 
     test('n\'élague pas les sons d\'une autre bibliothèque', () async {
       final libA = await insertLibrary(name: 'A', root: '/a');
@@ -428,71 +462,83 @@ void main() {
       required int libraryId,
       required String driveFileId,
       String? driveMd5,
-    }) =>
-        database.into(database.sounds).insert(
-              db.SoundsCompanion.insert(
-                title: 'loop',
-                displayName: 'loop',
-                filePath: '/cache/loop.mp3',
-                libraryId: Value(libraryId),
-                relativePath: const Value('loop.mp3'),
-                driveFileId: Value(driveFileId),
-                driveMd5: Value(driveMd5),
-                type: const Value(SoundType.music),
-                contentHash: const Value('hash-a'),
-                waveform: Value(Uint8List.fromList([1, 2, 3])),
-              ),
-            );
+    }) => database
+        .into(database.sounds)
+        .insert(
+          db.SoundsCompanion.insert(
+            title: 'loop',
+            displayName: 'loop',
+            filePath: '/cache/loop.mp3',
+            libraryId: Value(libraryId),
+            relativePath: const Value('loop.mp3'),
+            driveFileId: Value(driveFileId),
+            driveMd5: Value(driveMd5),
+            type: const Value(SoundType.music),
+            contentHash: const Value('hash-a'),
+            waveform: Value(Uint8List.fromList([1, 2, 3])),
+          ),
+        );
 
-    test('marque différente → contentChanged, waveform/hash purgés, type gardé',
-        () async {
-      final libraryId = await insertLibrary();
-      await insertMatureDriveSound(
-        libraryId: libraryId,
-        driveFileId: 'F1',
-        driveMd5: 'md5-a',
-      );
+    test(
+      'marque différente → contentChanged, waveform/hash purgés, type gardé',
+      () async {
+        final libraryId = await insertLibrary();
+        await insertMatureDriveSound(
+          libraryId: libraryId,
+          driveFileId: 'F1',
+          driveMd5: 'md5-a',
+        );
 
-      final result = await dataSource.syncLibrarySoundFromDriveIndex(
-        libraryId: libraryId,
-        relativePath: 'loop.mp3',
-        localPath: '/cache/loop.mp3',
-        driveFileId: 'F1',
-        driveMd5: 'md5-b', // contenu écrasé sur Drive
-      );
+        final result = await dataSource.syncLibrarySoundFromDriveIndex(
+          libraryId: libraryId,
+          relativePath: 'loop.mp3',
+          localPath: '/cache/loop.mp3',
+          driveFileId: 'F1',
+          driveMd5: 'md5-b', // contenu écrasé sur Drive
+        );
 
-      expect(result.contentChanged, isTrue);
-      final sound = (await soundsOf(libraryId)).single;
-      expect(sound.driveMd5, 'md5-b', reason: 'marque actualisée');
-      expect(sound.waveform, isNull, reason: 'dérivé de contenu invalidé');
-      expect(sound.contentHash, isNull, reason: 'dérivé de contenu invalidé');
-      expect(sound.type, SoundType.music,
-          reason: 'le type ne change jamais ici (cf. audio.md)');
-    });
+        expect(result.contentChanged, isTrue);
+        final sound = (await soundsOf(libraryId)).single;
+        expect(sound.driveMd5, 'md5-b', reason: 'marque actualisée');
+        expect(sound.waveform, isNull, reason: 'dérivé de contenu invalidé');
+        expect(sound.contentHash, isNull, reason: 'dérivé de contenu invalidé');
+        expect(
+          sound.type,
+          SoundType.music,
+          reason: 'le type ne change jamais ici (cf. audio.md)',
+        );
+      },
+    );
 
-    test('backfill (marque stockée nulle) n\'est pas un changement de contenu',
-        () async {
-      final libraryId = await insertLibrary();
-      await insertMatureDriveSound(
-        libraryId: libraryId,
-        driveFileId: 'F1',
-        driveMd5: null, // son indexé avant l'introduction de la marque
-      );
+    test(
+      'backfill (marque stockée nulle) n\'est pas un changement de contenu',
+      () async {
+        final libraryId = await insertLibrary();
+        await insertMatureDriveSound(
+          libraryId: libraryId,
+          driveFileId: 'F1',
+          driveMd5: null, // son indexé avant l'introduction de la marque
+        );
 
-      final result = await dataSource.syncLibrarySoundFromDriveIndex(
-        libraryId: libraryId,
-        relativePath: 'loop.mp3',
-        localPath: '/cache/loop.mp3',
-        driveFileId: 'F1',
-        driveMd5: 'md5-a',
-      );
+        final result = await dataSource.syncLibrarySoundFromDriveIndex(
+          libraryId: libraryId,
+          relativePath: 'loop.mp3',
+          localPath: '/cache/loop.mp3',
+          driveFileId: 'F1',
+          driveMd5: 'md5-a',
+        );
 
-      expect(result.contentChanged, isFalse);
-      final sound = (await soundsOf(libraryId)).single;
-      expect(sound.driveMd5, 'md5-a', reason: 'marque backfillée');
-      expect(sound.waveform, isNotNull, reason: 'aucune invalidation au backfill');
-      expect(sound.contentHash, 'hash-a');
-    });
+        expect(result.contentChanged, isFalse);
+        final sound = (await soundsOf(libraryId)).single;
+        expect(sound.driveMd5, 'md5-a', reason: 'marque backfillée');
+        expect(
+          sound.waveform,
+          isNotNull,
+          reason: 'aucune invalidation au backfill',
+        );
+        expect(sound.contentHash, 'hash-a');
+      },
+    );
 
     test('marque identique → aucun changement, dérivés conservés', () async {
       final libraryId = await insertLibrary();

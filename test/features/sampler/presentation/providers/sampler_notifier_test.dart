@@ -14,40 +14,32 @@ class MockSoundRepository extends Mock implements SoundRepository {}
 
 class MockLoadSoundsUseCase extends Mock implements LoadSoundsUseCase {}
 
-SoundBoard _board(int id, {String name = 'Scène'}) => SoundBoard(
-      id: id,
-      name: name,
-      createdAt: DateTime(2026),
-    );
+SoundBoard _board(int id, {String name = 'Scène'}) =>
+    SoundBoard(id: id, name: name, createdAt: DateTime(2026));
 
-Pad _pad(int id, {int boardId = 1}) => Pad(
-      id: id,
-      boardId: boardId,
-      sortOrder: 0,
-      createdAt: DateTime(2026),
-    );
+Pad _pad(int id, {int boardId = 1}) =>
+    Pad(id: id, boardId: boardId, sortOrder: 0, createdAt: DateTime(2026));
 
 Sound _sound(int id) => Sound(
-      id: id,
-      title: 'Son $id',
-      filePath: '/tmp/son_$id.mp3',
-      createdAt: DateTime(2026),
-    );
+  id: id,
+  title: 'Son $id',
+  filePath: '/tmp/son_$id.mp3',
+  createdAt: DateTime(2026),
+);
 
 Pad _multipad(
   int id,
   List<Sound> sounds, {
   int boardId = 1,
   PadPlayMode playMode = PadPlayMode.random,
-}) =>
-    Pad(
-      id: id,
-      boardId: boardId,
-      sortOrder: 0,
-      createdAt: DateTime(2026),
-      sounds: sounds,
-      playMode: playMode,
-    );
+}) => Pad(
+  id: id,
+  boardId: boardId,
+  sortOrder: 0,
+  createdAt: DateTime(2026),
+  sounds: sounds,
+  playMode: playMode,
+);
 
 /// Construit un notifier prêt à l'emploi, avec `markSoundPlayed` stubbé (le
 /// mock lèverait sinon une `MissingStubError` dès le premier `_markPlayed`).
@@ -108,17 +100,25 @@ void main() {
         boardsCallCount++;
         return boardsCallCount == 1 ? [] : [createdBoard];
       });
-      when(() => repo.createSoundBoard(any(),
-              color: any(named: 'color'), libraryId: any(named: 'libraryId')))
-          .thenAnswer((_) async => 1);
+      when(
+        () => repo.createSoundBoard(
+          any(),
+          color: any(named: 'color'),
+          libraryId: any(named: 'libraryId'),
+        ),
+      ).thenAnswer((_) async => 1);
       when(() => useCase.call(any())).thenAnswer((_) async => []);
 
       final n = SamplerNotifier(repo, useCase);
       await n.loadBoards();
 
-      verify(() => repo.createSoundBoard(any(),
+      verify(
+        () => repo.createSoundBoard(
+          any(),
           color: any(named: 'color'),
-          libraryId: any(named: 'libraryId'))).called(1);
+          libraryId: any(named: 'libraryId'),
+        ),
+      ).called(1);
     });
 
     test('passe à boardsError en cas d\'exception', () async {
@@ -138,8 +138,7 @@ void main() {
       final repo = MockSoundRepository();
       final useCase = MockLoadSoundsUseCase();
 
-      when(() => repo.getSoundBoards())
-          .thenAnswer((_) async => [_board(1)]);
+      when(() => repo.getSoundBoards()).thenAnswer((_) async => [_board(1)]);
       when(() => useCase.call(any())).thenAnswer((_) async => []);
 
       final n = SamplerNotifier(repo, useCase);
@@ -340,8 +339,7 @@ void main() {
       expect(n.sessionPlayCountFor(10), 0);
     });
 
-    test('la pré-écoute (debugMarkPlayedPreviewOnly) n\'incrémente jamais',
-        () {
+    test('la pré-écoute (debugMarkPlayedPreviewOnly) n\'incrémente jamais', () {
       final n = _notifierForPlayback();
       n.startLiveSession();
 
@@ -376,35 +374,36 @@ void main() {
       // sound 10 (index 0) reste à 0 → doit toujours être choisi.
 
       for (var i = 0; i < 50; i++) {
-        expect(
-          n.debugPickLowestSessionCountIndex(padItem, [0, 1, 2]),
-          0,
-        );
+        expect(n.debugPickLowestSessionCountIndex(padItem, [0, 1, 2]), 0);
       }
     });
 
-    test('égalité totale (session vierge) : tous les indices peuvent sortir',
-        () {
-      final n = _notifierForPlayback();
-      final pad = _multipad(1, [_sound(10), _sound(11), _sound(12)]);
-      final padItem = PadItem(pad: pad);
-      n.startLiveSession();
+    test(
+      'égalité totale (session vierge) : tous les indices peuvent sortir',
+      () {
+        final n = _notifierForPlayback();
+        final pad = _multipad(1, [_sound(10), _sound(11), _sound(12)]);
+        final padItem = PadItem(pad: pad);
+        n.startLiveSession();
 
-      final seen = <int>{};
-      for (var i = 0; i < 300; i++) {
-        seen.add(n.debugPickLowestSessionCountIndex(padItem, [0, 1, 2]));
-      }
+        final seen = <int>{};
+        for (var i = 0; i < 300; i++) {
+          seen.add(n.debugPickLowestSessionCountIndex(padItem, [0, 1, 2]));
+        }
 
-      expect(seen, {0, 1, 2});
-    });
+        expect(seen, {0, 1, 2});
+      },
+    );
 
     test('égalité partielle : seuls les ex-æquo au minimum sortent, tous les '
         'deux', () {
       final n = _notifierForPlayback();
-      final pad = _multipad(
-        1,
-        [_sound(10), _sound(11), _sound(12), _sound(13)],
-      );
+      final pad = _multipad(1, [
+        _sound(10),
+        _sound(11),
+        _sound(12),
+        _sound(13),
+      ]);
       final padItem = PadItem(pad: pad);
 
       n.startLiveSession();
@@ -418,39 +417,37 @@ void main() {
 
       final seen = <int>{};
       for (var i = 0; i < 200; i++) {
-        final chosen = n.debugPickLowestSessionCountIndex(padItem, [0, 1, 2, 3]);
+        final chosen = n.debugPickLowestSessionCountIndex(padItem, [
+          0,
+          1,
+          2,
+          3,
+        ]);
         expect(chosen, anyOf(0, 1));
         seen.add(chosen);
       }
       expect(seen, {0, 1});
     });
 
-    test(
-      'agnostique au playMode du pad (un pad séquentiel obtient le même '
-      'résultat qu\'un pad aléatoire à compteurs égaux) : _pickSoundIndex '
-      'appelle ce helper AVANT le switch sur playMode, donc son comportement '
-      'ne doit dépendre que des compteurs, jamais de playMode — cf. décision '
-      '0014.',
-      () {
-        final n = _notifierForPlayback();
-        final pad = _multipad(
-          1,
-          [_sound(10), _sound(11)],
-          playMode: PadPlayMode.sequential,
-        );
-        final padItem = PadItem(pad: pad);
+    test('agnostique au playMode du pad (un pad séquentiel obtient le même '
+        'résultat qu\'un pad aléatoire à compteurs égaux) : _pickSoundIndex '
+        'appelle ce helper AVANT le switch sur playMode, donc son comportement '
+        'ne doit dépendre que des compteurs, jamais de playMode — cf. décision '
+        '0014.', () {
+      final n = _notifierForPlayback();
+      final pad = _multipad(1, [
+        _sound(10),
+        _sound(11),
+      ], playMode: PadPlayMode.sequential);
+      final padItem = PadItem(pad: pad);
 
-        n.startLiveSession();
-        n.debugMarkPlayedAt(padItem, 0); // sound 10 → count 1
+      n.startLiveSession();
+      n.debugMarkPlayedAt(padItem, 0); // sound 10 → count 1
 
-        for (var i = 0; i < 20; i++) {
-          expect(
-            n.debugPickLowestSessionCountIndex(padItem, [0, 1]),
-            1,
-          );
-        }
-      },
-    );
+      for (var i = 0; i < 20; i++) {
+        expect(n.debugPickLowestSessionCountIndex(padItem, [0, 1]), 1);
+      }
+    });
   });
 
   // ── _pickSoundIndex (dispatch live / random / sequential) ────────────────
@@ -468,31 +465,35 @@ void main() {
       return padItem;
     }
 
-    test('session live : ignore playMode et choisit le compteur le plus bas',
-        () {
-      final n = _notifierForPlayback()
-        ..debugTreatReadyAvailabilityAsEligible = true;
-      final padItem = readyMultipad(
-        [_sound(10), _sound(11), _sound(12)],
-        playMode: PadPlayMode.sequential,
-      );
+    test(
+      'session live : ignore playMode et choisit le compteur le plus bas',
+      () {
+        final n = _notifierForPlayback()
+          ..debugTreatReadyAvailabilityAsEligible = true;
+        final padItem = readyMultipad([
+          _sound(10),
+          _sound(11),
+          _sound(12),
+        ], playMode: PadPlayMode.sequential);
 
-      n.startLiveSession();
-      n.debugMarkPlayedAt(padItem, 0);
-      n.debugMarkPlayedAt(padItem, 2);
+        n.startLiveSession();
+        n.debugMarkPlayedAt(padItem, 0);
+        n.debugMarkPlayedAt(padItem, 2);
 
-      for (var i = 0; i < 40; i++) {
-        expect(n.debugPickSoundIndex(padItem), 1);
-      }
-    });
+        for (var i = 0; i < 40; i++) {
+          expect(n.debugPickSoundIndex(padItem), 1);
+        }
+      },
+    );
 
     test('hors live + sequential : avance sur les slots prêts', () {
       final n = _notifierForPlayback()
         ..debugTreatReadyAvailabilityAsEligible = true;
-      final padItem = readyMultipad(
-        [_sound(10), _sound(11), _sound(12)],
-        playMode: PadPlayMode.sequential,
-      );
+      final padItem = readyMultipad([
+        _sound(10),
+        _sound(11),
+        _sound(12),
+      ], playMode: PadPlayMode.sequential);
 
       expect(n.debugPickSoundIndex(padItem), 0);
       expect(n.debugPickSoundIndex(padItem), 1);
@@ -504,9 +505,7 @@ void main() {
         'parcouru', () {
       final n = _notifierForPlayback()
         ..debugTreatReadyAvailabilityAsEligible = true;
-      final padItem = readyMultipad(
-        [_sound(10), _sound(11), _sound(12)],
-      );
+      final padItem = readyMultipad([_sound(10), _sound(11), _sound(12)]);
 
       final firstRound = <int>{
         n.debugPickSoundIndex(padItem),
