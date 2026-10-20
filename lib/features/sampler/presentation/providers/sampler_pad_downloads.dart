@@ -35,7 +35,9 @@ extension SamplerPadDownloads on SamplerNotifier {
     if (index < 0 || index >= resolved.slots.length) return false;
     final slot = resolved.slots[index];
     if (slot.isReady) return true;
-    if (slot.availability == PadSoundAvailability.unsupportedFormat) return false;
+    if (slot.availability == PadSoundAvailability.unsupportedFormat) {
+      return false;
+    }
     if (slot.availability == PadSoundAvailability.missingFile) {
       if (!_isRetryableMissingLibrarySound(resolved.pad.sounds[index])) {
         return false;
@@ -62,7 +64,9 @@ extension SamplerPadDownloads on SamplerNotifier {
 
     final slot = padItem.slots[index];
     if (slot.isReady) return true;
-    if (slot.availability == PadSoundAvailability.unsupportedFormat) return false;
+    if (slot.availability == PadSoundAvailability.unsupportedFormat) {
+      return false;
+    }
     if (slot.availability == PadSoundAvailability.missingFile &&
         !_isRetryableMissingLibrarySound(padItem.pad.sounds[index])) {
       return false;
