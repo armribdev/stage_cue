@@ -40,6 +40,11 @@ flutter test
 dart analyze
 ```
 
+**Formatage** (avant de commit, vérifié et bloquant en CI) :
+```sh
+dart format .
+```
+
 **Débuguer l'indexation / le cache / la synchro Drive :**
 
 Quatre canaux `developer.log`, filtrables dans la vue Logging de DevTools :
