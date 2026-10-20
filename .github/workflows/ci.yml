@@ -26,6 +26,11 @@ jobs:
 
       - run: flutter pub get
 
+      # Formatage exigé : corriger en local avec `dart format .` avant de commit.
+      # Placé avant le stub et le codegen pour ne vérifier que les fichiers versionnés.
+      - name: Vérifier le formatage
+        run: dart format --output=none --set-exit-if-changed .
+
       # google_oauth_secrets.dart est gitignoré (secrets locaux, absents du CI).
       # Stub vide pour que l'analyse/compilation passe.
       - name: Stub OAuth secrets
@@ -35,13 +40,6 @@ jobs:
       # Codegen Drift requis avant analyse/tests (les *.g.dart ne sont pas versionnés).
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
-
-      # Informatif seulement : le code n'est pas (encore) passé à `dart format`.
-      # On signale les écarts sans bloquer le CI. Pour formater tout le projet
-      # d'un coup, lancer en local : `dart format .`
-      - name: Vérifier le formatage (non bloquant)
-        run: dart format --output=none --set-exit-if-changed .
-        continue-on-error: true
 
       # Échoue sur les erreurs, pas sur les warnings (du dead-code WIP existe).
       - name: Analyse statique
