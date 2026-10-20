@@ -73,12 +73,37 @@ class AppUpdateChecker {
 
     final assetName = installerAsset['name'] as String;
     final downloadUrl = installerAsset['browser_download_url'] as String;
+
+    // Sans empreinte exploitable, on ne propose pas la mise à jour : l'app
+    // lancerait sinon en silencieux un exécutable qu'elle ne peut pas vérifier
+    // (décision 0026).
+    final sha256 = parseAssetDigest(installerAsset['digest']);
+    if (sha256 == null) {
+      UpdateLog.warn(
+        'Version $remoteVersion disponible mais $assetName n\'a pas de '
+        'digest SHA-256 exploitable — mise à jour non proposée',
+      );
+      return null;
+    }
+
     UpdateLog.newVersionFound(version: remoteVersion, assetName: assetName);
     return AppUpdateInfo(
       version: remoteVersion,
       downloadUrl: downloadUrl,
       assetName: assetName,
+      sha256: sha256,
     );
+  }
+
+  /// Extrait l'empreinte du champ `digest` d'un asset GitHub
+  /// (`sha256:<64 hex>`). `null` si absent, d'un autre algorithme ou mal formé.
+  @visibleForTesting
+  static String? parseAssetDigest(Object? digest) {
+    if (digest is! String) return null;
+    final match = RegExp(
+      r'^sha256:([0-9a-fA-F]{64})$',
+    ).firstMatch(digest.trim());
+    return match?.group(1)?.toLowerCase();
   }
 
   /// Comparateur semver minimal (major.minor.patch) — suffisant pour des tags
