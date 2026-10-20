@@ -11,21 +11,17 @@ class MockSoundRepository extends Mock implements SoundRepository {}
 
 class MockLoadSoundsUseCase extends Mock implements LoadSoundsUseCase {}
 
-Pad _pad(int id) => Pad(
-      id: id,
-      boardId: 1,
-      sortOrder: id,
-      createdAt: DateTime(2026),
-    );
+Pad _pad(int id) =>
+    Pad(id: id, boardId: 1, sortOrder: id, createdAt: DateTime(2026));
 
 Sound _sound(int id, {SoundType type = SoundType.ambiance}) => Sound(
-      id: id,
-      title: 'Son $id',
-      filePath: '/tmp/son_$id.mp3',
-      type: type,
-      volume: 1.0,
-      createdAt: DateTime(2026),
-    );
+  id: id,
+  title: 'Son $id',
+  filePath: '/tmp/son_$id.mp3',
+  type: type,
+  volume: 1.0,
+  createdAt: DateTime(2026),
+);
 
 SamplerNotifier _notifier({Map<int, Sound> soundsById = const {}}) {
   final repo = MockSoundRepository();
@@ -118,9 +114,7 @@ void main() {
     });
 
     test('son musique : refusé, la voie ambiance reste vide', () async {
-      final n = _notifier(
-        soundsById: {1: _sound(1, type: SoundType.music)},
-      );
+      final n = _notifier(soundsById: {1: _sound(1, type: SoundType.music)});
 
       final padItem = await n.playAmbianceBySoundId(1);
 

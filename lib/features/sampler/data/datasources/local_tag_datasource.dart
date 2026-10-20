@@ -14,32 +14,34 @@ class LocalTagDataSource {
   LocalTagDataSource(this._database);
 
   Future<List<domain.TagCategory>> getCategories() async {
-    final rows = await (_database.select(_database.tagCategories)
-          ..orderBy([
-            (c) => OrderingTerm(expression: c.sortOrder),
-            (c) => OrderingTerm(expression: c.name),
-          ]))
-        .get();
+    final rows =
+        await (_database.select(_database.tagCategories)..orderBy([
+              (c) => OrderingTerm(expression: c.sortOrder),
+              (c) => OrderingTerm(expression: c.name),
+            ]))
+            .get();
     return rows.map(TagCategoryModel.toEntity).toList();
   }
 
   Future<List<domain.TagItem>> getTagsByCategory(int categoryId) async {
-    final rows = await (_database.select(_database.tagItems)
-          ..where((t) => t.categoryId.equals(categoryId))
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
-        .get();
+    final rows =
+        await (_database.select(_database.tagItems)
+              ..where((t) => t.categoryId.equals(categoryId))
+              ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+            .get();
     return rows.map(TagItemModel.toEntity).toList();
   }
 
   Future<List<domain.TagItem>> getTagsForSound(int soundId) async {
-    final query = _database.select(_database.tagItems).join([
-      innerJoin(
-        _database.soundTags,
-        _database.soundTags.tagId.equalsExp(_database.tagItems.id),
-      ),
-    ])
-      ..where(_database.soundTags.soundId.equals(soundId))
-      ..orderBy([OrderingTerm(expression: _database.tagItems.name)]);
+    final query =
+        _database.select(_database.tagItems).join([
+            innerJoin(
+              _database.soundTags,
+              _database.soundTags.tagId.equalsExp(_database.tagItems.id),
+            ),
+          ])
+          ..where(_database.soundTags.soundId.equals(soundId))
+          ..orderBy([OrderingTerm(expression: _database.tagItems.name)]);
 
     final rows = await query.get();
     return rows
@@ -60,8 +62,7 @@ class LocalTagDataSource {
         _database.tagItems,
         _database.tagItems.id.equalsExp(_database.soundTags.tagId),
       ),
-    ])
-      ..orderBy([OrderingTerm(expression: _database.tagItems.name)]);
+    ])..orderBy([OrderingTerm(expression: _database.tagItems.name)]);
 
     final rows = await query.get();
     final tagsBySound = <int, List<domain.TagItem>>{};
@@ -75,11 +76,13 @@ class LocalTagDataSource {
 
   Future<void> setTagsForSound(int soundId, List<int> tagIds) async {
     await _database.transaction(() async {
-      await (_database.delete(_database.soundTags)
-            ..where((t) => t.soundId.equals(soundId)))
-          .go();
+      await (_database.delete(
+        _database.soundTags,
+      )..where((t) => t.soundId.equals(soundId))).go();
       for (final tagId in tagIds) {
-        await _database.into(_database.soundTags).insert(
+        await _database
+            .into(_database.soundTags)
+            .insert(
               db.SoundTagsCompanion.insert(
                 soundId: soundId,
                 tagId: tagId,
@@ -109,24 +112,28 @@ class LocalTagDataSource {
     }
 
     final placeholders = List.filled(tagIds.length, '?').join(',');
-    final soundRows = await _database.customSelect(
-      'SELECT DISTINCT sound_id FROM sound_tags WHERE tag_id IN ($placeholders)',
-      variables: [for (final id in tagIds) Variable<int>(id)],
-    ).get();
+    final soundRows = await _database
+        .customSelect(
+          'SELECT DISTINCT sound_id FROM sound_tags WHERE tag_id IN ($placeholders)',
+          variables: [for (final id in tagIds) Variable<int>(id)],
+        )
+        .get();
 
     return soundRows.map((r) => r.read<int>('sound_id')).toSet();
   }
 
   Future<List<int>> _tagIdsMatchingSubstring(String normalized) async {
     final like = '%$normalized%';
-    final rows = await _database.customSelect(
-      '''
+    final rows = await _database
+        .customSelect(
+          '''
         SELECT id FROM tags WHERE normalized_name LIKE ?
         UNION
         SELECT tag_id AS id FROM tag_aliases WHERE normalized_alias LIKE ?
       ''',
-      variables: [Variable<String>(like), Variable<String>(like)],
-    ).get();
+          variables: [Variable<String>(like), Variable<String>(like)],
+        )
+        .get();
     return rows.map((r) => r.read<int>('id')).toList();
   }
 
@@ -157,9 +164,7 @@ class LocalTagDataSource {
     final result = <domain.TagCategoryWithTags>[];
     for (final category in categories) {
       final tags = await getTagsByCategory(category.id);
-      result.add(
-        domain.TagCategoryWithTags(category: category, tags: tags),
-      );
+      result.add(domain.TagCategoryWithTags(category: category, tags: tags));
     }
     return result;
   }

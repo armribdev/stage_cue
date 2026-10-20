@@ -44,14 +44,22 @@ void main() {
       queue.enqueue(key: 'blocker', priority: 0, task: blocker.run);
       await Future<void>.delayed(Duration.zero);
 
-      final fLow = queue.enqueue<String>(key: 'low', priority: 1, task: () async {
-        order.add('low');
-        return 'low';
-      });
-      queue.enqueue<String>(key: 'high', priority: 100, task: () async {
-        order.add('high');
-        return 'high';
-      });
+      final fLow = queue.enqueue<String>(
+        key: 'low',
+        priority: 1,
+        task: () async {
+          order.add('low');
+          return 'low';
+        },
+      );
+      queue.enqueue<String>(
+        key: 'high',
+        priority: 100,
+        task: () async {
+          order.add('high');
+          return 'high';
+        },
+      );
 
       blocker.release();
       await fLow; // 'low' est la dernière à tourner
@@ -59,42 +67,60 @@ void main() {
       expect(order, ['high', 'low']);
     });
 
-    test('déduplique par clé et relève la priorité (tap double un prefetch)',
-        () async {
-      final queue = DownloadQueue(maxConcurrent: 1);
-      final order = <String>[];
-      final blocker = _Gate();
-      queue.enqueue(key: 'blocker', priority: 0, task: blocker.run);
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'déduplique par clé et relève la priorité (tap double un prefetch)',
+      () async {
+        final queue = DownloadQueue(maxConcurrent: 1);
+        final order = <String>[];
+        final blocker = _Gate();
+        queue.enqueue(key: 'blocker', priority: 0, task: blocker.run);
+        await Future<void>.delayed(Duration.zero);
 
-      final fa = queue.enqueue<String>(key: 'a', priority: 1, task: () async {
-        order.add('a');
-        return 'a';
-      });
-      final fb1 = queue.enqueue<String>(key: 'b', priority: 1, task: () async {
-        order.add('b');
-        return 'b';
-      });
-      // Même clé 'b' relevée en priorité haute : passe avant 'a', une seule fois.
-      final fb2 = queue.enqueue<String>(key: 'b', priority: 100, task: () async {
-        order.add('B!');
-        return 'B!';
-      });
+        final fa = queue.enqueue<String>(
+          key: 'a',
+          priority: 1,
+          task: () async {
+            order.add('a');
+            return 'a';
+          },
+        );
+        final fb1 = queue.enqueue<String>(
+          key: 'b',
+          priority: 1,
+          task: () async {
+            order.add('b');
+            return 'b';
+          },
+        );
+        // Même clé 'b' relevée en priorité haute : passe avant 'a', une seule fois.
+        final fb2 = queue.enqueue<String>(
+          key: 'b',
+          priority: 100,
+          task: () async {
+            order.add('B!');
+            return 'B!';
+          },
+        );
 
-      blocker.release();
-      await fa; // 'a' tourne en dernier
+        blocker.release();
+        await fa; // 'a' tourne en dernier
 
-      expect(order, ['b', 'a']); // 'b' exécutée une fois, avant 'a'
-      expect(await fb1, 'b');
-      expect(await fb2, 'b'); // même future que fb1 (dédup) → 'b', pas 'B!'
-    });
+        expect(order, ['b', 'a']); // 'b' exécutée une fois, avant 'a'
+        expect(await fb1, 'b');
+        expect(await fb2, 'b'); // même future que fb1 (dédup) → 'b', pas 'B!'
+      },
+    );
 
     test('partage le même future pour une clé en cours', () async {
       final queue = DownloadQueue(maxConcurrent: 1);
       final gate = _Gate();
       final f1 = queue.enqueue<int>(key: 'x', priority: 0, task: gate.run);
       await Future<void>.delayed(Duration.zero); // démarre
-      final f2 = queue.enqueue<int>(key: 'x', priority: 0, task: () async => 999);
+      final f2 = queue.enqueue<int>(
+        key: 'x',
+        priority: 0,
+        task: () async => 999,
+      );
 
       gate.release(42);
       expect(await f1, 42);
@@ -106,25 +132,28 @@ void main() {
       expect(queue.inFlight('absente'), isNull);
     });
 
-    test('inFlight : suit une tâche en cours jusqu\'à son achèvement', () async {
-      final queue = DownloadQueue();
-      final gate = _Gate();
-      unawaited(queue.enqueue(key: 'pad-1', priority: 0, task: gate.run));
+    test(
+      'inFlight : suit une tâche en cours jusqu\'à son achèvement',
+      () async {
+        final queue = DownloadQueue();
+        final gate = _Gate();
+        unawaited(queue.enqueue(key: 'pad-1', priority: 0, task: gate.run));
 
-      final pending = queue.inFlight('pad-1');
-      expect(pending, isNotNull);
+        final pending = queue.inFlight('pad-1');
+        expect(pending, isNotNull);
 
-      var done = false;
-      unawaited(pending!.then((_) => done = true));
-      await Future<void>.delayed(Duration.zero);
-      expect(done, isFalse);
+        var done = false;
+        unawaited(pending!.then((_) => done = true));
+        await Future<void>.delayed(Duration.zero);
+        expect(done, isFalse);
 
-      gate.release();
-      await Future<void>.delayed(Duration.zero);
-      expect(done, isTrue);
-      // Achevée : la clé est libérée, une portée plus large peut enfiler.
-      expect(queue.inFlight('pad-1'), isNull);
-    });
+        gate.release();
+        await Future<void>.delayed(Duration.zero);
+        expect(done, isTrue);
+        // Achevée : la clé est libérée, une portée plus large peut enfiler.
+        expect(queue.inFlight('pad-1'), isNull);
+      },
+    );
 
     test('inFlight : une tâche annulée libère quand même l\'attente', () async {
       final queue = DownloadQueue(maxConcurrent: 1);
@@ -132,7 +161,8 @@ void main() {
       unawaited(queue.enqueue(key: 'autre', priority: 0, task: blocking.run));
       // Reste EN ATTENTE derrière la précédente, donc annulable.
       unawaited(
-        queue.enqueue(key: 'pad-1', priority: 0, task: () async => 1)
+        queue
+            .enqueue(key: 'pad-1', priority: 0, task: () async => 1)
             .catchError((_) => 0),
       );
 
@@ -150,39 +180,51 @@ void main() {
       blocking.release();
     });
 
-    test('cancelQueued retire les tâches en attente selon (clé, priorité)',
-        () async {
-      final queue = DownloadQueue(maxConcurrent: 1);
-      final ran = <String>[];
-      final blocker = _Gate();
-      queue.enqueue(key: 'blocker', priority: 0, task: blocker.run);
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'cancelQueued retire les tâches en attente selon (clé, priorité)',
+      () async {
+        final queue = DownloadQueue(maxConcurrent: 1);
+        final ran = <String>[];
+        final blocker = _Gate();
+        queue.enqueue(key: 'blocker', priority: 0, task: blocker.run);
+        await Future<void>.delayed(Duration.zero);
 
-      final fLow = queue.enqueue<String>(key: 'low', priority: 10, task: () async {
-        ran.add('low');
-        return 'low';
-      });
-      final fHigh =
-          queue.enqueue<String>(key: 'high', priority: 100, task: () async {
-        ran.add('high');
-        return 'high';
-      });
+        final fLow = queue.enqueue<String>(
+          key: 'low',
+          priority: 10,
+          task: () async {
+            ran.add('low');
+            return 'low';
+          },
+        );
+        final fHigh = queue.enqueue<String>(
+          key: 'high',
+          priority: 100,
+          task: () async {
+            ran.add('high');
+            return 'high';
+          },
+        );
 
-      // Annule le prefetch (priorité basse), garde le tap.
-      queue.cancelQueued((key, priority) => priority <= 10);
-      await expectLater(
-          fLow, throwsA(isA<DownloadCancelledException>()));
+        // Annule le prefetch (priorité basse), garde le tap.
+        queue.cancelQueued((key, priority) => priority <= 10);
+        await expectLater(fLow, throwsA(isA<DownloadCancelledException>()));
 
-      blocker.release();
-      await fHigh;
+        blocker.release();
+        await fHigh;
 
-      expect(ran, ['high']); // 'low' annulée, jamais exécutée
-    });
+        expect(ran, ['high']); // 'low' annulée, jamais exécutée
+      },
+    );
 
     test('cancelQueued ne touche pas une tâche déjà démarrée', () async {
       final queue = DownloadQueue(maxConcurrent: 1);
       final gate = _Gate();
-      final future = queue.enqueue<int>(key: 'running', priority: 0, task: gate.run);
+      final future = queue.enqueue<int>(
+        key: 'running',
+        priority: 0,
+        task: gate.run,
+      );
       await Future<void>.delayed(Duration.zero); // démarrée
 
       queue.cancelQueued((key, priority) => true);
@@ -196,13 +238,18 @@ void main() {
       final blocker = _Gate();
       queue.enqueue(key: 'blocker', priority: 0, task: blocker.run);
       await Future<void>.delayed(Duration.zero);
-      final pendingFuture =
-          queue.enqueue<int>(key: 'pending', priority: 0, task: () async => 1);
+      final pendingFuture = queue.enqueue<int>(
+        key: 'pending',
+        priority: 0,
+        task: () async => 1,
+      );
 
       queue.dispose();
 
       await expectLater(
-          pendingFuture, throwsA(isA<DownloadCancelledException>()));
+        pendingFuture,
+        throwsA(isA<DownloadCancelledException>()),
+      );
     });
   });
 }

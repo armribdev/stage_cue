@@ -7,7 +7,6 @@ part of '../settings_screen.dart';
 /// Indexation d'un dossier surveillé et liaison d'un dossier Drive.
 /// Méthodes de [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsIndexing on _SettingsScreenState {
-
   Future<void> _indexWatchedDirectory(
     String selectedDirectory, {
     SafTreeInfo? safInfo,

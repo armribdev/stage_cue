@@ -7,7 +7,6 @@ part of '../sound_picker_overlay.dart';
 /// Actions par mode (lecture, pad, gestion) et notifications locales.
 /// Méthodes de [_SoundPickerOverlayState] extraites via extension dans le même `part`.
 extension _SoundPickerActions on _SoundPickerOverlayState {
-
   // ── Actions ───────────────────────────────────────────────────────────────
 
   Future<void> _onSubmit() async {
@@ -57,7 +56,8 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
   void _showPreviewFailureSnackBar() {
     final expired = widget.notifier.driveSessionExpired;
     final specific = widget.notifier.consumeLastMusicPlaybackError();
-    final message = specific ??
+    final message =
+        specific ??
         (expired
             ? 'Session Google expirée — touchez « Reconnecter »'
             : 'Son indisponible — vérifiez la connexion');
@@ -70,7 +70,8 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
   /// le courant plutôt que d'empiler.
   void _showLocalSnackBar(String message, {bool withReconnect = false}) {
     final onReconnect = widget.onReconnect;
-    final messenger = _messengerKey.currentState ?? ScaffoldMessenger.of(context);
+    final messenger =
+        _messengerKey.currentState ?? ScaffoldMessenger.of(context);
     AppSnackBar.showOn(
       messenger,
       message,
@@ -140,14 +141,17 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
     return widget.notifier.state.musicQueuePadIds.contains(padItem.pad.id);
   }
 
-  bool _isMusicOnBoard(Sound sound) => widget.notifier.state.pads
-      .any((p) => p.pad.sounds.any((s) => s.id == sound.id));
+  bool _isMusicOnBoard(Sound sound) => widget.notifier.state.pads.any(
+    (p) => p.pad.sounds.any((s) => s.id == sound.id),
+  );
 
   // Pad picker
   Future<void> _togglePadSound(Sound sound) async {
     final mode = _padMode!;
     if (_addingSoundIds.contains(sound.id) ||
-        _removingSoundIds.contains(sound.id)) { return; }
+        _removingSoundIds.contains(sound.id)) {
+      return;
+    }
     if (_padSoundIds.contains(sound.id)) {
       await _removePadSound(sound, mode);
     } else {

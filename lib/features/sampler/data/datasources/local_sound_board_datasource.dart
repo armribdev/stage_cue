@@ -20,11 +20,7 @@ class LocalSoundBoardDataSource {
 
   /// Crée une soundboard. Génère une identité portable ([boardKey]) et un
   /// horodatage : indispensables à la fusion intelligente entre appareils.
-  Future<int> createBoard(
-    String name, {
-    int? color,
-    int? libraryId,
-  }) async {
+  Future<int> createBoard(String name, {int? color, int? libraryId}) async {
     final now = DateTime.now();
     return await _database
         .into(_database.soundBoards)
@@ -42,12 +38,14 @@ class LocalSoundBoardDataSource {
 
   /// Renomme une soundboard (met à jour l'horodatage de fusion).
   Future<void> renameBoard(int boardId, String name) async {
-    await (_database.update(_database.soundBoards)
-          ..where((b) => b.id.equals(boardId)))
-        .write(db.SoundBoardsCompanion(
-      name: Value(name),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (_database.update(
+      _database.soundBoards,
+    )..where((b) => b.id.equals(boardId))).write(
+      db.SoundBoardsCompanion(
+        name: Value(name),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   /// Supprime une soundboard

@@ -37,9 +37,9 @@ extension _SettingsDiagnostic on _SettingsScreenState {
             'Journal des événements de l\'application (lecture, synchro, '
             'erreurs), conservé sur cet appareil. À joindre à un signalement '
             'de problème.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
           ),
           if (folder != null) ...[
             const SizedBox(height: 10),
@@ -50,9 +50,9 @@ extension _SettingsDiagnostic on _SettingsScreenState {
             Text(
               '$lost ligne(s) de journal n\'ont pas pu être écrites sur disque '
               'pendant cette session.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ],
           const SizedBox(height: 12),
@@ -186,11 +186,7 @@ extension _SettingsDiagnostic on _SettingsScreenState {
       }
       // `explorer.exe` rend un code de sortie 1 même quand il réussit : on ne
       // juge que le lancement du processus.
-      await Process.start(
-        executable,
-        [path],
-        mode: ProcessStartMode.detached,
-      );
+      await Process.start(executable, [path], mode: ProcessStartMode.detached);
     } catch (e) {
       AppLog.warn('Ouverture du dossier des logs échouée : $e');
       if (!mounted) return;

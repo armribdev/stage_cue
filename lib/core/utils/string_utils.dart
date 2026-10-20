@@ -61,7 +61,9 @@ int? fuzzyMatchScore(String normalizedText, String normalizedQuery) {
   if (maxTypo == 0) return null;
   final approx = _approximateMatch(normalizedText, normalizedQuery, maxTypo);
   if (approx == null) return null;
-  return 260 - approx.distance * 60; // sous les sous-chaînes, au-dessus des sous-séquences
+  return 260 -
+      approx.distance *
+          60; // sous les sous-chaînes, au-dessus des sous-séquences
 }
 
 /// Teste si [normalizedQuery] correspond quelque part dans [normalizedText]
@@ -179,7 +181,9 @@ TextSpan buildHighlightedSpan(String text, List<String> normalizedTokens) {
   for (var i = 0; i < text.length; i++) {
     final lower = text[i].toLowerCase();
     if (lower == 'œ' || lower == 'æ') {
-      normToOrig..add(i)..add(i);
+      normToOrig
+        ..add(i)
+        ..add(i);
     } else {
       normToOrig.add(i);
     }
@@ -235,7 +239,9 @@ TextSpan buildHighlightedSpan(String text, List<String> normalizedTokens) {
       spans.add(TextSpan(text: text.substring(pos, origStart)));
     }
     if (origEnd > origStart) {
-      spans.add(TextSpan(text: text.substring(origStart, origEnd), style: boldStyle));
+      spans.add(
+        TextSpan(text: text.substring(origStart, origEnd), style: boldStyle),
+      );
     }
     pos = origEnd;
   }

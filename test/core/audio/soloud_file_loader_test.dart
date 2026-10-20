@@ -30,7 +30,9 @@ void main() {
 
   group('loadAudioSourceFromFile', () {
     test('rejette un fichier absent', () async {
-      final missing = File('${Directory.systemTemp.path}/missing-audio-test.mp3');
+      final missing = File(
+        '${Directory.systemTemp.path}/missing-audio-test.mp3',
+      );
       if (await missing.exists()) {
         await missing.delete();
       }

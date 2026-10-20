@@ -7,7 +7,6 @@ part of '../sound_picker_overlay.dart';
 /// Recherche (débounce, tags) et calcul des résultats affichés.
 /// Méthodes de [_SoundPickerOverlayState] extraites via extension dans le même `part`.
 extension _SoundPickerSearch on _SoundPickerOverlayState {
-
   // ── Recherche ─────────────────────────────────────────────────────────────
 
   void _onQueryChanged(String value) {
@@ -91,12 +90,22 @@ extension _SoundPickerSearch on _SoundPickerOverlayState {
     final tokens = _normalizedTokens;
     final scored = <(Sound, int)>[];
     for (final sound in _all) {
-      if (!_matchesBoardScope(sound)) { continue; }
+      if (!_matchesBoardScope(sound)) {
+        continue;
+      }
       if (_effectiveTypeFilter != null &&
-          !sound.matchesSoundType(_effectiveTypeFilter!)) { continue; }
-      if (_favoritesOnly && !sound.isFavorite) { continue; }
-      if (_effectiveLocalOnly && !_isLocal(sound)) { continue; }
-      if (_isManage && _unprocessedOnly && sound.isProcessed) { continue; }
+          !sound.matchesSoundType(_effectiveTypeFilter!)) {
+        continue;
+      }
+      if (_favoritesOnly && !sound.isFavorite) {
+        continue;
+      }
+      if (_effectiveLocalOnly && !_isLocal(sound)) {
+        continue;
+      }
+      if (_isManage && _unprocessedOnly && sound.isProcessed) {
+        continue;
+      }
 
       int? score;
       if (q.isEmpty) {
@@ -105,8 +114,11 @@ extension _SoundPickerSearch on _SoundPickerOverlayState {
         // Requête sans token valide (ex : 1 char) → fuzzy entier + tag fallback.
         final name = normalizeForSearch(sound.displayName);
         score = fuzzyMatchScore(name, q);
-        if (score == null && _tagMatchSetsPerToken.isNotEmpty &&
-            _tagMatchSetsPerToken[0].contains(sound.id)) { score = 200; }
+        if (score == null &&
+            _tagMatchSetsPerToken.isNotEmpty &&
+            _tagMatchSetsPerToken[0].contains(sound.id)) {
+          score = 200;
+        }
       } else {
         // Logique AND par token : chaque token doit matcher titre OU tag.
         final name = normalizeForSearch(sound.displayName);
@@ -117,7 +129,7 @@ extension _SoundPickerSearch on _SoundPickerOverlayState {
           if (ts != null) {
             total += ts;
           } else if (i < _tagMatchSetsPerToken.length &&
-                     _tagMatchSetsPerToken[i].contains(sound.id)) {
+              _tagMatchSetsPerToken[i].contains(sound.id)) {
             total += 200;
           } else {
             allMatch = false;

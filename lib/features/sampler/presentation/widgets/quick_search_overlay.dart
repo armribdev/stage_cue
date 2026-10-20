@@ -1,6 +1,12 @@
 // Wrapper de rétrocompatibilité — délègue à SoundPickerOverlay.
 export 'sound_picker_overlay.dart'
-    show SoundPickerOverlay, QuickSearchMode, MusicPickerMode, PadPickerMode, LibraryMode, ManageMode;
+    show
+        SoundPickerOverlay,
+        QuickSearchMode,
+        MusicPickerMode,
+        PadPickerMode,
+        LibraryMode,
+        ManageMode;
 
 import 'package:flutter/material.dart';
 import '../../domain/entities/sound.dart';
@@ -17,11 +23,10 @@ class QuickSearchOverlay {
     required SamplerNotifier notifier,
     SoundType? initialTypeFilter,
     VoidCallback? onReconnect,
-  }) =>
-      SoundPickerOverlay.show(
-        context,
-        notifier: notifier,
-        initialTypeFilter: initialTypeFilter,
-        onReconnect: onReconnect,
-      );
+  }) => SoundPickerOverlay.show(
+    context,
+    notifier: notifier,
+    initialTypeFilter: initialTypeFilter,
+    onReconnect: onReconnect,
+  );
 }

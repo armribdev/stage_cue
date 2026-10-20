@@ -342,10 +342,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                     ),
                     _section('Couleur par défaut', _buildColors()),
                     _section('Volume par défaut', _buildVolume()),
-                    _section(
-                      'Point d\'entrée',
-                      _buildStartOffset(scheme),
-                    ),
+                    _section('Point d\'entrée', _buildStartOffset(scheme)),
                     _section('Tags', _buildTags(), isLast: true),
                   ],
                 ),
@@ -369,10 +366,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                     Text(
                       '${widget.queueRemaining} à traiter',
                       style: AppFonts.monoStyle(
-                        TextStyle(
-                          fontSize: 12,
-                          color: scheme.onSurfaceVariant,
-                        ),
+                        TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                       ),
                     ),
                   const Spacer(),
@@ -421,10 +415,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label.toUpperCase(),
-          style: AppTextStyles.sectionLabel(context),
-        ),
+        Text(label.toUpperCase(), style: AppTextStyles.sectionLabel(context)),
         const SizedBox(height: 8),
         child,
         if (!isLast) ...[
@@ -537,7 +528,8 @@ class _SoundEditFormState extends State<SoundEditForm> {
         if (widget.notifier != null) ...[
           const SizedBox(width: 8),
           Tooltip(
-            message: 'Mesure la sonie du fichier et règle le volume pour '
+            message:
+                'Mesure la sonie du fichier et règle le volume pour '
                 'normaliser',
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(
@@ -568,15 +560,14 @@ class _SoundEditFormState extends State<SoundEditForm> {
             Expanded(
               child: Text(
                 'La lecture démarre à ce point au lieu du début du fichier.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ),
             if (widget.notifier != null)
               TextButton.icon(
-                onPressed:
-                    _isRegeneratingWaveform ? null : _regenerateWaveform,
+                onPressed: _isRegeneratingWaveform ? null : _regenerateWaveform,
                 icon: _isRegeneratingWaveform
                     ? const SizedBox(
                         width: 16,
@@ -604,8 +595,8 @@ class _SoundEditFormState extends State<SoundEditForm> {
       return Text(
         'Tags indisponibles — réessayez en rouvrant le son.',
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       );
     }
     if (!_tagsLoaded) {
@@ -659,14 +650,13 @@ class _SoundEditFormState extends State<SoundEditForm> {
                     : _checkmarkColor(effectiveColor),
               )
             : (label != null
-                ? Text(
-                    label,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  )
-                : null),
+                  ? Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null),
       ),
     );
   }

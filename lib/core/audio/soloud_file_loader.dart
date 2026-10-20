@@ -28,7 +28,11 @@ Future<T> enqueueSoLoudFileTask<T>(Future<T> Function() task) =>
 
 /// Formats natifs de miniaudio (SoLoud) — AAC/M4A exclus.
 const Set<String> supportedAudioExtensions = {
-  '.mp3', '.wav', '.ogg', '.opus', '.flac',
+  '.mp3',
+  '.wav',
+  '.ogg',
+  '.opus',
+  '.flac',
 };
 
 /// Charge un fichier audio dans SoLoud via [loadMem].
@@ -75,9 +79,7 @@ Future<AudioSource> loadAudioSourceFromFile(
   }
   if (!hasPlausibleAudioHeader(bytes)) {
     markPathUnloadable(path);
-    throw StateError(
-      'Fichier audio invalide (contenu non audio) : $path',
-    );
+    throw StateError('Fichier audio invalide (contenu non audio) : $path');
   }
 
   return _enqueueLoadMemTask(() async {
@@ -93,17 +95,13 @@ Future<AudioSource> loadAudioSourceFromFile(
     } on SoLoudCppException catch (e, stack) {
       markPathUnloadable(path);
       AudioLoadLog.loadMemFailed(path: path, error: e, stackTrace: stack);
-      throw StateError(
-        'Fichier audio illisible ou corrompu : $path ($e)',
-      );
+      throw StateError('Fichier audio illisible ou corrompu : $path ($e)');
     } on StateError {
       rethrow;
     } catch (e, stack) {
       markPathUnloadable(path);
       AudioLoadLog.loadMemFailed(path: path, error: e, stackTrace: stack);
-      throw StateError(
-        'Fichier audio illisible ou corrompu : $path ($e)',
-      );
+      throw StateError('Fichier audio illisible ou corrompu : $path ($e)');
     }
   });
 }

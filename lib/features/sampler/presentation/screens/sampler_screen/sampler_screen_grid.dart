@@ -7,7 +7,6 @@ part of '../sampler_screen.dart';
 /// Construction de la grille de pads (rangées, emplacement d'ajout, drop targets).
 /// Méthodes de [_SamplerScreenState] extraites via extension dans le même `part`.
 extension _SamplerScreenGrid on _SamplerScreenState {
-
   Widget _buildAddToRowButton(
     BuildContext context,
     SoundBoard board, {

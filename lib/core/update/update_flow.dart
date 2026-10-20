@@ -54,8 +54,7 @@ Future<void> runUpdateFlow(
         title: const Text('Téléchargement en cours'),
         content: ValueListenableBuilder<double?>(
           valueListenable: progress,
-          builder: (context, value, _) =>
-              LinearProgressIndicator(value: value),
+          builder: (context, value, _) => LinearProgressIndicator(value: value),
         ),
       ),
     ),
@@ -66,9 +65,7 @@ Future<void> runUpdateFlow(
     installerPath = await resolvedInstaller.downloadInstaller(
       info,
       onProgress: (received, total) {
-        progress.value = (total != null && total > 0)
-            ? received / total
-            : null;
+        progress.value = (total != null && total > 0) ? received / total : null;
       },
     );
   } catch (e) {
@@ -88,10 +85,7 @@ Future<void> runUpdateFlow(
     await resolvedInstaller.launchInstallerSilently(installerPath);
   } catch (e) {
     if (context.mounted) {
-      showCopyableSnackBar(
-        context,
-        'Échec du lancement de l\'installeur : $e',
-      );
+      showCopyableSnackBar(context, 'Échec du lancement de l\'installeur : $e');
     }
     return;
   }

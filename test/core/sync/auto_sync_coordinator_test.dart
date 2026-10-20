@@ -32,7 +32,7 @@ class MockSyncController extends Mock implements SyncController {}
 /// Préférences minimales : seul `allowsNetworkSync` intéresse le coordinateur.
 class FakeAppPreferences extends AppPreferences {
   FakeAppPreferences({bool allowsNetworkSync = true})
-      : _allows = allowsNetworkSync;
+    : _allows = allowsNetworkSync;
 
   bool _allows;
 
@@ -46,12 +46,12 @@ class FakeAppPreferences extends AppPreferences {
 }
 
 Library _library(int id, {String? driveFolderId = 'drive-root'}) => Library(
-      id: id,
-      name: 'Lib$id',
-      localRootPath: '/cache/$id',
-      driveFolderId: driveFolderId,
-      createdAt: DateTime(2026),
-    );
+  id: id,
+  name: 'Lib$id',
+  localRootPath: '/cache/$id',
+  driveFolderId: driveFolderId,
+  createdAt: DateTime(2026),
+);
 
 void main() {
   late db.AppDatabase database;
@@ -106,23 +106,27 @@ void main() {
   }) {
     when(() => repository.getLibraries()).thenAnswer((_) async => libraries);
 
-    when(() => repository.applyDriveChanges(library: any(named: 'library')))
-        .thenAnswer((invocation) async {
+    when(
+      () => repository.applyDriveChanges(library: any(named: 'library')),
+    ).thenAnswer((invocation) async {
       final library = invocation.namedArguments[#library] as Library;
       calls.add('apply:${library.id}');
       return onApplyChanges?.call(library) ??
           const DriveSyncNeedsFullScan('test');
     });
 
-    when(() => repository.indexDriveFolder(
-          library: any(named: 'library'),
-          onProgress: any(named: 'onProgress'),
-        )).thenAnswer((invocation) async {
+    when(
+      () => repository.indexDriveFolder(
+        library: any(named: 'library'),
+        onProgress: any(named: 'onProgress'),
+      ),
+    ).thenAnswer((invocation) async {
       final library = invocation.namedArguments[#library] as Library;
       calls.add('index:${library.id}');
       if (indexThrows != null) throw indexThrows;
-      final onProgress = invocation.namedArguments[#onProgress]
-          as void Function(IndexingProgress)?;
+      final onProgress =
+          invocation.namedArguments[#onProgress]
+              as void Function(IndexingProgress)?;
       onProgress?.call(
         IndexingProgress(path: library.name, current: 1, total: 1),
       );
@@ -149,10 +153,12 @@ void main() {
       calls.add('watch-pull:${library.id}');
     });
 
-    when(() => repository.pruneSoundsAbsentFromDrive(
-          library: any(named: 'library'),
-          presentDriveFileIds: any(named: 'presentDriveFileIds'),
-        )).thenAnswer((invocation) async {
+    when(
+      () => repository.pruneSoundsAbsentFromDrive(
+        library: any(named: 'library'),
+        presentDriveFileIds: any(named: 'presentDriveFileIds'),
+      ),
+    ).thenAnswer((invocation) async {
       final library = invocation.namedArguments[#library] as Library;
       calls.add('prune:${library.id}');
       return 0;
@@ -190,19 +196,18 @@ void main() {
 
     test('scan complet : l\'élagage reçoit l\'ensemble DU SCAN', () async {
       final library = _library(1);
-      stubSequence(
-        libraries: [library],
-        onIndex: (_) => {'a', 'b', 'c'},
-      );
+      stubSequence(libraries: [library], onIndex: (_) => {'a', 'b', 'c'});
 
       await runInitialPull();
 
-      final captured = verify(
-        () => repository.pruneSoundsAbsentFromDrive(
-          library: any(named: 'library'),
-          presentDriveFileIds: captureAny(named: 'presentDriveFileIds'),
-        ),
-      ).captured.single as Set<String>;
+      final captured =
+          verify(
+                () => repository.pruneSoundsAbsentFromDrive(
+                  library: any(named: 'library'),
+                  presentDriveFileIds: captureAny(named: 'presentDriveFileIds'),
+                ),
+              ).captured.single
+              as Set<String>;
       expect(captured, {'a', 'b', 'c'});
     });
 
@@ -210,8 +215,7 @@ void main() {
       final library = _library(1);
       stubSequence(
         libraries: [library],
-        onApplyChanges: (_) =>
-            const DriveSyncApplied(upserted: 2, removed: 1),
+        onApplyChanges: (_) => const DriveSyncApplied(upserted: 2, removed: 1),
       );
 
       await runInitialPull();
@@ -220,7 +224,9 @@ void main() {
       // pas l'ensemble des fichiers présents, l'élaguer par différence
       // supprimerait tout ce qui n'a pas bougé (cf. décision 0021).
       expect(calls, ['apply:1', 'pull:1']);
-      verifyNever(() => repository.indexDriveFolder(library: any(named: 'library')));
+      verifyNever(
+        () => repository.indexDriveFolder(library: any(named: 'library')),
+      );
       verifyNever(
         () => repository.pruneSoundsAbsentFromDrive(
           library: any(named: 'library'),
@@ -233,19 +239,23 @@ void main() {
         'continuent', () async {
       final ok = _library(1);
       final broken = _library(2);
-      when(() => repository.getLibraries())
-          .thenAnswer((_) async => [broken, ok]);
+      when(
+        () => repository.getLibraries(),
+      ).thenAnswer((_) async => [broken, ok]);
 
-      when(() => repository.applyDriveChanges(library: any(named: 'library')))
-          .thenAnswer((invocation) async {
+      when(
+        () => repository.applyDriveChanges(library: any(named: 'library')),
+      ).thenAnswer((invocation) async {
         final library = invocation.namedArguments[#library] as Library;
         calls.add('apply:${library.id}');
         return const DriveSyncNeedsFullScan('test');
       });
-      when(() => repository.indexDriveFolder(
-            library: any(named: 'library'),
-            onProgress: any(named: 'onProgress'),
-          )).thenAnswer((invocation) async {
+      when(
+        () => repository.indexDriveFolder(
+          library: any(named: 'library'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).thenAnswer((invocation) async {
         final library = invocation.namedArguments[#library] as Library;
         calls.add('index:${library.id}');
         if (library.id == 2) throw StateError('dossier injoignable');
@@ -257,10 +267,12 @@ void main() {
       when(() => syncController.pullForLaunch(any())).thenAnswer((inv) async {
         calls.add('pull:${(inv.positionalArguments.first as Library).id}');
       });
-      when(() => repository.pruneSoundsAbsentFromDrive(
-            library: any(named: 'library'),
-            presentDriveFileIds: any(named: 'presentDriveFileIds'),
-          )).thenAnswer((inv) async {
+      when(
+        () => repository.pruneSoundsAbsentFromDrive(
+          library: any(named: 'library'),
+          presentDriveFileIds: any(named: 'presentDriveFileIds'),
+        ),
+      ).thenAnswer((inv) async {
         calls.add('prune:${(inv.namedArguments[#library] as Library).id}');
         return 0;
       });
@@ -270,8 +282,14 @@ void main() {
       // La bibliothèque 2 est indexée puis abandonnée : ni pull ni élagage.
       // Un index partiel suivi d'un pull racine purgerait ses boards et les
       // recâblerait sur un sous-ensemble de sons (cf. décision 0005).
-      expect(calls, ['apply:2', 'index:2', 'apply:1', 'index:1', 'pull:1',
-          'prune:1']);
+      expect(calls, [
+        'apply:2',
+        'index:2',
+        'apply:1',
+        'index:1',
+        'pull:1',
+        'prune:1',
+      ]);
     });
   });
 
@@ -301,10 +319,12 @@ void main() {
       // Tout l'intérêt : rescanner intégralement coûte des secondes pour ce que
       // `changes.list` rattrape en une requête.
       expect(calls, ['apply:1', 'pull:1']);
-      verifyNever(() => repository.indexDriveFolder(
-            library: any(named: 'library'),
-            onProgress: any(named: 'onProgress'),
-          ));
+      verifyNever(
+        () => repository.indexDriveFolder(
+          library: any(named: 'library'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      );
     });
 
     test('la progression du scan remonte avec sa bibliothèque', () async {
@@ -319,21 +339,24 @@ void main() {
       expect(seen, [1]);
     });
 
-    test('session expirée : le bilan le dit, et la pastille est prévenue',
-        () async {
-      stubSequence(libraries: [_library(1)]);
-      when(() => repository.applyDriveChanges(library: any(named: 'library')))
-          .thenThrow(const DriveAuthException());
+    test(
+      'session expirée : le bilan le dit, et la pastille est prévenue',
+      () async {
+        stubSequence(libraries: [_library(1)]);
+        when(
+          () => repository.applyDriveChanges(library: any(named: 'library')),
+        ).thenThrow(const DriveAuthException());
 
-      final report = await coordinator.refreshNow();
+        final report = await coordinator.refreshNow();
 
-      // Une session expirée pendant l'INDEXATION ne passe jamais par le pull :
-      // sans cette remontée, l'UI afficherait une erreur générique et la
-      // pastille resterait sur un état sain.
-      expect(report.authExpired, isTrue);
-      expect(report.synced, 0);
-      verify(() => syncController.handleAuthFailure()).called(1);
-    });
+        // Une session expirée pendant l'INDEXATION ne passe jamais par le pull :
+        // sans cette remontée, l'UI afficherait une erreur générique et la
+        // pastille resterait sur un état sain.
+        expect(report.authExpired, isTrue);
+        expect(report.synced, 0);
+        verify(() => syncController.handleAuthFailure()).called(1);
+      },
+    );
   });
 
   group('veille', () {
@@ -364,10 +387,12 @@ void main() {
       // bibliothèque dans son état. Tirer sans avoir indexé recâblerait en
       // outre les boards sur des sons inconnus (décision 0005).
       expect(calls, ['apply:1']);
-      verifyNever(() => repository.indexDriveFolder(
-            library: any(named: 'library'),
-            onProgress: any(named: 'onProgress'),
-          ));
+      verifyNever(
+        () => repository.indexDriveFolder(
+          library: any(named: 'library'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      );
       verifyNever(() => syncController.pullInBackground(any()));
     });
 
@@ -403,18 +428,20 @@ void main() {
       verifyNever(() => repository.reconnectSilently());
     });
 
-    test('mode local : l\'actualisation manuelle le DIT au lieu de mentir',
-        () async {
-      preferences.setAllowsNetworkSync(false);
-      stubSequence(libraries: [_library(1)]);
+    test(
+      'mode local : l\'actualisation manuelle le DIT au lieu de mentir',
+      () async {
+        preferences.setAllowsNetworkSync(false);
+        stubSequence(libraries: [_library(1)]);
 
-      final report = await coordinator.refreshNow();
+        final report = await coordinator.refreshNow();
 
-      // Sans ce drapeau, le bouton annonçait « Bibliothèque(s) actualisée(s) »
-      // après n'avoir rien fait du tout.
-      expect(report.localMode, isTrue);
-      expect(calls, isEmpty);
-    });
+        // Sans ce drapeau, le bouton annonçait « Bibliothèque(s) actualisée(s) »
+        // après n'avoir rien fait du tout.
+        expect(report.localMode, isTrue);
+        expect(calls, isEmpty);
+      },
+    );
 
     test('reprises rapprochées : la seconde sonde est ignorée', () async {
       stubSequence(
@@ -435,28 +462,33 @@ void main() {
   });
 
   group('verrou de passe', () {
-    test('une demande manuelle rejoint la passe en cours au lieu de la doubler',
-        () async {
-      final gate = Completer<DriveSyncOutcome>();
-      stubSequence(libraries: [_library(1)]);
-      when(() => repository.applyDriveChanges(library: any(named: 'library')))
-          .thenAnswer((invocation) {
-        calls.add('apply:${(invocation.namedArguments[#library] as Library).id}');
-        return gate.future;
-      });
+    test(
+      'une demande manuelle rejoint la passe en cours au lieu de la doubler',
+      () async {
+        final gate = Completer<DriveSyncOutcome>();
+        stubSequence(libraries: [_library(1)]);
+        when(
+          () => repository.applyDriveChanges(library: any(named: 'library')),
+        ).thenAnswer((invocation) {
+          calls.add(
+            'apply:${(invocation.namedArguments[#library] as Library).id}',
+          );
+          return gate.future;
+        });
 
-      final first = coordinator.refreshNow();
-      await pump();
-      final second = coordinator.refreshNow();
-      gate.complete(const DriveSyncApplied(upserted: 0, removed: 0));
-      await first;
-      await second;
+        final first = coordinator.refreshNow();
+        await pump();
+        final second = coordinator.refreshNow();
+        gate.complete(const DriveSyncApplied(upserted: 0, removed: 0));
+        await first;
+        await second;
 
-      // Deux passes concurrentes se marcheraient sur `_ignoreUpdates` (la
-      // première à finir le rabaisserait sous la seconde, rouvrant les push
-      // parasites) et doubleraient le trafic Drive.
-      expect(calls, ['apply:1', 'pull:1']);
-    });
+        // Deux passes concurrentes se marcheraient sur `_ignoreUpdates` (la
+        // première à finir le rabaisserait sous la seconde, rouvrant les push
+        // parasites) et doubleraient le trafic Drive.
+        expect(calls, ['apply:1', 'pull:1']);
+      },
+    );
   });
 
   group('conditions d\'entrée', () {
@@ -477,32 +509,38 @@ void main() {
       verifyNever(() => repository.reconnectSilently());
     });
 
-    test('aucune bibliothèque connectée : reste idle, pas de hors-ligne',
-        () async {
-      when(() => repository.getLibraries())
-          .thenAnswer((_) async => [_library(1, driveFolderId: null)]);
+    test(
+      'aucune bibliothèque connectée : reste idle, pas de hors-ligne',
+      () async {
+        when(
+          () => repository.getLibraries(),
+        ).thenAnswer((_) async => [_library(1, driveFolderId: null)]);
 
-      await runInitialPull();
+        await runInitialPull();
 
-      verifyNever(() => syncController.markOffline());
-      expect(calls, isEmpty);
-    });
+        verifyNever(() => syncController.markOffline());
+        expect(calls, isEmpty);
+      },
+    );
 
-    test('bibliothèque configurée mais sans session : hors-ligne, pas de pull',
-        () async {
-      when(() => repository.reconnectSilently()).thenAnswer((_) async => false);
-      stubSequence(libraries: [_library(1)]);
+    test(
+      'bibliothèque configurée mais sans session : hors-ligne, pas de pull',
+      () async {
+        when(
+          () => repository.reconnectSilently(),
+        ).thenAnswer((_) async => false);
+        stubSequence(libraries: [_library(1)]);
 
-      await runInitialPull();
+        await runInitialPull();
 
-      verify(() => syncController.markOffline()).called(1);
-      expect(calls, isEmpty);
-    });
+        verify(() => syncController.markOffline()).called(1);
+        expect(calls, isEmpty);
+      },
+    );
 
     test('erreur inattendue : bascule hors-ligne, la passe se conclut quand '
         'même', () async {
-      when(() => repository.reconnectSilently())
-          .thenThrow(StateError('panne'));
+      when(() => repository.reconnectSilently()).thenThrow(StateError('panne'));
 
       await runInitialPull(); // `runInitialPull` assère déjà que ça se conclut.
 
@@ -512,27 +550,31 @@ void main() {
   });
 
   group('push déclenché par les écritures', () {
-    test('les écritures de la passe initiale ne déclenchent AUCUN push',
-        () async {
-      final library = _library(1);
-      stubSequence(
-        libraries: [library],
-        onApplyChanges: (_) => const DriveSyncApplied(upserted: 1, removed: 0),
-      );
+    test(
+      'les écritures de la passe initiale ne déclenchent AUCUN push',
+      () async {
+        final library = _library(1);
+        stubSequence(
+          libraries: [library],
+          onApplyChanges: (_) =>
+              const DriveSyncApplied(upserted: 1, removed: 0),
+        );
 
-      await runInitialPull();
+        await runInitialPull();
 
-      // Le contenu vient du distant, pas d'une édition locale : le pousser
-      // renverrait à Drive ce qu'on vient d'en recevoir.
-      verifyNever(() => syncController.schedulePush(any()));
-    });
+        // Le contenu vient du distant, pas d'une édition locale : le pousser
+        // renverrait à Drive ce qu'on vient d'en recevoir.
+        verifyNever(() => syncController.schedulePush(any()));
+      },
+    );
 
     test('une écriture de bookkeeping seule ne déclenche pas de push', () async {
-      when(() => repository.getLibraries())
-          .thenAnswer((_) async => [_library(1)]);
-      final rowId = await database.into(database.libraries).insert(
-            db.LibrariesCompanion.insert(name: 'L', localRootPath: '/c'),
-          );
+      when(
+        () => repository.getLibraries(),
+      ).thenAnswer((_) async => [_library(1)]);
+      final rowId = await database
+          .into(database.libraries)
+          .insert(db.LibrariesCompanion.insert(name: 'L', localRootPath: '/c'));
       await runInitialPull();
       clearInteractions(syncController);
 
@@ -543,9 +585,7 @@ void main() {
       // `customStatement` n'en émet aucun et rendrait ce test vacuous.
       await (database.update(database.libraries)
             ..where((l) => l.id.equals(rowId)))
-          .write(const db.LibrariesCompanion(
-        lastSyncedRevision: Value(2),
-      ));
+          .write(const db.LibrariesCompanion(lastSyncedRevision: Value(2)));
       for (var i = 0; i < 20; i++) {
         await Future<void>.delayed(Duration.zero);
       }
@@ -554,17 +594,18 @@ void main() {
     });
 
     test('une écriture de données utilisateur déclenche un push', () async {
-      when(() => repository.getLibraries())
-          .thenAnswer((_) async => [_library(1)]);
+      when(
+        () => repository.getLibraries(),
+      ).thenAnswer((_) async => [_library(1)]);
       await runInitialPull();
       clearInteractions(syncController);
 
       // Contre-épreuve du test précédent : même mécanique d'écriture, table
       // non-bookkeeping. Sans ce cas, un filtre trop large (qui bloquerait
       // TOUT push) passerait le test ci-dessus sans qu'on s'en aperçoive.
-      await database.into(database.soundBoards).insert(
-            db.SoundBoardsCompanion.insert(name: 'Scène 1'),
-          );
+      await database
+          .into(database.soundBoards)
+          .insert(db.SoundBoardsCompanion.insert(name: 'Scène 1'));
       for (var i = 0; i < 20; i++) {
         await Future<void>.delayed(Duration.zero);
       }
@@ -573,10 +614,17 @@ void main() {
     });
 
     test('une lecture (last_played_at) ne déclenche pas de push', () async {
-      when(() => repository.getLibraries())
-          .thenAnswer((_) async => [_library(1)]);
-      final soundId = await database.into(database.sounds).insert(
-            db.SoundsCompanion.insert(title: 'Porte', displayName: 'Porte', filePath: '/c/porte.wav'),
+      when(
+        () => repository.getLibraries(),
+      ).thenAnswer((_) async => [_library(1)]);
+      final soundId = await database
+          .into(database.sounds)
+          .insert(
+            db.SoundsCompanion.insert(
+              title: 'Porte',
+              displayName: 'Porte',
+              filePath: '/c/porte.wav',
+            ),
           );
       await runInitialPull();
       clearInteractions(syncController);
@@ -588,9 +636,9 @@ void main() {
       await pump();
 
       verifyNever(() => syncController.schedulePush(any()));
-      final row = await (database.select(database.sounds)
-            ..where((s) => s.id.equals(soundId)))
-          .getSingle();
+      final row = await (database.select(
+        database.sounds,
+      )..where((s) => s.id.equals(soundId))).getSingle();
       expect(row.lastPlayedAt, playedAt);
     });
   });

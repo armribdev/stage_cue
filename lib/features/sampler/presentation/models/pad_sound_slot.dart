@@ -5,11 +5,13 @@ import '../../../../core/audio/audio_player_service.dart';
 /// Disponibilité locale d'un son dans un pad multi-variantes.
 enum PadSoundAvailability {
   ready,
+
   /// Fichier local vérifié — affichage PRÊT, lecteur SoLoud pas encore chargé.
   cached,
   needsDownload,
   offline,
   missingFile,
+
   /// Fichier présent mais format non décodable par SoLoud sur cette plateforme.
   unsupportedFormat,
 }

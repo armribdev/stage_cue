@@ -127,9 +127,9 @@ class LibrarySnapshotStore {
       // sur `UNIQUE constraint failed: sound_boards.board_key`.
       final local = snapKey == null
           ? null
-          : await (_database.select(_database.soundBoards)
-                ..where((b) => b.boardKey.equals(snapKey)))
-              .getSingleOrNull();
+          : await (_database.select(
+              _database.soundBoards,
+            )..where((b) => b.boardKey.equals(snapKey))).getSingleOrNull();
 
       // Board possédé par une AUTRE bibliothèque : on ne le duplique pas et on
       // ne le confisque pas. Même arbitrage que pour les sons partagés entre
@@ -159,7 +159,9 @@ class LibrarySnapshotStore {
 
       if (local == null) {
         // Board inconnu localement → insertion.
-        final newBoardId = await _database.into(_database.soundBoards).insert(
+        final newBoardId = await _database
+            .into(_database.soundBoards)
+            .insert(
               db.SoundBoardsCompanion.insert(
                 name: row.read<String>('name'),
                 color: Value(row.read<int?>('color')),
@@ -173,18 +175,20 @@ class LibrarySnapshotStore {
         _boardIdMap[snapBoardId] = newBoardId;
       } else if (snapUpdatedAt.isAfter(local.updatedAt)) {
         // Le distant est plus récent → on remplace le contenu de CE board.
-        await (_database.update(_database.soundBoards)
-              ..where((b) => b.id.equals(local.id)))
-            .write(db.SoundBoardsCompanion(
-          name: Value(row.read<String>('name')),
-          color: Value(row.read<int?>('color')),
-          icon: Value(row.read<int?>('icon')),
-          updatedAt: Value(snapUpdatedAt),
-        ));
+        await (_database.update(
+          _database.soundBoards,
+        )..where((b) => b.id.equals(local.id))).write(
+          db.SoundBoardsCompanion(
+            name: Value(row.read<String>('name')),
+            color: Value(row.read<int?>('color')),
+            icon: Value(row.read<int?>('icon')),
+            updatedAt: Value(snapUpdatedAt),
+          ),
+        );
         // Ses pads seront réimportés : on efface les anciens (cascade pad_sounds).
-        await (_database.delete(_database.pads)
-              ..where((p) => p.boardId.equals(local.id)))
-            .go();
+        await (_database.delete(
+          _database.pads,
+        )..where((p) => p.boardId.equals(local.id))).go();
         _boardIdMap[snapBoardId] = local.id;
       }
       // else : le local est plus récent (édité en parallèle) → conservé tel quel.
@@ -199,12 +203,15 @@ class LibrarySnapshotStore {
   Future<void> _importBoardPads(int libraryId) async {
     if (!await _snapHasTable('pads')) return;
 
-    final padRows =
-        await _database.customSelect('SELECT * FROM snap.pads ORDER BY id').get();
+    final padRows = await _database
+        .customSelect('SELECT * FROM snap.pads ORDER BY id')
+        .get();
     for (final row in padRows) {
       final localBoardId = _boardIdMap[row.read<int>('board_id')];
       if (localBoardId == null) continue;
-      final newPadId = await _database.into(_database.pads).insert(
+      final newPadId = await _database
+          .into(_database.pads)
+          .insert(
             db.PadsCompanion.insert(
               boardId: localBoardId,
               name: Value(row.read<String?>('name')),
@@ -222,8 +229,9 @@ class LibrarySnapshotStore {
 
     // Override de volume par son : absent des snapshots antérieurs à v29.
     final hasVolume = await _snapColumnExists('pad_sounds', 'volume');
-    final padSoundRows =
-        await _database.customSelect('SELECT * FROM snap.pad_sounds').get();
+    final padSoundRows = await _database
+        .customSelect('SELECT * FROM snap.pad_sounds')
+        .get();
     for (final row in padSoundRows) {
       final localPadId = _padIdMap[row.read<int>('pad_id')];
       if (localPadId == null) continue;
@@ -239,30 +247,34 @@ class LibrarySnapshotStore {
         // bibliothèques confondues. On ne scope PAS à `libraryId` — sinon un
         // board d'une bibliothèque « invitée » ne pourrait pas se recâbler sur un
         // son PARTAGÉ possédé par une autre bibliothèque (VUE PARTAGÉE).
-        sound = await (_database.select(_database.sounds)
-              ..where((s) => s.driveFileId.equals(driveFileId)))
-            .getSingleOrNull();
+        sound = await (_database.select(
+          _database.sounds,
+        )..where((s) => s.driveFileId.equals(driveFileId))).getSingleOrNull();
       }
       if (sound == null && relativePath != null) {
-        final normalized =
-            LibrarySoundPaths.normalizeRelativePath(relativePath);
-        sound = await (_database.select(_database.sounds)
-              ..where(
-                (s) =>
-                    s.libraryId.equals(libraryId) &
-                    s.relativePath.equals(normalized),
-              ))
-            .getSingleOrNull();
+        final normalized = LibrarySoundPaths.normalizeRelativePath(
+          relativePath,
+        );
+        sound =
+            await (_database.select(_database.sounds)..where(
+                  (s) =>
+                      s.libraryId.equals(libraryId) &
+                      s.relativePath.equals(normalized),
+                ))
+                .getSingleOrNull();
       }
       if (sound == null) continue;
 
-      await _database.into(_database.padSounds).insert(
+      await _database
+          .into(_database.padSounds)
+          .insert(
             db.PadSoundsCompanion.insert(
               padId: localPadId,
               soundId: sound.id,
               sortOrder: Value(row.read<int>('sort_order')),
-              volume:
-                  hasVolume ? Value(row.read<double?>('volume')) : const Value.absent(),
+              volume: hasVolume
+                  ? Value(row.read<double?>('volume'))
+                  : const Value.absent(),
               addedAt: Value(row.read<DateTime>('added_at')),
             ),
           );
@@ -358,15 +370,15 @@ class LibrarySnapshotStore {
     await _database.customStatement("ATTACH DATABASE '$escaped' AS snap");
     try {
       await _database.transaction(() async {
-        final folder = await (_database.select(_database.libraryFolders)
-              ..where((f) => f.id.equals(folderId)))
-            .getSingleOrNull();
+        final folder = await (_database.select(
+          _database.libraryFolders,
+        )..where((f) => f.id.equals(folderId))).getSingleOrNull();
         if (folder == null) return;
         if (!await _snapHasTable('sounds')) return;
 
-        final library = await (_database.select(_database.libraries)
-              ..where((l) => l.id.equals(folder.libraryId)))
-            .getSingleOrNull();
+        final library = await (_database.select(
+          _database.libraries,
+        )..where((l) => l.id.equals(folder.libraryId))).getSingleOrNull();
 
         await _importFolderSounds(
           folderId: folderId,
@@ -420,8 +432,8 @@ class LibrarySnapshotStore {
       final rootRelative = (folderRelative == null || folderRelative.isEmpty)
           ? folderRelative
           : (folderRelativePath.isEmpty
-              ? folderRelative
-              : '$folderRelativePath/$folderRelative');
+                ? folderRelative
+                : '$folderRelativePath/$folderRelative');
       final normalized = rootRelative != null
           ? LibrarySoundPaths.normalizeRelativePath(rootRelative)
           : null;
@@ -438,24 +450,24 @@ class LibrarySnapshotStore {
         // Identité forte GLOBALE : `drive_file_id` est unique en base. On le
         // résout sans le scoper au dossier — sinon un fichier déplacé vers CE
         // dossier depuis un autre nœud violerait l'index d'unicité à l'insert.
-        existing = await (_database.select(_database.sounds)
-              ..where((s) => s.driveFileId.equals(driveFileId)))
-            .getSingleOrNull();
+        existing = await (_database.select(
+          _database.sounds,
+        )..where((s) => s.driveFileId.equals(driveFileId))).getSingleOrNull();
       }
       if (existing == null && normalized != null) {
-        existing = await (_database.select(_database.sounds)
-              ..where(
-                (s) =>
-                    s.folderId.equals(folderId) &
-                    s.relativePath.equals(normalized),
-              ))
-            .getSingleOrNull();
+        existing =
+            await (_database.select(_database.sounds)..where(
+                  (s) =>
+                      s.folderId.equals(folderId) &
+                      s.relativePath.equals(normalized),
+                ))
+                .getSingleOrNull();
       }
 
       if (existing != null) {
-        await (_database.update(_database.sounds)
-              ..where((s) => s.id.equals(existing!.id)))
-            .write(
+        await (_database.update(
+          _database.sounds,
+        )..where((s) => s.id.equals(existing!.id))).write(
           db.SoundsCompanion(
             title: Value(row.read<String>('title')),
             displayName: Value(_displayNameOf(row)),
@@ -474,7 +486,9 @@ class LibrarySnapshotStore {
         );
         _soundIdMap[snapId] = existing.id;
       } else {
-        final newId = await _database.into(_database.sounds).insert(
+        final newId = await _database
+            .into(_database.sounds)
+            .insert(
               db.SoundsCompanion.insert(
                 title: row.read<String>('title'),
                 filePath: filePath,
@@ -497,15 +511,15 @@ class LibrarySnapshotStore {
     // Supprime les sons du dossier retirés côté distant (identité forte connue
     // mais absente du snapshot). On épargne les sons sans driveFileId (legacy /
     // pas encore réconciliés) pour ne pas perdre de données par erreur.
-    final localSounds = await (_database.select(_database.sounds)
-          ..where((s) => s.folderId.equals(folderId)))
-        .get();
+    final localSounds = await (_database.select(
+      _database.sounds,
+    )..where((s) => s.folderId.equals(folderId))).get();
     for (final sound in localSounds) {
       final fid = sound.driveFileId;
       if (fid != null && !seenDriveIds.contains(fid)) {
-        await (_database.delete(_database.sounds)
-              ..where((s) => s.id.equals(sound.id)))
-            .go();
+        await (_database.delete(
+          _database.sounds,
+        )..where((s) => s.id.equals(sound.id))).go();
       }
     }
   }
@@ -527,12 +541,15 @@ class LibrarySnapshotStore {
         final snapCategoryId = row.read<int>('id');
         final name = row.read<String>('name');
 
-        final existing = await (_database.select(_database.tagCategories)
-              ..where((c) => c.name.equals(name)))
-            .getSingleOrNull();
+        final existing = await (_database.select(
+          _database.tagCategories,
+        )..where((c) => c.name.equals(name))).getSingleOrNull();
 
-        final localCategoryId = existing?.id ??
-            await _database.into(_database.tagCategories).insert(
+        final localCategoryId =
+            existing?.id ??
+            await _database
+                .into(_database.tagCategories)
+                .insert(
                   db.TagCategoriesCompanion.insert(
                     name: name,
                     color: row.read<int>('color'),
@@ -553,19 +570,23 @@ class LibrarySnapshotStore {
     }
 
     if (await _snapHasTable('tag_aliases')) {
-      final aliasRows =
-          await _database.customSelect('SELECT * FROM snap.tag_aliases').get();
+      final aliasRows = await _database
+          .customSelect('SELECT * FROM snap.tag_aliases')
+          .get();
       for (final row in aliasRows) {
         final localTagId = _tagIdMap[row.read<int>('tag_id')];
         if (localTagId == null) continue;
 
         final normalizedAlias = row.read<String>('normalized_alias');
-        final existing = await (_database.select(_database.tagAliases)
-              ..where((a) => a.normalizedAlias.equals(normalizedAlias)))
-            .getSingleOrNull();
+        final existing =
+            await (_database.select(_database.tagAliases)
+                  ..where((a) => a.normalizedAlias.equals(normalizedAlias)))
+                .getSingleOrNull();
         if (existing != null) continue;
 
-        await _database.into(_database.tagAliases).insert(
+        await _database
+            .into(_database.tagAliases)
+            .insert(
               db.TagAliasesCompanion.insert(
                 tagId: localTagId,
                 alias: row.read<String>('alias'),
@@ -580,34 +601,36 @@ class LibrarySnapshotStore {
     int snapCategoryId,
     int localCategoryId,
   ) async {
-    final tagRows = await _database.customSelect(
-      'SELECT * FROM snap.tag_items WHERE category_id = ? ORDER BY id',
-      variables: [Variable<int>(snapCategoryId)],
-    ).get();
+    final tagRows = await _database
+        .customSelect(
+          'SELECT * FROM snap.tag_items WHERE category_id = ? ORDER BY id',
+          variables: [Variable<int>(snapCategoryId)],
+        )
+        .get();
 
     for (final row in tagRows) {
       await _upsertTagItem(row, localCategoryId: localCategoryId);
     }
   }
 
-  Future<void> _upsertTagItem(
-    QueryRow row, {
-    int? localCategoryId,
-  }) async {
+  Future<void> _upsertTagItem(QueryRow row, {int? localCategoryId}) async {
     final snapTagId = row.read<int>('id');
     final categoryId = localCategoryId ?? row.read<int>('category_id');
     final normalizedName = row.read<String>('normalized_name');
 
-    final existing = await (_database.select(_database.tagItems)
-          ..where(
-            (t) =>
-                t.categoryId.equals(categoryId) &
-                t.normalizedName.equals(normalizedName),
-          ))
-        .getSingleOrNull();
+    final existing =
+        await (_database.select(_database.tagItems)..where(
+              (t) =>
+                  t.categoryId.equals(categoryId) &
+                  t.normalizedName.equals(normalizedName),
+            ))
+            .getSingleOrNull();
 
-    final localTagId = existing?.id ??
-        await _database.into(_database.tagItems).insert(
+    final localTagId =
+        existing?.id ??
+        await _database
+            .into(_database.tagItems)
+            .insert(
               db.TagItemsCompanion.insert(
                 categoryId: categoryId,
                 name: row.read<String>('name'),
@@ -620,15 +643,18 @@ class LibrarySnapshotStore {
   }
 
   Future<void> _importSoundTags() async {
-    final rows =
-        await _database.customSelect('SELECT * FROM snap.sound_tags').get();
+    final rows = await _database
+        .customSelect('SELECT * FROM snap.sound_tags')
+        .get();
 
     for (final row in rows) {
       final localSoundId = _soundIdMap[row.read<int>('sound_id')];
       final localTagId = _tagIdMap[row.read<int>('tag_id')];
       if (localSoundId == null || localTagId == null) continue;
 
-      await _database.into(_database.soundTags).insert(
+      await _database
+          .into(_database.soundTags)
+          .insert(
             db.SoundTagsCompanion.insert(
               soundId: localSoundId,
               tagId: localTagId,
@@ -640,18 +666,21 @@ class LibrarySnapshotStore {
   }
 
   Future<bool> _snapHasTable(String table) async {
-    final rows = await _database.customSelect(
-      "SELECT name FROM snap.sqlite_master WHERE type = 'table' AND name = ?",
-      variables: [Variable<String>(table)],
-    ).get();
+    final rows = await _database
+        .customSelect(
+          "SELECT name FROM snap.sqlite_master WHERE type = 'table' AND name = ?",
+          variables: [Variable<String>(table)],
+        )
+        .get();
     return rows.isNotEmpty;
   }
 
   /// Vrai si la colonne existe dans la table du snapshot attaché. Robustesse
   /// face à un ancien snapshot dépourvu de `board_key`/`updated_at`.
   Future<bool> _snapColumnExists(String table, String column) async {
-    final rows =
-        await _database.customSelect('PRAGMA snap.table_info($table)').get();
+    final rows = await _database
+        .customSelect('PRAGMA snap.table_info($table)')
+        .get();
     return rows.any((r) => r.read<String>('name') == column);
   }
 

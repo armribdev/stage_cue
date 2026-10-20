@@ -24,13 +24,13 @@ void main() {
   }
 
   Sound librarySound(int id, String relativePath, {int libraryId = 1}) => Sound(
-        id: id,
-        title: 'son $id',
-        filePath: p.joinAll([tempDir.path, ...relativePath.split('/')]),
-        createdAt: DateTime(2026),
-        libraryId: libraryId,
-        relativePath: relativePath,
-      );
+    id: id,
+    title: 'son $id',
+    filePath: p.joinAll([tempDir.path, ...relativePath.split('/')]),
+    createdAt: DateTime(2026),
+    libraryId: libraryId,
+    relativePath: relativePath,
+  );
 
   group('probeLocallyAvailableSoundIds', () {
     test('ne retient que les sons présents dans le cache', () async {

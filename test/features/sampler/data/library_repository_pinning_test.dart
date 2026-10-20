@@ -73,14 +73,18 @@ void main() {
   }
 
   void stubDownload() {
-    when(() => client.findInFolder(
-          parentId: any(named: 'parentId'),
-          name: any(named: 'name'),
-        )).thenAnswer((_) async => const DriveFile(id: 'remote', name: 'x'));
-    when(() => client.downloadToFile(
-          fileId: any(named: 'fileId'),
-          destinationPath: any(named: 'destinationPath'),
-        )).thenAnswer((invocation) async {
+    when(
+      () => client.findInFolder(
+        parentId: any(named: 'parentId'),
+        name: any(named: 'name'),
+      ),
+    ).thenAnswer((_) async => const DriveFile(id: 'remote', name: 'x'));
+    when(
+      () => client.downloadToFile(
+        fileId: any(named: 'fileId'),
+        destinationPath: any(named: 'destinationPath'),
+      ),
+    ).thenAnswer((invocation) async {
       final dest = invocation.namedArguments[#destinationPath] as String;
       final file = File(dest);
       await file.parent.create(recursive: true);
@@ -99,20 +103,20 @@ void main() {
     );
   }
 
-  Future<int> insertLibraryRow() =>
-      database.into(database.libraries).insert(
-            db.LibrariesCompanion.insert(
-              name: 'Lib',
-              localRootPath: rootDir.path,
-            ),
-          );
+  Future<int> insertLibraryRow() => database
+      .into(database.libraries)
+      .insert(
+        db.LibrariesCompanion.insert(name: 'Lib', localRootPath: rootDir.path),
+      );
 
   Future<int> insertSound(
     int libraryId,
     String relativePath, {
     bool isFavorite = false,
   }) {
-    return database.into(database.sounds).insert(
+    return database
+        .into(database.sounds)
+        .insert(
           db.SoundsCompanion.insert(
             title: relativePath,
             displayName: relativePath,
@@ -128,15 +132,15 @@ void main() {
   /// Plateau contenant [soundId], via un pad — c'est la jointure que lit
   /// `getBoardRelativePaths`.
   Future<int> insertBoardWithSound(int soundId) async {
-    final boardId = await database.into(database.soundBoards).insert(
-          db.SoundBoardsCompanion.insert(name: 'Scène 1'),
-        );
-    final padId = await database.into(database.pads).insert(
-          db.PadsCompanion.insert(boardId: boardId),
-        );
-    await database.into(database.padSounds).insert(
-          db.PadSoundsCompanion.insert(padId: padId, soundId: soundId),
-        );
+    final boardId = await database
+        .into(database.soundBoards)
+        .insert(db.SoundBoardsCompanion.insert(name: 'Scène 1'));
+    final padId = await database
+        .into(database.pads)
+        .insert(db.PadsCompanion.insert(boardId: boardId));
+    await database
+        .into(database.padSounds)
+        .insert(db.PadSoundsCompanion.insert(padId: padId, soundId: soundId));
     return boardId;
   }
 
@@ -203,27 +207,24 @@ void main() {
     expect(existsInCache('recent.wav'), isTrue);
   });
 
-  test(
-    'sans plateau actif, seuls les favoris sont épinglés',
-    () async {
-      stubDownload();
-      final repository = buildRepository();
-      final libraryId = await insertLibraryRow();
-      final onBoardSoundId = await insertSound(libraryId, 'plateau.wav');
-      await insertBoardWithSound(onBoardSoundId);
-      await insertSound(libraryId, 'banal.wav');
-      await insertSound(libraryId, 'recent.wav');
+  test('sans plateau actif, seuls les favoris sont épinglés', () async {
+    stubDownload();
+    final repository = buildRepository();
+    final libraryId = await insertLibraryRow();
+    final onBoardSoundId = await insertSound(libraryId, 'plateau.wav');
+    await insertBoardWithSound(onBoardSoundId);
+    await insertSound(libraryId, 'banal.wav');
+    await insertSound(libraryId, 'recent.wav');
 
-      // activeBoardId laissé à null : aucune scène ouverte.
-      await cache(repository, 'plateau.wav');
-      await cache(repository, 'banal.wav');
-      await cache(repository, 'recent.wav');
+    // activeBoardId laissé à null : aucune scène ouverte.
+    await cache(repository, 'plateau.wav');
+    await cache(repository, 'banal.wav');
+    await cache(repository, 'recent.wav');
 
-      expect(
-        existsInCache('plateau.wav'),
-        isFalse,
-        reason: 'aucune scène active : rien ne protège ce son du LRU',
-      );
-    },
-  );
+    expect(
+      existsInCache('plateau.wav'),
+      isFalse,
+      reason: 'aucune scène active : rien ne protège ce son du LRU',
+    );
+  });
 }

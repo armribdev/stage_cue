@@ -419,7 +419,9 @@ class _SoundboardAppState extends State<SoundboardApp>
       builder: (context, child) {
         final theme = Theme.of(context);
         final availableWidth = MediaQuery.sizeOf(context).width - 48;
-        final snackBarWidth = availableWidth.clamp(0, _maxSnackBarWidth).toDouble();
+        final snackBarWidth = availableWidth
+            .clamp(0, _maxSnackBarWidth)
+            .toDouble();
         // Échelle typographique réduite sur poste desktop (souris/clavier,
         // distance de lecture normale) — les tailles pensées tactile/mobile
         // paraissent surdimensionnées. Un seul point d'ajustement pour tout
@@ -445,15 +447,14 @@ class _SoundboardAppState extends State<SoundboardApp>
             )
           : SamplerScreen(
               services: widget.services,
-              isWindowsFullScreen:
-                  _isWindowsDesktop ? _boundsBeforeFullScreen != null : null,
+              isWindowsFullScreen: _isWindowsDesktop
+                  ? _boundsBeforeFullScreen != null
+                  : null,
               onToggleWindowsFullScreen: _isWindowsDesktop
                   ? () => unawaited(_toggleFullScreen())
                   : null,
-              onQuitApp:
-                  _isWindowsDesktop ? () => unawaited(_quitApp()) : null,
+              onQuitApp: _isWindowsDesktop ? () => unawaited(_quitApp()) : null,
             ),
     );
   }
 }
-

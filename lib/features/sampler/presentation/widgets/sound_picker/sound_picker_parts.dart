@@ -7,7 +7,6 @@ part of '../sound_picker_overlay.dart';
 /// Éléments partagés : pied d'aide, tags, bouton icône rond.
 /// Méthodes de [_SoundPickerOverlayState] extraites via extension dans le même `part`.
 extension _SoundPickerParts on _SoundPickerOverlayState {
-
   Widget _buildHints(ColorScheme scheme, bool hasResults) {
     if (!hasResults) return const SizedBox.shrink();
     return Container(

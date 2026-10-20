@@ -69,9 +69,7 @@ const double _itemWidth = 180;
 const Duration _padEmphasisDuration = Duration(milliseconds: 2200);
 const double _editRowGap = 14;
 const double _padScrollAlignment = 0.28;
-const Duration _addSlotTransitionDuration = Duration(
-  milliseconds: 240,
-);
+const Duration _addSlotTransitionDuration = Duration(milliseconds: 240);
 
 class _SamplerScreenState extends State<SamplerScreen> {
   late final SamplerNotifier _notifier;
@@ -97,6 +95,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   /// true après la 1re frame de drag — évite de reconstruire l'arbre pendant
   /// l'accrochage du geste (sinon le Draggable est démonté et le pad reste bloqué).
   bool _editDragUiReady = false;
+
   /// Contexte de la grille éditable (hit-test drop). Pas de [GlobalKey] :
   /// [AnimatedSwitcher] garde l'ancien enfant au changement de board, ce qui
   /// dupliquerait une GlobalKey partagée.
@@ -108,13 +107,14 @@ class _SamplerScreenState extends State<SamplerScreen> {
   bool _isMusicRegieAdvanced = false;
   double _musicRegieOccupiedHeight = 0;
 
-  EdgeInsets _padsGridScrollPadding(BuildContext context) => EdgeInsets.fromLTRB(
-    _padsGridPadding,
-    _padsGridPadding,
-    _padsGridPadding,
-    _padsGridPadding +
-        (context.prefersDesktopUi ? 0 : _musicRegieOccupiedHeight),
-  );
+  EdgeInsets _padsGridScrollPadding(BuildContext context) =>
+      EdgeInsets.fromLTRB(
+        _padsGridPadding,
+        _padsGridPadding,
+        _padsGridPadding,
+        _padsGridPadding +
+            (context.prefersDesktopUi ? 0 : _musicRegieOccupiedHeight),
+      );
 
   @override
   void initState() {
@@ -267,12 +267,13 @@ class _SamplerScreenState extends State<SamplerScreen> {
               return null;
             },
           ),
-          _QuickSearchFilteredIntent: CallbackAction<_QuickSearchFilteredIntent>(
-            onInvoke: (intent) {
-              unawaited(_openQuickSearch(typeFilter: intent.type));
-              return null;
-            },
-          ),
+          _QuickSearchFilteredIntent:
+              CallbackAction<_QuickSearchFilteredIntent>(
+                onInvoke: (intent) {
+                  unawaited(_openQuickSearch(typeFilter: intent.type));
+                  return null;
+                },
+              ),
         },
         child: Focus(
           autofocus: true,

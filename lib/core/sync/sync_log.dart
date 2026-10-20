@@ -30,8 +30,7 @@ class SyncLog {
   /// Muettes par défaut : sur une bibliothèque de milliers de sons, elles
   /// noieraient la console. Activer pour investiguer :
   /// `--dart-define=STAGE_CUE_SYNC_TRACE=true`.
-  static const bool traceEnabled =
-      bool.fromEnvironment('STAGE_CUE_SYNC_TRACE');
+  static const bool traceEnabled = bool.fromEnvironment('STAGE_CUE_SYNC_TRACE');
 
   static void trace(String message) {
     if (!traceEnabled) return;
@@ -52,11 +51,7 @@ class SyncLog {
   static void warn(String message) =>
       _emit(message, level: 900, sinkLevel: LogLevel.warn);
 
-  static void severe(
-    String message, {
-    Object? error,
-    StackTrace? stackTrace,
-  }) =>
+  static void severe(String message, {Object? error, StackTrace? stackTrace}) =>
       _emit(
         message,
         level: 1000,
@@ -94,10 +89,7 @@ class SyncLog {
   /// Conséquence lourde et jusqu'ici totalement muette : sans cette ligne, un
   /// lancement qui ne fusionne rien ne dit pas s'il s'agit d'un timeout, d'un
   /// quota Drive ou d'un dossier injoignable.
-  static void librarySkipped({
-    required String library,
-    required Object error,
-  }) {
+  static void librarySkipped({required String library, required Object error}) {
     warn('$library : écartée du pull cette session (index incomplet) — $error');
   }
 
@@ -245,10 +237,7 @@ class SyncLog {
 
   // ── Cache & téléchargements ────────────────────────────────────────────────
 
-  static void downloadFailed({
-    required String title,
-    required Object error,
-  }) {
+  static void downloadFailed({required String title, required Object error}) {
     warn('Téléchargement échoué — « $title » : $error');
   }
 
@@ -269,7 +258,8 @@ class SyncLog {
     required int freeAfter,
     required int minFreeBytes,
   }) {
-    final message = '$library : éviction du cache — $evicted fichier(s) '
+    final message =
+        '$library : éviction du cache — $evicted fichier(s) '
         'évincé(s), ${_mb(freedBytes)} libérés, libre ${_mb(freeBefore)} → '
         '≈${_mb(freeAfter)}, $pinnedProtected épinglé(s) protégé(s)'
         '${failed > 0 ? ', $failed suppression(s) échouée(s)' : ''}.';
@@ -293,7 +283,8 @@ class SyncLog {
     required int cancelled,
     required Duration elapsed,
   }) {
-    final message = 'File de téléchargement vidée : $succeeded réussi(s), '
+    final message =
+        'File de téléchargement vidée : $succeeded réussi(s), '
         '$failed échec(s), $cancelled annulé(s), '
         '${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)} s.';
     if (failed > 0) {
@@ -303,19 +294,13 @@ class SyncLog {
     }
   }
 
-  static void evictionFailed({
-    required String path,
-    required Object error,
-  }) {
+  static void evictionFailed({required String path, required Object error}) {
     warn('Éviction du cache impossible — $path : $error');
   }
 
   /// Ménage best-effort qui a échoué (blob résiduel, fichier temporaire).
   /// N'empêche rien de fonctionner, mais explique un `.stagecue` qui grossit.
-  static void cleanupFailed({
-    required String what,
-    required Object error,
-  }) {
+  static void cleanupFailed({required String what, required Object error}) {
     warn('Ménage incomplet — $what : $error');
   }
 

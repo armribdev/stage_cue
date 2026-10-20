@@ -32,7 +32,6 @@ class SoundLibraryScreenResult {
 /// Longueur minimale de la recherche pour ne pas reléguer les sons déjà en board.
 const int kMinPreciseSoundLibrarySearchLength = 5;
 
-
 /// Écran pour ajouter un son à la board.
 class SoundLibraryScreen extends StatefulWidget {
   final db.AppDatabase database;
@@ -85,6 +84,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   List<Sound> _availableSounds = [];
   Set<int> _soundsInBoard = {};
   Map<int, int> _soundIdToPadId = {};
+
   /// IDs des sons correspondant à la recherche (AND entre tokens, tag ou titre par token).
   /// null = pas de filtre (requête vide ou tokens vides).
   Set<int>? _searchMatchedSoundIds;
@@ -124,15 +124,19 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
 
     try {
       await widget.libraryRepository?.refreshLibraryOwnerEmails();
-      final libraries = await LocalLibraryDataSource(widget.database)
-          .getAllLibraries();
+      final libraries = await LocalLibraryDataSource(
+        widget.database,
+      ).getAllLibraries();
       final allSounds = await _repository.getAllSounds();
       // Sons déjà présents dans un pad de la board (indicatif uniquement)
       final inBoard = await _repository.getSoundIdsInBoard(widget.boardId);
-      final soundIdToPadId =
-          await _repository.getSoundIdToFirstPadIdInBoard(widget.boardId);
+      final soundIdToPadId = await _repository.getSoundIdToFirstPadIdInBoard(
+        widget.boardId,
+      );
 
-      final availableSounds = allSounds.where((s) => s.isClassifiedForTypeFilter).toList();
+      final availableSounds = allSounds
+          .where((s) => s.isClassifiedForTypeFilter)
+          .toList();
 
       setState(() {
         _librariesById = {for (final lib in libraries) lib.id: lib};
@@ -252,10 +256,9 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
 
   List<String> get _normalizedSearchTokens {
     if (_searchQuery.trim().isEmpty) return const [];
-    return _parseSearchTokens(_searchQuery)
-        .map(normalizeForSearch)
-        .where((t) => t.isNotEmpty)
-        .toList();
+    return _parseSearchTokens(
+      _searchQuery,
+    ).map(normalizeForSearch).where((t) => t.isNotEmpty).toList();
   }
 
   Widget _buildTagChip(TagItem tag, {List<String> highlightTokens = const []}) {
@@ -287,9 +290,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   String _displayPath(Sound sound) {
     return SoundDisplayPaths.forSound(
       sound,
-      library: sound.libraryId != null
-          ? _librariesById[sound.libraryId]
-          : null,
+      library: sound.libraryId != null ? _librariesById[sound.libraryId] : null,
     );
   }
 
@@ -482,141 +483,140 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
               scrollController: scrollController,
             )
           : _filteredSounds.isEmpty
-              ? Center(
-                  key: ValueKey('empty_${_selectedType.name}'),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _selectedType.icon,
-                        size: 64,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _searchQuery.isEmpty
-                            ? 'Aucun ${_selectedType.label.toLowerCase()} disponible'
-                            : 'Aucun ${_selectedType.label.toLowerCase()} trouvé',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+          ? Center(
+              key: ValueKey('empty_${_selectedType.name}'),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _selectedType.icon,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                )
-              : ListView.builder(
-                  key: ValueKey('list_${_selectedType.name}'),
-                  controller: scrollController,
-                  itemCount: _filteredSounds.length,
-                  itemBuilder: (context, index) {
-                    final sound = _filteredSounds[index];
-                    final isInBoard = _soundsInBoard.contains(sound.id);
-                    final tags = _soundTags[sound.id] ?? [];
+                  const SizedBox(height: 16),
+                  Text(
+                    _searchQuery.isEmpty
+                        ? 'Aucun ${_selectedType.label.toLowerCase()} disponible'
+                        : 'Aucun ${_selectedType.label.toLowerCase()} trouvé',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              key: ValueKey('list_${_selectedType.name}'),
+              controller: scrollController,
+              itemCount: _filteredSounds.length,
+              itemBuilder: (context, index) {
+                final sound = _filteredSounds[index];
+                final isInBoard = _soundsInBoard.contains(sound.id);
+                final tags = _soundTags[sound.id] ?? [];
 
-                    return TweenAnimationBuilder<double>(
-                      duration: Duration(milliseconds: 160 + (index * 22)),
-                      curve: Curves.easeOutCubic,
-                      tween: Tween(begin: 0, end: 1),
-                      builder: (context, value, child) {
-                        return Opacity(
-                          opacity: value,
-                          child: Transform.translate(
-                            offset: Offset(0, (1 - value) * 10),
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: Card(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 4,
-                        ),
-                        child: Opacity(
-                          opacity: isInBoard ? 0.6 : 1.0,
-                          child: ListTile(
-                            leading: SoundTypeAvatar(
-                              type: sound.type,
-                              colorValue: sound.colorValue,
-                            ),
-                            title: Text.rich(
-                              buildHighlightedSpan(
-                                sound.title,
-                                _normalizedSearchTokens,
-                              ),
-                              style: TextStyle(
-                                fontWeight: isInBoard
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 4),
-                                Text(
-                                  _displayPath(sound),
-                                  style: const TextStyle(fontSize: 11),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (tags.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 6,
-                                    children: [
-                                      for (final tag in tags)
-                                        _buildTagChip(
-                                          tag,
-                                          highlightTokens: _normalizedSearchTokens,
-                                        ),
-                                    ],
-                                  ),
-                                ],
-                                const SizedBox(height: 2),
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Type: ${sound.typeDisplayLabel}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            trailing: SoundPickerActionButtons(
-                              onGo: () => _handleAdd(sound),
-                              secondaryEnabled: !isInBoard,
-                              onSecondary: () => _handleAddAsPad(sound),
-                              secondaryIcon: isInBoard
-                                  ? Icons.check_rounded
-                                  : Icons.view_comfy_alt_rounded,
-                            ),
-                          ),
-                        ),
+                return TweenAnimationBuilder<double>(
+                  duration: Duration(milliseconds: 160 + (index * 22)),
+                  curve: Curves.easeOutCubic,
+                  tween: Tween(begin: 0, end: 1),
+                  builder: (context, value, child) {
+                    return Opacity(
+                      opacity: value,
+                      child: Transform.translate(
+                        offset: Offset(0, (1 - value) * 10),
+                        child: child,
                       ),
                     );
                   },
-                ),
+                  child: Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: Opacity(
+                      opacity: isInBoard ? 0.6 : 1.0,
+                      child: ListTile(
+                        leading: SoundTypeAvatar(
+                          type: sound.type,
+                          colorValue: sound.colorValue,
+                        ),
+                        title: Text.rich(
+                          buildHighlightedSpan(
+                            sound.title,
+                            _normalizedSearchTokens,
+                          ),
+                          style: TextStyle(
+                            fontWeight: isInBoard
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text(
+                              _displayPath(sound),
+                              style: const TextStyle(fontSize: 11),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (tags.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  for (final tag in tags)
+                                    _buildTagChip(
+                                      tag,
+                                      highlightTokens: _normalizedSearchTokens,
+                                    ),
+                                ],
+                              ),
+                            ],
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Text(
+                                  'Type: ${sound.typeDisplayLabel}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        trailing: SoundPickerActionButtons(
+                          onGo: () => _handleAdd(sound),
+                          secondaryEnabled: !isInBoard,
+                          onSecondary: () => _handleAddAsPad(sound),
+                          secondaryIcon: isInBoard
+                              ? Icons.check_rounded
+                              : Icons.view_comfy_alt_rounded,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 
   Widget _buildBody({ScrollController? listScrollController}) {
     return Column(
       children: [
-        if (!widget.isModal) ...[
-          _buildTypeSelector(),
-          _buildSearchField(),
-        ],
-        Expanded(child: _buildSoundList(scrollController: listScrollController)),
+        if (!widget.isModal) ...[_buildTypeSelector(), _buildSearchField()],
+        Expanded(
+          child: _buildSoundList(scrollController: listScrollController),
+        ),
       ],
     );
   }
@@ -624,10 +624,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
   Widget _buildModalHeader() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildTypeSelector(),
-        _buildSearchField(),
-      ],
+      children: [_buildTypeSelector(), _buildSearchField()],
     );
   }
 

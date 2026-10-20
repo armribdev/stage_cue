@@ -3,21 +3,21 @@ import 'package:stage_cue/features/sampler/domain/entities/pad.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
 
 Sound _sound(int id, SoundType? type) => Sound(
-      id: id,
-      title: 'Son $id',
-      filePath: '/tmp/son_$id.mp3',
-      type: type,
-      volume: 1.0,
-      createdAt: DateTime(2026),
-    );
+  id: id,
+  title: 'Son $id',
+  filePath: '/tmp/son_$id.mp3',
+  type: type,
+  volume: 1.0,
+  createdAt: DateTime(2026),
+);
 
 Pad _pad(List<Sound> sounds) => Pad(
-      id: 1,
-      boardId: 1,
-      sortOrder: 0,
-      createdAt: DateTime(2026),
-      sounds: sounds,
-    );
+  id: 1,
+  boardId: 1,
+  sortOrder: 0,
+  createdAt: DateTime(2026),
+  sounds: sounds,
+);
 
 void main() {
   group('Pad — voies exclusives', () {

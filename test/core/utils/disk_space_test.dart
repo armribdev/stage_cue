@@ -14,15 +14,18 @@ void main() {
       expect(await availableDiskBytes(missing.path), isNull);
     });
 
-    test('répertoire temporaire existant → octets positifs (desktop)', () async {
-      final bytes = await availableDiskBytes(Directory.systemTemp.path);
-      // Windows / Linux / macOS mesurent ; mobile renverrait null.
-      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-        expect(bytes, isNotNull);
-        expect(bytes!, greaterThan(0));
-      } else {
-        expect(bytes, isNull);
-      }
-    });
+    test(
+      'répertoire temporaire existant → octets positifs (desktop)',
+      () async {
+        final bytes = await availableDiskBytes(Directory.systemTemp.path);
+        // Windows / Linux / macOS mesurent ; mobile renverrait null.
+        if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+          expect(bytes, isNotNull);
+          expect(bytes!, greaterThan(0));
+        } else {
+          expect(bytes, isNull);
+        }
+      },
+    );
   });
 }

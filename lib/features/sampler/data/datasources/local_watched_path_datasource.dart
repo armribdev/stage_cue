@@ -39,8 +39,9 @@ class LocalWatchedPathDataSource {
     String? accountEmail,
     String? driveFileId,
   }) async {
-    await (_database.update(_database.watchedPaths)..where((w) => w.id.equals(id)))
-        .write(
+    await (_database.update(
+      _database.watchedPaths,
+    )..where((w) => w.id.equals(id))).write(
       db.WatchedPathsCompanion(
         accountEmail: Value(accountEmail),
         driveFileId: Value(driveFileId),

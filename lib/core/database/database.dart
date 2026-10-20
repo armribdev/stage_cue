@@ -348,7 +348,10 @@ class AppDatabase extends _$AppDatabase {
           // s'installent. Gardé par un test d'existence : un upgrade depuis < 10
           // recrée déjà les tables au schéma courant.
           if (!await _columnExists('library_folders', 'manifest_probe_token')) {
-            await m.addColumn(libraryFolders, libraryFolders.manifestProbeToken);
+            await m.addColumn(
+              libraryFolders,
+              libraryFolders.manifestProbeToken,
+            );
           }
         }
         if (from < 37) {
@@ -556,10 +559,7 @@ class AppDatabase extends _$AppDatabase {
       }
 
       await (update(libraries)..where((l) => l.id.equals(id))).write(
-        LibrariesCompanion(
-          name: Value(name),
-          drivePath: Value(drivePath),
-        ),
+        LibrariesCompanion(name: Value(name), drivePath: Value(drivePath)),
       );
     }
   }
@@ -890,10 +890,7 @@ class AppDatabase extends _$AppDatabase {
       final normalizedTag = _normalize(tagName);
       var tagRow = await customSelect(
         'SELECT id FROM tags WHERE category_id = ? AND normalized_name = ? LIMIT 1',
-        variables: [
-          Variable<int>(categoryId),
-          Variable<String>(normalizedTag),
-        ],
+        variables: [Variable<int>(categoryId), Variable<String>(normalizedTag)],
       ).getSingleOrNull();
 
       if (tagRow == null) {
@@ -916,10 +913,7 @@ class AppDatabase extends _$AppDatabase {
         final normalizedAlias = _normalize(alias);
         final existing = await customSelect(
           'SELECT id FROM tag_aliases WHERE tag_id = ? AND normalized_alias = ? LIMIT 1',
-          variables: [
-            Variable<int>(tagId),
-            Variable<String>(normalizedAlias),
-          ],
+          variables: [Variable<int>(tagId), Variable<String>(normalizedAlias)],
         ).getSingleOrNull();
         if (existing != null) return;
         await customStatement(

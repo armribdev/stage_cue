@@ -11,20 +11,20 @@ import 'package:stage_cue/features/sampler/presentation/providers/sync_controlle
 class MockLibraryRepository extends Mock implements LibraryRepository {}
 
 Library _library() => Library(
-      id: 1,
-      name: 'Lib',
-      localRootPath: '/tmp/lib',
-      driveFolderId: 'folder',
-      lastSyncedRevision: 2,
-      createdAt: DateTime(2026),
-    );
+  id: 1,
+  name: 'Lib',
+  localRootPath: '/tmp/lib',
+  driveFolderId: 'folder',
+  lastSyncedRevision: 2,
+  createdAt: DateTime(2026),
+);
 
 SyncManifest _remote(int revision) => SyncManifest(
-      revision: revision,
-      deviceId: 'other',
-      updatedAt: DateTime(2026),
-      schemaVersion: 11,
-    );
+  revision: revision,
+  deviceId: 'other',
+  updatedAt: DateTime(2026),
+  schemaVersion: 11,
+);
 
 void main() {
   late MockLibraryRepository repo;
@@ -46,9 +46,12 @@ void main() {
 
   group('syncNow', () {
     test('push réussi -> synced + horodatage', () async {
-      when(() => repo.pushLibrary(any(),
-              overrideKnownRevision: any(named: 'overrideKnownRevision')))
-          .thenAnswer((_) async => const PushSuccess(3));
+      when(
+        () => repo.pushLibrary(
+          any(),
+          overrideKnownRevision: any(named: 'overrideKnownRevision'),
+        ),
+      ).thenAnswer((_) async => const PushSuccess(3));
       final controller = SyncController(repo);
 
       await controller.syncNow(library);
@@ -57,36 +60,45 @@ void main() {
       expect(controller.state.lastSyncedAt, isNotNull);
     });
 
-    test('dispose pendant un push en vol -> pas de notification post-dispose',
-        () async {
-      // Un push dure plusieurs secondes (export + upload) et n'est pas
-      // annulable : la fermeture de l'écran pendant ce temps ne doit pas
-      // notifier un ChangeNotifier détruit.
-      final completer = Completer<PushOutcome>();
-      when(() => repo.pushLibrary(any(),
-              overrideKnownRevision: any(named: 'overrideKnownRevision')))
-          .thenAnswer((_) => completer.future);
-      final controller = SyncController(repo);
+    test(
+      'dispose pendant un push en vol -> pas de notification post-dispose',
+      () async {
+        // Un push dure plusieurs secondes (export + upload) et n'est pas
+        // annulable : la fermeture de l'écran pendant ce temps ne doit pas
+        // notifier un ChangeNotifier détruit.
+        final completer = Completer<PushOutcome>();
+        when(
+          () => repo.pushLibrary(
+            any(),
+            overrideKnownRevision: any(named: 'overrideKnownRevision'),
+          ),
+        ).thenAnswer((_) => completer.future);
+        final controller = SyncController(repo);
 
-      final inFlight = controller.syncNow(library);
-      controller.dispose();
-      completer.complete(const PushSuccess(3));
+        final inFlight = controller.syncNow(library);
+        controller.dispose();
+        completer.complete(const PushSuccess(3));
 
-      await expectLater(inFlight, completes);
-    });
+        await expectLater(inFlight, completes);
+      },
+    );
 
     test('push en conflit -> fusion auto (pull + repush) -> synced', () async {
       // Un autre appareil a poussé entre-temps : au lieu d'écraser, on fusionne
       // (pull board-par-board non destructif) puis on repousse l'union.
       var pushCount = 0;
-      when(() => repo.pushLibrary(any(),
-              overrideKnownRevision: any(named: 'overrideKnownRevision')))
-          .thenAnswer((_) async {
+      when(
+        () => repo.pushLibrary(
+          any(),
+          overrideKnownRevision: any(named: 'overrideKnownRevision'),
+        ),
+      ).thenAnswer((_) async {
         pushCount++;
         return pushCount == 1 ? PushConflict(_remote(5)) : const PushSuccess(6);
       });
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullStaged(5));
+      when(
+        () => repo.pullLibrary(any()),
+      ).thenAnswer((_) async => const PullStaged(5));
       when(() => repo.getLibraryById(any())).thenAnswer((_) async => library);
       final controller = SyncController(repo);
 
@@ -94,32 +106,44 @@ void main() {
 
       expect(controller.state.status, SyncStatus.synced);
       verify(() => repo.pullLibrary(any())).called(1);
-      verify(() => repo.pushLibrary(any(),
-          overrideKnownRevision: any(named: 'overrideKnownRevision'))).called(2);
+      verify(
+        () => repo.pushLibrary(
+          any(),
+          overrideKnownRevision: any(named: 'overrideKnownRevision'),
+        ),
+      ).called(2);
     });
 
-    test('conflit persistant (double course) -> conflict UI en dernier recours',
-        () async {
-      // La fusion auto repush et se re-conflit (un 3e appareil a encore poussé)
-      // → on retombe sur la résolution manuelle.
-      when(() => repo.pushLibrary(any(),
-              overrideKnownRevision: any(named: 'overrideKnownRevision')))
-          .thenAnswer((invocation) async {
-        final override =
-            invocation.namedArguments[#overrideKnownRevision] as int?;
-        return override == null ? PushConflict(_remote(5)) : const PushSuccess(6);
-      });
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullStaged(5));
-      when(() => repo.getLibraryById(any())).thenAnswer((_) async => library);
-      final controller = SyncController(repo);
+    test(
+      'conflit persistant (double course) -> conflict UI en dernier recours',
+      () async {
+        // La fusion auto repush et se re-conflit (un 3e appareil a encore poussé)
+        // → on retombe sur la résolution manuelle.
+        when(
+          () => repo.pushLibrary(
+            any(),
+            overrideKnownRevision: any(named: 'overrideKnownRevision'),
+          ),
+        ).thenAnswer((invocation) async {
+          final override =
+              invocation.namedArguments[#overrideKnownRevision] as int?;
+          return override == null
+              ? PushConflict(_remote(5))
+              : const PushSuccess(6);
+        });
+        when(
+          () => repo.pullLibrary(any()),
+        ).thenAnswer((_) async => const PullStaged(5));
+        when(() => repo.getLibraryById(any())).thenAnswer((_) async => library);
+        final controller = SyncController(repo);
 
-      await controller.syncNow(library);
+        await controller.syncNow(library);
 
-      expect(controller.state.status, SyncStatus.conflict);
-      expect(controller.state.conflictRemoteRevision, 5);
-      expect(controller.state.conflictLibraryId, 1);
-    });
+        expect(controller.state.status, SyncStatus.conflict);
+        expect(controller.state.conflictRemoteRevision, 5);
+        expect(controller.state.conflictLibraryId, 1);
+      },
+    );
 
     test('non connecté et reconnexion impossible -> offline', () async {
       when(() => repo.isConnected).thenReturn(false);
@@ -136,17 +160,21 @@ void main() {
 
   group('résolution de conflit', () {
     test('keepLocal force le push avec la révision distante', () async {
-      when(() => repo.pushLibrary(any(),
-              overrideKnownRevision: any(named: 'overrideKnownRevision')))
-          .thenAnswer((invocation) async {
+      when(
+        () => repo.pushLibrary(
+          any(),
+          overrideKnownRevision: any(named: 'overrideKnownRevision'),
+        ),
+      ).thenAnswer((invocation) async {
         final override =
             invocation.namedArguments[#overrideKnownRevision] as int?;
         // Pushes auto (syncNow + repush de fusion) : sans override → conflit.
         // keepLocal fournit l'override (5) → push forcé accepté.
         return override == 5 ? const PushSuccess(6) : PushConflict(_remote(5));
       });
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullStaged(5));
+      when(
+        () => repo.pullLibrary(any()),
+      ).thenAnswer((_) async => const PullStaged(5));
       when(() => repo.getLibraryById(any())).thenAnswer((_) async => library);
       final controller = SyncController(repo);
       await controller.syncNow(library); // fusion auto échoue → conflit
@@ -161,8 +189,9 @@ void main() {
     });
 
     test('takeRemote tire le distant et fusionne immédiatement', () async {
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullStaged(5));
+      when(
+        () => repo.pullLibrary(any()),
+      ).thenAnswer((_) async => const PullStaged(5));
       final controller = SyncController(repo);
 
       await controller.takeRemote(library);
@@ -173,8 +202,9 @@ void main() {
 
   group('pullForLaunch', () {
     test('snapshot plus récent -> synced', () async {
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullStaged(7));
+      when(
+        () => repo.pullLibrary(any()),
+      ).thenAnswer((_) async => const PullStaged(7));
       final controller = SyncController(repo);
 
       await controller.pullForLaunch(library);
@@ -183,8 +213,9 @@ void main() {
     });
 
     test('déjà à jour -> synced', () async {
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullUpToDate());
+      when(
+        () => repo.pullLibrary(any()),
+      ).thenAnswer((_) async => const PullUpToDate());
       final controller = SyncController(repo);
 
       await controller.pullForLaunch(library);
@@ -193,8 +224,9 @@ void main() {
     });
 
     test('PullStaged déclenche onLibraryMerged', () async {
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullStaged(7));
+      when(
+        () => repo.pullLibrary(any()),
+      ).thenAnswer((_) async => const PullStaged(7));
       final controller = SyncController(repo);
       var mergedCalled = false;
       controller.onLibraryMerged = () => mergedCalled = true;
@@ -205,8 +237,9 @@ void main() {
     });
 
     test('PullUpToDate ne déclenche pas onLibraryMerged', () async {
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullUpToDate());
+      when(
+        () => repo.pullLibrary(any()),
+      ).thenAnswer((_) async => const PullUpToDate());
       final controller = SyncController(repo);
       var mergedCalled = false;
       controller.onLibraryMerged = () => mergedCalled = true;
@@ -222,8 +255,9 @@ void main() {
   // clignoterait en boucle « Synchro… » / « Synchronisé » pour zéro information.
   group('pullInBackground', () {
     test('déjà à jour -> la pastille ne bouge PAS', () async {
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullUpToDate());
+      when(
+        () => repo.pullLibrary(any()),
+      ).thenAnswer((_) async => const PullUpToDate());
       final controller = SyncController(repo);
       var notifications = 0;
       controller.addListener(() => notifications++);
@@ -235,21 +269,24 @@ void main() {
       expect(notifications, 0, reason: 'aucune transition à afficher');
     });
 
-    test('fusion réelle -> synced et onLibraryMerged, comme au lancement',
-        () async {
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullStaged(7));
-      final controller = SyncController(repo);
-      var mergedCalled = false;
-      controller.onLibraryMerged = () => mergedCalled = true;
+    test(
+      'fusion réelle -> synced et onLibraryMerged, comme au lancement',
+      () async {
+        when(
+          () => repo.pullLibrary(any()),
+        ).thenAnswer((_) async => const PullStaged(7));
+        final controller = SyncController(repo);
+        var mergedCalled = false;
+        controller.onLibraryMerged = () => mergedCalled = true;
 
-      await controller.pullInBackground(library);
+        await controller.pullInBackground(library);
 
-      // Le contenu des scènes vient de changer sous les yeux de l'utilisateur :
-      // c'est précisément ce qu'une veille silencieuse doit quand même dire.
-      expect(controller.state.status, SyncStatus.synced);
-      expect(mergedCalled, isTrue);
-    });
+        // Le contenu des scènes vient de changer sous les yeux de l'utilisateur :
+        // c'est précisément ce qu'une veille silencieuse doit quand même dire.
+        expect(controller.state.status, SyncStatus.synced);
+        expect(mergedCalled, isTrue);
+      },
+    );
 
     test('erreur -> signalée malgré le mode silencieux', () async {
       when(() => repo.pullLibrary(any())).thenThrow(StateError('réseau'));
@@ -283,25 +320,29 @@ void main() {
   });
 
   group('pas de snapshot distant', () {
-    test('bibliothèque déjà poussée -> erreur, jamais « synchronisé »',
-        () async {
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullNoRemoteSnapshot());
-      final controller = SyncController(repo);
+    test(
+      'bibliothèque déjà poussée -> erreur, jamais « synchronisé »',
+      () async {
+        when(
+          () => repo.pullLibrary(any()),
+        ).thenAnswer((_) async => const PullNoRemoteSnapshot());
+        final controller = SyncController(repo);
 
-      // lastSyncedRevision = 2 : le .stagecue a donc été vidé ou supprimé.
-      await controller.pullForLaunch(library);
+        // lastSyncedRevision = 2 : le .stagecue a donc été vidé ou supprimé.
+        await controller.pullForLaunch(library);
 
-      expect(controller.state.status, SyncStatus.error);
-      expect(controller.state.message, contains('introuvable'));
-      // Le piège d'origine : annoncer « Synchronisé » avec un horodatage frais
-      // alors que rien n'est sauvegardé à distance.
-      expect(controller.state.lastSyncedAt, isNull);
-    });
+        expect(controller.state.status, SyncStatus.error);
+        expect(controller.state.message, contains('introuvable'));
+        // Le piège d'origine : annoncer « Synchronisé » avec un horodatage frais
+        // alors que rien n'est sauvegardé à distance.
+        expect(controller.state.lastSyncedAt, isNull);
+      },
+    );
 
     test('bibliothèque jamais poussée -> idle, rien à signaler', () async {
-      when(() => repo.pullLibrary(any()))
-          .thenAnswer((_) async => const PullNoRemoteSnapshot());
+      when(
+        () => repo.pullLibrary(any()),
+      ).thenAnswer((_) async => const PullNoRemoteSnapshot());
       final controller = SyncController(repo);
 
       await controller.pullForLaunch(
@@ -320,9 +361,12 @@ void main() {
 
   group('Mode Spectacle (pause auto-sync)', () {
     test('deux bibliothèques différées -> les DEUX sont rejouées', () async {
-      when(() => repo.pushLibrary(any(),
-              overrideKnownRevision: any(named: 'overrideKnownRevision')))
-          .thenAnswer((_) async => const PushSuccess(3));
+      when(
+        () => repo.pushLibrary(
+          any(),
+          overrideKnownRevision: any(named: 'overrideKnownRevision'),
+        ),
+      ).thenAnswer((_) async => const PushSuccess(3));
       final other = Library(
         id: 2,
         name: 'Lib 2',
@@ -331,8 +375,10 @@ void main() {
         lastSyncedRevision: 5,
         createdAt: DateTime(2026),
       );
-      final controller =
-          SyncController(repo, debounce: const Duration(milliseconds: 20));
+      final controller = SyncController(
+        repo,
+        debounce: const Duration(milliseconds: 20),
+      );
 
       controller.pauseAutoSync();
       controller.schedulePush(library);
@@ -343,20 +389,29 @@ void main() {
 
       // Un slot unique ne retenait que la dernière : l'autre bibliothèque
       // n'était jamais poussée.
-      verify(() => repo.pushLibrary(
-            any(that: isA<Library>().having((l) => l.id, 'id', 1)),
-          )).called(1);
-      verify(() => repo.pushLibrary(
-            any(that: isA<Library>().having((l) => l.id, 'id', 2)),
-          )).called(1);
+      verify(
+        () => repo.pushLibrary(
+          any(that: isA<Library>().having((l) => l.id, 'id', 1)),
+        ),
+      ).called(1);
+      verify(
+        () => repo.pushLibrary(
+          any(that: isA<Library>().having((l) => l.id, 'id', 2)),
+        ),
+      ).called(1);
     });
 
     test('schedulePush en pause -> aucun push, rejoué à la reprise', () async {
-      when(() => repo.pushLibrary(any(),
-              overrideKnownRevision: any(named: 'overrideKnownRevision')))
-          .thenAnswer((_) async => const PushSuccess(3));
-      final controller =
-          SyncController(repo, debounce: const Duration(milliseconds: 20));
+      when(
+        () => repo.pushLibrary(
+          any(),
+          overrideKnownRevision: any(named: 'overrideKnownRevision'),
+        ),
+      ).thenAnswer((_) async => const PushSuccess(3));
+      final controller = SyncController(
+        repo,
+        debounce: const Duration(milliseconds: 20),
+      );
 
       controller.pauseAutoSync();
       controller.schedulePush(library);
@@ -368,32 +423,44 @@ void main() {
       verify(() => repo.pushLibrary(any())).called(1);
     });
 
-    test('un push débouncé en attente est différé puis rejoué à la reprise',
-        () async {
-      when(() => repo.pushLibrary(any(),
-              overrideKnownRevision: any(named: 'overrideKnownRevision')))
-          .thenAnswer((_) async => const PushSuccess(3));
-      final controller =
-          SyncController(repo, debounce: const Duration(milliseconds: 30));
+    test(
+      'un push débouncé en attente est différé puis rejoué à la reprise',
+      () async {
+        when(
+          () => repo.pushLibrary(
+            any(),
+            overrideKnownRevision: any(named: 'overrideKnownRevision'),
+          ),
+        ).thenAnswer((_) async => const PushSuccess(3));
+        final controller = SyncController(
+          repo,
+          debounce: const Duration(milliseconds: 30),
+        );
 
-      controller.schedulePush(library); // timer armé
-      controller.pauseAutoSync(); // entre en spectacle : annule mais diffère
-      await Future<void>.delayed(const Duration(milliseconds: 60));
-      verifyNever(() => repo.pushLibrary(any())); // rien pendant le show
+        controller.schedulePush(library); // timer armé
+        controller.pauseAutoSync(); // entre en spectacle : annule mais diffère
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        verifyNever(() => repo.pushLibrary(any())); // rien pendant le show
 
-      controller.resumeAutoSync();
-      await Future<void>.delayed(const Duration(milliseconds: 60));
-      verify(() => repo.pushLibrary(any())).called(1);
-    });
+        controller.resumeAutoSync();
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        verify(() => repo.pushLibrary(any())).called(1);
+      },
+    );
   });
 
   group('schedulePush (anti-rebond)', () {
     test('plusieurs appels rapprochés -> un seul push', () async {
-      when(() => repo.pushLibrary(any(),
-              overrideKnownRevision: any(named: 'overrideKnownRevision')))
-          .thenAnswer((_) async => const PushSuccess(3));
-      final controller =
-          SyncController(repo, debounce: const Duration(milliseconds: 20));
+      when(
+        () => repo.pushLibrary(
+          any(),
+          overrideKnownRevision: any(named: 'overrideKnownRevision'),
+        ),
+      ).thenAnswer((_) async => const PushSuccess(3));
+      final controller = SyncController(
+        repo,
+        debounce: const Duration(milliseconds: 20),
+      );
 
       controller.schedulePush(library);
       controller.schedulePush(library);
@@ -404,11 +471,16 @@ void main() {
     });
 
     test('syncNow supersède un push débouncé en attente', () async {
-      when(() => repo.pushLibrary(any(),
-              overrideKnownRevision: any(named: 'overrideKnownRevision')))
-          .thenAnswer((_) async => const PushSuccess(3));
-      final controller =
-          SyncController(repo, debounce: const Duration(milliseconds: 50));
+      when(
+        () => repo.pushLibrary(
+          any(),
+          overrideKnownRevision: any(named: 'overrideKnownRevision'),
+        ),
+      ).thenAnswer((_) async => const PushSuccess(3));
+      final controller = SyncController(
+        repo,
+        debounce: const Duration(milliseconds: 50),
+      );
 
       controller.schedulePush(library);
       await controller.syncNow(library); // push immédiat

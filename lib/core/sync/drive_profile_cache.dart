@@ -56,7 +56,7 @@ class DriveProfileStore {
 /// entre deux lancements alors que la photo, elle, est la même.
 class DriveAvatarCache {
   DriveAvatarCache({http.Client? httpClient})
-      : _http = httpClient ?? http.Client();
+    : _http = httpClient ?? http.Client();
 
   final http.Client _http;
   Directory? _cachedDir;
@@ -142,8 +142,7 @@ class DriveAvatarCache {
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         final dir = await _dir();
         final ext = _extForContentType(response.headers['content-type']);
-        final file =
-            File(p.join(dir.path, 'avatar_${_keyFor(identity)}.$ext'));
+        final file = File(p.join(dir.path, 'avatar_${_keyFor(identity)}.$ext'));
         await file.writeAsBytes(response.bodyBytes, flush: true);
         await _pruneExcept(file);
         return file;
@@ -184,9 +183,7 @@ class DriveAvatarCache {
       // Best-effort, mais c'est une DÉCONNEXION : la photo du compte quitté
       // reste sur le disque. Sans conséquence fonctionnelle, à savoir tout de
       // même si la question de ce qui subsiste après déconnexion se pose.
-      SyncLog.warn(
-        'Photos de compte non purgées à la déconnexion — $e',
-      );
+      SyncLog.warn('Photos de compte non purgées à la déconnexion — $e');
     }
   }
 

@@ -7,7 +7,6 @@ part of '../sound_picker_overlay.dart';
 /// Navigation clavier dans la liste de résultats.
 /// Méthodes de [_SoundPickerOverlayState] extraites via extension dans le même `part`.
 extension _SoundPickerNavigation on _SoundPickerOverlayState {
-
   // ── Navigation clavier ────────────────────────────────────────────────────
 
   int _clampSelectedIndex(int count) =>
@@ -25,7 +24,11 @@ extension _SoundPickerNavigation on _SoundPickerOverlayState {
     final ctx = _itemKey(next).currentContext;
 
     if (ctx != null) {
-      Scrollable.ensureVisible(ctx, duration: Duration.zero, alignmentPolicy: policy);
+      Scrollable.ensureVisible(
+        ctx,
+        duration: Duration.zero,
+        alignmentPolicy: policy,
+      );
       setState(() => _selectedIndex = next);
       return;
     }
@@ -35,12 +38,15 @@ extension _SoundPickerNavigation on _SoundPickerOverlayState {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final lateCtx = _itemKey(next).currentContext;
       if (lateCtx == null) return;
-      Scrollable.ensureVisible(lateCtx, duration: Duration.zero, alignmentPolicy: policy);
+      Scrollable.ensureVisible(
+        lateCtx,
+        duration: Duration.zero,
+        alignmentPolicy: policy,
+      );
     });
   }
 
-  GlobalKey _itemKey(int index) =>
-      _itemKeys.putIfAbsent(index, GlobalKey.new);
+  GlobalKey _itemKey(int index) => _itemKeys.putIfAbsent(index, GlobalKey.new);
 
   void _preScrollToIndex(int index, int delta) {
     if (!_scrollController.hasClients) return;

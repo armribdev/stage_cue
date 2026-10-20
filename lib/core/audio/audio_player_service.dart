@@ -221,12 +221,13 @@ class AudioPlayerService implements PreviewPlayback {
     }
   }
 
-  static const _invalidHandleReason = 'voix refusée par le moteur (handle invalide)';
+  static const _invalidHandleReason =
+      'voix refusée par le moteur (handle invalide)';
 
   static String _describeStartFailure(Object e) =>
       e is SoLoudNotInitializedException
-          ? 'moteur audio non initialisé'
-          : 'erreur de lecture — $e';
+      ? 'moteur audio non initialisé'
+      : 'erreur de lecture — $e';
 
   /// Met en pause la voix courante (mono-voix).
   @override
@@ -384,7 +385,10 @@ class AudioPlayerService implements PreviewPlayback {
       return SoLoud.instance.getLength(_source);
     } catch (e) {
       // `duration` est lu à chaque tap et à chaque rafraîchissement : une fois.
-      AudioLoadLog.warnOnce('duration-unavailable', 'Durée audio indisponible — $e');
+      AudioLoadLog.warnOnce(
+        'duration-unavailable',
+        'Durée audio indisponible — $e',
+      );
       return Duration.zero;
     }
   }

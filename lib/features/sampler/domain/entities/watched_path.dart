@@ -2,6 +2,7 @@
 class WatchedPath {
   final int id;
   final String path;
+
   /// Toujours `true` : seuls les dossiers locaux sont indexés via cette entité.
   final bool isDirectory;
   final String? accountEmail;
@@ -17,4 +18,3 @@ class WatchedPath {
     required this.addedAt,
   });
 }
-

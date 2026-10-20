@@ -12,12 +12,7 @@ void main() {
     test('retourne les pads de la board demandee', () async {
       final repository = MockSoundRepository();
       final pads = [
-        Pad(
-          id: 1,
-          boardId: 42,
-          sortOrder: 0,
-          createdAt: DateTime(2026, 1, 1),
-        ),
+        Pad(id: 1, boardId: 42, sortOrder: 0, createdAt: DateTime(2026, 1, 1)),
       ];
       when(() => repository.getBoardPads(42)).thenAnswer((_) async => pads);
       final useCase = LoadSoundsUseCase(repository);

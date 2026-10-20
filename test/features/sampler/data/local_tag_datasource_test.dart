@@ -19,29 +19,33 @@ void main() {
     await database.close();
   });
 
-  Future<int> insertCategory({String name = 'AMBIANCE'}) =>
-      database.into(database.tagCategories).insert(
-            db.TagCategoriesCompanion.insert(name: name, color: 0xFF000000),
-          );
+  Future<int> insertCategory({String name = 'AMBIANCE'}) => database
+      .into(database.tagCategories)
+      .insert(db.TagCategoriesCompanion.insert(name: name, color: 0xFF000000));
 
-  Future<int> insertTag(String name, int categoryId) =>
-      database.into(database.tagItems).insert(
-            db.TagItemsCompanion.insert(
-              categoryId: categoryId,
-              name: name,
-              normalizedName: normalizeForSearch(name),
-            ),
-          );
+  Future<int> insertTag(String name, int categoryId) => database
+      .into(database.tagItems)
+      .insert(
+        db.TagItemsCompanion.insert(
+          categoryId: categoryId,
+          name: name,
+          normalizedName: normalizeForSearch(name),
+        ),
+      );
 
-  Future<int> insertSound(String title) =>
-      database.into(database.sounds).insert(
-            db.SoundsCompanion.insert(title: title, displayName: title, filePath: '/x/$title.mp3'),
-          );
+  Future<int> insertSound(String title) => database
+      .into(database.sounds)
+      .insert(
+        db.SoundsCompanion.insert(
+          title: title,
+          displayName: title,
+          filePath: '/x/$title.mp3',
+        ),
+      );
 
-  Future<void> linkSoundTag(int soundId, int tagId) =>
-      database.into(database.soundTags).insert(
-            db.SoundTagsCompanion.insert(soundId: soundId, tagId: tagId),
-          );
+  Future<void> linkSoundTag(int soundId, int tagId) => database
+      .into(database.soundTags)
+      .insert(db.SoundTagsCompanion.insert(soundId: soundId, tagId: tagId));
 
   test('correspondance exacte (sous-chaîne) sur le nom du tag', () async {
     final categoryId = await insertCategory();
@@ -53,16 +57,18 @@ void main() {
     expect(result, {soundId});
   });
 
-  test('faute de frappe (lettres interverties) sur le nom du tag -> repli flou',
-      () async {
-    final categoryId = await insertCategory();
-    final tagId = await insertTag('Explosion', categoryId);
-    final soundId = await insertSound('Boom');
-    await linkSoundTag(soundId, tagId);
+  test(
+    'faute de frappe (lettres interverties) sur le nom du tag -> repli flou',
+    () async {
+      final categoryId = await insertCategory();
+      final tagId = await insertTag('Explosion', categoryId);
+      final soundId = await insertSound('Boom');
+      await linkSoundTag(soundId, tagId);
 
-    final result = await dataSource.findSoundIdsByTagQuery('epxlosion');
-    expect(result, {soundId});
-  });
+      final result = await dataSource.findSoundIdsByTagQuery('epxlosion');
+      expect(result, {soundId});
+    },
+  );
 
   test('faute de frappe sur un alias -> repli flou', () async {
     // Mots choisis pour ne pas entrer en collision avec les alias par
@@ -71,7 +77,9 @@ void main() {
     final tagId = await insertTag('Vaisselle cassée', categoryId);
     final soundId = await insertSound('Coup de feu');
     await linkSoundTag(soundId, tagId);
-    await database.into(database.tagAliases).insert(
+    await database
+        .into(database.tagAliases)
+        .insert(
           db.TagAliasesCompanion.insert(
             tagId: tagId,
             alias: 'porcelaine',

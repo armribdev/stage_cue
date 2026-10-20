@@ -26,8 +26,7 @@ class UpdateLog {
   static void newVersionFound({
     required String version,
     required String assetName,
-  }) =>
-      info('Nouvelle version disponible : $version ($assetName).');
+  }) => info('Nouvelle version disponible : $version ($assetName).');
 
   static void checkFailed(Object error) =>
       warn('Vérification de mise à jour échouée — $error');
@@ -38,8 +37,7 @@ class UpdateLog {
   static void downloadFailed(Object error) =>
       warn('Téléchargement de l\'installeur échoué — $error');
 
-  static void installLaunched(String path) =>
-      info('Installeur lancé — $path');
+  static void installLaunched(String path) => info('Installeur lancé — $path');
 
   static void installLaunchFailed(Object error) =>
       warn('Lancement de l\'installeur échoué — $error');

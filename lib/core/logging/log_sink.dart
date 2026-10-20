@@ -132,7 +132,9 @@ class LogSink {
     _headerTimer?.cancel();
     _headerTimer = Timer(_headerDeadline, () {
       if (_headerPending) {
-        _setHeader(const ['Session — en-tête incomplet (initialisation interrompue).']);
+        _setHeader(const [
+          'Session — en-tête incomplet (initialisation interrompue).',
+        ]);
         unawaited(flush());
       }
     });
@@ -177,7 +179,9 @@ class LogSink {
         // Un incident peut précéder un crash : on n'attend pas l'en-tête ni le
         // prochain tick.
         if (_headerPending) {
-          _setHeader(const ['Session — en-tête non encore disponible (erreur précoce).']);
+          _setHeader(const [
+            'Session — en-tête non encore disponible (erreur précoce).',
+          ]);
         }
         unawaited(flush());
       }
@@ -246,8 +250,7 @@ class LogSink {
   static Future<void> _rotate() async {
     final directory = _directory;
     if (directory == null) return;
-    String archive(int n) =>
-        p.join(directory.path, 'stage-cue.$n.log');
+    String archive(int n) => p.join(directory.path, 'stage-cue.$n.log');
     final current = File(p.join(directory.path, currentFileName));
     try {
       final oldest = File(archive(archiveCount));

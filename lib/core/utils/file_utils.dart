@@ -5,7 +5,14 @@ import 'package:permission_handler/permission_handler.dart';
 
 /// Extensions audio supportées
 final List<String> audioExtensions = [
-  'mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'wma', 'opus'
+  'mp3',
+  'wav',
+  'm4a',
+  'aac',
+  'ogg',
+  'flac',
+  'wma',
+  'opus',
 ];
 
 /// Vérifie si un fichier est un fichier audio
@@ -70,7 +77,7 @@ Future<String?> computeQuickHash(File file, {int sampleSize = 65536}) async {
 /// Scanne récursivement un dossier et retourne tous les fichiers audio
 Future<List<File>> scanDirectoryForAudioFiles(Directory directory) async {
   final List<File> audioFiles = [];
-  
+
   try {
     if (!await directory.exists()) {
       return audioFiles;
@@ -79,22 +86,25 @@ Future<List<File>> scanDirectoryForAudioFiles(Directory directory) async {
     // Sur Android, vérifier et demander la permission MANAGE_EXTERNAL_STORAGE si nécessaire
     if (Platform.isAndroid) {
       final manageStorageStatus = await Permission.manageExternalStorage.status;
-      
+
       if (!manageStorageStatus.isGranted) {
         await Permission.manageExternalStorage.request();
         // Note: On continue même si la permission n'est pas accordée,
         // car FilePicker peut avoir donné un accès temporaire via SAF
       }
     }
-    
+
     // Utiliser listSync() qui fonctionne mieux sur Android
     try {
       // Récupérer toutes les entités récursivement
-      List<FileSystemEntity> entities = directory.listSync(recursive: true, followLinks: false);
-      
+      List<FileSystemEntity> entities = directory.listSync(
+        recursive: true,
+        followLinks: false,
+      );
+
       // Filtrer pour ne garder que les fichiers
       List<File> allFiles = entities.whereType<File>().toList();
-      
+
       // Parcourir les fichiers et trouver les fichiers audio
       for (var file in allFiles) {
         try {
@@ -112,7 +122,7 @@ Future<List<File>> scanDirectoryForAudioFiles(Directory directory) async {
   } catch (e) {
     debugPrint('Erreur lors du scan de ${directory.path}: $e');
   }
-  
+
   return audioFiles;
 }
 
@@ -131,7 +141,7 @@ Future<void> _scanDirectoryRecursive(
     if (!await directory.exists()) {
       return;
     }
-    
+
     await for (FileSystemEntity entity in directory.list(followLinks: false)) {
       try {
         if (entity is File) {
@@ -140,7 +150,12 @@ Future<void> _scanDirectoryRecursive(
           }
         } else if (entity is Directory) {
           // Scanner récursivement les sous-dossiers
-          await _scanDirectoryRecursive(entity, audioFiles, depth: depth + 1, maxDepth: maxDepth);
+          await _scanDirectoryRecursive(
+            entity,
+            audioFiles,
+            depth: depth + 1,
+            maxDepth: maxDepth,
+          );
         }
       } catch (e) {
         // Ignorer les erreurs sur des fichiers/dossiers individuels

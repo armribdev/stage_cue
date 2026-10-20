@@ -74,7 +74,8 @@ class AmbianceController {
       }
     }
 
-    final index = soundIndex != null &&
+    final index =
+        soundIndex != null &&
             soundIndex >= 0 &&
             soundIndex < padItem.slots.length &&
             padItem.slots[soundIndex].isReady
@@ -244,9 +245,7 @@ class AmbianceController {
   }
 
   /// Coupe l'ambiance à l'antenne avec un fondu de [fade].
-  Future<void> stopCurrentAmbiance({
-    Duration fade = stopFadeDuration,
-  }) async {
+  Future<void> stopCurrentAmbiance({Duration fade = stopFadeDuration}) async {
     final current = _o._state.currentAmbiancePad;
     if (current == null) return;
     await _fadeOutAndStop(current, fade);
@@ -329,8 +328,7 @@ class AmbianceController {
   PadItem? _reclaimOffStagePad(int padId) =>
       _offStageAmbiancePads.remove(padId);
 
-  bool _isKeptOffStage(int padId) =>
-      _offStageAmbiancePads.containsKey(padId);
+  bool _isKeptOffStage(int padId) => _offStageAmbiancePads.containsKey(padId);
 
   /// Libère les pads hors-scène qui ne jouent plus.
   void cleanupOffStagePads() {

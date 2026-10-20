@@ -7,7 +7,6 @@ part of '../settings_screen.dart';
 /// Chargement des données (base, périphériques cue, version) et défilement.
 /// Méthodes de [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsData on _SettingsScreenState {
-
   Future<void> _loadAppVersion() async {
     final packageInfo = await PackageInfo.fromPlatform();
     if (!mounted) return;

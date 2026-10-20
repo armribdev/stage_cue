@@ -3,7 +3,6 @@ part of 'library_repository.dart';
 /// Téléchargements de masse d'une bibliothèque (progression, annulation, préchargement).
 /// Méthodes de [LibraryRepository] extraites via extension dans le même `part`.
 extension LibraryRepositoryDownloads on LibraryRepository {
-
   /// Compte les sons de la bibliothèque déjà disponibles hors ligne (fichier
   /// présent dans le cache local) sur le total. Sert d'indicateur d'état dans
   /// les paramètres — même critère de présence que [downloadAllLibraryAudio].
@@ -87,86 +86,82 @@ extension LibraryRepositoryDownloads on LibraryRepository {
       // et ici on veut au contraire qu'un fichier illisible n'emporte pas toute
       // la passe (c'est l'inverse de l'indexation, où un trou fait supprimer des
       // sons — ici il ne fait que laisser un son non téléchargé).
-      await mapBounded(
-        sounds,
-        (sound) async {
-          // Annulation et expiration de session : les tâches déjà en file se
-          // vident sans rien faire plutôt que d'être interrompues en vol (un
-          // téléchargement à moitié écrit serait un `.part` de plus à nettoyer).
-          if (cancelled() || authExpired || sessionLost) return;
+      await mapBounded(sounds, (sound) async {
+        // Annulation et expiration de session : les tâches déjà en file se
+        // vident sans rien faire plutôt que d'être interrompues en vol (un
+        // téléchargement à moitié écrit serait un `.part` de plus à nettoyer).
+        if (cancelled() || authExpired || sessionLost) return;
 
-          final relativePath = sound.relativePath;
-          try {
-            if (relativePath == null) {
-              throw StateError('Aucun chemin Drive associé');
-            }
-            final localPath = _cacheManager.localPathFor(library, relativePath);
-            if (!await File(localPath).exists()) {
-              // Client relu ICI, pas capturé plus haut : celui du début de passe
-              // a pu être disposé entre-temps (cf. commentaire ci-dessus).
-              final client = await _ensureAnyDriveClient();
-              if (client == null) {
-                // Session réellement perdue : inutile de faire échouer les
-                // centaines de fichiers restants un par un.
-                sessionLost = true;
-                return;
-              }
-              final resolvedLocalPath = await _cacheManager.ensureCached(
-                client: client,
-                library: library,
-                relativePath: relativePath,
-                driveFileId: sound.driveFileId,
-              );
-              unawaited(
-                _soundDataSource.syncLibrarySoundLocalPath(
-                  sound.id,
-                  resolvedLocalPath,
-                ),
-              );
-              unawaited(
-                _materializeSoundFileMetadataIfNeeded(
-                  sound,
-                  File(resolvedLocalPath),
-                ),
-              );
-              downloaded++;
-            }
-          } on DriveAuthException {
-            // Token révoqué/expiré : les fichiers suivants échoueraient de la
-            // même façon. On lève le drapeau — les tâches restantes le voient et
-            // renoncent — plutôt que de les marquer une par une en échec.
-            if (!authExpired) {
-              authExpired = true;
-              // Gardé : `mapBounded` est « complet ou rien », donc la moindre
-              // erreur qui s'échappe d'ici emporterait la passe entière et
-              // sauterait le rapport final — laissant la barre de progression
-              // figée alors que tout est terminé.
-              try {
-                await invalidateAuthSession();
-              } catch (e) {
-                SyncLog.warn('Invalidation de session échouée — $e');
-              }
-            }
-          } catch (e) {
-            failed++;
-            SyncLog.downloadFailed(title: sound.title, error: e);
+        final relativePath = sound.relativePath;
+        try {
+          if (relativePath == null) {
+            throw StateError('Aucun chemin Drive associé');
           }
+          final localPath = _cacheManager.localPathFor(library, relativePath);
+          if (!await File(localPath).exists()) {
+            // Client relu ICI, pas capturé plus haut : celui du début de passe
+            // a pu être disposé entre-temps (cf. commentaire ci-dessus).
+            final client = await _ensureAnyDriveClient();
+            if (client == null) {
+              // Session réellement perdue : inutile de faire échouer les
+              // centaines de fichiers restants un par un.
+              sessionLost = true;
+              return;
+            }
+            final resolvedLocalPath = await _cacheManager.ensureCached(
+              client: client,
+              library: library,
+              relativePath: relativePath,
+              driveFileId: sound.driveFileId,
+            );
+            unawaited(
+              _soundDataSource.syncLibrarySoundLocalPath(
+                sound.id,
+                resolvedLocalPath,
+              ),
+            );
+            unawaited(
+              _materializeSoundFileMetadataIfNeeded(
+                sound,
+                File(resolvedLocalPath),
+              ),
+            );
+            downloaded++;
+          }
+        } on DriveAuthException {
+          // Token révoqué/expiré : les fichiers suivants échoueraient de la
+          // même façon. On lève le drapeau — les tâches restantes le voient et
+          // renoncent — plutôt que de les marquer une par une en échec.
+          if (!authExpired) {
+            authExpired = true;
+            // Gardé : `mapBounded` est « complet ou rien », donc la moindre
+            // erreur qui s'échappe d'ici emporterait la passe entière et
+            // sauterait le rapport final — laissant la barre de progression
+            // figée alors que tout est terminé.
+            try {
+              await invalidateAuthSession();
+            } catch (e) {
+              SyncLog.warn('Invalidation de session échouée — $e');
+            }
+          }
+        } catch (e) {
+          failed++;
+          SyncLog.downloadFailed(title: sound.title, error: e);
+        }
 
-          // Compteur de tâches ACHEVÉES : en parallèle, l'indice dans la liste
-          // ne dit plus où en est la passe. Dart étant mono-isolate, cet
-          // incrément n'a pas besoin de verrou.
-          processed++;
-          report(
-            IndexingProgress(
-              path: library.name,
-              current: processed,
-              total: total,
-              isComplete: false,
-            ),
-          );
-        },
-        concurrency: _bulkDownloadConcurrency,
-      );
+        // Compteur de tâches ACHEVÉES : en parallèle, l'indice dans la liste
+        // ne dit plus où en est la passe. Dart étant mono-isolate, cet
+        // incrément n'a pas besoin de verrou.
+        processed++;
+        report(
+          IndexingProgress(
+            path: library.name,
+            current: processed,
+            total: total,
+            isComplete: false,
+          ),
+        );
+      }, concurrency: _bulkDownloadConcurrency);
 
       report(
         IndexingProgress(
@@ -178,8 +173,9 @@ extension LibraryRepositoryDownloads on LibraryRepository {
             (true, _, _) => 'Session Google expirée — reconnexion requise.',
             // Distinct d'une expiration : la session a été fermée sous nos
             // pieds, pas refusée par Google. Un simple relancement suffit.
-            (_, true, _) => 'Connexion Drive interrompue — relancez le '
-                'téléchargement.',
+            (_, true, _) =>
+              'Connexion Drive interrompue — relancez le '
+                  'téléchargement.',
             (_, _, final n) when n > 0 => '$n fichier(s) ignoré(s)',
             _ => null,
           },

@@ -51,8 +51,9 @@ class SoundPickerActionButtons extends StatelessWidget {
               disabledBackgroundColor: Colors.transparent,
               hoverColor: scheme.onSurface.withValues(alpha: 0.08),
               foregroundColor: scheme.onSurfaceVariant,
-              disabledForegroundColor:
-                  scheme.onSurfaceVariant.withValues(alpha: 0.38),
+              disabledForegroundColor: scheme.onSurfaceVariant.withValues(
+                alpha: 0.38,
+              ),
             ),
             constraints: const BoxConstraints.tightFor(
               width: _secondaryButtonSize,

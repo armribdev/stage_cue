@@ -31,7 +31,10 @@ void main() {
       expect(GoogleOAuthConfig.clientSecret, 'secret');
       expect(GoogleOAuthConfig.isConfigured, isTrue);
       expect(GoogleOAuthConfig.hasRuntimeCredentials, isTrue);
-      expect(memory.values[OAuthSecureKeys.clientId], 'id.apps.googleusercontent.com');
+      expect(
+        memory.values[OAuthSecureKeys.clientId],
+        'id.apps.googleusercontent.com',
+      );
       expect(memory.values[OAuthSecureKeys.clientSecret], 'secret');
     });
 
@@ -89,7 +92,10 @@ void main() {
     });
 
     test('ne réécrit pas un jeton déjà présent dans le coffre', () async {
-      await memory.write(OAuthSecureKeys.driveToken, '{"access_token":"secure"}');
+      await memory.write(
+        OAuthSecureKeys.driveToken,
+        '{"access_token":"secure"}',
+      );
       SharedPreferences.setMockInitialValues({
         OAuthSecureKeys.legacyPrefsToken: '{"access_token":"legacy"}',
       });
@@ -104,7 +110,10 @@ void main() {
       SharedPreferences.setMockInitialValues({
         OAuthSecureKeys.legacyPrefsToken: '{"access_token":"legacy"}',
       });
-      await memory.write(OAuthSecureKeys.driveToken, '{"access_token":"secure"}');
+      await memory.write(
+        OAuthSecureKeys.driveToken,
+        '{"access_token":"secure"}',
+      );
       OAuthSecureStore.debugResetMigrationFlag();
 
       await OAuthSecureStore.deleteDriveToken();

@@ -5,16 +5,16 @@ import '../../domain/entities/sound.dart';
 /// Libellés, icônes et couleurs d'avatar pour les types de sons.
 extension SoundTypeUi on SoundType {
   String get label => switch (this) {
-        SoundType.soundEffect => 'Bruitage',
-        SoundType.music => 'Musique',
-        SoundType.ambiance => 'Ambiance',
-      };
+    SoundType.soundEffect => 'Bruitage',
+    SoundType.music => 'Musique',
+    SoundType.ambiance => 'Ambiance',
+  };
 
   IconData get icon => switch (this) {
-        SoundType.soundEffect => Icons.graphic_eq_rounded,
-        SoundType.music => Icons.music_note_rounded,
-        SoundType.ambiance => Icons.waves_rounded,
-      };
+    SoundType.soundEffect => Icons.graphic_eq_rounded,
+    SoundType.music => Icons.music_note_rounded,
+    SoundType.ambiance => Icons.waves_rounded,
+  };
 
   ({Color background, Color foreground}) avatarColors(ColorScheme scheme) =>
       switch (this) {
@@ -67,8 +67,9 @@ class SoundTypeAvatar extends StatelessWidget {
 
     if (colorValue != null) {
       final background = Color(colorValue!);
-      final foreground =
-          background.computeLuminance() > 0.6 ? Colors.black : Colors.white;
+      final foreground = background.computeLuminance() > 0.6
+          ? Colors.black
+          : Colors.white;
       return CircleAvatar(
         radius: radius,
         backgroundColor: background,
@@ -91,11 +92,7 @@ class SoundTypeAvatar extends StatelessWidget {
     return CircleAvatar(
       radius: radius,
       backgroundColor: colors.background,
-      child: Icon(
-        type!.icon,
-        size: iconSize,
-        color: colors.foreground,
-      ),
+      child: Icon(type!.icon, size: iconSize, color: colors.foreground),
     );
   }
 }

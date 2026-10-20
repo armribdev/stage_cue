@@ -10,4 +10,3 @@ class StopSoundUseCase {
     await _audioPlayer.stop();
   }
 }
-

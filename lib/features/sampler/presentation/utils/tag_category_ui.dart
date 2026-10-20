@@ -8,11 +8,11 @@ import '../../domain/entities/tag_category.dart';
 /// nom brut mis en forme.
 extension TagCategoryUi on TagCategory {
   String get displayLabel => switch (name) {
-        'ACTION' => 'Actions',
-        'OBJET' => 'Objets',
-        'MUSIQUE' => 'Musique',
-        _ => _toSentenceCase(name),
-      };
+    'ACTION' => 'Actions',
+    'OBJET' => 'Objets',
+    'MUSIQUE' => 'Musique',
+    _ => _toSentenceCase(name),
+  };
 }
 
 String _toSentenceCase(String s) {

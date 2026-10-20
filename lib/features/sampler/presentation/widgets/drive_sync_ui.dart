@@ -83,42 +83,42 @@ class SyncStatusPill extends StatelessWidget {
   ) {
     return switch (status) {
       SyncStatus.syncing => (
-          scheme.primary,
-          'Synchro…',
-          Icons.sync_rounded,
-          true,
-        ),
+        scheme.primary,
+        'Synchro…',
+        Icons.sync_rounded,
+        true,
+      ),
       SyncStatus.synced => (
-          scheme.primary,
-          'À jour',
-          Icons.cloud_done_outlined,
-          false,
-        ),
+        scheme.primary,
+        'À jour',
+        Icons.cloud_done_outlined,
+        false,
+      ),
       // Hors-ligne : neutre, jamais alarmiste — le travail local est normal.
       SyncStatus.offline => (
-          scheme.onSurfaceVariant,
-          'Hors-ligne',
-          Icons.cloud_off_outlined,
-          false,
-        ),
+        scheme.onSurfaceVariant,
+        'Hors-ligne',
+        Icons.cloud_off_outlined,
+        false,
+      ),
       SyncStatus.conflict => (
-          scheme.error,
-          'Conflit',
-          Icons.merge_type_rounded,
-          false,
-        ),
+        scheme.error,
+        'Conflit',
+        Icons.merge_type_rounded,
+        false,
+      ),
       SyncStatus.error => (
-          scheme.error,
-          'Erreur sync',
-          Icons.error_outline_rounded,
-          false,
-        ),
+        scheme.error,
+        'Erreur sync',
+        Icons.error_outline_rounded,
+        false,
+      ),
       SyncStatus.idle => (
-          scheme.onSurfaceVariant,
-          '',
-          Icons.cloud_outlined,
-          false,
-        ),
+        scheme.onSurfaceVariant,
+        '',
+        Icons.cloud_outlined,
+        false,
+      ),
     };
   }
 }
@@ -188,8 +188,9 @@ Future<void> resolveSyncConflictFromPill({
   }
 
   final libraries = await libraryRepository.getLibraries();
-  final connected =
-      libraries.where((library) => library.isConnectedToDrive).toList();
+  final connected = libraries
+      .where((library) => library.isConnectedToDrive)
+      .toList();
 
   if (!context.mounted) return;
 

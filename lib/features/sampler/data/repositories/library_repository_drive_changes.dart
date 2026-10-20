@@ -3,7 +3,6 @@ part of 'library_repository.dart';
 /// Synchronisation incrémentale par changes.list (ADR 0021).
 /// Méthodes de [LibraryRepository] extraites via extension dans le même `part`.
 extension LibraryRepositoryDriveChanges on LibraryRepository {
-
   Future<DriveSyncOutcome> _applyDriveChanges({
     required DriveClient client,
     required Library library,
@@ -50,16 +49,13 @@ extension LibraryRepositoryDriveChanges on LibraryRepository {
 
     // 2. Cadre de chemins : les nœuds dossier connus de CETTE bibliothèque.
     final folders = await _dataSource.getFoldersForLibrary(library.id);
-    final folderByDriveId = {
-      for (final f in folders) f.driveFolderId: f,
-    };
+    final folderByDriveId = {for (final f in folders) f.driveFolderId: f};
     // Chemins relatifs connus, pour greffer un dossier neuf sous un parent
     // local (y compris la racine de la bibliothèque, qui n'a pas toujours de
     // nœud si aucun audio n'y a jamais été indexé).
     final folderRelativeByDriveId = <String, String>{
       for (final f in folders) f.driveFolderId: f.relativePath,
-      if (library.driveFolderId != null)
-        library.driveFolderId!: '',
+      if (library.driveFolderId != null) library.driveFolderId!: '',
     };
     final knownSoundIds = await _soundDataSource.getDriveFileIdsForLibrary(
       library.id,
@@ -181,13 +177,18 @@ extension LibraryRepositoryDriveChanges on LibraryRepository {
           if (!seenEntryIds.add(audio.driveFileId)) continue;
           final folderId = folderIds[audio.folderDriveId];
           if (folderId == null) continue;
-          entries.add(DriveIndexEntry(
-            relativePath: audio.relativePath,
-            localPath: _cacheManager.localPathFor(library, audio.relativePath),
-            driveFileId: audio.driveFileId,
-            driveMd5: audio.driveMd5,
-            folderId: folderId,
-          ));
+          entries.add(
+            DriveIndexEntry(
+              relativePath: audio.relativePath,
+              localPath: _cacheManager.localPathFor(
+                library,
+                audio.relativePath,
+              ),
+              driveFileId: audio.driveFileId,
+              driveMd5: audio.driveMd5,
+              folderId: folderId,
+            ),
+          );
         }
       }
       SyncLog.trace(
@@ -252,13 +253,15 @@ extension LibraryRepositoryDriveChanges on LibraryRepository {
       final relativePath = folder.relativePath.isEmpty
           ? name
           : '${folder.relativePath}/$name';
-      entries.add(DriveIndexEntry(
-        relativePath: relativePath,
-        localPath: _cacheManager.localPathFor(library, relativePath),
-        driveFileId: change.fileId,
-        driveMd5: file.md5Checksum,
-        folderId: folder.id,
-      ));
+      entries.add(
+        DriveIndexEntry(
+          relativePath: relativePath,
+          localPath: _cacheManager.localPathFor(library, relativePath),
+          driveFileId: change.fileId,
+          driveMd5: file.md5Checksum,
+          folderId: folder.id,
+        ),
+      );
     }
 
     // 5. Application. Les ajouts/modifications passent par les MÊMES règles de
@@ -278,11 +281,11 @@ extension LibraryRepositoryDriveChanges on LibraryRepository {
     }
 
     if (removedIds.isNotEmpty) {
-      final prunedPaths =
-          await _soundDataSource.deleteLibrarySoundsByDriveFileIds(
-        libraryId: library.id,
-        driveFileIds: removedIds,
-      );
+      final prunedPaths = await _soundDataSource
+          .deleteLibrarySoundsByDriveFileIds(
+            libraryId: library.id,
+            driveFileIds: removedIds,
+          );
       for (final relativePath in prunedPaths) {
         await _cacheManager.evictCachedFile(library, relativePath);
       }

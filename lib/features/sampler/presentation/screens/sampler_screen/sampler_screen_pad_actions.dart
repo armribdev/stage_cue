@@ -7,7 +7,6 @@ part of '../sampler_screen.dart';
 /// Interactions avec un pad : déclenchement, préparation, indisponibilité, sélecteur de sons.
 /// Méthodes de [_SamplerScreenState] extraites via extension dans le même `part`.
 extension _SamplerScreenPadActions on _SamplerScreenState {
-
   Future<void> _handlePadTap(BuildContext context, PadItem padItem) async {
     final resolved = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
 
@@ -145,7 +144,8 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
     };
     // Session expirée : proposer la reconnexion plutôt que le détail du pad,
     // qui ne dirait rien de la vraie cause.
-    final action = _reconnectSnackBarAction() ??
+    final action =
+        _reconnectSnackBarAction() ??
         SnackBarAction(
           label: 'Détails',
           onPressed: () => _showPadUnavailableSheet(context, padItem),
@@ -206,7 +206,10 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
             children: [
               Text(
                 title,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 8),
               Text(body, style: Theme.of(ctx).textTheme.bodyMedium),
@@ -240,8 +243,7 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
       ),
       onEdit: showEditAffordances
           ? () {
-              final live =
-                  _notifier.findPadItemById(padItem.pad.id) ?? padItem;
+              final live = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
               PadDetailsScreen.open(
                 context,
                 padItem: live,
@@ -265,10 +267,12 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
   /// Overlay listant les sons d'un multipad — permet de déclencher une
   /// variante précise plutôt que de laisser le pad piocher automatiquement.
   void _showPadSoundPicker(BuildContext context, PadItem padItem) {
-    unawaited(SoundPickerOverlay.showForPadVariant(
-      context,
-      notifier: _notifier,
-      padItem: padItem,
-    ));
+    unawaited(
+      SoundPickerOverlay.showForPadVariant(
+        context,
+        notifier: _notifier,
+        padItem: padItem,
+      ),
+    );
   }
 }

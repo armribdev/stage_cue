@@ -20,10 +20,7 @@ Future<void> openAdaptiveScreen({
   required Widget Function({required bool isModal}) builder,
 }) async {
   if (preferModalPresentation(context)) {
-    await showAppModal<void>(
-      context: context,
-      child: builder(isModal: true),
-    );
+    await showAppModal<void>(context: context, child: builder(isModal: true));
     return;
   }
 
@@ -94,7 +91,9 @@ class AppModalShell extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppModalStyle.padding),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppModalStyle.padding,
+          ),
           child: SizedBox(
             height: _headerHeight,
             child: Row(

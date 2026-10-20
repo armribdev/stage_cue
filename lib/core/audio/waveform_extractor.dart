@@ -66,7 +66,7 @@ class WaveformProbe {
 
   const WaveformProbe._(this.status, [this.bytes]);
   const WaveformProbe.success(Uint8List bytes)
-      : this._(WaveformProbeStatus.success, bytes);
+    : this._(WaveformProbeStatus.success, bytes);
   const WaveformProbe.transient() : this._(WaveformProbeStatus.transient);
   const WaveformProbe.unsupported() : this._(WaveformProbeStatus.unsupported);
 
@@ -76,8 +76,9 @@ class WaveformProbe {
   /// Valeur à écrire dans `sounds.waveformProbeGeneration` :
   /// - `unsupported` → génération courante (bloque le retry jusqu'au prochain bump) ;
   /// - `success`/`transient` → null (efface tout marqueur / re-tentera).
-  int? get generationValue =>
-      status == WaveformProbeStatus.unsupported ? kWaveformProbeGeneration : null;
+  int? get generationValue => status == WaveformProbeStatus.unsupported
+      ? kWaveformProbeGeneration
+      : null;
 }
 
 /// Décode [filePath] hors du thread UI (SoLoud le fait via un isolate interne)

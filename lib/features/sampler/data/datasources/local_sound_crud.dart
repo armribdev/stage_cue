@@ -3,7 +3,6 @@ part of 'local_sound_datasource.dart';
 /// Lecture et mutations des sons (CRUD, scènes, réglages, favoris).
 /// Méthodes de [LocalSoundDataSource] extraites via extension dans le même `part`.
 extension LocalSoundCrud on LocalSoundDataSource {
-
   /// Récupère tous les sons
   Future<List<domain.Sound>> getAllSounds() async {
     final sounds = await _database.select(_database.sounds).get();
@@ -161,9 +160,9 @@ extension LocalSoundCrud on LocalSoundDataSource {
     // fichier (invariant garanti ici, pas seulement par le formulaire).
     String? resolvedName = displayName?.trim();
     if (updateDisplayName && (resolvedName == null || resolvedName.isEmpty)) {
-      final row = await (_database.select(_database.sounds)
-            ..where((s) => s.id.equals(id)))
-          .getSingleOrNull();
+      final row = await (_database.select(
+        _database.sounds,
+      )..where((s) => s.id.equals(id))).getSingleOrNull();
       resolvedName = row?.title;
     }
     final companion = db.SoundsCompanion(
@@ -172,10 +171,12 @@ extension LocalSoundCrud on LocalSoundDataSource {
           ? Value(resolvedName)
           : const Value.absent(),
       volume: volume != null ? Value(volume) : const Value.absent(),
-      startOffsetMs:
-          startOffsetMs != null ? Value(startOffsetMs) : const Value.absent(),
-      isProcessed:
-          isProcessed != null ? Value(isProcessed) : const Value.absent(),
+      startOffsetMs: startOffsetMs != null
+          ? Value(startOffsetMs)
+          : const Value.absent(),
+      isProcessed: isProcessed != null
+          ? Value(isProcessed)
+          : const Value.absent(),
     );
     await (_database.update(
       _database.sounds,
@@ -187,8 +188,7 @@ extension LocalSoundCrud on LocalSoundDataSource {
   Future<void> markSoundsProcessed(Iterable<int> ids) async {
     final idList = ids.toList();
     if (idList.isEmpty) return;
-    await (_database.update(_database.sounds)
-          ..where((s) => s.id.isIn(idList)))
+    await (_database.update(_database.sounds)..where((s) => s.id.isIn(idList)))
         .write(const db.SoundsCompanion(isProcessed: Value(true)));
   }
 
@@ -208,11 +208,14 @@ extension LocalSoundCrud on LocalSoundDataSource {
   /// Un échec `transient` (moteur non prêt) n'écrit rien — on retentera.
   Future<void> persistWaveformProbe(int id, WaveformProbe probe) async {
     if (probe.status == WaveformProbeStatus.transient) return;
-    await (_database.update(_database.sounds)..where((s) => s.id.equals(id)))
-        .write(db.SoundsCompanion(
-      waveform: Value(probe.waveformValue),
-      waveformProbeGeneration: Value(probe.generationValue),
-    ));
+    await (_database.update(
+      _database.sounds,
+    )..where((s) => s.id.equals(id))).write(
+      db.SoundsCompanion(
+        waveform: Value(probe.waveformValue),
+        waveformProbeGeneration: Value(probe.generationValue),
+      ),
+    );
   }
 
   /// Marque ou démarque un son comme favori (accès rapide en recherche).
@@ -282,7 +285,10 @@ extension LocalSoundCrud on LocalSoundDataSource {
   }
 
   /// Copie les réglages par-board d'une scène source vers une scène cible.
-  Future<void> copyBoardSoundSettings(int sourceBoardId, int targetBoardId) async {
+  Future<void> copyBoardSoundSettings(
+    int sourceBoardId,
+    int targetBoardId,
+  ) async {
     await _database.customStatement(
       '''
       INSERT OR IGNORE INTO board_sound_settings (board_id, sound_id, display_name, color, volume)

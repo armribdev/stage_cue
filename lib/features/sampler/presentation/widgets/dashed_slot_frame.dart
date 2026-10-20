@@ -3,10 +3,7 @@ import '../../../../core/theme/app_tokens.dart';
 
 /// Contour pointillé pour les emplacements vides (ajout de pad, brouillon).
 class DashedRoundedRectPainter extends CustomPainter {
-  const DashedRoundedRectPainter({
-    required this.color,
-    required this.radius,
-  });
+  const DashedRoundedRectPainter({required this.color, required this.radius});
 
   final Color color;
   final double radius;

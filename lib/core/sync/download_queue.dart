@@ -37,7 +37,7 @@ class DownloadQueue {
   final void Function(DownloadQueueSummary summary)? onDrained;
 
   DownloadQueue({this.maxConcurrent = 2, this.onDrained})
-      : assert(maxConcurrent >= 1, 'maxConcurrent doit être ≥ 1');
+    : assert(maxConcurrent >= 1, 'maxConcurrent doit être ≥ 1');
 
   int _succeeded = 0;
   int _failed = 0;

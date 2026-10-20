@@ -189,15 +189,15 @@ class _AppTextInputDialogState extends State<AppTextInputDialog> {
             hintText: widget.hint,
             prefixIcon: widget.icon == null
                 ? null
-                : Icon(widget.icon, color: scheme.primary.withValues(alpha: 0.9)),
+                : Icon(
+                    widget.icon,
+                    color: scheme.primary.withValues(alpha: 0.9),
+                  ),
           ),
         ),
       ),
       actions: [
-        ElevatedButton(
-          onPressed: _submit,
-          child: Text(widget.confirmLabel),
-        ),
+        ElevatedButton(onPressed: _submit, child: Text(widget.confirmLabel)),
       ],
     );
   }
@@ -354,9 +354,9 @@ class _AppBoardCreationDialogState extends State<AppBoardCreationDialog> {
   void _submit() {
     final raw = _controller.text.trim();
     final name = raw.isEmpty ? widget.suggestedName : raw;
-    Navigator.of(context).pop(
-      (name: name, color: _selectedColor, libraryId: _selectedLibraryId),
-    );
+    Navigator.of(
+      context,
+    ).pop((name: name, color: _selectedColor, libraryId: _selectedLibraryId));
   }
 
   @override
@@ -443,12 +443,7 @@ class _AppBoardCreationDialogState extends State<AppBoardCreationDialog> {
           ],
         ),
       ),
-      actions: [
-        ElevatedButton(
-          onPressed: _submit,
-          child: const Text('Créer'),
-        ),
-      ],
+      actions: [ElevatedButton(onPressed: _submit, child: const Text('Créer'))],
     );
   }
 }

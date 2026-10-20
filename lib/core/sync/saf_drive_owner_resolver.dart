@@ -16,7 +16,8 @@ class SafDriveOwnerResolver {
   }) async {
     GoogleDriveClient? client = existingClient;
     if (client == null) {
-      final connected = await _authenticator.connectSilently() ??
+      final connected =
+          await _authenticator.connectSilently() ??
           await _authenticator.connect();
       if (connected is! GoogleDriveClient) {
         return null;

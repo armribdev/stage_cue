@@ -22,7 +22,9 @@ class AppUpdateChecker {
   /// l'appelant), ou si la release n'a pas d'asset installeur exploitable.
   /// Les erreurs réseau/format remontent à l'appelant — c'est lui qui décide
   /// de logguer et d'afficher (ou pas) un message.
-  Future<AppUpdateInfo?> checkForUpdate({required String currentVersion}) async {
+  Future<AppUpdateInfo?> checkForUpdate({
+    required String currentVersion,
+  }) async {
     UpdateLog.checkStarted();
     final client = _http;
     final response = client == null
@@ -35,9 +37,7 @@ class AppUpdateChecker {
             headers: const {'Accept': 'application/vnd.github+json'},
           );
     if (response.statusCode != 200) {
-      throw Exception(
-        'Réponse inattendue de GitHub (${response.statusCode})',
-      );
+      throw Exception('Réponse inattendue de GitHub (${response.statusCode})');
     }
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -45,8 +45,9 @@ class AppUpdateChecker {
     if (tagName == null || tagName.isEmpty) {
       throw Exception('Release GitHub sans tag_name');
     }
-    final remoteVersion =
-        tagName.startsWith('v') ? tagName.substring(1) : tagName;
+    final remoteVersion = tagName.startsWith('v')
+        ? tagName.substring(1)
+        : tagName;
 
     if (!isNewerVersion(remoteVersion, currentVersion)) {
       UpdateLog.upToDate(currentVersion);

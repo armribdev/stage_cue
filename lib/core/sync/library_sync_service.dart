@@ -144,8 +144,8 @@ class LibrarySyncService {
     this._snapshotStore, {
     String? deviceId,
     Directory? tempDir,
-  })  : _deviceIdOverride = deviceId,
-        _tempDirOverride = tempDir;
+  }) : _deviceIdOverride = deviceId,
+       _tempDirOverride = tempDir;
 
   /// Pousse l'état local vers Drive si aucun conflit de révision n'est détecté.
   Future<PushOutcome> push({
@@ -200,7 +200,11 @@ class LibrarySyncService {
   }) async {
     final stageId = await _ensureStageFolder(client, remoteFolderId);
 
-    final remoteManifest = await _readManifest(client, stageId, manifestFileName);
+    final remoteManifest = await _readManifest(
+      client,
+      stageId,
+      manifestFileName,
+    );
     // `force` (résolution de conflit « garder le local ») : on adopte la
     // révision distante pour l'écraser au lieu de signaler un conflit.
     if (!force &&
@@ -242,8 +246,11 @@ class LibrarySyncService {
       // manifest apparu entre-temps, y compris publié par un appareil qui n'en
       // avait posé aucun. L'optimiser en relisant un id mémorisé plus haut
       // ferait manquer exactement le cas qu'elle existe pour détecter.
-      final currentEntry =
-          await _readManifestEntry(client, stageId, manifestFileName);
+      final currentEntry = await _readManifestEntry(
+        client,
+        stageId,
+        manifestFileName,
+      );
       final current = currentEntry?.manifest;
       if (!force &&
           current != null &&
@@ -315,7 +322,11 @@ class LibrarySyncService {
     required DriveClient client,
     required String libraryFolderId,
   }) async {
-    final stage = await _findInFolder(client, libraryFolderId, _stageFolderName);
+    final stage = await _findInFolder(
+      client,
+      libraryFolderId,
+      _stageFolderName,
+    );
     if (stage == null) return false;
     // Les snapshots portant désormais un nom unique, c'est la présence d'un
     // MANIFEST qui atteste qu'un snapshot a été publié. Les noms historiques
@@ -425,12 +436,15 @@ class LibrarySyncService {
       name: _folderManifestFileName,
     );
 
-    final readable = <({
-      FolderPullTarget target,
-      String stageId,
-      String fileId,
-      String? probeToken,
-    })>[];
+    final readable =
+        <
+          ({
+            FolderPullTarget target,
+            String stageId,
+            String fileId,
+            String? probeToken,
+          })
+        >[];
     for (final entry in staged) {
       final manifestFile = manifestFiles[entry.stageId];
       if (manifestFile == null) {
@@ -469,14 +483,10 @@ class LibrarySyncService {
 
     // 4. Lecture des manifests restants en parallèle (idempotent, sans effet
     //    de bord).
-    final manifests = await mapBounded(
-      readable,
-      (entry) async {
-        final bytes = await client.downloadBytes(entry.fileId);
-        return SyncManifest.decode(utf8.decode(bytes));
-      },
-      concurrency: _pullConcurrency,
-    );
+    final manifests = await mapBounded(readable, (entry) async {
+      final bytes = await client.downloadBytes(entry.fileId);
+      return SyncManifest.decode(utf8.decode(bytes));
+    }, concurrency: _pullConcurrency);
 
     // 5. Fusion, une par une.
     for (var i = 0; i < readable.length; i++) {
@@ -522,7 +532,11 @@ class LibrarySyncService {
     final stage = await _findInFolder(client, remoteFolderId, _stageFolderName);
     if (stage == null) return const PullNoRemoteSnapshot();
 
-    final remoteManifest = await _readManifest(client, stage.id, manifestFileName);
+    final remoteManifest = await _readManifest(
+      client,
+      stage.id,
+      manifestFileName,
+    );
     if (remoteManifest == null) return const PullNoRemoteSnapshot();
     if (remoteManifest.revision <= knownRevision) {
       return const PullUpToDate();
@@ -595,8 +609,7 @@ class LibrarySyncService {
     DriveClient client,
     String parentId,
     String name,
-  ) =>
-      client.findInFolder(parentId: parentId, name: name);
+  ) => client.findInFolder(parentId: parentId, name: name);
 
   Future<SyncManifest?> _readManifest(
     DriveClient client,

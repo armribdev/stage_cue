@@ -7,7 +7,6 @@ part of '../sound_picker_overlay.dart';
 /// Mise en page : volet scindé, champ de recherche, filtres de type.
 /// Méthodes de [_SoundPickerOverlayState] extraites via extension dans le même `part`.
 extension _SoundPickerLayout on _SoundPickerOverlayState {
-
   /// Gestion en volet scindé : sons à gauche, infos du son sélectionné à droite.
   ///
   /// Le bloc entier est borné en largeur et centré : sur un grand écran, la
@@ -151,7 +150,10 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
                           ),
                         ),
                 ),
-                suffixIconConstraints: const BoxConstraints(maxHeight: 24, maxWidth: 24),
+                suffixIconConstraints: const BoxConstraints(
+                  maxHeight: 24,
+                  maxWidth: 24,
+                ),
               ),
               style: const TextStyle(fontSize: 17),
             ),
@@ -169,15 +171,23 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
     final segments = <(String, SoundType?, IconData)>[
       if (_isQuickSearch || _isLibrary || _isManage)
         ('Tous', null, Icons.apps_rounded),
-      (SoundType.soundEffect.label, SoundType.soundEffect, SoundType.soundEffect.icon),
+      (
+        SoundType.soundEffect.label,
+        SoundType.soundEffect,
+        SoundType.soundEffect.icon,
+      ),
       (SoundType.music.label, SoundType.music, SoundType.music.icon),
       (SoundType.ambiance.label, SoundType.ambiance, SoundType.ambiance.icon),
     ];
 
     Widget segment(String label, SoundType? type, IconData icon, bool isLast) {
       final selected = _effectiveTypeFilter == type;
-      final colors = type?.avatarColors(scheme) ??
-          (background: scheme.primaryContainer, foreground: scheme.onPrimaryContainer);
+      final colors =
+          type?.avatarColors(scheme) ??
+          (
+            background: scheme.primaryContainer,
+            foreground: scheme.onPrimaryContainer,
+          );
       return InkWell(
         canRequestFocus: false,
         onTap: () {
@@ -230,14 +240,20 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: AppRadius.radiusMd,
-          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+          border: Border.all(
+            color: scheme.outlineVariant.withValues(alpha: 0.6),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             for (var i = 0; i < segments.length; i++)
-              segment(segments[i].$1, segments[i].$2, segments[i].$3,
-                  i == segments.length - 1),
+              segment(
+                segments[i].$1,
+                segments[i].$2,
+                segments[i].$3,
+                i == segments.length - 1,
+              ),
           ],
         ),
       ),
@@ -267,7 +283,9 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
         _roundIconButton(
           scheme: scheme,
           icon: Icons.offline_bolt_rounded,
-          iconColor: _effectiveLocalOnly ? scheme.primary : scheme.onSurfaceVariant,
+          iconColor: _effectiveLocalOnly
+              ? scheme.primary
+              : scheme.onSurfaceVariant,
           active: _effectiveLocalOnly,
           flat: true,
           onPressed: () {

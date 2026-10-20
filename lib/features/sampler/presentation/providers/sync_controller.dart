@@ -140,12 +140,14 @@ class SyncController extends ChangeNotifier {
   void _onRepositorySessionChanged() {
     if (_disposed) return;
     if (_repository.requiresInteractiveReconnect && !_state.authExpired) {
-      _set(_state.copyWith(
-        status: SyncStatus.offline,
-        clearConflict: true,
-        message: 'Session Google expirée — reconnexion requise.',
-        authExpired: true,
-      ));
+      _set(
+        _state.copyWith(
+          status: SyncStatus.offline,
+          clearConflict: true,
+          message: 'Session Google expirée — reconnexion requise.',
+          authExpired: true,
+        ),
+      );
     }
   }
 
@@ -293,17 +295,21 @@ class SyncController extends ChangeNotifier {
         case PullStaged():
           // Une fusion réelle se voit toujours, même en veille : le contenu des
           // scènes vient de changer sous les yeux de l'utilisateur.
-          _set(_state.copyWith(
-            status: SyncStatus.synced,
-            lastSyncedAt: DateTime.now(),
-          ));
+          _set(
+            _state.copyWith(
+              status: SyncStatus.synced,
+              lastSyncedAt: DateTime.now(),
+            ),
+          );
           onLibraryMerged?.call();
         case PullUpToDate():
           if (quiet) return;
-          _set(_state.copyWith(
-            status: SyncStatus.synced,
-            lastSyncedAt: DateTime.now(),
-          ));
+          _set(
+            _state.copyWith(
+              status: SyncStatus.synced,
+              lastSyncedAt: DateTime.now(),
+            ),
+          );
         case PullNoRemoteSnapshot():
           _applyNoRemoteSnapshot(library);
       }
@@ -343,26 +349,33 @@ class SyncController extends ChangeNotifier {
       final outcome = await _repository.pullLibrary(library);
       switch (outcome) {
         case PullStaged():
-          _set(_state.copyWith(
-            status: SyncStatus.synced,
-            lastSyncedAt: DateTime.now(),
-            clearConflict: true,
-          ));
+          _set(
+            _state.copyWith(
+              status: SyncStatus.synced,
+              lastSyncedAt: DateTime.now(),
+              clearConflict: true,
+            ),
+          );
           onLibraryMerged?.call();
         case PullUpToDate():
-          _set(_state.copyWith(
-            status: SyncStatus.synced,
-            lastSyncedAt: DateTime.now(),
-            clearConflict: true,
-          ));
+          _set(
+            _state.copyWith(
+              status: SyncStatus.synced,
+              lastSyncedAt: DateTime.now(),
+              clearConflict: true,
+            ),
+          );
         case PullNoRemoteSnapshot():
           // Résolution de conflit « prendre le distant » alors qu'il n'y a rien
           // à prendre : incohérent, on le signale au lieu de clore le conflit.
-          _set(_state.copyWith(
-            status: SyncStatus.error,
-            message: 'Sauvegarde distante introuvable : impossible de prendre '
-                'la version distante.',
-          ));
+          _set(
+            _state.copyWith(
+              status: SyncStatus.error,
+              message:
+                  'Sauvegarde distante introuvable : impossible de prendre '
+                  'la version distante.',
+            ),
+          );
       }
     } on DriveAuthException {
       await _onAuthError();
@@ -383,27 +396,34 @@ class SyncController extends ChangeNotifier {
       _set(_state.copyWith(status: SyncStatus.idle, clearMessage: true));
       return;
     }
-    _set(_state.copyWith(
-      status: SyncStatus.error,
-      message: 'Sauvegarde distante introuvable — vos scènes ne sont plus '
-          'que locales. Lancez une synchro pour la recréer.',
-    ));
+    _set(
+      _state.copyWith(
+        status: SyncStatus.error,
+        message:
+            'Sauvegarde distante introuvable — vos scènes ne sont plus '
+            'que locales. Lancez une synchro pour la recréer.',
+      ),
+    );
   }
 
   void _applyPushOutcome(PushOutcome outcome) {
     switch (outcome) {
       case PushSuccess():
-        _set(_state.copyWith(
-          status: SyncStatus.synced,
-          lastSyncedAt: DateTime.now(),
-          clearConflict: true,
-        ));
+        _set(
+          _state.copyWith(
+            status: SyncStatus.synced,
+            lastSyncedAt: DateTime.now(),
+            clearConflict: true,
+          ),
+        );
       case PushConflict(:final remote):
-        _set(_state.copyWith(
-          status: SyncStatus.conflict,
-          conflictRemoteRevision: remote.revision,
-          conflictLibraryId: _pushInFlightLibrary?.id,
-        ));
+        _set(
+          _state.copyWith(
+            status: SyncStatus.conflict,
+            conflictRemoteRevision: remote.revision,
+            conflictLibraryId: _pushInFlightLibrary?.id,
+          ),
+        );
     }
   }
 
@@ -428,12 +448,14 @@ class SyncController extends ChangeNotifier {
   /// Libère la session HTTP et passe en offline sans effacer les tokens Google.
   Future<void> _onAuthError() async {
     await _repository.invalidateAuthSession();
-    _set(_state.copyWith(
-      status: SyncStatus.offline,
-      clearConflict: true,
-      message: 'Session Google expirée — reconnexion requise.',
-      authExpired: true,
-    ));
+    _set(
+      _state.copyWith(
+        status: SyncStatus.offline,
+        clearConflict: true,
+        message: 'Session Google expirée — reconnexion requise.',
+        authExpired: true,
+      ),
+    );
   }
 
   @override

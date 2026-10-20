@@ -7,7 +7,6 @@ part of '../settings_screen.dart';
 /// Actions sur les bibliothèques : retrait, actualisation Drive, maintenance.
 /// Méthodes de [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsLibraryActions on _SettingsScreenState {
-
   /// Vérification manuelle : ignore le throttle 6h du check automatique
   /// (voir `SoundboardApp._maybeCheckForUpdateOnLaunch`).
   Future<void> _checkForUpdatesManually() async {
@@ -82,8 +81,9 @@ extension _SettingsLibraryActions on _SettingsScreenState {
   /// la divergence était déjà réelle : le bouton tirait avant d'indexer et
   /// rescannait systématiquement.
   Future<void> _refreshAllFromDrive() async {
-    final hasDriveLibrary =
-        _libraries.any((library) => library.isConnectedToDrive);
+    final hasDriveLibrary = _libraries.any(
+      (library) => library.isConnectedToDrive,
+    );
     if (!hasDriveLibrary) {
       if (mounted) {
         AppSnackBar.show(context, 'Aucun dossier Drive indexé');
@@ -222,7 +222,7 @@ extension _SettingsLibraryActions on _SettingsScreenState {
     final summary = aborted
         ? 'Moteur audio non prêt — $regenerated régénérée(s) avant interruption.'
         : '$regenerated régénérée(s), $skipped ignorée(s) (hors cache), '
-            '$failed échec(s) de format.';
+              '$failed échec(s) de format.';
     AppSnackBar.show(context, summary);
   }
 
@@ -239,7 +239,6 @@ extension _SettingsLibraryActions on _SettingsScreenState {
       if (mounted) setState(() => _isSyncBusy = false);
     }
   }
-
 
   Future<void> _toggleAutoDownload(domain.Library library) async {
     await widget.libraryRepository.setAutoDownload(

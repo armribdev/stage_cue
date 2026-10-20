@@ -146,8 +146,8 @@ class _FakeDriveClient implements DriveClient {
 
   @override
   noSuchMethod(Invocation invocation) => throw UnimplementedError(
-        'Appel Drive non prévu par le test : ${invocation.memberName}',
-      );
+    'Appel Drive non prévu par le test : ${invocation.memberName}',
+  );
 }
 
 /// Authentificateur qui rend toujours le même client fake.
@@ -224,7 +224,9 @@ void main() {
     libraryDataSource = LocalLibraryDataSource(database);
     cacheRoot = await Directory.systemTemp.createTemp('stagecue_index_test');
 
-    final id = await database.into(database.libraries).insert(
+    final id = await database
+        .into(database.libraries)
+        .insert(
           db.LibrariesCompanion.insert(
             name: 'Lib',
             localRootPath: cacheRoot.path,
@@ -250,10 +252,9 @@ void main() {
     }
   });
 
-  Future<List<db.Sound>> soundsOf(int libraryId) =>
-      (database.select(database.sounds)
-            ..where((s) => s.libraryId.equals(libraryId)))
-          .get();
+  Future<List<db.Sound>> soundsOf(int libraryId) => (database.select(
+    database.sounds,
+  )..where((s) => s.libraryId.equals(libraryId))).get();
 
   test('scan initial : crée nœuds, memberships et sons ; ignore .stagecue et '
       'les fichiers non audio', () async {
@@ -277,24 +278,23 @@ void main() {
     expect(client.listedFolders, isNot(contains('stage')));
 
     final sounds = await soundsOf(library.id);
-    expect(sounds.map((s) => s.relativePath), containsAll(<String>[
-      'intro.mp3',
-      'Portes/knock.wav',
-    ]));
+    expect(
+      sounds.map((s) => s.relativePath),
+      containsAll(<String>['intro.mp3', 'Portes/knock.wav']),
+    );
     // Un son créé reçoit d'emblée le titre du fichier comme nom affiché.
-    expect(sounds.map((s) => s.displayName), unorderedEquals(<String>[
-      'intro',
-      'knock',
-    ]));
+    expect(
+      sounds.map((s) => s.displayName),
+      unorderedEquals(<String>['intro', 'knock']),
+    );
 
     // Un nœud dossier par dossier PORTEUR de fichiers (racine + Portes).
     final folders = await libraryDataSource.getFoldersForLibrary(library.id);
-    expect(folders.map((f) => f.driveFolderId), containsAll(<String>[
-      'root',
-      'd1',
-    ]));
-    final memberships =
-        await libraryDataSource.getMemberFolderIds(library.id);
+    expect(
+      folders.map((f) => f.driveFolderId),
+      containsAll(<String>['root', 'd1']),
+    );
+    final memberships = await libraryDataSource.getMemberFolderIds(library.id);
     expect(memberships, hasLength(folders.length));
   });
 
@@ -333,12 +333,14 @@ void main() {
     await repository.indexDriveFolder(library: library);
 
     // Dérivés de contenu déjà calculés + fichier présent en cache.
-    await (database.update(database.sounds)
-          ..where((s) => s.driveFileId.equals('f1')))
-        .write(db.SoundsCompanion(
-      waveform: Value(Uint8List.fromList([0, 1, 0])),
-      contentHash: const Value('hash-v1'),
-    ));
+    await (database.update(
+      database.sounds,
+    )..where((s) => s.driveFileId.equals('f1'))).write(
+      db.SoundsCompanion(
+        waveform: Value(Uint8List.fromList([0, 1, 0])),
+        contentHash: const Value('hash-v1'),
+      ),
+    );
     final cached = File('${cacheRoot.path}${Platform.pathSeparator}intro.mp3');
     await cached.writeAsString('audio-v1');
 
@@ -359,42 +361,48 @@ void main() {
     final repository = await repositoryFor(client);
     await repository.indexDriveFolder(library: library);
 
-    await (database.update(database.sounds)
-          ..where((s) => s.driveFileId.equals('f1')))
-        .write(db.SoundsCompanion(
-          waveform: Value(Uint8List.fromList([0, 1, 0])),
-        ));
+    await (database.update(
+      database.sounds,
+    )..where((s) => s.driveFileId.equals('f1'))).write(
+      db.SoundsCompanion(waveform: Value(Uint8List.fromList([0, 1, 0]))),
+    );
 
     await repository.indexDriveFolder(library: library);
 
     expect((await soundsOf(library.id)).single.waveform, [0, 1, 0]);
   });
 
-  test('fichier disparu de Drive : son élagué et fichier de cache supprimé',
-      () async {
-    final client = _FakeDriveClient({
-      'root': [_audio('f1', 'intro.mp3'), _audio('f2', 'outro.mp3')],
-    });
-    final repository = await repositoryFor(client);
-    await repository.indexDriveFolder(library: library);
+  test(
+    'fichier disparu de Drive : son élagué et fichier de cache supprimé',
+    () async {
+      final client = _FakeDriveClient({
+        'root': [_audio('f1', 'intro.mp3'), _audio('f2', 'outro.mp3')],
+      });
+      final repository = await repositoryFor(client);
+      await repository.indexDriveFolder(library: library);
 
-    final cached = File('${cacheRoot.path}${Platform.pathSeparator}outro.mp3');
-    await cached.writeAsString('audio');
+      final cached = File(
+        '${cacheRoot.path}${Platform.pathSeparator}outro.mp3',
+      );
+      await cached.writeAsString('audio');
 
-    client.tree['root'] = [_audio('f1', 'intro.mp3')];
-    final result = await repository.indexDriveFolder(library: library);
+      client.tree['root'] = [_audio('f1', 'intro.mp3')];
+      final result = await repository.indexDriveFolder(library: library);
 
-    expect(result.presentDriveFileIds, {'f1'});
-    final sounds = await soundsOf(library.id);
-    expect(sounds, hasLength(1));
-    expect(sounds.single.driveFileId, 'f1');
-    expect(await cached.exists(), isFalse);
-  });
+      expect(result.presentDriveFileIds, {'f1'});
+      final sounds = await soundsOf(library.id);
+      expect(sounds, hasLength(1));
+      expect(sounds.single.driveFileId, 'f1');
+      expect(await cached.exists(), isFalse);
+    },
+  );
 
   test('son legacy sans driveFileId : épargné par l\'élagage et adopte '
       'l\'identité forte quand son chemin est retrouvé', () async {
     // Son issu d'un snapshot, sans identité forte.
-    await database.into(database.sounds).insert(
+    await database
+        .into(database.sounds)
+        .insert(
           db.SoundsCompanion.insert(
             title: 'knock',
             displayName: 'knock',
@@ -421,7 +429,9 @@ void main() {
 
   test('son legacy dont le fichier est absent de Drive : conservé (jamais '
       'élagué faute d\'identité forte)', () async {
-    await database.into(database.sounds).insert(
+    await database
+        .into(database.sounds)
+        .insert(
           db.SoundsCompanion.insert(
             title: 'orphelin',
             displayName: 'orphelin',
@@ -439,10 +449,7 @@ void main() {
 
     final sounds = await soundsOf(library.id);
     expect(sounds, hasLength(2));
-    expect(
-      sounds.where((s) => s.driveFileId == null).single.title,
-      'orphelin',
-    );
+    expect(sounds.where((s) => s.driveFileId == null).single.title, 'orphelin');
   });
 
   group('parcours parallèle', () {
@@ -456,16 +463,22 @@ void main() {
       for (var i = 0; i < 20; i++) {
         tree['d$i'] = [_audio('f$i', 'son_$i.mp3')];
       }
-      final client = _FakeDriveClient(tree)..latency =
-          const Duration(milliseconds: 5);
+      final client = _FakeDriveClient(tree)
+        ..latency = const Duration(milliseconds: 5);
       final repository = await repositoryFor(client);
 
       await repository.indexDriveFolder(library: library);
 
-      expect(client.maxConcurrent, greaterThan(1),
-          reason: 'le parcours doit être parallèle');
-      expect(client.maxConcurrent, lessThanOrEqualTo(5),
-          reason: 'la borne de concurrence doit être respectée');
+      expect(
+        client.maxConcurrent,
+        greaterThan(1),
+        reason: 'le parcours doit être parallèle',
+      );
+      expect(
+        client.maxConcurrent,
+        lessThanOrEqualTo(5),
+        reason: 'la borne de concurrence doit être respectée',
+      );
       expect((await soundsOf(library.id)), hasLength(20));
     });
 
@@ -491,8 +504,11 @@ void main() {
       );
 
       final sounds = await soundsOf(library.id);
-      expect(sounds, hasLength(2),
-          reason: 'aucun son ne doit être élagué sur un scan incomplet');
+      expect(
+        sounds,
+        hasLength(2),
+        reason: 'aucun son ne doit être élagué sur un scan incomplet',
+      );
     });
   });
 
@@ -515,18 +531,17 @@ void main() {
       String name, {
       required String parentId,
       String? md5,
-    }) =>
-        DriveChange(
-          fileId: id,
-          removed: false,
-          file: DriveFile(
-            id: id,
-            name: name,
-            mimeType: 'audio/mpeg',
-            md5Checksum: md5,
-          ),
-          parentId: parentId,
-        );
+    }) => DriveChange(
+      fileId: id,
+      removed: false,
+      file: DriveFile(
+        id: id,
+        name: name,
+        mimeType: 'audio/mpeg',
+        md5Checksum: md5,
+      ),
+      parentId: parentId,
+    );
 
     test('sans jeton de reprise : scan complet demandé', () async {
       final client = _FakeDriveClient({'root': []});
@@ -538,20 +553,25 @@ void main() {
       expect(client.listChangesCalls, 0);
     });
 
-    test('dernier scan complet trop ancien : rescan périodique demandé',
-        () async {
-      final client = _FakeDriveClient({'root': []});
-      final repository = await repositoryFor(client);
+    test(
+      'dernier scan complet trop ancien : rescan périodique demandé',
+      () async {
+        final client = _FakeDriveClient({'root': []});
+        final repository = await repositoryFor(client);
 
-      final outcome = await repository.applyDriveChanges(
-        library: armed(since: const Duration(days: 8)),
-      );
+        final outcome = await repository.applyDriveChanges(
+          library: armed(since: const Duration(days: 8)),
+        );
 
-      expect(outcome, isA<DriveSyncNeedsFullScan>());
-      expect((outcome as DriveSyncNeedsFullScan).reason, 'rescan périodique');
-      expect(client.listChangesCalls, 0,
-          reason: 'le rescan périodique doit court-circuiter le delta');
-    });
+        expect(outcome, isA<DriveSyncNeedsFullScan>());
+        expect((outcome as DriveSyncNeedsFullScan).reason, 'rescan périodique');
+        expect(
+          client.listChangesCalls,
+          0,
+          reason: 'le rescan périodique doit court-circuiter le delta',
+        );
+      },
+    );
 
     test('jeton expiré : scan complet demandé', () async {
       final client = _FakeDriveClient({'root': []})
@@ -640,56 +660,58 @@ void main() {
         containsAll(['NouveauPack/boom.mp3', 'NouveauPack/crash.mp3']),
       );
 
-      final stored = await (database.select(database.libraries)
-            ..where((l) => l.id.equals(library.id)))
-          .getSingle();
+      final stored = await (database.select(
+        database.libraries,
+      )..where((l) => l.id.equals(library.id))).getSingle();
       expect(stored.driveChangeToken, 'token-2');
     });
 
-    test('nouveau dossier imbriqué (parent neuf + enfant) dans le même delta',
-        () async {
-      final client = _FakeDriveClient({
-        'root': [_audio('f0', 'intro.mp3')],
-      });
-      final repository = await repositoryFor(client);
-      await repository.indexDriveFolder(library: library);
+    test(
+      'nouveau dossier imbriqué (parent neuf + enfant) dans le même delta',
+      () async {
+        final client = _FakeDriveClient({
+          'root': [_audio('f0', 'intro.mp3')],
+        });
+        final repository = await repositoryFor(client);
+        await repository.indexDriveFolder(library: library);
 
-      client.tree['root'] = [
-        _audio('f0', 'intro.mp3'),
-        _folder('d1', 'Actes'),
-      ];
-      client.tree['d1'] = [_folder('d2', 'Acte 1')];
-      client.tree['d2'] = [_audio('f1', 'pluie.mp3', md5: 'aaa')];
-      client.changePages['token-1'] = DriveChangePage(
-        changes: [
-          // Enfant annoncé avant le parent : la greffe doit réordonner.
-          DriveChange(
-            fileId: 'd2',
-            removed: false,
-            file: _folder('d2', 'Acte 1'),
-            parentId: 'd1',
-            isFolder: true,
-          ),
-          DriveChange(
-            fileId: 'd1',
-            removed: false,
-            file: _folder('d1', 'Actes'),
-            parentId: 'root',
-            isFolder: true,
-          ),
-        ],
-        newStartPageToken: 'token-2',
-      );
+        client.tree['root'] = [
+          _audio('f0', 'intro.mp3'),
+          _folder('d1', 'Actes'),
+        ];
+        client.tree['d1'] = [_folder('d2', 'Acte 1')];
+        client.tree['d2'] = [_audio('f1', 'pluie.mp3', md5: 'aaa')];
+        client.changePages['token-1'] = DriveChangePage(
+          changes: [
+            // Enfant annoncé avant le parent : la greffe doit réordonner.
+            DriveChange(
+              fileId: 'd2',
+              removed: false,
+              file: _folder('d2', 'Acte 1'),
+              parentId: 'd1',
+              isFolder: true,
+            ),
+            DriveChange(
+              fileId: 'd1',
+              removed: false,
+              file: _folder('d1', 'Actes'),
+              parentId: 'root',
+              isFolder: true,
+            ),
+          ],
+          newStartPageToken: 'token-2',
+        );
 
-      final outcome = await repository.applyDriveChanges(library: armed());
+        final outcome = await repository.applyDriveChanges(library: armed());
 
-      expect(outcome, isA<DriveSyncApplied>());
-      final sounds = await soundsOf(library.id);
-      expect(
-        sounds.map((s) => s.relativePath),
-        contains('Actes/Acte 1/pluie.mp3'),
-      );
-    });
+        expect(outcome, isA<DriveSyncApplied>());
+        final sounds = await soundsOf(library.id);
+        expect(
+          sounds.map((s) => s.relativePath),
+          contains('Actes/Acte 1/pluie.mp3'),
+        );
+      },
+    );
 
     test('suppression d\'un dossier connu : scan complet demandé', () async {
       final client = _FakeDriveClient({
@@ -700,9 +722,7 @@ void main() {
       await repository.indexDriveFolder(library: library);
 
       client.changePages['token-1'] = const DriveChangePage(
-        changes: [
-          DriveChange(fileId: 'd1', removed: true, isFolder: true),
-        ],
+        changes: [DriveChange(fileId: 'd1', removed: true, isFolder: true)],
         newStartPageToken: 'token-2',
       );
 
@@ -715,38 +735,40 @@ void main() {
       );
     });
 
-    test('ajout d\'un fichier dans un dossier connu : son créé, jeton avancé',
-        () async {
-      final client = _FakeDriveClient({
-        'root': [_folder('d1', 'Portes')],
-        // Le dossier doit déjà porter un son : un nœud dossier n'existe
-        // localement que pour les dossiers qui contiennent des fichiers.
-        'd1': [_audio('f0', 'existant.mp3')],
-      });
-      final repository = await repositoryFor(client);
-      // Scan initial : crée le nœud dossier `d1` et pose le jeton.
-      await repository.indexDriveFolder(library: library);
+    test(
+      'ajout d\'un fichier dans un dossier connu : son créé, jeton avancé',
+      () async {
+        final client = _FakeDriveClient({
+          'root': [_folder('d1', 'Portes')],
+          // Le dossier doit déjà porter un son : un nœud dossier n'existe
+          // localement que pour les dossiers qui contiennent des fichiers.
+          'd1': [_audio('f0', 'existant.mp3')],
+        });
+        final repository = await repositoryFor(client);
+        // Scan initial : crée le nœud dossier `d1` et pose le jeton.
+        await repository.indexDriveFolder(library: library);
 
-      client.changePages['token-1'] = DriveChangePage(
-        changes: [audioChange('f1', 'knock.mp3', parentId: 'd1', md5: 'aaa')],
-        newStartPageToken: 'token-2',
-      );
+        client.changePages['token-1'] = DriveChangePage(
+          changes: [audioChange('f1', 'knock.mp3', parentId: 'd1', md5: 'aaa')],
+          newStartPageToken: 'token-2',
+        );
 
-      final outcome = await repository.applyDriveChanges(library: armed());
+        final outcome = await repository.applyDriveChanges(library: armed());
 
-      expect(outcome, isA<DriveSyncApplied>());
-      expect((outcome as DriveSyncApplied).upserted, 1);
+        expect(outcome, isA<DriveSyncApplied>());
+        expect((outcome as DriveSyncApplied).upserted, 1);
 
-      final sounds = await soundsOf(library.id);
-      expect(sounds, hasLength(2));
-      final added = sounds.firstWhere((s) => s.driveFileId == 'f1');
-      expect(added.relativePath, 'Portes/knock.mp3');
+        final sounds = await soundsOf(library.id);
+        expect(sounds, hasLength(2));
+        final added = sounds.firstWhere((s) => s.driveFileId == 'f1');
+        expect(added.relativePath, 'Portes/knock.mp3');
 
-      final stored = await (database.select(database.libraries)
-            ..where((l) => l.id.equals(library.id)))
-          .getSingle();
-      expect(stored.driveChangeToken, 'token-2');
-    });
+        final stored = await (database.select(
+          database.libraries,
+        )..where((l) => l.id.equals(library.id))).getSingle();
+        expect(stored.driveChangeToken, 'token-2');
+      },
+    );
 
     test('suppression signalée : son retiré et cache évincé', () async {
       final client = _FakeDriveClient({
@@ -755,8 +777,9 @@ void main() {
       final repository = await repositoryFor(client);
       await repository.indexDriveFolder(library: library);
 
-      final cached =
-          File('${cacheRoot.path}${Platform.pathSeparator}outro.mp3');
+      final cached = File(
+        '${cacheRoot.path}${Platform.pathSeparator}outro.mp3',
+      );
       await cached.writeAsString('audio');
 
       client.changePages['token-1'] = const DriveChangePage(
@@ -773,32 +796,37 @@ void main() {
       expect(await cached.exists(), isFalse);
     });
 
-    test('AUCUN élagage par différence : un delta vide ne supprime RIEN',
-        () async {
-      final client = _FakeDriveClient({
-        'root': [
-          _audio('f1', 'a.mp3'),
-          _audio('f2', 'b.mp3'),
-          _audio('f3', 'c.mp3'),
-        ],
-      });
-      final repository = await repositoryFor(client);
-      await repository.indexDriveFolder(library: library);
-      expect(await soundsOf(library.id), hasLength(3));
+    test(
+      'AUCUN élagage par différence : un delta vide ne supprime RIEN',
+      () async {
+        final client = _FakeDriveClient({
+          'root': [
+            _audio('f1', 'a.mp3'),
+            _audio('f2', 'b.mp3'),
+            _audio('f3', 'c.mp3'),
+          ],
+        });
+        final repository = await repositoryFor(client);
+        await repository.indexDriveFolder(library: library);
+        expect(await soundsOf(library.id), hasLength(3));
 
-      // Delta vide : Drive dit « rien n'a changé ». Un élagage par différence
-      // d'ensembles conclurait ici que les trois fichiers ont disparu.
-      client.changePages['token-1'] = const DriveChangePage(
-        changes: [],
-        newStartPageToken: 'token-2',
-      );
+        // Delta vide : Drive dit « rien n'a changé ». Un élagage par différence
+        // d'ensembles conclurait ici que les trois fichiers ont disparu.
+        client.changePages['token-1'] = const DriveChangePage(
+          changes: [],
+          newStartPageToken: 'token-2',
+        );
 
-      final outcome = await repository.applyDriveChanges(library: armed());
+        final outcome = await repository.applyDriveChanges(library: armed());
 
-      expect(outcome, isA<DriveSyncApplied>());
-      expect(await soundsOf(library.id), hasLength(3),
-          reason: 'le chemin incrémental ne doit JAMAIS élaguer par différence');
-    });
+        expect(outcome, isA<DriveSyncApplied>());
+        expect(
+          await soundsOf(library.id),
+          hasLength(3),
+          reason: 'le chemin incrémental ne doit JAMAIS élaguer par différence',
+        );
+      },
+    );
 
     test('un fichier audio dans un dossier inconnu : scan complet demandé, '
         'jamais un saut silencieux', () async {
@@ -809,9 +837,7 @@ void main() {
       await repository.indexDriveFolder(library: library);
 
       client.changePages['token-1'] = DriveChangePage(
-        changes: [
-          audioChange('f1', 'intro.mp3', parentId: 'dossier-inconnu'),
-        ],
+        changes: [audioChange('f1', 'intro.mp3', parentId: 'dossier-inconnu')],
         newStartPageToken: 'token-2',
       );
 
@@ -843,42 +869,45 @@ void main() {
       expect(await soundsOf(library.id), hasLength(1));
     });
 
-    test('pagination : toutes les pages sont collectées avant application',
-        () async {
-      final client = _FakeDriveClient({
-        'root': [_folder('d1', 'Portes')],
-        'd1': [_audio('f0', 'existant.mp3')],
-      });
-      final repository = await repositoryFor(client);
-      await repository.indexDriveFolder(library: library);
+    test(
+      'pagination : toutes les pages sont collectées avant application',
+      () async {
+        final client = _FakeDriveClient({
+          'root': [_folder('d1', 'Portes')],
+          'd1': [_audio('f0', 'existant.mp3')],
+        });
+        final repository = await repositoryFor(client);
+        await repository.indexDriveFolder(library: library);
 
-      client.changePages['token-1'] = DriveChangePage(
-        changes: [audioChange('f1', 'a.mp3', parentId: 'd1')],
-        nextPageToken: 'page-2',
-      );
-      client.changePages['page-2'] = DriveChangePage(
-        changes: [audioChange('f2', 'b.mp3', parentId: 'd1')],
-        newStartPageToken: 'token-2',
-      );
+        client.changePages['token-1'] = DriveChangePage(
+          changes: [audioChange('f1', 'a.mp3', parentId: 'd1')],
+          nextPageToken: 'page-2',
+        );
+        client.changePages['page-2'] = DriveChangePage(
+          changes: [audioChange('f2', 'b.mp3', parentId: 'd1')],
+          newStartPageToken: 'token-2',
+        );
 
-      final outcome = await repository.applyDriveChanges(library: armed());
+        final outcome = await repository.applyDriveChanges(library: armed());
 
-      expect((outcome as DriveSyncApplied).upserted, 2);
-      expect(await soundsOf(library.id), hasLength(3));
-      expect(client.listChangesCalls, 2);
-    });
+        expect((outcome as DriveSyncApplied).upserted, 2);
+        expect(await soundsOf(library.id), hasLength(3));
+        expect(client.listChangesCalls, 2);
+      },
+    );
 
     test('un scan complet arme le parcours incrémental (jeton pris AVANT le '
         'parcours) et réarme l\'horloge du rescan', () async {
-      final client = _FakeDriveClient({'root': [_audio('f1', 'intro.mp3')]})
-        ..startPageToken = 'token-frais';
+      final client = _FakeDriveClient({
+        'root': [_audio('f1', 'intro.mp3')],
+      })..startPageToken = 'token-frais';
       final repository = await repositoryFor(client);
 
       await repository.indexDriveFolder(library: library);
 
-      final stored = await (database.select(database.libraries)
-            ..where((l) => l.id.equals(library.id)))
-          .getSingle();
+      final stored = await (database.select(
+        database.libraries,
+      )..where((l) => l.id.equals(library.id))).getSingle();
       expect(stored.driveChangeToken, 'token-frais');
       expect(stored.lastFullScanAt, isNotNull);
     });
@@ -898,21 +927,30 @@ void main() {
       return repository;
     }
 
-    test('les téléchargements sont parallèles, dans la limite de la borne',
-        () async {
-      final client = _FakeDriveClient({})
-        ..downloadLatency = const Duration(milliseconds: 5);
-      final repository = await indexedLibrary(client, 20);
+    test(
+      'les téléchargements sont parallèles, dans la limite de la borne',
+      () async {
+        final client = _FakeDriveClient({})
+          ..downloadLatency = const Duration(milliseconds: 5);
+        final repository = await indexedLibrary(client, 20);
 
-      final downloaded =
-          await repository.downloadAllLibraryAudio(library: library);
+        final downloaded = await repository.downloadAllLibraryAudio(
+          library: library,
+        );
 
-      expect(downloaded, 20);
-      expect(client.maxConcurrentDownloads, greaterThan(1),
-          reason: 'la passe doit être parallèle');
-      expect(client.maxConcurrentDownloads, lessThanOrEqualTo(4),
-          reason: 'la borne de concurrence doit être respectée');
-    });
+        expect(downloaded, 20);
+        expect(
+          client.maxConcurrentDownloads,
+          greaterThan(1),
+          reason: 'la passe doit être parallèle',
+        );
+        expect(
+          client.maxConcurrentDownloads,
+          lessThanOrEqualTo(4),
+          reason: 'la borne de concurrence doit être respectée',
+        );
+      },
+    );
 
     test('un fichier en échec n\'emporte pas la passe', () async {
       final client = _FakeDriveClient({})..failingDownloads.add('f2');
@@ -932,25 +970,31 @@ void main() {
       expect(last?.error, contains('1 fichier(s) ignoré(s)'));
     });
 
-    test('session expirée : la passe s\'arrête, les tâches restantes renoncent',
-        () async {
-      final client = _FakeDriveClient({})
-        ..downloadLatency = const Duration(milliseconds: 5)
-        ..authExpiredDownloads.add('f0');
-      final repository = await indexedLibrary(client, 30);
+    test(
+      'session expirée : la passe s\'arrête, les tâches restantes renoncent',
+      () async {
+        final client = _FakeDriveClient({})
+          ..downloadLatency = const Duration(milliseconds: 5)
+          ..authExpiredDownloads.add('f0');
+        final repository = await indexedLibrary(client, 30);
 
-      IndexingProgress? last;
-      await repository.downloadAllLibraryAudio(
-        library: library,
-        onProgress: (p) => last = p,
-      );
+        IndexingProgress? last;
+        await repository.downloadAllLibraryAudio(
+          library: library,
+          onProgress: (p) => last = p,
+        );
 
-      expect(last?.error, contains('Session Google expirée'));
-      // Les tâches déjà en file se vident sans rien télécharger : on ne doit
-      // pas voir les 30 fichiers tentés un par un.
-      expect(client.downloadCalls, lessThan(30),
-          reason: 'les tâches restantes doivent renoncer, pas échouer une à une');
-    });
+        expect(last?.error, contains('Session Google expirée'));
+        // Les tâches déjà en file se vident sans rien télécharger : on ne doit
+        // pas voir les 30 fichiers tentés un par un.
+        expect(
+          client.downloadCalls,
+          lessThan(30),
+          reason:
+              'les tâches restantes doivent renoncer, pas échouer une à une',
+        );
+      },
+    );
 
     test('annulation : plus aucun téléchargement ne démarre', () async {
       final client = _FakeDriveClient({})
@@ -961,61 +1005,77 @@ void main() {
       repository.cancelLibraryDownload(library.id);
       await pass;
 
-      expect(client.downloadCalls, lessThan(40),
-          reason: 'l\'annulation doit tarir la file');
-    });
-
-    test('client remplacé en cours de passe : la passe suit le NOUVEAU client',
-        () async {
-      final first = _FakeDriveClient({})
-        ..downloadLatency = const Duration(milliseconds: 5);
-      final repository = await indexedLibrary(first, 20);
-
-      final second = _FakeDriveClient({})
-        ..downloadLatency = const Duration(milliseconds: 5);
-
-      final pass = repository.downloadAllLibraryAudio(library: library);
-      // Ce que fait `reconnectSilently` sous les pieds d'une passe en cours :
-      // il pose un client frais et DISPOSE le précédent. Quand la passe
-      // capturait son client une fois pour toutes, tous les fichiers restants
-      // échouaient sur « Client is already closed » — traduit en « Pas de
-      // connexion », soit des centaines de lignes annonçant une panne réseau
-      // qui n'existait pas.
-      authenticator.client = second;
-      await repository.reconnectSilently();
-      await pass;
-
-      expect(second.downloadCalls, greaterThan(0),
-          reason: 'le client doit être relu à chaque fichier, jamais capturé');
       expect(
-        first.downloadCalls + second.downloadCalls,
-        20,
-        reason: 'aucun fichier ne doit être perdu au changement de client',
+        client.downloadCalls,
+        lessThan(40),
+        reason: 'l\'annulation doit tarir la file',
       );
     });
 
-    test('session définitivement perdue : arrêt net, pas une rafale d\'échecs',
-        () async {
-      final client = _FakeDriveClient({})
-        ..downloadLatency = const Duration(milliseconds: 5);
-      final repository = await indexedLibrary(client, 40);
+    test(
+      'client remplacé en cours de passe : la passe suit le NOUVEAU client',
+      () async {
+        final first = _FakeDriveClient({})
+          ..downloadLatency = const Duration(milliseconds: 5);
+        final repository = await indexedLibrary(first, 20);
 
-      IndexingProgress? last;
-      final pass = repository.downloadAllLibraryAudio(
-        library: library,
-        onProgress: (p) => last = p,
-      );
-      // Plus aucune session à rétablir : continuer ferait échouer chacun des
-      // fichiers restants, un par un.
-      authenticator.client = null;
-      await repository.releaseDriveSession();
-      await pass;
+        final second = _FakeDriveClient({})
+          ..downloadLatency = const Duration(milliseconds: 5);
 
-      expect(client.downloadCalls, lessThan(40),
-          reason: 'la passe doit s\'arrêter, pas échouer fichier par fichier');
-      expect(last?.error, contains('Connexion Drive interrompue'),
-          reason: 'à distinguer d\'une session expirée côté Google');
-    });
+        final pass = repository.downloadAllLibraryAudio(library: library);
+        // Ce que fait `reconnectSilently` sous les pieds d'une passe en cours :
+        // il pose un client frais et DISPOSE le précédent. Quand la passe
+        // capturait son client une fois pour toutes, tous les fichiers restants
+        // échouaient sur « Client is already closed » — traduit en « Pas de
+        // connexion », soit des centaines de lignes annonçant une panne réseau
+        // qui n'existait pas.
+        authenticator.client = second;
+        await repository.reconnectSilently();
+        await pass;
+
+        expect(
+          second.downloadCalls,
+          greaterThan(0),
+          reason: 'le client doit être relu à chaque fichier, jamais capturé',
+        );
+        expect(
+          first.downloadCalls + second.downloadCalls,
+          20,
+          reason: 'aucun fichier ne doit être perdu au changement de client',
+        );
+      },
+    );
+
+    test(
+      'session définitivement perdue : arrêt net, pas une rafale d\'échecs',
+      () async {
+        final client = _FakeDriveClient({})
+          ..downloadLatency = const Duration(milliseconds: 5);
+        final repository = await indexedLibrary(client, 40);
+
+        IndexingProgress? last;
+        final pass = repository.downloadAllLibraryAudio(
+          library: library,
+          onProgress: (p) => last = p,
+        );
+        // Plus aucune session à rétablir : continuer ferait échouer chacun des
+        // fichiers restants, un par un.
+        authenticator.client = null;
+        await repository.releaseDriveSession();
+        await pass;
+
+        expect(
+          client.downloadCalls,
+          lessThan(40),
+          reason: 'la passe doit s\'arrêter, pas échouer fichier par fichier',
+        );
+        expect(
+          last?.error,
+          contains('Connexion Drive interrompue'),
+          reason: 'à distinguer d\'une session expirée côté Google',
+        );
+      },
+    );
 
     test('fichiers déjà en cache : aucun téléchargement', () async {
       final client = _FakeDriveClient({});
@@ -1023,8 +1083,9 @@ void main() {
       await repository.downloadAllLibraryAudio(library: library);
       final afterFirst = client.downloadCalls;
 
-      final downloaded =
-          await repository.downloadAllLibraryAudio(library: library);
+      final downloaded = await repository.downloadAllLibraryAudio(
+        library: library,
+      );
 
       expect(downloaded, 0);
       expect(client.downloadCalls, afterFirst);

@@ -342,8 +342,9 @@ class _TransitionCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground =
-        isSelected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
+    final foreground = isSelected
+        ? scheme.onPrimaryContainer
+        : scheme.onSurfaceVariant;
     final Widget child = icon != null
         ? Icon(icon, size: size * 0.55, color: foreground)
         : Text(

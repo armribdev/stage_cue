@@ -4,10 +4,7 @@ class _RegieDownloadRing extends StatelessWidget {
   final PadItem padItem;
   final double size;
 
-  const _RegieDownloadRing({
-    required this.padItem,
-    this.size = 24,
-  });
+  const _RegieDownloadRing({required this.padItem, this.size = 24});
 
   @override
   Widget build(BuildContext context) {
@@ -66,8 +63,7 @@ class _CompactNowPlayingTime extends StatefulWidget {
   });
 
   @override
-  State<_CompactNowPlayingTime> createState() =>
-      _CompactNowPlayingTimeState();
+  State<_CompactNowPlayingTime> createState() => _CompactNowPlayingTimeState();
 }
 
 class _CompactNowPlayingTimeState extends State<_CompactNowPlayingTime>
@@ -158,8 +154,7 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker;
 
-  bool get _isLive =>
-      widget.isPlaying && (widget.padItem?.isPlaying ?? false);
+  bool get _isLive => widget.isPlaying && (widget.padItem?.isPlaying ?? false);
 
   bool get _hasTrack => widget.padItem != null;
 
@@ -212,8 +207,10 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
       return (position: position, duration: duration, value: 0);
     }
 
-    final value = (position.inMilliseconds / duration.inMilliseconds)
-        .clamp(0.0, 1.0);
+    final value = (position.inMilliseconds / duration.inMilliseconds).clamp(
+      0.0,
+      1.0,
+    );
     return (position: position, duration: duration, value: value);
   }
 
@@ -262,8 +259,7 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
         progressWidget = LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
-            void seekTo(double dx) =>
-                _handleSeek(dx, width, playback.duration);
+            void seekTo(double dx) => _handleSeek(dx, width, playback.duration);
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTapDown: (d) => seekTo(d.localPosition.dx),

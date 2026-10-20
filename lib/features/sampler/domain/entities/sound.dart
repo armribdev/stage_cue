@@ -4,6 +4,7 @@ import 'dart:typed_data';
 class Sound {
   final int id;
   final String title;
+
   /// Nom affiché : jamais vide, vaut [title] tant que non personnalisé.
   final String displayName;
   final String filePath;
@@ -110,9 +111,4 @@ class Sound {
 }
 
 /// Type de son
-enum SoundType {
-  soundEffect,
-  music,
-  ambiance,
-}
-
+enum SoundType { soundEffect, music, ambiance }

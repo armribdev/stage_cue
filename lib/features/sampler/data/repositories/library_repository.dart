@@ -177,8 +177,9 @@ class LibraryRepository extends ChangeNotifier {
         // récence » ne suffit pas — un téléchargement massif rebat l'ordre LRU
         // et rend les sons de la scène en cours plus anciens que le reste.
         pinnedPaths: (library) async {
-          final favorites =
-              await soundDataSource.getFavoriteRelativePaths(library.id);
+          final favorites = await soundDataSource.getFavoriteRelativePaths(
+            library.id,
+          );
           final boardId = repository.activeBoardId;
           if (boardId == null) return favorites;
           return {
@@ -394,20 +395,18 @@ class LibraryRepository extends ChangeNotifier {
     required Library library,
     required Set<String> presentDriveFileIds,
   }) async {
-    final prunedPaths = await _soundDataSource.pruneLibrarySoundsAbsentFromDrive(
-      libraryId: library.id,
-      keptDriveFileIds: presentDriveFileIds,
-    );
+    final prunedPaths = await _soundDataSource
+        .pruneLibrarySoundsAbsentFromDrive(
+          libraryId: library.id,
+          keptDriveFileIds: presentDriveFileIds,
+        );
     // La ligne en base disparaît : le fichier téléchargé ne doit pas subsister.
     for (final relativePath in prunedPaths) {
       await _cacheManager.evictCachedFile(library, relativePath);
     }
     if (prunedPaths.isNotEmpty) {
-      SyncLog.trace(
-        '${library.name} : élagués — ${prunedPaths.join(', ')}',
-      );
+      SyncLog.trace('${library.name} : élagués — ${prunedPaths.join(', ')}');
     }
     return prunedPaths.length;
   }
-
 }

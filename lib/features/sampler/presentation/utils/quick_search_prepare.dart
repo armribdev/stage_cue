@@ -17,17 +17,10 @@ class QuickSearchPrepareResult {
 }
 
 /// Référence minimale d'un pad sur scène (hors couche UI).
-typedef OnStagePadRef = ({
-  int padId,
-  bool isDraft,
-  List<int> soundIds,
-});
+typedef OnStagePadRef = ({int padId, bool isDraft, List<int> soundIds});
 
 /// Pad dédié = exactement un son, visible sur scène (pas brouillon).
-int? findDedicatedOnStagePadId(
-  Iterable<OnStagePadRef> pads,
-  int soundId,
-) {
+int? findDedicatedOnStagePadId(Iterable<OnStagePadRef> pads, int soundId) {
   for (final pad in pads) {
     if (pad.isDraft) continue;
     if (pad.soundIds.length == 1 && pad.soundIds.first == soundId) {
@@ -130,8 +123,10 @@ Future<QuickSearchPrepareResult> prepareSfxOnBoard({
     for (final item in padsOnBoard)
       if (!item.isDraft) item.pad,
   ];
-  final placement =
-      computeLastRowAppendPlacement(stagePads, forceNewRow: forceNewRow);
+  final placement = computeLastRowAppendPlacement(
+    stagePads,
+    forceNewRow: forceNewRow,
+  );
   final padId = await createPad(placement);
 
   final reloaded = await reloadPads();

@@ -28,8 +28,9 @@ class AudioLoadLog {
   /// la console en debug/profile (le listener de lecture émet à chaque
   /// changement d'état). Activer pour investiguer :
   /// `--dart-define=STAGE_CUE_AUDIO_TRACE=true`.
-  static const bool traceEnabled =
-      bool.fromEnvironment('STAGE_CUE_AUDIO_TRACE');
+  static const bool traceEnabled = bool.fromEnvironment(
+    'STAGE_CUE_AUDIO_TRACE',
+  );
 
   static void trace(String message) {
     if (!traceEnabled) return;
@@ -47,11 +48,7 @@ class AudioLoadLog {
   static void warn(String message) =>
       _emit(message, level: 900, sinkLevel: LogLevel.warn);
 
-  static void severe(
-    String message, {
-    Object? error,
-    StackTrace? stackTrace,
-  }) =>
+  static void severe(String message, {Object? error, StackTrace? stackTrace}) =>
       _emit(
         message,
         level: 1000,
@@ -90,7 +87,8 @@ class AudioLoadLog {
     int unavailableCount = 0,
     Duration elapsed = Duration.zero,
   }) {
-    final message = 'Plateau #$boardId préchargé : $padCount pad(s), '
+    final message =
+        'Plateau #$boardId préchargé : $padCount pad(s), '
         '$unavailableCount indisponible(s), ${elapsed.inMilliseconds} ms.';
     if (unavailableCount > 0) {
       warn(message);
@@ -132,11 +130,10 @@ class AudioLoadLog {
     required String padLabel,
     required int padId,
     bool paused = false,
-  }) =>
-      info(
-        'Musique ${paused ? 'mise en pause' : 'arrêtée'} : '
-        '« $padLabel » (pad $padId).',
-      );
+  }) => info(
+    'Musique ${paused ? 'mise en pause' : 'arrêtée'} : '
+    '« $padLabel » (pad $padId).',
+  );
 
   static void ambianceStarted({required String padLabel, required int padId}) =>
       info('Ambiance démarrée : « $padLabel » (pad $padId).');
@@ -145,11 +142,10 @@ class AudioLoadLog {
     required String fromLabel,
     required String toLabel,
     required int toPadId,
-  }) =>
-      info(
-        'Ambiance remplacée (fondu enchaîné) : « $fromLabel » → '
-        '« $toLabel » (pad $toPadId).',
-      );
+  }) => info(
+    'Ambiance remplacée (fondu enchaîné) : « $fromLabel » → '
+    '« $toLabel » (pad $toPadId).',
+  );
 
   static void ambianceStopped({required String padLabel, required int padId}) =>
       info('Ambiance arrêtée : « $padLabel » (pad $padId).');
@@ -159,12 +155,11 @@ class AudioLoadLog {
     required int stoppedPads,
     required bool musicStillPlaying,
     required bool ambianceStillPlaying,
-  }) =>
-      info(
-        'Panique : $stoppedPads pad(s) de bruitage coupé(s) — musique '
-        '${musicStillPlaying ? 'laissée' : 'absente'}, ambiance '
-        '${ambianceStillPlaying ? 'laissée' : 'absente'}.',
-      );
+  }) => info(
+    'Panique : $stoppedPads pad(s) de bruitage coupé(s) — musique '
+    '${musicStillPlaying ? 'laissée' : 'absente'}, ambiance '
+    '${ambianceStillPlaying ? 'laissée' : 'absente'}.',
+  );
 
   // ── Périphériques de sortie (cue) ──────────────────────────────────────────
 
@@ -172,15 +167,15 @@ class AudioLoadLog {
       warn('Énumération des périphériques de sortie cue échouée — $error');
 
   static void cueFallbackToSoLoud(Object error) => warn(
-        'Pré-écoute cue (media_kit) indisponible, repli sur la sortie '
-        'principale — $error',
-      );
+    'Pré-écoute cue (media_kit) indisponible, repli sur la sortie '
+    'principale — $error',
+  );
 
   static void cueOutputChanged({required bool configured}) => info(
-        configured
-            ? 'Sortie cue : périphérique dédié configuré.'
-            : 'Sortie cue : retour à la sortie principale (SoLoud).',
-      );
+    configured
+        ? 'Sortie cue : périphérique dédié configuré.'
+        : 'Sortie cue : retour à la sortie principale (SoLoud).',
+  );
 
   static void padPlayersFailed({
     required int padId,
@@ -188,10 +183,7 @@ class AudioLoadLog {
     required Object error,
     StackTrace? stackTrace,
   }) {
-    _once(
-      'pad:$padId',
-      () => warn('Pad « $padLabel » (id=$padId) : $error'),
-    );
+    _once('pad:$padId', () => warn('Pad « $padLabel » (id=$padId) : $error'));
   }
 
   static void soundLoadFailed({
@@ -222,10 +214,7 @@ class AudioLoadLog {
     _fileFailed(path, error);
   }
 
-  static void corruptCacheFile({
-    required String path,
-    required int bytes,
-  }) {
+  static void corruptCacheFile({required String path, required int bytes}) {
     _once(
       'corrupt:$path',
       () => warn(

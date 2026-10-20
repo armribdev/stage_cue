@@ -30,20 +30,20 @@ class SyncManifest {
   });
 
   Map<String, dynamic> toJson() => {
-        'revision': revision,
-        'deviceId': deviceId,
-        'updatedAt': updatedAt.toUtc().toIso8601String(),
-        'schemaVersion': schemaVersion,
-        if (dbFileName != null) 'dbFileName': dbFileName,
-      };
+    'revision': revision,
+    'deviceId': deviceId,
+    'updatedAt': updatedAt.toUtc().toIso8601String(),
+    'schemaVersion': schemaVersion,
+    if (dbFileName != null) 'dbFileName': dbFileName,
+  };
 
   factory SyncManifest.fromJson(Map<String, dynamic> json) => SyncManifest(
-        revision: json['revision'] as int,
-        deviceId: json['deviceId'] as String,
-        updatedAt: DateTime.parse(json['updatedAt'] as String),
-        schemaVersion: json['schemaVersion'] as int,
-        dbFileName: json['dbFileName'] as String?,
-      );
+    revision: json['revision'] as int,
+    deviceId: json['deviceId'] as String,
+    updatedAt: DateTime.parse(json['updatedAt'] as String),
+    schemaVersion: json['schemaVersion'] as int,
+    dbFileName: json['dbFileName'] as String?,
+  );
 
   String encode() => jsonEncode(toJson());
 

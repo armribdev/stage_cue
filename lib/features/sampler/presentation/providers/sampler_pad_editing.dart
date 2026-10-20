@@ -64,10 +64,7 @@ extension SamplerPadEditing on SamplerNotifier {
     if (index < 0) return;
 
     final clamped = volume?.clamp(0.0, 1.0);
-    final nextVolumes = List<double?>.filled(
-      padItem.pad.sounds.length,
-      null,
-    );
+    final nextVolumes = List<double?>.filled(padItem.pad.sounds.length, null);
     for (var i = 0; i < nextVolumes.length; i++) {
       nextVolumes[i] = i < padItem.pad.soundVolumes.length
           ? padItem.pad.soundVolumes[i]
@@ -79,8 +76,9 @@ extension SamplerPadEditing on SamplerNotifier {
 
     // Applique en direct si ce son précis est en cours de lecture.
     if (padItem.isPlaying && padItem.currentSoundIndex == index) {
-      padItem.currentPlayer
-          ?.setVolume(_effectiveVolume(padItem, soundIndex: index));
+      padItem.currentPlayer?.setVolume(
+        _effectiveVolume(padItem, soundIndex: index),
+      );
     }
     _notify();
 
@@ -104,8 +102,9 @@ extension SamplerPadEditing on SamplerNotifier {
     final boardId = _activeBoardId;
     if (boardId == null) return;
 
-    final drafts =
-        _state.pads.where((item) => item.isDraft).toList(growable: false);
+    final drafts = _state.pads
+        .where((item) => item.isDraft)
+        .toList(growable: false);
 
     final byRow = <int, List<PadItem>>{};
     for (final p in _state.pads) {
@@ -141,10 +140,7 @@ extension SamplerPadEditing on SamplerNotifier {
     var globalSort = 0;
     for (final rowIdx in allRows) {
       for (final item in byRow[rowIdx]!) {
-        item.pad = item.pad.copyWith(
-          rowIndex: rowIdx,
-          sortOrder: globalSort,
-        );
+        item.pad = item.pad.copyWith(rowIndex: rowIdx, sortOrder: globalSort);
         layout.add((
           padId: item.pad.id,
           rowIndex: rowIdx,
@@ -233,8 +229,7 @@ extension SamplerPadEditing on SamplerNotifier {
     }
     padItem.dispose();
 
-    final remainingPads =
-        _state.pads.where((p) => p != padItem).toList();
+    final remainingPads = _state.pads.where((p) => p != padItem).toList();
     _syncMultipadNumbers(remainingPads);
     _state = _state.copyWith(pads: remainingPads, error: null);
     _syncVoicesWithPads();
@@ -289,9 +284,7 @@ extension SamplerPadEditing on SamplerNotifier {
     bool notify = true,
   }) {
     if (padItem.pad.sounds.any((s) => s.id == sound.id)) return;
-    padItem.pad = padItem.pad.copyWith(
-      sounds: [...padItem.pad.sounds, sound],
-    );
+    padItem.pad = padItem.pad.copyWith(sounds: [...padItem.pad.sounds, sound]);
     padItem.syncSlotCount();
     _finalizePadAvailability(padItem);
     _syncMultipadNumbers(_state.pads);

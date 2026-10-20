@@ -9,7 +9,11 @@ class PadDownloadSheet extends StatefulWidget {
   final PadItem padItem;
   final SamplerNotifier notifier;
 
-  const PadDownloadSheet({super.key, required this.padItem, required this.notifier});
+  const PadDownloadSheet({
+    super.key,
+    required this.padItem,
+    required this.notifier,
+  });
 
   @override
   State<PadDownloadSheet> createState() => _PadDownloadSheetState();

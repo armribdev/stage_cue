@@ -13,10 +13,10 @@ class DriveAccountProfile {
   /// Sérialisation pour la persistance locale (affichage immédiat au lancement,
   /// avant tout appel réseau).
   Map<String, dynamic> toJson() => {
-        'email': email,
-        if (displayName != null) 'display_name': displayName,
-        if (photoUrl != null) 'photo_url': photoUrl,
-      };
+    'email': email,
+    if (displayName != null) 'display_name': displayName,
+    if (photoUrl != null) 'photo_url': photoUrl,
+  };
 
   static DriveAccountProfile? fromJson(Map<String, dynamic> json) {
     final email = json['email'];
@@ -40,9 +40,8 @@ class DriveAccountProfile {
   @override
   int get hashCode => Object.hash(email, displayName, photoUrl);
 
-  String get label => displayName?.trim().isNotEmpty == true
-      ? displayName!.trim()
-      : email;
+  String get label =>
+      displayName?.trim().isNotEmpty == true ? displayName!.trim() : email;
 
   String get initials {
     final source = displayName?.trim().isNotEmpty == true

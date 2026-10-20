@@ -201,8 +201,9 @@ extension SamplerPadAudioEngine on SamplerNotifier {
             padItem._currentPlayerIndex = idx;
             padItem.isPlaying = true;
           } else {
-            final anyPlaying =
-                padItem.slots.any((s) => s.player?.isPlaying ?? false);
+            final anyPlaying = padItem.slots.any(
+              (s) => s.player?.isPlaying ?? false,
+            );
             padItem.isPlaying = anyPlaying;
             if (!anyPlaying) padItem._currentPlayerIndex = null;
           }
@@ -266,8 +267,10 @@ extension SamplerPadAudioEngine on SamplerNotifier {
     for (final padItem in padsToFetch) {
       if (padItem.pendingDownloadCount == 0) continue;
       unawaited(
-        downloadAndLoadPad(padItem, priority: SamplerNotifier._downloadPriorityPrefetch)
-            .catchError((_) => false),
+        downloadAndLoadPad(
+          padItem,
+          priority: SamplerNotifier._downloadPriorityPrefetch,
+        ).catchError((_) => false),
       );
     }
   }

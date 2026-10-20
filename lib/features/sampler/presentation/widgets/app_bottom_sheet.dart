@@ -44,7 +44,7 @@ class AppBottomSheetShell extends StatelessWidget {
   final IconData? leadingIcon;
   final Widget? header;
   final Widget Function(BuildContext context, ScrollController scrollController)
-      bodyBuilder;
+  bodyBuilder;
   final double initialChildSize;
   final double minChildSize;
   final double maxChildSize;
@@ -63,14 +63,9 @@ class AppBottomSheetShell extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _AppBottomSheetTitle(
-                title: title,
-                leadingIcon: leadingIcon,
-              ),
+              _AppBottomSheetTitle(title: title, leadingIcon: leadingIcon),
               ?header,
-              Expanded(
-                child: bodyBuilder(context, scrollController),
-              ),
+              Expanded(child: bodyBuilder(context, scrollController)),
             ],
           );
         },
@@ -80,10 +75,7 @@ class AppBottomSheetShell extends StatelessWidget {
 }
 
 class _AppBottomSheetTitle extends StatelessWidget {
-  const _AppBottomSheetTitle({
-    required this.title,
-    this.leadingIcon,
-  });
+  const _AppBottomSheetTitle({required this.title, this.leadingIcon});
 
   final String title;
   final IconData? leadingIcon;

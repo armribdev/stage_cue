@@ -7,7 +7,6 @@ part of '../settings_screen.dart';
 /// Décomptes et libellés des dossiers indexés.
 /// Méthodes de [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsLabels on _SettingsScreenState {
-
   String _normalizeWatchedPath(String path) {
     return p.normalize(path).replaceAll('\\', '/');
   }

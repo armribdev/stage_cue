@@ -98,9 +98,7 @@ class GoogleDriveClient implements DriveClient {
       ...error.errors.map((e) => e.reason?.toLowerCase() ?? ''),
       error.message?.toLowerCase() ?? '',
     ];
-    return reasons.any(
-      (r) => r.contains('ratelimit') || r.contains('quota'),
-    );
+    return reasons.any((r) => r.contains('ratelimit') || r.contains('quota'));
   }
 
   /// Traduit une erreur d'API en message présentable.
@@ -207,7 +205,8 @@ class GoogleDriveClient implements DriveClient {
   @override
   Future<List<DriveFile>> listSharedWithMeFolders() async {
     return _listFiles(
-      q: "sharedWithMe = true and mimeType = '$driveFolderMimeType' "
+      q:
+          "sharedWithMe = true and mimeType = '$driveFolderMimeType' "
           'and trashed = false',
       pageSize: 200,
     );
@@ -261,7 +260,8 @@ class GoogleDriveClient implements DriveClient {
   }) async {
     return _guardRetry(() async {
       final fileList = await _api.files.list(
-        q: "'${_escape(parentId)}' in parents and "
+        q:
+            "'${_escape(parentId)}' in parents and "
             "name = '${_escape(name)}' and trashed = false",
         spaces: 'drive',
         $fields: 'files($_fileFields)',
@@ -294,14 +294,16 @@ class GoogleDriveClient implements DriveClient {
         start,
         math.min(start + _findInFoldersChunk, parents.length),
       );
-      final parentClause =
-          chunk.map((id) => "'${_escape(id)}' in parents").join(' or ');
+      final parentClause = chunk
+          .map((id) => "'${_escape(id)}' in parents")
+          .join(' or ');
 
       await _guardRetry(() async {
         String? pageToken;
         do {
           final fileList = await _api.files.list(
-            q: "($parentClause) and name = '${_escape(name)}' "
+            q:
+                "($parentClause) and name = '${_escape(name)}' "
                 'and trashed = false',
             spaces: 'drive',
             // `parents` en plus : c'est lui qui permet de rattacher chaque
@@ -361,7 +363,8 @@ class GoogleDriveClient implements DriveClient {
           includeRemoved: true,
           spaces: 'drive',
           pageSize: 200,
-          $fields: 'nextPageToken, newStartPageToken, '
+          $fields:
+              'nextPageToken, newStartPageToken, '
               'changes(fileId, removed, file($_fileFields, parents, trashed))',
         );
       } on drive.DetailedApiRequestError catch (e) {
@@ -382,13 +385,15 @@ class GoogleDriveClient implements DriveClient {
         final removed =
             change.removed == true || file == null || file.trashed == true;
 
-        changes.add(DriveChange(
-          fileId: fileId,
-          removed: removed,
-          file: removed ? null : _toDriveFile(file),
-          parentId: file?.parents?.firstOrNull,
-          isFolder: file?.mimeType == driveFolderMimeType,
-        ));
+        changes.add(
+          DriveChange(
+            fileId: fileId,
+            removed: removed,
+            file: removed ? null : _toDriveFile(file),
+            parentId: file?.parents?.firstOrNull,
+            isFolder: file?.mimeType == driveFolderMimeType,
+          ),
+        );
       }
 
       return DriveChangePage(
@@ -400,10 +405,7 @@ class GoogleDriveClient implements DriveClient {
   }
 
   @override
-  Future<DriveFile> createFolder({
-    required String name,
-    String? parentId,
-  }) {
+  Future<DriveFile> createFolder({required String name, String? parentId}) {
     return _guard(() async {
       final metadata = drive.File()
         ..name = name
@@ -464,16 +466,15 @@ class GoogleDriveClient implements DriveClient {
   }
 
   @override
-  Future<DriveFile?> getFile(
-    String fileId, {
-    String? sharedDriveId,
-  }) async {
+  Future<DriveFile?> getFile(String fileId, {String? sharedDriveId}) async {
     try {
-      final f = await _api.files.get(
-        fileId,
-        $fields: _fileFields,
-        supportsAllDrives: true,
-      ) as drive.File;
+      final f =
+          await _api.files.get(
+                fileId,
+                $fields: _fileFields,
+                supportsAllDrives: true,
+              )
+              as drive.File;
       return _toDriveFile(f);
     } on drive.DetailedApiRequestError catch (e) {
       if (_isAuthError(e)) throw const DriveAuthException();
@@ -487,11 +488,13 @@ class GoogleDriveClient implements DriveClient {
   @override
   Future<List<int>> downloadBytes(String fileId) {
     return _guardRetry(() async {
-      final media = await _api.files.get(
-        fileId,
-        downloadOptions: drive.DownloadOptions.fullMedia,
-        supportsAllDrives: true,
-      ) as drive.Media;
+      final media =
+          await _api.files.get(
+                fileId,
+                downloadOptions: drive.DownloadOptions.fullMedia,
+                supportsAllDrives: true,
+              )
+              as drive.Media;
       final bytes = <int>[];
       await for (final chunk in media.stream) {
         bytes.addAll(chunk);
@@ -506,11 +509,13 @@ class GoogleDriveClient implements DriveClient {
     required String destinationPath,
   }) {
     return _guardRetry(() async {
-      final media = await _api.files.get(
-        fileId,
-        downloadOptions: drive.DownloadOptions.fullMedia,
-        supportsAllDrives: true,
-      ) as drive.Media;
+      final media =
+          await _api.files.get(
+                fileId,
+                downloadOptions: drive.DownloadOptions.fullMedia,
+                supportsAllDrives: true,
+              )
+              as drive.Media;
 
       final destination = File(destinationPath);
       await destination.parent.create(recursive: true);
@@ -549,11 +554,13 @@ class GoogleDriveClient implements DriveClient {
   /// E-mail du propriétaire du dossier (y compris dossier partagé).
   Future<String?> getFolderOwnerEmail(String fileId) async {
     try {
-      final file = await _api.files.get(
-        fileId,
-        $fields: 'owners(emailAddress)',
-        supportsAllDrives: true,
-      ) as drive.File;
+      final file =
+          await _api.files.get(
+                fileId,
+                $fields: 'owners(emailAddress)',
+                supportsAllDrives: true,
+              )
+              as drive.File;
       final owners = file.owners;
       if (owners == null || owners.isEmpty) {
         return null;
@@ -576,11 +583,13 @@ class GoogleDriveClient implements DriveClient {
     }
 
     try {
-      final file = await _api.files.get(
-        folder.id!,
-        $fields: 'owners(emailAddress)',
-        supportsAllDrives: true,
-      ) as drive.File;
+      final file =
+          await _api.files.get(
+                folder.id!,
+                $fields: 'owners(emailAddress)',
+                supportsAllDrives: true,
+              )
+              as drive.File;
       final owners = file.owners;
       if (owners == null || owners.isEmpty) {
         return null;
@@ -632,7 +641,8 @@ class GoogleDriveClient implements DriveClient {
     String? pageToken;
     do {
       final response = await _api.files.list(
-        q: "name = '${_escape(trimmed)}' and "
+        q:
+            "name = '${_escape(trimmed)}' and "
             "mimeType = '$driveFolderMimeType' and trashed = false",
         corpora: 'allDrives',
         includeItemsFromAllDrives: true,
@@ -663,8 +673,8 @@ class GoogleDriveAuthenticator implements DriveAuthenticator {
   GoogleDriveAuthenticator({
     DriveAuthenticator? authenticator,
     DriveProfileStore? profileStore,
-  })  : _delegate = authenticator ?? _createPlatformAuthenticator(),
-        _profileStore = profileStore ?? const DriveProfileStore();
+  }) : _delegate = authenticator ?? _createPlatformAuthenticator(),
+       _profileStore = profileStore ?? const DriveProfileStore();
 
   final DriveAuthenticator _delegate;
   final DriveProfileStore _profileStore;
@@ -762,14 +772,15 @@ class GoogleDriveAuthenticator implements DriveAuthenticator {
 /// OAuth via le plugin `google_sign_in` (Android, iOS, macOS).
 class _MobileGoogleDriveAuthenticator implements DriveAuthenticator {
   _MobileGoogleDriveAuthenticator({gsi.GoogleSignIn? googleSignIn})
-      : _googleSignIn = googleSignIn ??
-            gsi.GoogleSignIn(
-              scopes: const [
-                drive.DriveApi.driveScope,
-                drive.DriveApi.driveFileScope,
-                drive.DriveApi.driveReadonlyScope,
-              ],
-            );
+    : _googleSignIn =
+          googleSignIn ??
+          gsi.GoogleSignIn(
+            scopes: const [
+              drive.DriveApi.driveScope,
+              drive.DriveApi.driveFileScope,
+              drive.DriveApi.driveReadonlyScope,
+            ],
+          );
 
   final gsi.GoogleSignIn _googleSignIn;
 

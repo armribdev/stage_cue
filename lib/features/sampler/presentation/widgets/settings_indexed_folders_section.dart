@@ -342,8 +342,9 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
 
     // 2. Téléchargement des variantes audio (Drive uniquement).
     if (!item.isLocal) {
-      final download =
-          libraryRepository.libraryDownloadProgress(item.library!.id);
+      final download = libraryRepository.libraryDownloadProgress(
+        item.library!.id,
+      );
       if (download != null && !download.isComplete) {
         return _buildActivityBlock(
           context,
@@ -469,8 +470,9 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
     }
 
     final library = item.library!;
-    final downloadProgress =
-        libraryRepository.libraryDownloadProgress(library.id);
+    final downloadProgress = libraryRepository.libraryDownloadProgress(
+      library.id,
+    );
     final isDownloading =
         downloadProgress != null && !downloadProgress.isComplete;
     final offline = offlineCounts[library.id];

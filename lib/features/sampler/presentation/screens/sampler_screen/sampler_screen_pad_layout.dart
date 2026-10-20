@@ -7,7 +7,6 @@ part of '../sampler_screen.dart';
 /// Disposition des pads : glisser-déposer, défilement, mode spectacle, mise en valeur.
 /// Méthodes de [_SamplerScreenState] extraites via extension dans le même `part`.
 extension _SamplerScreenPadLayout on _SamplerScreenState {
-
   void _updateDropTarget(int rowIndex, int position) {
     if (_dropTarget?.rowIndex == rowIndex &&
         _dropTarget?.position == position) {

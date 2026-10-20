@@ -202,10 +202,7 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
     _activeTransitionKind = null;
   }
 
-  void _startTransitionFeedback(
-    _MusicTransitionKind kind,
-    Duration duration,
-  ) {
+  void _startTransitionFeedback(_MusicTransitionKind kind, Duration duration) {
     if (_selectedTransitionDuration == null) return;
 
     _clearTransitionFeedback();
@@ -245,8 +242,9 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
       }
       // Tap simple : sélection temporaire (reviendra au cut après transition).
       // Reclic sur la même durée → désélection, et on lève le verrou.
-      _selectedTransitionDuration =
-          _selectedTransitionDuration == option ? null : option;
+      _selectedTransitionDuration = _selectedTransitionDuration == option
+          ? null
+          : option;
       _transitionDurationLocked = false;
     });
   }
@@ -324,15 +322,13 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
     _expandController.value = _drawerDragProgress;
     setState(() => _isDrawerDragging = false);
 
-    _expandController
-        .animateTo(target, curve: _drawerSnapCurve)
-        .then((_) {
-          if (!mounted) return;
-          final isAdvanced = target >= 0.5;
-          if (isAdvanced != widget.isAdvanced) {
-            widget.onAdvancedChanged(isAdvanced);
-          }
-        });
+    _expandController.animateTo(target, curve: _drawerSnapCurve).then((_) {
+      if (!mounted) return;
+      final isAdvanced = target >= 0.5;
+      if (isAdvanced != widget.isAdvanced) {
+        widget.onAdvancedChanged(isAdvanced);
+      }
+    });
   }
 
   void _handleDrawerDragCancel() {
@@ -497,10 +493,7 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
     );
   }
 
-  void _handlePauseToggle({
-    required bool isPlaying,
-    required bool hasCurrent,
-  }) {
+  void _handlePauseToggle({required bool isPlaying, required bool hasCurrent}) {
     if (isPlaying && hasCurrent) {
       final duration = _effectiveTransitionDuration;
       widget.onFadeOut?.call(duration);
@@ -511,10 +504,7 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
     }
   }
 
-  void _handleSkipNext({
-    required bool isPlaying,
-    required bool hasQueue,
-  }) {
+  void _handleSkipNext({required bool isPlaying, required bool hasQueue}) {
     if (!hasQueue) {
       widget.onSkipNext?.call();
       return;
@@ -540,4 +530,3 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
     return _buildTouchPanel(panelWidth);
   }
 }
-

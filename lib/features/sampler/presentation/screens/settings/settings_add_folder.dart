@@ -7,7 +7,6 @@ part of '../settings_screen.dart';
 /// Ajout d'un dossier indexé : sélecteurs local, SAF et Drive.
 /// Méthodes de [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsAddFolder on _SettingsScreenState {
-
   Future<void> _onAddFolderPressed() async {
     if (Platform.isAndroid) {
       await _addDirectoryFromIntegratedPicker();

@@ -33,29 +33,34 @@ void main() {
     if (dir.existsSync()) await dir.delete(recursive: true);
   });
 
-  test('les trois classes de log alimentent le fichier avec leur canal', () async {
-    SyncLog.info('indexé');
-    AudioLoadLog.warn('illisible');
-    UpdateLog.info('à jour');
-    AppLog.info('démarré');
-    final out = await flushed();
-    expect(out, contains(RegExp(r'INFO  Sync   indexé')));
-    expect(out, contains(RegExp(r'WARN  Audio  illisible')));
-    expect(out, contains(RegExp(r'INFO  Update à jour')));
-    expect(out, contains(RegExp(r'INFO  App    démarré')));
-  });
+  test(
+    'les trois classes de log alimentent le fichier avec leur canal',
+    () async {
+      SyncLog.info('indexé');
+      AudioLoadLog.warn('illisible');
+      UpdateLog.info('à jour');
+      AppLog.info('démarré');
+      final out = await flushed();
+      expect(out, contains(RegExp(r'INFO  Sync   indexé')));
+      expect(out, contains(RegExp(r'WARN  Audio  illisible')));
+      expect(out, contains(RegExp(r'INFO  Update à jour')));
+      expect(out, contains(RegExp(r'INFO  App    démarré')));
+    },
+  );
 
-  test('les traces ne vont au fichier que si leur --dart-define est actif',
-      () async {
-    // Dans cette suite, STAGE_CUE_*_TRACE n'est pas défini.
-    expect(SyncLog.traceEnabled, isFalse);
-    expect(AudioLoadLog.traceEnabled, isFalse);
-    SyncLog.trace('détail fichier');
-    AudioLoadLog.trace('détail audio');
-    final out = await flushed();
-    expect(out, isNot(contains('détail fichier')));
-    expect(out, isNot(contains('détail audio')));
-  });
+  test(
+    'les traces ne vont au fichier que si leur --dart-define est actif',
+    () async {
+      // Dans cette suite, STAGE_CUE_*_TRACE n'est pas défini.
+      expect(SyncLog.traceEnabled, isFalse);
+      expect(AudioLoadLog.traceEnabled, isFalse);
+      SyncLog.trace('détail fichier');
+      AudioLoadLog.trace('détail audio');
+      final out = await flushed();
+      expect(out, isNot(contains('détail fichier')));
+      expect(out, isNot(contains('détail audio')));
+    },
+  );
 
   group('préchargement', () {
     test('bilan en info quand tout est disponible', () async {
@@ -66,7 +71,9 @@ void main() {
       );
       expect(
         await flushed(),
-        contains('INFO  Audio  Plateau #3 préchargé : 12 pad(s), 0 indisponible(s), 840 ms.'),
+        contains(
+          'INFO  Audio  Plateau #3 préchargé : 12 pad(s), 0 indisponible(s), 840 ms.',
+        ),
       );
     });
 
@@ -102,24 +109,26 @@ void main() {
       );
     });
 
-    test('un même échec répété dans la fenêtre n\'écrit qu\'une ligne',
-        () async {
-      for (var i = 0; i < 5; i++) {
+    test(
+      'un même échec répété dans la fenêtre n\'écrit qu\'une ligne',
+      () async {
+        for (var i = 0; i < 5; i++) {
+          AudioLoadLog.padTriggerFailed(
+            padId: 77,
+            padLabel: 'Pluie',
+            reason: 'pad sans son',
+          );
+        }
         AudioLoadLog.padTriggerFailed(
           padId: 77,
           padLabel: 'Pluie',
-          reason: 'pad sans son',
+          reason: 'fichier introuvable',
         );
-      }
-      AudioLoadLog.padTriggerFailed(
-        padId: 77,
-        padLabel: 'Pluie',
-        reason: 'fichier introuvable',
-      );
-      final out = await flushed();
-      expect('pad sans son'.allMatches(out).length, 1);
-      expect(out, contains('fichier introuvable'));
-    });
+        final out = await flushed();
+        expect('pad sans son'.allMatches(out).length, 1);
+        expect(out, contains('fichier introuvable'));
+      },
+    );
   });
 
   group('éviction du cache', () {
@@ -135,7 +144,10 @@ void main() {
         minFreeBytes: 2000 * 1024 * 1024,
       );
       final out = await flushed();
-      expect(out, contains('INFO  Sync   Lib : éviction du cache — 12 fichier(s)'));
+      expect(
+        out,
+        contains('INFO  Sync   Lib : éviction du cache — 12 fichier(s)'),
+      );
       expect(out, contains('40 épinglé(s) protégé(s)'));
     });
 
@@ -177,17 +189,19 @@ void main() {
       expect(summaries.single.cancelled, 0);
     });
 
-    test('un second lot produit un second bilan, compteurs remis à zéro',
-        () async {
-      final summaries = <DownloadQueueSummary>[];
-      final queue = DownloadQueue(onDrained: summaries.add);
-      await queue.enqueue<int>(key: 'a', priority: 1, task: () async => 1);
-      await Future<void>.delayed(Duration.zero);
-      await queue.enqueue<int>(key: 'b', priority: 1, task: () async => 2);
-      await Future<void>.delayed(Duration.zero);
-      expect(summaries, hasLength(2));
-      expect(summaries.last.succeeded, 1);
-    });
+    test(
+      'un second lot produit un second bilan, compteurs remis à zéro',
+      () async {
+        final summaries = <DownloadQueueSummary>[];
+        final queue = DownloadQueue(onDrained: summaries.add);
+        await queue.enqueue<int>(key: 'a', priority: 1, task: () async => 1);
+        await Future<void>.delayed(Duration.zero);
+        await queue.enqueue<int>(key: 'b', priority: 1, task: () async => 2);
+        await Future<void>.delayed(Duration.zero);
+        expect(summaries, hasLength(2));
+        expect(summaries.last.succeeded, 1);
+      },
+    );
 
     test('les tâches annulées en attente sont comptées', () async {
       final summaries = <DownloadQueueSummary>[];

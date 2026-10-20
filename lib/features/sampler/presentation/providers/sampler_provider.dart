@@ -70,6 +70,7 @@ class SamplerNotifier extends ChangeNotifier {
     _activeBoardIdValue = value;
     _libraryRepository?.activeBoardId = value;
   }
+
   _RemovedPadSnapshot? _lastRemovedPad;
 
   /// Réinitialisé à chaque entrée en mode live (Mode Spectacle) : force le
@@ -147,16 +148,16 @@ class SamplerNotifier extends ChangeNotifier {
 
   /// Index mémoire de la bibliothèque pour le sélecteur de sons : ouvrir la
   /// recherche en spectacle ne doit pas attendre la base ni le disque.
-  late final SoundSearchIndex _searchIndex =
-      SoundSearchIndex(_repository, _libraryRepository);
+  late final SoundSearchIndex _searchIndex = SoundSearchIndex(
+    _repository,
+    _libraryRepository,
+  );
 
   SamplerState _state = SamplerState(pads: []);
   SamplerState get state => _state;
   bool get offlineMode => isLiveOfflineMode;
-  bool get isLiveOfflineMode =>
-      _appPreferences?.isLiveOfflineMode ?? false;
-  bool get allowsSoundDownload =>
-      _appPreferences?.allowsSoundDownload ?? true;
+  bool get isLiveOfflineMode => _appPreferences?.isLiveOfflineMode ?? false;
+  bool get allowsSoundDownload => _appPreferences?.allowsSoundDownload ?? true;
 
   /// Session Google révoquée/expirée : un OAuth interactif est requis. Permet à
   /// l'UI de distinguer un échec « token mort » d'un simple « hors-ligne » quand
@@ -235,8 +236,9 @@ class SamplerNotifier extends ChangeNotifier {
     if (ambiance != null && !isPadVisibleInOfflineMode(ambiance)) {
       await _ambiance._stopImmediately();
     }
-    final newQueue =
-        _state.musicQueuePadIds.where(visibleIds.contains).toList();
+    final newQueue = _state.musicQueuePadIds
+        .where(visibleIds.contains)
+        .toList();
     if (newQueue.length != _state.musicQueuePadIds.length) {
       _state = _state.copyWith(musicQueuePadIds: newQueue);
     }
@@ -303,8 +305,7 @@ class SamplerNotifier extends ChangeNotifier {
     if (_activeBoardId != boardId) return;
 
     // Le pad a pu changer depuis (re-tri, suppression) : relocaliser par id.
-    final freshIndex =
-        padItem.pad.sounds.indexWhere((s) => s.id == sound.id);
+    final freshIndex = padItem.pad.sounds.indexWhere((s) => s.id == sound.id);
     if (freshIndex < 0) return;
     // Réinjecte le son à jour même sur un échec `unsupported` : l'entité en
     // mémoire porte alors la génération d'échec, ce qui évite de re-sonder le
@@ -524,8 +525,9 @@ class SamplerNotifier extends ChangeNotifier {
   Future<bool> deleteBoard(SoundBoard board) async {
     try {
       await _repository.deleteSoundBoard(board.id);
-      final updatedBoards =
-          _state.boards.where((b) => b.id != board.id).toList();
+      final updatedBoards = _state.boards
+          .where((b) => b.id != board.id)
+          .toList();
       SoundBoard? nextSelected = _state.selectedBoard;
       if (_state.selectedBoard?.id == board.id) {
         nextSelected = updatedBoards.isNotEmpty ? updatedBoards.first : null;
@@ -634,7 +636,8 @@ class SamplerNotifier extends ChangeNotifier {
         // Ré-adopte un pad musique/ambiance détaché hors-scène (tapis sonore)
         // si l'on revient sur son plateau d'origine : évite un second lecteur
         // pour un son déjà en cours de lecture.
-        final existing = previousItemsById[pad.id] ??
+        final existing =
+            previousItemsById[pad.id] ??
             _music._reclaimOffStagePad(pad.id) ??
             _ambiance._reclaimOffStagePad(pad.id);
         if (existing != null) {
@@ -661,15 +664,17 @@ class SamplerNotifier extends ChangeNotifier {
       // sur un pad n'annule pas les autres (Future.wait sans isolation causerait
       // la perte de tous les résultats si l'un échoue).
       await Future.wait(
-        padItems.where((item) => !item.isDraft).map(
-          (item) => _probePadLocalAvailability(item).catchError((e, st) {
-            AudioLoadLog.severe(
-              'Sonde pad #${item.pad.id} échouée',
-              error: e,
-              stackTrace: st,
-            );
-          }),
-        ),
+        padItems
+            .where((item) => !item.isDraft)
+            .map(
+              (item) => _probePadLocalAvailability(item).catchError((e, st) {
+                AudioLoadLog.severe(
+                  'Sonde pad #${item.pad.id} échouée',
+                  error: e,
+                  stackTrace: st,
+                );
+              }),
+            ),
       );
 
       _syncMultipadNumbers(_padsForMultipadNumbering());
@@ -678,9 +683,10 @@ class SamplerNotifier extends ChangeNotifier {
       // Ne pas disposer un pad musique/ambiance conservé hors-scène : il
       // continue de jouer en tapis sonore et reste piloté par la régie.
       final removedItems = previousItems
-          .where((item) =>
-              !keptIds.contains(item.pad.id) &&
-              !_isKeptOffStage(item.pad.id))
+          .where(
+            (item) =>
+                !keptIds.contains(item.pad.id) && !_isKeptOffStage(item.pad.id),
+          )
           .toList();
       _disposePadItems(removedItems);
       _syncVoicesWithPads();
@@ -945,9 +951,11 @@ class SamplerNotifier extends ChangeNotifier {
     _notifyPad(padItem);
     notifyListeners();
   }
+
   bool _slotEligibleForPlayback(PadItem padItem, int index) {
     final slot = padItem.slots[index];
-    final ready = slot.isReady ||
+    final ready =
+        slot.isReady ||
         (debugTreatReadyAvailabilityAsEligible &&
             slot.availability == PadSoundAvailability.ready);
     if (!ready) return false;
@@ -978,30 +986,32 @@ class SamplerNotifier extends ChangeNotifier {
 
     final chosen = switch (padItem.pad.playMode) {
       PadPlayMode.random => () {
-          var available = readyIndices
-              .where((i) => !padItem._playedSoundIndices.contains(i))
-              .toList();
-          if (available.isEmpty) {
-            padItem.resetRandomPlaySession();
-            available = List<int>.from(readyIndices);
-          }
-          final idx = available[_random.nextInt(available.length)];
-          padItem._playedSoundIndices.add(idx);
-          return idx;
-        }(),
+        var available = readyIndices
+            .where((i) => !padItem._playedSoundIndices.contains(i))
+            .toList();
+        if (available.isEmpty) {
+          padItem.resetRandomPlaySession();
+          available = List<int>.from(readyIndices);
+        }
+        final idx = available[_random.nextInt(available.length)];
+        padItem._playedSoundIndices.add(idx);
+        return idx;
+      }(),
       PadPlayMode.sequential => () {
-          final total = padItem.slots.length;
-          for (var step = 0; step < total; step++) {
-            final idx = (padItem._nextSoundIndex + step) % total;
-            if (_slotEligibleForPlayback(padItem, idx)) {
-              padItem._nextSoundIndex = (idx + 1) % total;
-              return idx;
-            }
+        final total = padItem.slots.length;
+        for (var step = 0; step < total; step++) {
+          final idx = (padItem._nextSoundIndex + step) % total;
+          if (_slotEligibleForPlayback(padItem, idx)) {
+            padItem._nextSoundIndex = (idx + 1) % total;
+            return idx;
           }
-          return readyIndices.first;
-        }(),
+        }
+        return readyIndices.first;
+      }(),
     };
-    AudioLoadLog.trace('[PICK] → chosen=$chosen _nextSoundIndex(after)=${padItem._nextSoundIndex}');
+    AudioLoadLog.trace(
+      '[PICK] → chosen=$chosen _nextSoundIndex(after)=${padItem._nextSoundIndex}',
+    );
     return chosen;
   }
 
@@ -1046,8 +1056,7 @@ class SamplerNotifier extends ChangeNotifier {
       _music.seekPausedMusic(position);
   Future<void> skipToNextMusic() => _music.skipToNextMusic();
   Future<void> stopCurrentMusic() => _music.stopCurrentMusic();
-  Future<void> fadeOutCurrentMusic(Duration d) =>
-      _music.fadeOutCurrentMusic(d);
+  Future<void> fadeOutCurrentMusic(Duration d) => _music.fadeOutCurrentMusic(d);
   Future<void> crossfadeToNextMusic(Duration d) =>
       _music.crossfadeToNextMusic(d);
   PadItem? findMusicPadForSound(int id) => _music.findMusicPadForSound(id);
@@ -1062,8 +1071,7 @@ class SamplerNotifier extends ChangeNotifier {
       _ambiance.playAmbianceBySoundId(id);
   Future<void> stopCurrentAmbiance({
     Duration fade = AmbianceController.stopFadeDuration,
-  }) =>
-      _ambiance.stopCurrentAmbiance(fade: fade);
+  }) => _ambiance.stopCurrentAmbiance(fade: fade);
   PadItem? resolveAmbiancePad(int id) => _ambiance.resolveAmbiancePad(id);
   Future<void> setAmbianceVolume(double v, {bool smooth = false}) =>
       _ambiance.setAmbianceVolume(v, smooth: smooth);
@@ -1099,7 +1107,9 @@ class SamplerNotifier extends ChangeNotifier {
       await _loadPlayersForPad(padItem, pad);
       return padItem;
     } catch (e) {
-      AudioLoadLog.warn('Impossible de préparer le son ${sound.id} pour la régie : $e');
+      AudioLoadLog.warn(
+        'Impossible de préparer le son ${sound.id} pour la régie : $e',
+      );
       return null;
     }
   }
@@ -1116,5 +1126,4 @@ class SamplerNotifier extends ChangeNotifier {
     _ambiance._disposeOffStagePads();
     super.dispose();
   }
-
 }
