@@ -364,7 +364,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     }
     if (_isQuickSearch) {
       if (_effectiveLocalOnly) return 'Aucun son disponible hors-ligne';
-      if (_query.isEmpty && !_favoritesOnly) return 'Tapez pour chercher vos sons';
+      if (_query.isEmpty && !_favoritesOnly) {
+        return 'Tapez pour chercher vos sons';
+      }
     }
     return 'Aucun son';
   }
