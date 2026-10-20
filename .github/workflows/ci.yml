@@ -47,3 +47,48 @@ jobs:
 
       - name: Tests
         run: flutter test
+
+  # Mêmes tests sur Windows, la plateforme réellement utilisée en prod : c'est
+  # là que vivent les bugs déjà rencontrés (décodages SoLoud concurrents 0001,
+  # ouverture DB au démarrage à froid 0013, WAL 0018, séparateurs de chemin).
+  # Job séparé plutôt que matrice : le job Ubuntu garde son nom de check et ses
+  # étapes à l'identique, sans `if: runner.os` à semer dedans.
+  test-windows:
+    name: Test (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    # Un nouveau push sur une PR annule le run Windows obsolète (le plus lent) ;
+    # sur main, chaque commit garde son run complet.
+    concurrency:
+      group: ${{ github.workflow }}-windows-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - run: flutter pub get
+
+      # Pas de `dart format` ni de `dart analyze` ici : le résultat est identique
+      # à Ubuntu, et le checkout Windows (core.autocrlf) convertit les fins de
+      # ligne en CRLF, ce qui ferait échouer la vérification de formatage à tort.
+
+      # google_oauth_secrets.dart est gitignoré (secrets locaux, absents du CI).
+      # `cp` passe par Git Bash, présent sur les runners Windows.
+      - name: Stub OAuth secrets
+        run: cp lib/core/sync/google_oauth_secrets.example.dart lib/core/sync/google_oauth_secrets.dart
+        shell: bash
+
+      # Codegen Drift requis avant les tests (les *.g.dart ne sont pas versionnés).
+      - name: Codegen (Drift / build_runner)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # Tests Dart/widget sur la VM hôte : pas de build desktop, pas de
+      # périphérique audio réel. Le build Windows et l'installeur sont validés
+      # par release.yml, au tag.
+      - name: Tests
+        run: flutter test
