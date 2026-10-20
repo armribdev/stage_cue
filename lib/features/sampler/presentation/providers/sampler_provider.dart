@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/audio/audio_load_log.dart';
+import '../../../../core/logging/app_log.dart';
 import '../../../../core/audio/audio_player_service.dart';
 import '../../../../core/audio/cue_audio_service.dart';
 import '../../../../core/audio/preview_playback.dart';
@@ -14,6 +15,7 @@ import '../../../../core/audio/local_sound_probe.dart';
 import '../../../../core/audio/loudness_analyzer.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/sync/download_queue.dart';
+import '../../../../core/sync/sync_log.dart';
 import '../../data/repositories/library_repository.dart'
     show
         LibraryRepository,
@@ -89,6 +91,9 @@ class SamplerNotifier extends ChangeNotifier {
   /// sortie du Mode Spectacle ; remis à zéro seulement à la prochaine entrée.
   final Map<int, int> _sessionPlayCounts = {};
 
+  /// Début de la session live courante, pour la durée journalisée à la sortie.
+  DateTime? _liveSessionStartedAt;
+
   /// Quand vrai, un slot `availability == ready` compte comme éligible même
   /// sans `AudioPlayerService` natif — permet d'exercer [_pickSoundIndex]
   /// (live / random / sequential) en test unitaire.
@@ -106,7 +111,15 @@ class SamplerNotifier extends ChangeNotifier {
   StreamSubscription<bool>? _libraryPreviewSub;
 
   /// File de téléchargement priorisée à concurrence bornée (refonte UX P2).
-  final DownloadQueue _downloadQueue = DownloadQueue(maxConcurrent: 2);
+  final DownloadQueue _downloadQueue = DownloadQueue(
+    maxConcurrent: 2,
+    onDrained: (summary) => SyncLog.downloadQueueDrained(
+      succeeded: summary.succeeded,
+      failed: summary.failed,
+      cancelled: summary.cancelled,
+      elapsed: summary.elapsed,
+    ),
+  );
 
   static const int _downloadPriorityTap = 100;
   static const int _downloadPriorityManualPrepare = 50;
@@ -711,6 +724,7 @@ class SamplerNotifier extends ChangeNotifier {
     );
     if (!resolved.isPlayable) {
       AudioLoadLog.trace('[TOGGLE] ↩ not playable, ignoring');
+      reportPadTriggerFailure(resolved);
       return;
     }
     if (resolved.pad.isMusicPad) {
@@ -735,9 +749,18 @@ class SamplerNotifier extends ChangeNotifier {
   /// joue directement ce son (comme un tap normal sur un pad simple).
   Future<void> playPadSoundAtIndex(PadItem padItem, int soundIndex) async {
     final resolved = _resolveBoardPadItem(padItem);
-    if (!resolved.isPlayable) return;
+    if (!resolved.isPlayable) {
+      reportPadTriggerFailure(resolved);
+      return;
+    }
     if (soundIndex < 0 || soundIndex >= resolved.slots.length) return;
-    if (!_slotEligibleForPlayback(resolved, soundIndex)) return;
+    if (!_slotEligibleForPlayback(resolved, soundIndex)) {
+      reportPadTriggerFailure(
+        resolved,
+        reason: 'variante ${soundIndex + 1} indisponible',
+      );
+      return;
+    }
 
     if (resolved.pad.isMusicPad) {
       // Même mécanisme que « suivant » dans la file (`playNextInQueueNow`) :
@@ -764,7 +787,13 @@ class SamplerNotifier extends ChangeNotifier {
       'playerNull=${player == null} '
       '_nextSoundIndex=${resolved._nextSoundIndex}',
     );
-    if (player == null) return;
+    if (player == null) {
+      reportPadTriggerFailure(
+        resolved,
+        reason: 'aucun lecteur chargé pour la variante ${soundIndex + 1}',
+      );
+      return;
+    }
     await _syncPadSoundMetadata(resolved, soundIndex);
     // Point d'entrée : le déclenchement démarre à cet offset au lieu du sample 0.
     var startOffsetMs = resolved.pad.sounds[soundIndex].startOffsetMs;
@@ -776,10 +805,16 @@ class SamplerNotifier extends ChangeNotifier {
       }
     }
     final startOffset = Duration(milliseconds: startOffsetMs);
-    await player.playOverlapping(
+    final started = await player.playOverlapping(
       volume: _effectiveVolume(resolved, soundIndex: soundIndex),
       startOffset: startOffset,
     );
+    if (!started) {
+      reportPadTriggerFailure(
+        resolved,
+        reason: player.lastStartFailure ?? 'voix non démarrée',
+      );
+    }
     // Ticket de progression : une barre superposée par voix, auto-supprimée à
     // la fin du son (bump de révision pour rafraîchir le seul PadButton). La
     // durée restante tient compte du point d'entrée sauté en tête.
@@ -828,6 +863,22 @@ class SamplerNotifier extends ChangeNotifier {
     }
     stopAllPreviews();
     if (changed) notifyListeners();
+  }
+
+  /// Bouton panique « Tout arrêter » : coupe les bruitages en cours, laisse
+  /// musique et ambiance, et journalise ce qui a été coupé et ce qui est resté.
+  /// Distinct de [stopAllNonMusicSounds], aussi appelé en changeant de plateau
+  /// (geste programmatique, pas une panique).
+  Future<void> panicStop() async {
+    final stopped = _state.pads
+        .where((p) => !p.pad.isExclusiveVoicePad && p.isPlaying)
+        .length;
+    await stopAllNonMusicSounds();
+    AudioLoadLog.panic(
+      stoppedPads: stopped,
+      musicStillPlaying: _state.currentMusicPad?.isPlaying ?? false,
+      ambianceStillPlaying: _state.currentAmbiancePad?.isPlaying ?? false,
+    );
   }
 
   /// Au moins un bruitage (ni musique ni ambiance) joue actuellement, ou une
@@ -1048,7 +1099,7 @@ class SamplerNotifier extends ChangeNotifier {
       await _loadPlayersForPad(padItem, pad);
       return padItem;
     } catch (e) {
-      debugPrint('Impossible de préparer le son ${sound.id} pour la régie: $e');
+      AudioLoadLog.warn('Impossible de préparer le son ${sound.id} pour la régie : $e');
       return null;
     }
   }

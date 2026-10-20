@@ -20,6 +20,7 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
     );
 
     if (_notifier.isLiveOfflineMode && !resolved.hasLocallyAvailableSound) {
+      _notifier.reportPadTriggerFailure(resolved);
       return;
     }
 
@@ -44,6 +45,11 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
       );
       if (after.isPlayable) {
         await _notifier.toggleSound(after);
+      } else {
+        _notifier.reportPadTriggerFailure(
+          after,
+          reason: 'rechargement depuis le cache sans effet',
+        );
       }
       return;
     }
@@ -56,6 +62,7 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
         '[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason',
       );
       unawaited(HapticFeedback.heavyImpact());
+      _notifier.reportPadTriggerFailure(resolved);
       _showBlockedPadFeedback(resolved, reason);
       return;
     }
@@ -65,10 +72,17 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
       debugPrint(
         '[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason',
       );
+      _notifier.reportPadTriggerFailure(resolved);
       return;
     }
 
-    if (!_notifier.allowsSoundDownload) return;
+    if (!_notifier.allowsSoundDownload) {
+      _notifier.reportPadTriggerFailure(
+        resolved,
+        reason: 'téléchargement désactivé (mode local ou hors-ligne)',
+      );
+      return;
+    }
 
     debugPrint(
       '[TAP] pad="${resolved.pad.displayName}" → EN ROUTE / preparing',
@@ -76,7 +90,13 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
     // EN ROUTE (bouton DL) : on télécharge SANS jouer. Le moment de lecture
     // doit rester maîtrisé par l'opérateur → le pad devient un bouton GO une
     // fois prêt, et un second tap le déclenche immédiatement.
-    if (resolved.isDownloading) return; // déjà en cours
+    if (resolved.isDownloading) {
+      _notifier.reportPadTriggerFailure(resolved);
+      return; // déjà en cours
+    }
+    // Pas de lecture à ce tap : le pad doit d'abord être téléchargé. Journalisé
+    // parce que « j'ai tapé, rien n'a joué » est exactement ce cas.
+    _notifier.reportPadTriggerFailure(resolved);
     unawaited(HapticFeedback.selectionClick());
     await _preparePad(resolved);
   }
@@ -215,6 +235,9 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
       animateOnRestore: _recentlyRestoredSoundId == padItem.pad.id,
       isHighlighted: _highlightedPadId == padItem.pad.id,
       onTap: () => unawaited(_handlePadTap(context, padItem)),
+      onBlockedTap: () => _notifier.reportPadTriggerFailure(
+        _notifier.findPadItemById(padItem.pad.id) ?? padItem,
+      ),
       onEdit: showEditAffordances
           ? () {
               final live =

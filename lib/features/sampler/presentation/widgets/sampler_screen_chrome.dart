@@ -97,7 +97,7 @@ class StopAllButton extends StatelessWidget {
         }
         void handleTap() {
           unawaited(HapticFeedback.heavyImpact());
-          unawaited(notifier.stopAllNonMusicSounds());
+          unawaited(notifier.panicStop());
         }
 
         return Padding(

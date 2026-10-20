@@ -98,6 +98,7 @@ extension SamplerPadAudioEngine on SamplerNotifier {
     if (boardId == null || padItems.isEmpty) return;
 
     AudioLoadLog.preloadStarted(boardId: boardId, padCount: padItems.length);
+    final stopwatch = Stopwatch()..start();
     for (final padItem in padItems) {
       if (generation != _padPreloadGeneration) {
         AudioLoadLog.preloadCancelled(boardId: boardId);
@@ -111,7 +112,14 @@ extension SamplerPadAudioEngine on SamplerNotifier {
       return;
     }
 
-    AudioLoadLog.preloadFinished(boardId: boardId, padCount: padItems.length);
+    AudioLoadLog.preloadFinished(
+      boardId: boardId,
+      padCount: padItems.length,
+      unavailableCount: padItems
+          .where((item) => item.pad.sounds.isNotEmpty && !item.isPlayable)
+          .length,
+      elapsed: stopwatch.elapsed,
+    );
     _notify();
     unawaited(_prefetchActiveBoard());
   }

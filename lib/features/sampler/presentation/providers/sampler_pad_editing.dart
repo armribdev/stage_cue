@@ -161,7 +161,7 @@ extension SamplerPadEditing on SamplerNotifier {
     try {
       await _repository.applyPadsLayout(boardId, layout);
     } catch (e) {
-      debugPrint('Erreur lors du déplacement du pad: $e');
+      AppLog.warn('Déplacement du pad échoué (plateau rechargé) : $e');
       await loadSounds();
     }
   }
@@ -193,7 +193,7 @@ extension SamplerPadEditing on SamplerNotifier {
         newOrder.map((p) => p.pad.id).toList(),
       );
     } catch (e) {
-      debugPrint('Erreur lors du réordonnancement: $e');
+      AppLog.warn('Réordonnancement des pads échoué (plateau rechargé) : $e');
       await loadSounds();
     }
   }
@@ -214,7 +214,7 @@ extension SamplerPadEditing on SamplerNotifier {
       try {
         await _removePadUseCase(padItem.pad.id);
       } catch (e) {
-        debugPrint('Erreur lors du retrait du pad: $e');
+        AppLog.warn('Retrait du pad échoué : $e');
         _state = _state.copyWith(error: 'Impossible de retirer ce pad.');
         _notify();
         return false;
@@ -274,7 +274,7 @@ extension SamplerPadEditing on SamplerNotifier {
           .firstOrNull;
       return restored?.pad.id;
     } catch (e) {
-      debugPrint('Erreur lors de l\'annulation de suppression: $e');
+      AppLog.warn('Annulation de suppression échouée : $e');
       _state = _state.copyWith(
         error: 'Impossible d\'annuler la suppression du pad.',
       );

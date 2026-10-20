@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:path/path.dart' as p;
 
+import '../logging/log_sink.dart';
+
 /// Journalisation audio via DevTools et la Debug Console (`developer.log`).
 ///
 /// Messages concis : une ligne par problème, sans stack trace pour les
@@ -12,6 +14,7 @@ class AudioLoadLog {
   AudioLoadLog._();
 
   static const _name = 'StageCue.Audio';
+  static const _channel = 'Audio';
   static final Set<String> _loggedOnce = {};
 
   static void _once(String key, void Function() log) {
@@ -29,12 +32,20 @@ class AudioLoadLog {
       bool.fromEnvironment('STAGE_CUE_AUDIO_TRACE');
 
   static void trace(String message) {
-    if (traceEnabled) debugPrint(message);
+    if (!traceEnabled) return;
+    debugPrint(message);
+    LogSink.log(_channel, LogLevel.trace, message);
   }
 
-  static void info(String message) => _emit(message);
+  /// Avertissement journalisé **une seule fois par clé** pour la session : à
+  /// utiliser quand une même cause peut se répéter en boucle.
+  static void warnOnce(String key, String message) =>
+      _once('once:$key', () => warn(message));
 
-  static void warn(String message) => _emit(message, level: 900);
+  static void info(String message) => _emit(message, sinkLevel: LogLevel.info);
+
+  static void warn(String message) =>
+      _emit(message, level: 900, sinkLevel: LogLevel.warn);
 
   static void severe(
     String message, {
@@ -44,6 +55,7 @@ class AudioLoadLog {
       _emit(
         message,
         level: 1000,
+        sinkLevel: LogLevel.severe,
         error: error,
         stackTrace: stackTrace,
       );
@@ -61,19 +73,114 @@ class AudioLoadLog {
   /// Doublon asynchrone du plugin flutter_soloud — déjà journalisé au chargement.
   static void benignSoLoudSideEffect(Object error, StackTrace stackTrace) {}
 
-  static void uncaughtZoneError(Object error, StackTrace stackTrace) {
-    severe(
-      'Erreur non gérée dans la zone audio : $error',
-      error: error,
-      stackTrace: stackTrace,
-    );
+  // ── Préchargement d'un plateau ─────────────────────────────────────────────
+
+  static void preloadStarted({required int boardId, required int padCount}) =>
+      trace('[PRELOAD] plateau #$boardId : $padCount pad(s) à charger');
+
+  static void preloadCancelled({required int boardId}) =>
+      trace('[PRELOAD] plateau #$boardId : annulé (changement de plateau)');
+
+  /// Bilan d'un préchargement mené jusqu'au bout : une ligne par plateau, `warn`
+  /// si au moins un pad est resté indisponible (c'est le « pourquoi mon pad est
+  /// grisé ? » du lendemain).
+  static void preloadFinished({
+    required int boardId,
+    required int padCount,
+    int unavailableCount = 0,
+    Duration elapsed = Duration.zero,
+  }) {
+    final message = 'Plateau #$boardId préchargé : $padCount pad(s), '
+        '$unavailableCount indisponible(s), ${elapsed.inMilliseconds} ms.';
+    if (unavailableCount > 0) {
+      warn(message);
+    } else {
+      info(message);
+    }
   }
 
-  static void preloadStarted({required int boardId, required int padCount}) {}
+  // ── Déclenchement d'un pad ─────────────────────────────────────────────────
 
-  static void preloadCancelled({required int boardId}) {}
+  static final Map<String, DateTime> _triggerFailureAt = {};
 
-  static void preloadFinished({required int boardId, required int padCount}) {}
+  /// Fenêtre dans laquelle un même échec (pad + raison) n'est journalisé
+  /// qu'une fois : un opérateur qui retape trois fois un pad muet est une seule
+  /// information, pas trois.
+  static const Duration _triggerFailureWindow = Duration(seconds: 2);
+
+  /// Un pad déclenché n'a rien joué. C'est LA question post-incident ; elle ne
+  /// doit jamais rester muette (cf. `toggleSound`, qui retournait sans un mot).
+  static void padTriggerFailed({
+    required int padId,
+    required String padLabel,
+    required String reason,
+  }) {
+    final key = '$padId|$reason';
+    final now = DateTime.now();
+    final last = _triggerFailureAt[key];
+    if (last != null && now.difference(last) < _triggerFailureWindow) return;
+    _triggerFailureAt[key] = now;
+    warn('Pad « $padLabel » (id=$padId) n\'a rien joué : $reason');
+  }
+
+  // ── Voies à faible fréquence ───────────────────────────────────────────────
+
+  static void musicStarted({required String padLabel, required int padId}) =>
+      info('Musique démarrée : « $padLabel » (pad $padId).');
+
+  static void musicStopped({
+    required String padLabel,
+    required int padId,
+    bool paused = false,
+  }) =>
+      info(
+        'Musique ${paused ? 'mise en pause' : 'arrêtée'} : '
+        '« $padLabel » (pad $padId).',
+      );
+
+  static void ambianceStarted({required String padLabel, required int padId}) =>
+      info('Ambiance démarrée : « $padLabel » (pad $padId).');
+
+  static void ambianceReplaced({
+    required String fromLabel,
+    required String toLabel,
+    required int toPadId,
+  }) =>
+      info(
+        'Ambiance remplacée (fondu enchaîné) : « $fromLabel » → '
+        '« $toLabel » (pad $toPadId).',
+      );
+
+  static void ambianceStopped({required String padLabel, required int padId}) =>
+      info('Ambiance arrêtée : « $padLabel » (pad $padId).');
+
+  /// Bouton panique : coupe les bruitages, laisse musique et ambiance.
+  static void panic({
+    required int stoppedPads,
+    required bool musicStillPlaying,
+    required bool ambianceStillPlaying,
+  }) =>
+      info(
+        'Panique : $stoppedPads pad(s) de bruitage coupé(s) — musique '
+        '${musicStillPlaying ? 'laissée' : 'absente'}, ambiance '
+        '${ambianceStillPlaying ? 'laissée' : 'absente'}.',
+      );
+
+  // ── Périphériques de sortie (cue) ──────────────────────────────────────────
+
+  static void cueDevicesEnumerationFailed(Object error) =>
+      warn('Énumération des périphériques de sortie cue échouée — $error');
+
+  static void cueFallbackToSoLoud(Object error) => warn(
+        'Pré-écoute cue (media_kit) indisponible, repli sur la sortie '
+        'principale — $error',
+      );
+
+  static void cueOutputChanged({required bool configured}) => info(
+        configured
+            ? 'Sortie cue : périphérique dédié configuré.'
+            : 'Sortie cue : retour à la sortie principale (SoLoud).',
+      );
 
   static void padPlayersFailed({
     required int padId,
@@ -145,6 +252,7 @@ class AudioLoadLog {
   static void _emit(
     String message, {
     int level = 800,
+    required LogLevel sinkLevel,
     Object? error,
     StackTrace? stackTrace,
   }) {
@@ -152,6 +260,13 @@ class AudioLoadLog {
       message,
       name: _name,
       level: level,
+      error: error,
+      stackTrace: stackTrace,
+    );
+    LogSink.log(
+      _channel,
+      sinkLevel,
+      message,
       error: error,
       stackTrace: stackTrace,
     );

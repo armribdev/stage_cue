@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
@@ -11,6 +12,9 @@ import 'package:win32/win32.dart' as win32;
 import 'package:window_manager/window_manager.dart';
 import '../audio/audio_load_log.dart';
 import '../audio/soloud_engine.dart';
+import '../logging/app_log.dart';
+import '../logging/log_session.dart';
+import '../logging/log_sink.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import '../update/app_update_checker.dart';
@@ -67,6 +71,11 @@ class _SoundboardAppState extends State<SoundboardApp>
   Object? _audioEngineError;
 
   bool _isRetryingAudioEngine = false;
+
+  /// Évite de journaliser deux fois la même mise en arrière-plan : Windows
+  /// enchaîne `hidden` puis `paused`, et `resumed` revient aussi après un simple
+  /// alt-tab (`inactive`) sans qu'il y ait eu d'arrière-plan.
+  bool _isBackgrounded = false;
 
   @override
   void initState() {
@@ -162,16 +171,52 @@ class _SoundboardAppState extends State<SoundboardApp>
     final coordinator = widget.services.autoSyncCoordinator;
     switch (state) {
       case AppLifecycleState.resumed:
+        if (_isBackgrounded) {
+          _isBackgrounded = false;
+          AppLog.info(
+            'App revenue au premier plan — veille Drive réactivée '
+            '(sonde immédiate).',
+          );
+        }
         coordinator.onAppResumed();
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
       case AppLifecycleState.detached:
+        if (!_isBackgrounded) {
+          _isBackgrounded = true;
+          // Explique pourquoi la veille Drive ne fait plus rien (ADR 0022) :
+          // sans cette ligne, une synchro « qui ne s'est pas faite » pendant un
+          // alt-tab prolongé est indiscernable d'une panne.
+          AppLog.info(
+            'App passée en arrière-plan (${state.name}) — veille Drive muette '
+            'jusqu\'au retour au premier plan.',
+          );
+        }
+        // Le process peut être tué à tout moment une fois en arrière-plan.
+        unawaited(LogSink.flush());
         coordinator.onAppBackgrounded();
       case AppLifecycleState.inactive:
         // Desktop : la fenêtre a seulement perdu le focus (alt-tab) — souvent
         // pour aller justement déposer des fichiers sur Drive. La veille
         // continue de tourner.
         break;
+    }
+  }
+
+  /// Fermeture demandée par le système (croix de fenêtre, Alt+F4, arrêt de
+  /// session) : vide le journal et pose le marqueur d'arrêt propre.
+  @override
+  Future<ui.AppExitResponse> didRequestAppExit() async {
+    await _shutdownLog('didRequestAppExit');
+    return ui.AppExitResponse.exit;
+  }
+
+  Future<void> _shutdownLog(String source) async {
+    AppLog.info('Fermeture de l\'application ($source).');
+    try {
+      await LogSink.shutdown();
+    } finally {
+      LogSession.markCleanExit();
     }
   }
 

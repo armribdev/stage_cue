@@ -325,6 +325,8 @@ extension _SettingsSections on _SettingsScreenState {
                     ),
                     _sectionDivider(),
                     _buildMaintenanceCard(),
+                    _sectionDivider(),
+                    _buildDiagnosticSection(),
                     if (Platform.isWindows) ...[
                       _sectionDivider(),
                       _buildUpdateCard(),

@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
+import '../logging/app_log.dart';
 import '../sync/library_sound_paths.dart';
 import 'sounds.dart';
 
@@ -43,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
         await _createBoardKeyIndex();
         await _seedDefaultTagsIfEmpty();
       },
-      onUpgrade: (m, from, to) async {
+      onUpgrade: _withUpgradeLogging((m, from, to) async {
         if (from < 2) {
           // 1. Créer la nouvelle table WatchedPaths
           await m.createTable(watchedPaths);
@@ -403,9 +404,10 @@ class AppDatabase extends _$AppDatabase {
           // recréation, il faut le reposer.
           await _createGlobalIdentityIndexes();
         }
-      },
+      }),
       beforeOpen: (details) async {
         await _applyJournalPragmas();
+        _logSlowOpen();
 
         // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
         // encore migré — sans effet sur les bases v10+ (table inexistante).
@@ -983,8 +985,54 @@ Future<File> resolveDatabaseFile() async {
   return File(p.join(dbFolder.path, kDbFileName));
 }
 
+/// Chrono d'ouverture : démarre quand la connexion paresseuse s'ouvre, s'arrête
+/// à la fin de `beforeOpen` (migration comprise).
+Stopwatch? _openWatch;
+
+/// Au-delà, une ouverture lente mérite une ligne : c'est le symptôme du blocage
+/// à froid décrit par l'ADR 0013, ou d'une migration lourde.
+const Duration _slowOpenThreshold = Duration(seconds: 2);
+
+void _logSlowOpen() {
+  final watch = _openWatch;
+  _openWatch = null;
+  if (watch == null) return;
+  watch.stop();
+  if (watch.elapsed >= _slowOpenThreshold) {
+    AppLog.warn(
+      'Ouverture de la base lente : ${watch.elapsedMilliseconds} ms '
+      '(migration comprise).',
+    );
+  }
+}
+
+/// Journalise début, fin et durée d'une migration, et tout échec en `severe`
+/// (l'exception est relancée : Drift doit toujours la voir).
+OnUpgrade _withUpgradeLogging(OnUpgrade upgrade) {
+  return (m, from, to) async {
+    final watch = Stopwatch()..start();
+    AppLog.info('Migration de la base : v$from → v$to.');
+    try {
+      await upgrade(m, from, to);
+    } catch (e, stack) {
+      AppLog.severe(
+        'Migration de la base v$from → v$to échouée après '
+        '${watch.elapsedMilliseconds} ms.',
+        error: e,
+        stackTrace: stack,
+      );
+      rethrow;
+    }
+    AppLog.info(
+      'Migration de la base v$from → v$to terminée '
+      '(${watch.elapsedMilliseconds} ms).',
+    );
+  };
+}
+
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
+    _openWatch = Stopwatch()..start();
     // Initialiser les bibliothèques natives SQLite sur Android/iOS
     if (Platform.isAndroid || Platform.isIOS) {
       await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();

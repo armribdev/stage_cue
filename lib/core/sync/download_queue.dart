@@ -8,6 +8,15 @@ class DownloadCancelledException implements Exception {
   String toString() => 'DownloadCancelledException';
 }
 
+/// Bilan d'une vidange de [DownloadQueue] : tout ce qui s'est exécuté depuis
+/// que la file était vide jusqu'à ce qu'elle le redevienne.
+typedef DownloadQueueSummary = ({
+  int succeeded,
+  int failed,
+  int cancelled,
+  Duration elapsed,
+});
+
 /// File d'exécution à **priorité** et **concurrence bornée**, avec
 /// **déduplication par clé**. Générique et sans dépendance (audio, Drift,
 /// réseau) → entièrement testable isolément.
@@ -23,8 +32,17 @@ class DownloadCancelledException implements Exception {
 class DownloadQueue {
   final int maxConcurrent;
 
-  DownloadQueue({this.maxConcurrent = 2})
+  /// Appelé une fois à chaque vidange (plus rien en attente ni en cours). Un
+  /// callback plutôt qu'une dépendance au journal : la file reste générique.
+  final void Function(DownloadQueueSummary summary)? onDrained;
+
+  DownloadQueue({this.maxConcurrent = 2, this.onDrained})
       : assert(maxConcurrent >= 1, 'maxConcurrent doit être ≥ 1');
+
+  int _succeeded = 0;
+  int _failed = 0;
+  int _cancelled = 0;
+  Stopwatch? _batchWatch;
 
   final List<_QueuedTask> _pending = [];
   final Map<Object, _QueuedTask> _byKey = {};
@@ -59,6 +77,7 @@ class DownloadQueue {
       return existing.completer.future.then((value) => value as T);
     }
 
+    _batchWatch ??= Stopwatch()..start();
     final queued = _QueuedTask(
       key: key,
       priority: priority,
@@ -98,10 +117,12 @@ class DownloadQueue {
     });
     for (final t in cancelled) {
       _byKey.remove(t.key);
+      _cancelled++;
       if (!t.completer.isCompleted) {
         t.completer.completeError(const DownloadCancelledException());
       }
     }
+    _reportIfDrained();
   }
 
   void _sortPending() {
@@ -124,13 +145,41 @@ class DownloadQueue {
   Future<void> _run(_QueuedTask task) async {
     try {
       final result = await task.run();
+      _succeeded++;
       if (!task.completer.isCompleted) task.completer.complete(result);
     } catch (e, st) {
+      if (e is DownloadCancelledException) {
+        _cancelled++;
+      } else {
+        _failed++;
+      }
       if (!task.completer.isCompleted) task.completer.completeError(e, st);
     } finally {
       _running--;
       _byKey.remove(task.key);
       if (!_disposed) _pump();
+      _reportIfDrained();
+    }
+  }
+
+  void _reportIfDrained() {
+    if (_running > 0 || _pending.isNotEmpty) return;
+    final watch = _batchWatch;
+    if (watch == null) return;
+    final summary = (
+      succeeded: _succeeded,
+      failed: _failed,
+      cancelled: _cancelled,
+      elapsed: watch.elapsed,
+    );
+    _batchWatch = null;
+    _succeeded = 0;
+    _failed = 0;
+    _cancelled = 0;
+    try {
+      onDrained?.call(summary);
+    } catch (_) {
+      // Un callback de journal ne doit jamais perturber la file.
     }
   }
 

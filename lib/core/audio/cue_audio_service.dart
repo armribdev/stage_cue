@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'audio_load_log.dart';
 import 'audio_player_service.dart';
 import 'preview_playback.dart';
 
@@ -66,7 +67,9 @@ class CueAudioService {
 
   /// Change le device cue courant (`null` = défaut système → flutter_soloud).
   void setSelectedDevice(String? deviceId) {
+    final changed = _selectedDeviceId != deviceId;
     _selectedDeviceId = deviceId;
+    if (changed) AudioLoadLog.cueOutputChanged(configured: deviceId != null);
   }
 
   /// Énumère les périphériques de sortie disponibles (best-effort).
@@ -97,7 +100,7 @@ class CueAudioService {
       ];
       return _cachedDevices;
     } catch (e) {
-      debugPrint('Énumération des devices cue échouée: $e');
+      AudioLoadLog.cueDevicesEnumerationFailed(e);
       return _cachedDevices;
     } finally {
       await player.dispose();
@@ -142,7 +145,7 @@ class CueAudioService {
     } catch (e) {
       // Repli soloud si media_kit échoue (device indisponible, format…) :
       // la pré-écoute reste fonctionnelle sur la sortie par défaut.
-      debugPrint('Pré-écoute cue (media_kit) échouée, repli soloud: $e');
+      AudioLoadLog.cueFallbackToSoLoud(e);
       return ephemeral
           ? AudioPlayerService.createEphemeral(filePath)
           : AudioPlayerService.create(filePath);
@@ -223,7 +226,7 @@ class CuePreviewPlayer implements PreviewPlayback {
       _stateController.add(true);
       return true;
     } catch (e) {
-      debugPrint('CuePreviewPlayer.playFromPosition erreur: $e');
+      AudioLoadLog.warn('Pré-écoute cue : lecture impossible — $e');
       return false;
     }
   }

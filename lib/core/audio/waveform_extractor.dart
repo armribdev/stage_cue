@@ -1,6 +1,9 @@
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import 'audio_load_log.dart';
 import 'soloud_file_loader.dart';
 
 /// Nombre de barres de l'enveloppe waveform stockée par son (~1 octet/barre).
@@ -110,7 +113,7 @@ Future<WaveformProbe> extractWaveform(
       ),
     );
     if (samples.isEmpty) {
-      debugPrint(
+      AudioLoadLog.trace(
         'extractWaveform: aucun échantillon lu ($filePath) — fichier vide ou '
         'silencieux ; marqué non extractible (gén. $kWaveformProbeGeneration).',
       );
@@ -124,7 +127,7 @@ Future<WaveformProbe> extractWaveform(
       if (s > peak) peak = s;
     }
     if (peak <= 0) {
-      debugPrint(
+      AudioLoadLog.trace(
         'extractWaveform: audio silencieux ($filePath) — marqué non extractible '
         '(gén. $kWaveformProbeGeneration).',
       );
@@ -137,7 +140,7 @@ Future<WaveformProbe> extractWaveform(
     }
     return WaveformProbe.success(out);
   } catch (e) {
-    debugPrint(
+    AudioLoadLog.trace(
       'extractWaveform: le backend de lecture d\'échantillons a refusé '
       '"$filePath" (gén. $kWaveformProbeGeneration) — ${_describeSamplingError(e)}',
     );

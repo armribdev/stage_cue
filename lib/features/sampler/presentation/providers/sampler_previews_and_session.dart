@@ -85,7 +85,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       _notify();
       return true;
     } catch (e) {
-      debugPrint('Aperçu bibliothèque échoué pour ${sound.title}: $e');
+      AudioLoadLog.warn('Aperçu bibliothèque échoué pour « ${sound.title} » : $e');
       stopLibraryPreview(notify: false);
       return false;
     }
@@ -121,7 +121,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       _notify();
       return true;
     } catch (e) {
-      debugPrint('Pré-écoute échouée pour ${sound.title}: $e');
+      AudioLoadLog.warn('Pré-écoute échouée pour « ${sound.title} » : $e');
       return false;
     }
   }
@@ -156,14 +156,31 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
   void startLiveSession() {
     _sessionPlayCounts.clear();
     _isLiveSessionActive = true;
+    _liveSessionStartedAt = DateTime.now();
+    AppLog.info('Mode Spectacle activé.');
     _notify();
   }
 
   /// Termine la session live : gèle les compteurs (ni effacés, ni remis à
   /// zéro) — seule la prochaine [startLiveSession] repart propre.
   void endLiveSession() {
+    final startedAt = _liveSessionStartedAt;
+    if (_isLiveSessionActive && startedAt != null) {
+      final totalPlays = _sessionPlayCounts.values.fold<int>(0, (a, b) => a + b);
+      final duration = DateTime.now().difference(startedAt);
+      AppLog.info(
+        'Mode Spectacle désactivé — durée ${_formatSessionDuration(duration)}, '
+        '$totalPlays lecture(s) sur ${_sessionPlayCounts.length} son(s).',
+      );
+    }
+    _liveSessionStartedAt = null;
     _isLiveSessionActive = false;
     _notify();
+  }
+
+  static String _formatSessionDuration(Duration d) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${d.inHours}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
   }
 
   /// Expose `_markPlayedAt` pour les tests unitaires (simule une lecture

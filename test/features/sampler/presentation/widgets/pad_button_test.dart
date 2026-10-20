@@ -63,10 +63,14 @@ class FakeAudioPlayerService implements AudioPlayerService {
   }) async {}
 
   @override
-  Future<void> playOverlapping({
+  String? lastStartFailure;
+
+  @override
+  Future<bool> playOverlapping({
     double volume = 1.0,
     Duration startOffset = Duration.zero,
-  }) async {}
+  }) async =>
+      true;
 
   @override
   void fadeVolumeTo(double to, Duration duration) {}

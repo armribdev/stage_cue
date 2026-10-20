@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -9,6 +10,9 @@ import 'package:drift/drift.dart' show OrderingTerm;
 import '../../../../core/audio/cue_audio_service.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/database/database.dart' as db;
+import '../../../../core/logging/app_log.dart';
+import '../../../../core/logging/log_export.dart';
+import '../../../../core/logging/log_sink.dart';
 import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
@@ -42,6 +46,7 @@ import '../widgets/settings_loading_view.dart';
 import 'sound_library_screen.dart';
 
 part 'settings/settings_data.dart';
+part 'settings/settings_diagnostic.dart';
 part 'settings/settings_drive_account.dart';
 part 'settings/settings_add_folder.dart';
 part 'settings/settings_indexing.dart';
@@ -121,6 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _waveformRegenTotal = 0;
   String? _appVersion;
   bool _isCheckingForUpdate = false;
+  bool _isDiagnosticBusy = false;
 
   /// Périphériques de sortie de pré-écoute (cue) — Windows uniquement.
   List<CueDevice> _cueDevices = const [];
