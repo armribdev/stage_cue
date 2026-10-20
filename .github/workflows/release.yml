@@ -18,10 +18,35 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Garde-fou : le tag doit correspondre à la version du pubspec.yaml. L'app
+  # lit sa version dans le pubspec, l'installeur la prend dans le tag : un écart
+  # ferait proposer la mise à jour en boucle (l'app installée se croirait
+  # toujours en retard sur la release). Sans effet hors tag (workflow_dispatch).
+  # ---------------------------------------------------------------------------
+  check-version:
+    name: Vérifier tag = version du pubspec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comparer le tag au pubspec.yaml
+        if: github.ref_type == 'tag'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          pubspec_version=$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml | head -n1)
+          if [ "${TAG#v}" != "$pubspec_version" ]; then
+            echo "::error::Le tag $TAG ne correspond pas à la version du pubspec.yaml ($pubspec_version). Mettre à jour 'version:' puis recréer le tag."
+            exit 1
+          fi
+          echo "Tag $TAG = pubspec $pubspec_version"
+
+  # ---------------------------------------------------------------------------
   # Android : APK (installable hors store) + AAB (format Play Store)
   # ---------------------------------------------------------------------------
   android:
     name: Build Android
+    needs: check-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +88,7 @@ jobs:
   # ---------------------------------------------------------------------------
   ios:
     name: Build iOS (unsigned)
+    needs: check-version
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -102,6 +128,7 @@ jobs:
   # ---------------------------------------------------------------------------
   macos:
     name: Build macOS
+    needs: check-version
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -145,6 +172,7 @@ jobs:
   # ---------------------------------------------------------------------------
   linux:
     name: Build Linux
+    needs: check-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -191,6 +219,7 @@ jobs:
   # ---------------------------------------------------------------------------
   windows:
     name: Build Windows
+    needs: check-version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
