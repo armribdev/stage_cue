@@ -94,7 +94,10 @@ class AmbianceController {
 
     var player = padItem.slots[index].player;
     if (player == null) {
-      _o._music._setMusicLoadError(padItem);
+      _o._music._setMusicLoadError(
+        padItem,
+        'aucun lecteur chargé pour la variante ${index + 1}',
+      );
       return false;
     }
 
@@ -169,7 +172,7 @@ class AmbianceController {
               _o._state.currentAmbiancePad?.pad.id == previous.pad.id) {
             _o._state = _o._state.copyWith(clearCurrentAmbiancePad: true);
           }
-          _o._music._setMusicLoadError(padItem);
+          _o._music._setMusicLoadError(padItem, player.lastStartFailure);
           return false;
         }
         _setOnAir(padItem, index);
@@ -190,6 +193,18 @@ class AmbianceController {
       if (_transitionLockCount > 0) _transitionLockCount--;
     }
 
+    if (previousPlaying && !identical(previous, padItem)) {
+      AudioLoadLog.ambianceReplaced(
+        fromLabel: previous.displayName,
+        toLabel: padItem.displayName,
+        toPadId: padItem.pad.id,
+      );
+    } else {
+      AudioLoadLog.ambianceStarted(
+        padLabel: padItem.displayName,
+        padId: padItem.pad.id,
+      );
+    }
     _o._markPlayedAt(padItem, index);
     _o._notify();
     return true;
@@ -379,6 +394,12 @@ class AmbianceController {
   }
 
   Future<void> _fadeOutAndStop(PadItem padItem, Duration fade) async {
+    if (padItem.isPlaying) {
+      AudioLoadLog.ambianceStopped(
+        padLabel: padItem.displayName,
+        padId: padItem.pad.id,
+      );
+    }
     final player = padItem.currentPlayer;
     if (player != null && padItem.isPlaying && fade > Duration.zero) {
       _transitionLockCount++;

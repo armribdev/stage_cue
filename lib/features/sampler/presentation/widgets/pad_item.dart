@@ -18,6 +18,11 @@ class PadCard extends StatefulWidget {
   final bool isHighlighted;
   final bool Function(PadItem padItem) isTapBlocked;
   final VoidCallback? onTap;
+
+  /// Appelé quand on touche un pad dont le tap est bloqué ([isTapBlocked]).
+  /// Le tap lui-même reste ignoré (aucun effet visuel) : ce rappel ne sert qu'à
+  /// ne pas laisser ce « rien ne se passe » muet dans le journal.
+  final VoidCallback? onBlockedTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onRemove;
 
@@ -37,6 +42,7 @@ class PadCard extends StatefulWidget {
     this.animateOnRestore = false,
     this.isHighlighted = false,
     this.onTap,
+    this.onBlockedTap,
     this.onLongPress,
     this.onRemove,
     this.onEdit,
@@ -285,7 +291,7 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
         listenable: widget.padItem.revision,
         builder: (context, _) {
           final blocked = widget.isTapBlocked(widget.padItem);
-          return PadButton(
+          final button = PadButton(
             key: ValueKey<int>(widget.padItem.pad.id),
             padItem: widget.padItem,
             onTap: blocked ? null : widget.onTap,
@@ -294,6 +300,15 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
             onRemove: widget.onRemove != null ? _handleRemoveTap : null,
             onEdit: widget.onEdit,
             onShowSounds: widget.onShowSounds,
+          );
+          final onBlockedTap = widget.onBlockedTap;
+          if (!blocked || onBlockedTap == null) return button;
+          // `Listener` plutôt qu'un détecteur de gestes : il n'entre pas dans
+          // l'arène des gestes et ne change rien à l'aspect du pad bloqué.
+          return Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (_) => onBlockedTap(),
+            child: button,
           );
         },
       ),

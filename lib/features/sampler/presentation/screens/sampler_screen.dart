@@ -262,7 +262,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
             onInvoke: (intent) {
               if (_notifier.hasNonMusicSoundsPlaying) {
                 unawaited(HapticFeedback.heavyImpact());
-                unawaited(_notifier.stopAllNonMusicSounds());
+                unawaited(_notifier.panicStop());
               }
               return null;
             },

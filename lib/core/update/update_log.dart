@@ -1,5 +1,7 @@
 import 'dart:developer' as developer;
 
+import '../logging/log_sink.dart';
+
 /// Journalisation du check de mise à jour et de l'installation, via DevTools
 /// et la Debug Console (`developer.log`).
 ///
@@ -10,10 +12,11 @@ class UpdateLog {
   UpdateLog._();
 
   static const _name = 'StageCue.Update';
+  static const _channel = 'Update';
 
-  static void info(String message) => _emit(message);
+  static void info(String message) => _emit(message, LogLevel.info);
 
-  static void warn(String message) => _emit(message, level: 900);
+  static void warn(String message) => _emit(message, LogLevel.warn, level: 900);
 
   static void checkStarted() => info('Vérification de mise à jour…');
 
@@ -41,7 +44,8 @@ class UpdateLog {
   static void installLaunchFailed(Object error) =>
       warn('Lancement de l\'installeur échoué — $error');
 
-  static void _emit(String message, {int level = 800}) {
+  static void _emit(String message, LogLevel sinkLevel, {int level = 800}) {
     developer.log(message, name: _name, level: level);
+    LogSink.log(_channel, sinkLevel, message);
   }
 }

@@ -148,6 +148,7 @@ class GoogleDriveClient implements DriveClient {
       return await fn();
     } catch (e) {
       if (_isAuthError(e) || _isOAuthClientConfigurationError(e)) {
+        SyncLog.driveAuthRejected();
         throw const DriveAuthException();
       }
       throw _describe(e);
@@ -163,6 +164,7 @@ class GoogleDriveClient implements DriveClient {
         return await fn();
       } catch (e) {
         if (_isAuthError(e) || _isOAuthClientConfigurationError(e)) {
+          SyncLog.driveAuthRejected();
           throw const DriveAuthException();
         }
         attempt++;
@@ -703,14 +705,32 @@ class GoogleDriveAuthenticator implements DriveAuthenticator {
 
   @override
   Future<DriveClient?> connect() async {
-    final client = await _delegate.connect();
+    final DriveClient? client;
+    try {
+      client = await _delegate.connect();
+    } catch (e) {
+      SyncLog.driveSignInFailed(e);
+      rethrow;
+    }
+    if (client == null) {
+      SyncLog.driveSignInCancelled();
+    } else {
+      SyncLog.driveSignedIn();
+    }
     await _syncPersistedProfile();
     return client;
   }
 
   @override
   Future<DriveClient?> connectSilently() async {
-    final client = await _delegate.connectSilently();
+    final DriveClient? client;
+    try {
+      client = await _delegate.connectSilently();
+    } catch (e) {
+      SyncLog.driveSilentReconnectFailed(e);
+      rethrow;
+    }
+    SyncLog.driveSilentReconnect(restored: client != null);
     await _syncPersistedProfile();
     return client;
   }
@@ -733,6 +753,7 @@ class GoogleDriveAuthenticator implements DriveAuthenticator {
   @override
   Future<void> signOut() async {
     await _delegate.signOut();
+    SyncLog.driveSignedOut();
     _persistedProfile = null;
     await _profileStore.clear();
   }

@@ -497,16 +497,23 @@ class AudioCacheManager {
     // appel système par passe suffit, le reste est déjà connu via la taille
     // trackée à l'écriture).
     var freed = 0;
+    var evictedCount = 0;
+    var pinnedProtected = 0;
+    var failedCount = 0;
     for (final entry in ordered) {
       if (free + freed >= minFreeDiskBytes) break;
       if (entry.key == protectedKey) continue;
-      if (pinned.contains(entry.key)) continue; // épinglé : jamais évincé
+      if (pinned.contains(entry.key)) {
+        pinnedProtected++; // épinglé : jamais évincé
+        continue;
+      }
       final fileToDelete = File(localPathFor(library, entry.key));
       final int reclaimedBytes;
       try {
         if (await fileToDelete.exists()) {
           await fileToDelete.delete();
           reclaimedBytes = entry.value.size;
+          evictedCount++;
           SyncLog.trace('évincé ${entry.key} — ${entry.value.size} o');
         } else {
           // Entrée périmée : le fichier a disparu hors de notre dos. On la
@@ -520,6 +527,7 @@ class AudioCacheManager {
         // ferait sortir de l'index, et plus aucune passe d'éviction ne le
         // reprendrait — espace perdu jusqu'à une purge manuelle. Best-effort
         // veut dire « ne bloque pas la passe », pas « oublie le fichier ».
+        failedCount++;
         SyncLog.warn(
           'Éviction impossible (${fileToDelete.path}), entrée conservée pour '
           'la prochaine passe — $e',
@@ -530,6 +538,16 @@ class AudioCacheManager {
       freed += reclaimedBytes;
     }
     await _saveIndex(library.localRootPath, index);
+    SyncLog.evictionPass(
+      library: library.name,
+      evicted: evictedCount,
+      freedBytes: freed,
+      failed: failedCount,
+      pinnedProtected: pinnedProtected,
+      freeBefore: free,
+      freeAfter: free + freed,
+      minFreeBytes: minFreeDiskBytes,
+    );
   }
 
   /// Sérialise les sauvegardes de l'index par racine de cache.

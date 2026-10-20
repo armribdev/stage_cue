@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
 import 'audio_file_validation.dart';
@@ -46,6 +45,12 @@ class AudioPlayerService implements PreviewPlayback {
   final _stateController = StreamController<bool>.broadcast();
   StreamSubscription? _soundEventsSubscription;
 
+  /// Raison du dernier démarrage de voix raté (`null` si le dernier a réussi).
+  ///
+  /// Le lecteur ignore à quel pad il appartient : c'est l'appelant qui journalise
+  /// l'échec avec son contexte (id, libellé) à partir de cette raison.
+  String? lastStartFailure;
+
   AudioPlayerService._(this._source) {
     _soundEventsSubscription = _source.soundEvents.listen((event) {
       if (event.event == SoundEventType.handleIsNoMoreValid) {
@@ -53,7 +58,7 @@ class AudioPlayerService implements PreviewPlayback {
         if (event.handle == _currentHandle) {
           _currentHandle = _handles.isNotEmpty ? _handles.last : null;
         }
-        debugPrint(
+        AudioLoadLog.trace(
           '[AUDIO-EVT] handleIsNoMoreValid handle=${event.handle} '
           'removed=$removed remaining=${_handles.length}',
         );
@@ -151,7 +156,10 @@ class AudioPlayerService implements PreviewPlayback {
     bool looping = false,
     Duration loopStart = Duration.zero,
   }) async {
-    debugPrint('[AUDIO-PLAY] playFromPosition pos=$position handles=${_handles.length}');
+    AudioLoadLog.trace(
+      '[AUDIO-PLAY] playFromPosition pos=$position handles=${_handles.length}',
+    );
+    lastStartFailure = null;
     try {
       await _stopAllHandles();
       final handle = _startVoice(
@@ -162,6 +170,7 @@ class AudioPlayerService implements PreviewPlayback {
       );
       if (handle == null) {
         _paused = false;
+        lastStartFailure = _invalidHandleReason;
         return false;
       }
       _handles.add(handle);
@@ -170,7 +179,8 @@ class AudioPlayerService implements PreviewPlayback {
       _stateController.add(true);
       return true;
     } catch (e) {
-      debugPrint('[AUDIO-PLAY] ERROR: $e');
+      lastStartFailure = _describeStartFailure(e);
+      AudioLoadLog.warn('Lecture impossible : $lastStartFailure');
       return false;
     }
   }
@@ -179,25 +189,44 @@ class AudioPlayerService implements PreviewPlayback {
   /// Utilisé par les pads non-musique : chaque déclenchement empile un son.
   /// [startOffset] démarre la voix à ce point d'entrée (via pause → seek →
   /// reprise, pour un départ net sans blip audible).
-  Future<void> playOverlapping({
+  ///
+  /// Retourne `false` si la voix n'a pas démarré ; la raison est alors dans
+  /// [lastStartFailure].
+  Future<bool> playOverlapping({
     double volume = 1.0,
     Duration startOffset = Duration.zero,
   }) async {
+    lastStartFailure = null;
     try {
       final handle = _startVoice(volume: volume, position: startOffset);
-      if (handle == null) return;
+      if (handle == null) {
+        lastStartFailure = _invalidHandleReason;
+        return false;
+      }
       _handles.add(handle);
       _currentHandle = handle;
-      debugPrint('[AUDIO-PLAY] overlapping new handle=$handle total=${_handles.length}');
+      AudioLoadLog.trace(
+        '[AUDIO-PLAY] overlapping new handle=$handle total=${_handles.length}',
+      );
       // Ne notifier le passage à « en cours » que sur la première voix : les
       // suivantes ne changent pas l'état booléen du lecteur.
       if (_handles.length == 1) {
         _stateController.add(true);
       }
+      return true;
     } catch (e) {
-      debugPrint('[AUDIO-PLAY] playOverlapping ERROR: $e');
+      lastStartFailure = _describeStartFailure(e);
+      AudioLoadLog.warn('Lecture superposée impossible : $lastStartFailure');
+      return false;
     }
   }
+
+  static const _invalidHandleReason = 'voix refusée par le moteur (handle invalide)';
+
+  static String _describeStartFailure(Object e) =>
+      e is SoLoudNotInitializedException
+          ? 'moteur audio non initialisé'
+          : 'erreur de lecture — $e';
 
   /// Met en pause la voix courante (mono-voix).
   @override
@@ -279,7 +308,8 @@ class AudioPlayerService implements PreviewPlayback {
       _paused = false;
       _stateController.add(true);
     } catch (e) {
-      debugPrint('Erreur lors de la lecture: $e');
+      lastStartFailure = _describeStartFailure(e);
+      AudioLoadLog.warn('Erreur lors de la lecture : $lastStartFailure');
     }
   }
 
@@ -353,7 +383,8 @@ class AudioPlayerService implements PreviewPlayback {
     try {
       return SoLoud.instance.getLength(_source);
     } catch (e) {
-      debugPrint('Durée audio indisponible: $e');
+      // `duration` est lu à chaque tap et à chaque rafraîchissement : une fois.
+      AudioLoadLog.warnOnce('duration-unavailable', 'Durée audio indisponible — $e');
       return Duration.zero;
     }
   }
@@ -388,7 +419,7 @@ class AudioPlayerService implements PreviewPlayback {
       _paused = false;
       SoLoud.instance.disposeSource(_source);
     } catch (e) {
-      debugPrint('Erreur lors du dispose audio: $e');
+      AudioLoadLog.warn('Erreur lors du dispose audio : $e');
     }
     _stateController.close();
   }

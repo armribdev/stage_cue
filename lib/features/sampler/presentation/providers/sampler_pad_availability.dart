@@ -181,6 +181,37 @@ extension SamplerPadAvailability on SamplerNotifier {
     _finalizePadAvailability(padItem);
   }
 
+  /// Raison lisible pour laquelle [padItem] ne peut pas jouer, destinée au
+  /// journal : c'est la réponse à « pourquoi ce pad n'a-t-il rien joué ? ».
+  String triggerFailureReason(PadItem padItem) {
+    if (padItem.pad.sounds.isEmpty) return 'pad sans son';
+    if (padItem.isDownloading) return 'téléchargement en cours';
+    if (isLiveOfflineMode && !padItem.hasLocallyAvailableSound) {
+      return 'mode hors-ligne : fichier absent du cache local';
+    }
+    return switch (padItem.unavailabilityReason) {
+      PadUnavailabilityReason.needsDownload =>
+        'fichier non téléchargé (téléchargement à lancer)',
+      PadUnavailabilityReason.offline => 'hors-ligne, fichier absent du cache',
+      PadUnavailabilityReason.missingFile => 'fichier introuvable',
+      PadUnavailabilityReason.unsupportedFormat =>
+        'format audio non pris en charge',
+      null => driveSessionExpired
+          ? 'session Google expirée, fichier non téléchargé'
+          : 'aucun lecteur chargé (préchargement en cours ou échoué)',
+    };
+  }
+
+  /// Journalise qu'un déclenchement n'a rien joué (warn, dédupliqué par
+  /// [AudioLoadLog.padTriggerFailed]).
+  void reportPadTriggerFailure(PadItem padItem, {String? reason}) {
+    AudioLoadLog.padTriggerFailed(
+      padId: padItem.pad.id,
+      padLabel: padItem.displayName,
+      reason: reason ?? triggerFailureReason(padItem),
+    );
+  }
+
   void _finalizePadAvailability(PadItem padItem) {
     if (padItem.isPlayable) {
       padItem.unavailabilityReason = null;

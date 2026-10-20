@@ -2,6 +2,8 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 
+import '../logging/log_sink.dart';
+
 /// Journalisation de l'indexation, du cache et de la synchronisation Drive, via
 /// DevTools et la Debug Console (`developer.log`).
 ///
@@ -22,6 +24,7 @@ class SyncLog {
   SyncLog._();
 
   static const _name = 'StageCue.Sync';
+  static const _channel = 'Sync';
 
   /// Traces à **haute fréquence** (une ligne par dossier, par lot, par fichier).
   /// Muettes par défaut : sur une bibliothèque de milliers de sons, elles
@@ -31,10 +34,12 @@ class SyncLog {
       bool.fromEnvironment('STAGE_CUE_SYNC_TRACE');
 
   static void trace(String message) {
-    if (traceEnabled) debugPrint('[sync] $message');
+    if (!traceEnabled) return;
+    debugPrint('[sync] $message');
+    LogSink.log(_channel, LogLevel.trace, message);
   }
 
-  static void info(String message) => _emit(message);
+  static void info(String message) => _emit(message, sinkLevel: LogLevel.info);
 
   /// Un avertissement porte TOUT dans son message — pas d'objet d'erreur.
   ///
@@ -44,14 +49,21 @@ class SyncLog {
   /// pile au moment où elle sert — pendant une rafale d'échecs. Le seul endroit
   /// qui justifie l'objet est [severe], où la stack trace doit lui être
   /// attachée.
-  static void warn(String message) => _emit(message, level: 900);
+  static void warn(String message) =>
+      _emit(message, level: 900, sinkLevel: LogLevel.warn);
 
   static void severe(
     String message, {
     Object? error,
     StackTrace? stackTrace,
   }) =>
-      _emit(message, level: 1000, error: error, stackTrace: stackTrace);
+      _emit(
+        message,
+        level: 1000,
+        sinkLevel: LogLevel.severe,
+        error: error,
+        stackTrace: stackTrace,
+      );
 
   // ── Choix du chemin de synchronisation ─────────────────────────────────────
 
@@ -171,6 +183,66 @@ class SyncLog {
     );
   }
 
+  // ── Authentification Drive ─────────────────────────────────────────────────
+  //
+  // Aucune de ces lignes ne porte de jeton ni d'adresse e-mail : on journalise
+  // l'ÉVÉNEMENT (connexion, déconnexion, échec), jamais l'identité.
+
+  static void driveSignedIn() => info('Drive : connexion réussie.');
+
+  static void driveSignInCancelled() =>
+      info('Drive : connexion annulée (aucune session obtenue).');
+
+  static void driveSignInFailed(Object error) =>
+      warn('Drive : connexion échouée — $error');
+
+  /// Résultat de la reconnexion silencieuse au lancement / à la veille.
+  ///
+  /// Le cas nominal rejoué (la veille le refait toutes les 5 minutes) passe en
+  /// `trace`.
+  ///
+  /// Plusieurs écrans déclenchent une reconnexion silencieuse (réglages,
+  /// téléchargements) : on ne journalise que le **changement** d'issue, pas
+  /// chaque appel — sinon la même ligne se répète à chaque ouverture d'écran.
+  static bool? _lastSilentRestored;
+
+  static void driveSilentReconnect({required bool restored}) {
+    final changed = _lastSilentRestored != restored;
+    _lastSilentRestored = restored;
+    if (!changed) {
+      trace('Drive : reconnexion silencieuse (restaurée=$restored).');
+    } else if (restored) {
+      info('Drive : session restaurée silencieusement.');
+    } else {
+      info(
+        'Drive : aucune session à restaurer (reconnexion interactive '
+        'nécessaire ou hors-ligne).',
+      );
+    }
+  }
+
+  static void driveSilentReconnectFailed(Object error) =>
+      warn('Drive : reconnexion silencieuse échouée — $error');
+
+  static void driveSignedOut() => info('Drive : déconnexion.');
+
+  static DateTime? _lastAuthRejectedAt;
+
+  /// Drive a rejeté le jeton (401 / accès refusé). Une rafale d'appels
+  /// parallèles échoue d'un seul bloc : une ligne par minute suffit.
+  static void driveAuthRejected() {
+    final now = DateTime.now();
+    final last = _lastAuthRejectedAt;
+    if (last != null && now.difference(last) < const Duration(minutes: 1)) {
+      return;
+    }
+    _lastAuthRejectedAt = now;
+    warn(
+      'Drive : jeton rejeté par l\'API (401) — renouvellement de la session '
+      'nécessaire.',
+    );
+  }
+
   // ── Cache & téléchargements ────────────────────────────────────────────────
 
   static void downloadFailed({
@@ -178,6 +250,57 @@ class SyncLog {
     required Object error,
   }) {
     warn('Téléchargement échoué — « $title » : $error');
+  }
+
+  /// Bilan d'une passe d'éviction (une ligne par passe, jamais par fichier).
+  ///
+  /// `warn` quand le garde-fou disque ([minFreeBytes], ADR 0016) n'est pas
+  /// atteint à l'issue de la passe — tout ce qui restait était épinglé,
+  /// protégé ou non supprimable : le disque reste sous pression et la prochaine
+  /// écriture risque d'échouer. [freeAfter] est une estimation (libre mesuré +
+  /// octets libérés), sans second appel système.
+  static void evictionPass({
+    required String library,
+    required int evicted,
+    required int freedBytes,
+    required int failed,
+    required int pinnedProtected,
+    required int freeBefore,
+    required int freeAfter,
+    required int minFreeBytes,
+  }) {
+    final message = '$library : éviction du cache — $evicted fichier(s) '
+        'évincé(s), ${_mb(freedBytes)} libérés, libre ${_mb(freeBefore)} → '
+        '≈${_mb(freeAfter)}, $pinnedProtected épinglé(s) protégé(s)'
+        '${failed > 0 ? ', $failed suppression(s) échouée(s)' : ''}.';
+    if (freeAfter < minFreeBytes) {
+      warn(
+        '$message Garde-fou disque (${_mb(minFreeBytes)}) non atteint : plus '
+        'rien d\'évinçable.',
+      );
+    } else {
+      info(message);
+    }
+  }
+
+  static String _mb(int bytes) => '${(bytes / (1024 * 1024)).round()} Mo';
+
+  /// Bilan de la file de téléchargement à sa vidange, en plus de
+  /// [downloadFailed] (qui dit *lequel* a échoué).
+  static void downloadQueueDrained({
+    required int succeeded,
+    required int failed,
+    required int cancelled,
+    required Duration elapsed,
+  }) {
+    final message = 'File de téléchargement vidée : $succeeded réussi(s), '
+        '$failed échec(s), $cancelled annulé(s), '
+        '${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)} s.';
+    if (failed > 0) {
+      warn(message);
+    } else {
+      info(message);
+    }
   }
 
   static void evictionFailed({
@@ -199,6 +322,7 @@ class SyncLog {
   static void _emit(
     String message, {
     int level = 800,
+    required LogLevel sinkLevel,
     Object? error,
     StackTrace? stackTrace,
   }) {
@@ -206,6 +330,13 @@ class SyncLog {
       message,
       name: _name,
       level: level,
+      error: error,
+      stackTrace: stackTrace,
+    );
+    LogSink.log(
+      _channel,
+      sinkLevel,
+      message,
       error: error,
       stackTrace: stackTrace,
     );

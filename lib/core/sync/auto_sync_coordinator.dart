@@ -288,6 +288,12 @@ class AutoSyncCoordinator {
       if (!reconnected) {
         // Bibliothèque Drive configurée mais pas de session (hors-ligne au
         // lancement) : on signale l'état local plutôt que de rester silencieux.
+        if (trigger != SyncPassTrigger.watch) {
+          SyncLog.info(
+            'Passe de synchronisation (${trigger.name}) : bibliothèque Drive '
+            'configurée mais aucune session — état local conservé, hors-ligne.',
+          );
+        }
         _syncController.markOffline();
         return const SyncPassReport(offline: true);
       }

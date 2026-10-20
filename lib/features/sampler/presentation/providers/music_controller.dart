@@ -624,7 +624,10 @@ class MusicController {
     }();
     final player = padItem.slots[index].player;
     if (player == null) {
-      _setMusicLoadError(padItem);
+      _setMusicLoadError(
+        padItem,
+        'aucun lecteur chargé pour la variante ${index + 1}',
+      );
       return false;
     }
 
@@ -649,16 +652,24 @@ class MusicController {
       _o._attachPlayerListeners(padItem);
       final reloaded = padItem.slots[index].player;
       if (reloaded == null) {
-        _setMusicLoadError(padItem);
+        _setMusicLoadError(padItem, 'rechargement du son impossible');
         return false;
       }
       started = await reloaded.playFromPosition(startPos, volume: volume);
+      if (!started) {
+        _setMusicLoadError(padItem, reloaded.lastStartFailure);
+        return false;
+      }
     }
 
     if (!started) {
-      _setMusicLoadError(padItem);
+      _setMusicLoadError(padItem, player.lastStartFailure);
       return false;
     }
+    AudioLoadLog.musicStarted(
+      padLabel: padItem.displayName,
+      padId: padItem.pad.id,
+    );
 
     _o._state = _o._state.copyWith(
       currentMusicPad: padItem,
@@ -681,6 +692,13 @@ class MusicController {
     }
     if (!clearOnAir && manual) {
       _capturePausedPlayback(padItem);
+    }
+    if (padItem.isPlaying) {
+      AudioLoadLog.musicStopped(
+        padLabel: padItem.displayName,
+        padId: padItem.pad.id,
+        paused: !clearOnAir && manual,
+      );
     }
     try {
       // On coupe toute voix réellement active du pad plutôt que de se fier au
@@ -839,7 +857,7 @@ class MusicController {
     try {
       sound = await _o._repository.getSoundById(soundId);
     } catch (e) {
-      debugPrint('Impossible de préparer la musique pour la régie: $e');
+      AudioLoadLog.warn('Impossible de préparer la musique pour la régie : $e');
       _reportPlaybackError('Impossible de préparer cette musique.');
       return null;
     }
@@ -861,7 +879,9 @@ class MusicController {
     return padItem;
   }
 
-  void _setMusicLoadError([PadItem? padItem]) {
+  /// [detail] : cause précise de l'échec (ex. raison du lecteur) — à défaut, la
+  /// raison de disponibilité du pad sert de motif au journal.
+  void _setMusicLoadError([PadItem? padItem, String? detail]) {
     final reason = padItem?.unavailabilityReason;
     // Un token révoqué remonte en `offline` (cf. correction du classement dans
     // `resolvePlayablePath`) : distinguer « session expirée » d'un vrai hors-ligne
@@ -877,6 +897,14 @@ class MusicController {
         PadUnavailabilityReason.unsupportedFormat => 'Format audio non supporté.',
         _ => 'Fichier audio introuvable ou indisponible hors-ligne.',
       };
+    }
+    if (padItem != null) {
+      _o.reportPadTriggerFailure(
+        padItem,
+        reason: detail ?? _o.triggerFailureReason(padItem),
+      );
+    } else {
+      AudioLoadLog.warn('Lecture impossible : $_lastPlaybackError');
     }
     _o._notify();
   }
