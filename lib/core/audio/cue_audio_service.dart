@@ -113,6 +113,13 @@ class CueAudioService {
   /// Dernière liste de devices connue (peuplée par [refreshDevices]).
   List<CueDevice> get cachedDevices => _cachedDevices;
 
+  String? _excludedRoomLabel;
+
+  /// Libellé de la sortie par défaut du système retirée de la dernière liste
+  /// (la salle), ou `null` si [refreshDevices] n'a rien exclu. Sert à expliquer
+  /// pourquoi un périphérique branché n'est pas proposé.
+  String? get excludedRoomLabel => _excludedRoomLabel;
+
   /// Applique le device persisté au démarrage (appelé depuis `main`).
   void init({String? selectedDeviceId}) {
     _selectedDeviceId = selectedDeviceId;
@@ -132,33 +139,56 @@ class CueAudioService {
   /// cache précédent en cas d'échec.
   Future<List<CueDevice>> refreshDevices() async {
     if (!isSupported) return const [];
-    final player = Player();
+    Player? player;
     try {
+      player = Player();
       final devices = await _awaitAudioDevices(player);
-      _cachedDevices = excludeRoomDevice([
+      final roomName = _roomDeviceName();
+      final all = [
         for (final d in devices)
           if (d.name != 'auto')
             CueDevice(
               id: d.name,
               label: d.description.isNotEmpty ? d.description : d.name,
             ),
-      ], _roomDeviceName());
+      ];
+      _cachedDevices = excludeRoomDevice(all, roomName);
+      // Seulement si l'exclusion a réellement retiré un périphérique : sinon
+      // l'afficher laisserait croire qu'un casque est écarté à tort.
+      _excludedRoomLabel = _cachedDevices.length < all.length ? roomName : null;
+      // Une ligne par actualisation : sans elle, une liste vide est
+      // indiscernable d'une énumération qui n'a rien vu.
+      AudioLoadLog.info(
+        'Sorties cue : media_kit voit ${all.length} périphérique(s) '
+        '[${all.map((d) => d.label).join(' | ')}], défaut système (salle) = '
+        '${roomName ?? 'inconnu'}, ${_cachedDevices.length} proposée(s)'
+        '${_excludedRoomLabel != null ? ', salle exclue' : ''}.',
+      );
       return _cachedDevices;
     } catch (e) {
       AudioLoadLog.cueDevicesEnumerationFailed(e);
       return _cachedDevices;
     } finally {
-      await player.dispose();
+      await player?.dispose();
     }
   }
+
+  /// Vrai si [devices] contient autre chose que l'entrée virtuelle « auto ».
+  ///
+  /// L'état initial d'un lecteur media_kit est `[auto]` — jamais vide : tester
+  /// `isNotEmpty` prenait ce faux départ pour la vraie liste (mpv la publie plus
+  /// tard par événement) et ne voyait alors aucun périphérique.
+  @visibleForTesting
+  static bool hasRealDevice(List<AudioDevice> devices) =>
+      devices.any((d) => d.name != 'auto');
 
   /// Liste des devices que [player] voit, en attendant brièvement la première
   /// énumération (vide à la création du lecteur, peuplée de façon asynchrone).
   static Future<List<AudioDevice>> _awaitAudioDevices(Player player) async {
     final known = player.state.audioDevices;
-    if (known.isNotEmpty) return known;
+    if (hasRealDevice(known)) return known;
     return player.stream.audioDevices
-        .firstWhere((d) => d.isNotEmpty)
+        .firstWhere(hasRealDevice)
         .timeout(
           const Duration(seconds: 2),
           onTimeout: () => player.state.audioDevices,

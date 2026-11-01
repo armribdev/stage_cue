@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart' show OrderingTerm;
+import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/cue_audio_service.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/database/database.dart' as db;
@@ -131,6 +132,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Périphériques de sortie de pré-écoute (cue) — Windows uniquement.
   List<CueDevice> _cueDevices = const [];
   bool _isLoadingCueDevices = false;
+
+  /// Vrai après la première énumération : évite d'annoncer « aucune sortie »
+  /// avant même d'avoir cherché.
+  bool _cueDevicesLoaded = false;
   bool _shouldScrollToDriveSection = false;
 
   /// Contexte de la section Drive pour le défilement ([Scrollable.ensureVisible]).

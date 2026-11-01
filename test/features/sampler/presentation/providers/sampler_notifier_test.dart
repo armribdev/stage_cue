@@ -580,6 +580,30 @@ void main() {
       },
     );
 
+    test('Mode Spectacle sans casque (plateforme capable) → pré-écoute '
+        'refusée, jamais en salle', () async {
+      final son = sound(10);
+      when(() => repo.getSoundById(10)).thenAnswer((_) async => son);
+      n.startLiveSession();
+
+      expect(await n.previewSound(10), isFalse);
+      expect(n.consumeLastPreviewError(), contains('Mode Spectacle'));
+
+      expect(await n.toggleLibraryPreview(10), isFalse);
+      expect(n.consumeLastPreviewError(), contains('Mode Spectacle'));
+      verifyNever(() => repo.getSoundById(any()));
+    });
+
+    test('Mode Spectacle sur plateforme sans sortie casque → pas de refus '
+        '(aucune alternative possible)', () async {
+      CueAudioService.debugOverrideSupported = false;
+      when(() => repo.getSoundById(10)).thenAnswer((_) async => null);
+      n.startLiveSession();
+
+      expect(await n.previewSound(10), isFalse); // son introuvable
+      expect(n.hasPendingPreviewError, isFalse);
+    });
+
     test('previewPadOnCue sur un pad sans son → false, sans message', () async {
       final padItem = PadItem(pad: _pad(1));
 

@@ -17,15 +17,22 @@ extension _SettingsData on _SettingsScreenState {
   Future<void> _loadCueDevices() async {
     if (!CueAudioService.isSupported) return;
     setState(() => _isLoadingCueDevices = true);
-    final devices = await CueAudioService.instance.refreshDevices();
+    var devices = CueAudioService.instance.cachedDevices;
+    try {
+      devices = await CueAudioService.instance.refreshDevices();
+    } catch (e) {
+      AudioLoadLog.cueDevicesEnumerationFailed(e);
+    }
     if (!mounted) return;
     setState(() {
       _cueDevices = devices;
+      _cueDevicesLoaded = true;
       _isLoadingCueDevices = false;
     });
   }
 
   /// Change le device cue : persistance + application immédiate au moteur.
+  /// `null` n'est pas choisissable dans le menu (état « aucun casque » initial).
   Future<void> _setCueDevice(String? deviceId) async {
     CueAudioService.instance.setSelectedDevice(deviceId);
     await widget.appPreferences.setCueOutputDeviceId(deviceId);

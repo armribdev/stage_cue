@@ -128,6 +128,9 @@ extension _SettingsSections on _SettingsScreenState {
           final knownIds = _cueDevices.map((d) => d.id).toSet();
           final missingSelected =
               selectedId != null && !knownIds.contains(selectedId);
+          // Énumération terminée et rien d'autre que la sortie de la salle :
+          // un menu vide serait trompeur, on l'annonce à la place.
+          final noExtraOutput = _cueDevicesLoaded && _cueDevices.isEmpty;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -139,51 +142,91 @@ extension _SettingsSections on _SettingsScreenState {
                 ),
               ),
               const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: DropdownButtonFormField<String?>(
-                  initialValue: selectedId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+              if (noExtraOutput)
+                Row(
+                  children: [
+                    Icon(
+                      Icons.headset_off_outlined,
+                      size: 18,
+                      color: scheme.onSurfaceVariant,
                     ),
-                    isDense: true,
-                  ),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Défaut système'),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        selectedId == null
+                            ? 'Aucune sortie supplémentaire détectée. Branchez '
+                                  'un casque puis actualisez la liste.'
+                            : 'Le casque choisi est indisponible et aucune '
+                                  'autre sortie supplémentaire n\'est détectée. '
+                                  'Rebranchez-le puis actualisez la liste.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
                     ),
-                    for (final device in _cueDevices)
-                      DropdownMenuItem<String?>(
-                        value: device.id,
-                        child: Text(
-                          device.label,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    if (missingSelected)
-                      DropdownMenuItem<String?>(
-                        value: selectedId,
-                        child: const Text(
-                          'Périphérique indisponible',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
                   ],
-                  onChanged: (value) => unawaited(_setCueDevice(value)),
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: DropdownButtonFormField<String?>(
+                    initialValue: selectedId,
+                    isExpanded: true,
+                    // Pas d'entrée « Défaut système » : la sortie par défaut est
+                    // celle de la salle, elle ne peut pas servir de casque.
+                    hint: const Text('Choisir un casque'),
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      isDense: true,
+                    ),
+                    items: [
+                      for (final device in _cueDevices)
+                        DropdownMenuItem<String?>(
+                          value: device.id,
+                          child: Text(
+                            device.label,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      if (missingSelected)
+                        DropdownMenuItem<String?>(
+                          value: selectedId,
+                          child: const Text(
+                            'Périphérique indisponible',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (value) => unawaited(_setCueDevice(value)),
+                  ),
                 ),
-              ),
+              if (CueAudioService.instance.excludedRoomLabel
+                  case final room?) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '« $room » est la sortie par défaut de Windows, donc celle '
+                  'de la salle : elle n\'est pas proposée comme casque. Pour '
+                  'l\'utiliser comme casque, choisissez une autre sortie par '
+                  'défaut dans Windows (haut-parleurs de la salle), puis '
+                  'actualisez la liste.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: scheme.onSurface),
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
-                selectedId == null
-                    ? 'Les pré-écoutes sortent sur le périphérique par défaut, '
-                          'comme le reste de l\'application : le public les '
-                          'entend. Choisissez un casque pour écouter sans être '
-                          'entendu.'
+                noExtraOutput
+                    ? 'Sans casque, les pré-écoutes sortent sur la salle : le '
+                          'public les entend. En Mode Spectacle, elles sont '
+                          'désactivées.'
+                    : selectedId == null
+                    ? 'Aucun casque choisi : les pré-écoutes sortent sur la '
+                          'salle, le public les entend. Choisissez un casque '
+                          'pour écouter sans être entendu. En Mode Spectacle, '
+                          'sans casque, les pré-écoutes sont désactivées.'
                     : 'Les pré-écoutes sortent sur ce périphérique, tandis que '
                           'les pads et la régie restent sur la sortie système. '
                           'Si le périphérique est indisponible, la pré-écoute '
