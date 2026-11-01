@@ -92,6 +92,25 @@ void main() {
       );
     });
 
+    test('excludeRoomDevice retire la sortie par défaut du système', () {
+      const room = CueDevice(id: 'wasapi/1', label: 'Haut-parleurs (Realtek)');
+      const headset = CueDevice(id: 'wasapi/2', label: 'Casque USB');
+
+      final result = CueAudioService.excludeRoomDevice(const [
+        room,
+        headset,
+      ], 'haut-parleurs (realtek) '); // casse et espaces ignorés
+
+      expect(result, [headset]);
+    });
+
+    test('excludeRoomDevice sans défaut connu → liste inchangée', () {
+      const a = CueDevice(id: 'a', label: 'A');
+      const b = CueDevice(id: 'b', label: 'B');
+
+      expect(CueAudioService.excludeRoomDevice(const [a, b], null), [a, b]);
+    });
+
     test('CueUnavailableException expose un message lisible', () {
       const e = CueUnavailableException('Casque indisponible');
       expect(e.message, 'Casque indisponible');
