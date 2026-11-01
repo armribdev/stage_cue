@@ -12,6 +12,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
   /// de pré-écoute est configuré : elle prend alors le lecteur d'aperçu
   /// (play/pause), sans toucher à la régie ni à la salle.
   Future<bool> previewSound(int soundId) async {
+    if (_refuseRoomPreviewInLive()) return false;
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
     if (sound.type == SoundType.music) {
@@ -75,10 +76,30 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       }
     }
 
+    if (_refuseRoomPreviewInLive()) return false;
     stopLibraryPreview(notify: false);
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
     return _startLibraryPreview(sound, requireCue: requireCue);
+  }
+
+  /// En Mode Spectacle, sur une plateforme capable d'une sortie casque, une
+  /// pré-écoute sans casque choisi sortirait en salle : on la refuse (message
+  /// via [consumeLastPreviewError]) plutôt que de la laisser entendre du
+  /// public. Hors spectacle, ou sans sortie séparée possible, rien ne change.
+  bool _refuseRoomPreviewInLive() {
+    if (!_isLiveSessionActive ||
+        !CueAudioService.isSupported ||
+        CueAudioService.instance.isCueActive) {
+      return false;
+    }
+    _refusePreview(
+      const CueUnavailableException(
+        'Aucun casque configuré — pré-écoute désactivée en Mode Spectacle '
+        'pour ne pas sortir en salle.',
+      ),
+    );
+    return true;
   }
 
   /// Répercute en direct un changement de volume sur l'aperçu bibliothèque de

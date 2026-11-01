@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit/media_kit.dart' show AudioDevice;
 import 'package:stage_cue/core/audio/cue_audio_service.dart';
 
 void main() {
@@ -103,6 +104,24 @@ void main() {
 
       expect(result, [headset]);
     });
+
+    test(
+      'hasRealDevice : l\'état initial [auto] n\'est pas une vraie liste',
+      () {
+        expect(
+          CueAudioService.hasRealDevice(const [AudioDevice('auto', '')]),
+          isFalse,
+        );
+        expect(CueAudioService.hasRealDevice(const []), isFalse);
+        expect(
+          CueAudioService.hasRealDevice(const [
+            AudioDevice('auto', ''),
+            AudioDevice('wasapi/1', 'Casque (WH-1000XM6)'),
+          ]),
+          isTrue,
+        );
+      },
+    );
 
     test('excludeRoomDevice sans défaut connu → liste inchangée', () {
       const a = CueDevice(id: 'a', label: 'A');
