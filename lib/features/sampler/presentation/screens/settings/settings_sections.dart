@@ -187,7 +187,9 @@ extension _SettingsSections on _SettingsScreenState {
                     : 'Les pré-écoutes sortent sur ce périphérique, tandis que '
                           'les pads et la régie restent sur la sortie système. '
                           'Si le périphérique est indisponible, la pré-écoute '
-                          'est refusée : elle ne sort jamais sur la salle.',
+                          'est refusée : elle ne sort jamais sur la salle. '
+                          'La sortie par défaut du système n\'est pas '
+                          'proposée : c\'est celle de la salle.',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),

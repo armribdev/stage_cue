@@ -21,6 +21,7 @@ Quand un casque est choisi, la pré-écoute est **stricte** : son absence (devic
 
 - Tout nouvel appel de pré-écoute passe par `CueAudioService.createPreviewPlayer` et doit gérer `CueUnavailableException` (message lisible dans `.message`). Dans `SamplerNotifier` le refus est posé dans `_lastPreviewError` (`consumeLastPreviewError`) et affiché une seule fois par `SamplerScreen` ou le sélecteur — ne jamais l'avaler : un bouton casque muet passe pour une panne.
 - Ne pas réintroduire de repli soloud quand `isCueActive` est vrai, ni retirer la vérification de présence du device dans `CuePreviewPlayer.create`.
+- La sortie par défaut du système (`PlaybackDevice.isDefault` de flutter_soloud, celle de la salle) est exclue de la liste des casques (`excludeRoomDevice`) et refusée à la lecture si le casque choisi l'est devenu entre-temps. La correspondance se fait sur le libellé du périphérique entre soloud et media_kit ; si le défaut est indéterminable, rien n'est exclu.
 - Sans casque choisi, la pré-écoute ordinaire (recherche-éclair, bibliothèque) garde son comportement historique : elle sort en salle. Seul le bouton casque d'un pad refuse alors de jouer.
 - Avec un casque actif, la musique de la recherche-éclair passe par le lecteur d'aperçu (play/pause), plus par la régie.
 - Windows uniquement. Ailleurs, `requireCue` refuse toujours : pas de sortie séparée possible.

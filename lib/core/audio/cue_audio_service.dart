@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'audio_load_log.dart';
@@ -65,6 +66,40 @@ class CueAudioService {
   static bool get isSupported =>
       debugOverrideSupported ?? (!kIsWeb && Platform.isWindows);
 
+  /// Libellé du périphérique de sortie par défaut du système — celui sur lequel
+  /// flutter_soloud joue, donc la salle. `null` si indéterminable.
+  ///
+  /// Relu à chaque appel : le défaut Windows change quand on branche un casque
+  /// qui s'impose comme sortie par défaut.
+  static String? _roomDeviceName() {
+    try {
+      for (final d in SoLoud.instance.listPlaybackDevices()) {
+        if (d.isDefault) return d.name;
+      }
+    } catch (e) {
+      AudioLoadLog.warn('Périphérique par défaut introuvable : $e');
+    }
+    return null;
+  }
+
+  /// Vrai si [label] désigne la sortie de la salle. Les deux moteurs lisent le
+  /// nom convivial du périphérique Windows : on compare sur ce libellé.
+  static bool _isRoomDevice(String label, String? roomName) =>
+      roomName != null &&
+      label.trim().toLowerCase() == roomName.trim().toLowerCase();
+
+  /// Retire de [devices] la sortie de la salle ([roomName]) : la proposer comme
+  /// casque ferait entendre les pré-écoutes au public. Sans [roomName]
+  /// (indéterminable), la liste est rendue telle quelle.
+  @visibleForTesting
+  static List<CueDevice> excludeRoomDevice(
+    List<CueDevice> devices,
+    String? roomName,
+  ) => [
+    for (final d in devices)
+      if (!_isRoomDevice(d.label, roomName)) d,
+  ];
+
   String? _selectedDeviceId;
   List<CueDevice> _cachedDevices = const [];
 
@@ -100,14 +135,14 @@ class CueAudioService {
     final player = Player();
     try {
       final devices = await _awaitAudioDevices(player);
-      _cachedDevices = [
+      _cachedDevices = excludeRoomDevice([
         for (final d in devices)
           if (d.name != 'auto')
             CueDevice(
               id: d.name,
               label: d.description.isNotEmpty ? d.description : d.name,
             ),
-      ];
+      ], _roomDeviceName());
       return _cachedDevices;
     } catch (e) {
       AudioLoadLog.cueDevicesEnumerationFailed(e);
@@ -219,9 +254,24 @@ class CuePreviewPlayer implements PreviewPlayback {
       // Sans cette vérification, un device débranché ou introuvable est
       // accepté par mpv qui joue alors sur le défaut système (la salle).
       final available = await CueAudioService._awaitAudioDevices(player);
-      if (!available.any((d) => d.name == device.name)) {
+      final chosen = available.where((d) => d.name == device.name).firstOrNull;
+      if (chosen == null) {
         throw const CueUnavailableException(
           'Sortie casque introuvable (débranchée ?) — pré-écoute annulée.',
+        );
+      }
+      // Le casque choisi a pu devenir la sortie par défaut du système depuis
+      // (branchement à chaud) : il serait alors la salle.
+      final label = chosen.description.isNotEmpty
+          ? chosen.description
+          : chosen.name;
+      if (CueAudioService._isRoomDevice(
+        label,
+        CueAudioService._roomDeviceName(),
+      )) {
+        throw const CueUnavailableException(
+          'Le périphérique choisi est la sortie par défaut (la salle) — '
+          'choisissez un autre casque dans Paramètres.',
         );
       }
       await player.setAudioDevice(device);
