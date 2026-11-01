@@ -274,6 +274,7 @@ class AudioPlayerService implements PreviewPlayback {
   }
 
   /// Définit le volume (0.0 -> 1.0) sur toutes les voix actives.
+  @override
   void setVolume(double volume) {
     final clamped = volume.clamp(0.0, 1.0);
     for (final handle in _handles) {

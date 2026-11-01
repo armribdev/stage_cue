@@ -26,6 +26,10 @@ class StartOffsetEditor extends StatefulWidget {
   final Uint8List? waveform;
   final int initialOffsetMs;
 
+  /// Volume d'écoute (0.0 → 1.0) : celui du son, pour que l'audition du point
+  /// d'entrée soit au niveau réel. Relu à chaque lecture.
+  final double volume;
+
   /// Notifié à chaque changement de valeur (drag, nudge, reset).
   final ValueChanged<int> onChanged;
 
@@ -34,6 +38,7 @@ class StartOffsetEditor extends StatefulWidget {
     required this.filePath,
     required this.waveform,
     required this.initialOffsetMs,
+    required this.volume,
     required this.onChanged,
   });
 
@@ -63,6 +68,12 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
     super.initState();
     _offsetMs = widget.initialOffsetMs;
     _load();
+  }
+
+  @override
+  void didUpdateWidget(StartOffsetEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.volume != widget.volume) _player?.setVolume(widget.volume);
   }
 
   Future<void> _load() async {
@@ -119,7 +130,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       return;
     }
     _playhead = _offset;
-    await player.playFromPosition(_offset);
+    await player.playFromPosition(_offset, volume: widget.volume);
   }
 
   void _syncTicker() {
@@ -285,6 +296,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
                     child: CustomPaint(
                       painter: _OffsetWaveformPainter(
                         bars: bars,
+                        volume: widget.volume,
                         offsetFraction: fraction,
                         playheadFraction: _isPreviewing
                             ? playheadFraction
@@ -373,6 +385,7 @@ class _NudgeButton extends StatelessWidget {
 /// préserver les crêtes.
 class _OffsetWaveformPainter extends CustomPainter {
   final List<double> bars;
+  final double volume;
   final double offsetFraction;
   final double? playheadFraction;
   final Color skippedColor;
@@ -384,6 +397,7 @@ class _OffsetWaveformPainter extends CustomPainter {
 
   _OffsetWaveformPainter({
     required this.bars,
+    required this.volume,
     required this.offsetFraction,
     required this.playheadFraction,
     required this.skippedColor,
@@ -403,7 +417,12 @@ class _OffsetWaveformPainter extends CustomPainter {
     if (bars.isNotEmpty) {
       final count = WaveformEnvelope.pointCountFor(size.width);
       if (count > 0) {
-        final amps = WaveformEnvelope.resample(bars, count);
+        // L'enveloppe stockée est normalisée au pic : on la met à l'échelle du
+        // volume pour montrer le niveau réellement restitué.
+        final amps = [
+          for (final amp in WaveformEnvelope.resample(bars, count))
+            amp * volume,
+        ];
         final path = WaveformEnvelope.buildPath(amps, size);
         // Même enveloppe remplie deux fois, découpée au point d'entrée : grisée
         // avant (sautée à la lecture), colorée après.
@@ -474,6 +493,7 @@ class _OffsetWaveformPainter extends CustomPainter {
       old.offsetFraction != offsetFraction ||
       old.playheadFraction != playheadFraction ||
       old.bars != bars ||
+      old.volume != volume ||
       old.keptColor != keptColor ||
       old.handleHovered != handleHovered;
 }

@@ -49,6 +49,14 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     return _startLibraryPreview(sound);
   }
 
+  /// Répercute en direct un changement de volume sur l'aperçu bibliothèque de
+  /// [soundId] (curseur du formulaire d'édition). Sans effet si ce son n'est
+  /// pas celui en aperçu.
+  void setLibraryPreviewVolume(int soundId, double volume) {
+    if (_libraryPreviewSoundId != soundId) return;
+    _libraryPreviewPlayer?.setVolume(volume);
+  }
+
   /// Arrête et libère l'aperçu bibliothèque.
   void stopLibraryPreview({bool notify = true}) {
     _libraryPreviewSub?.cancel();
@@ -80,7 +88,10 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
           startOffsetMs = (maxMs - 1).clamp(0, maxMs);
         }
       }
-      await player.playFromPosition(Duration(milliseconds: startOffsetMs));
+      await player.playFromPosition(
+        Duration(milliseconds: startOffsetMs),
+        volume: sound.volume,
+      );
       _markPlayed(sound.id);
       _notify();
       return true;
@@ -118,7 +129,10 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
           startOffsetMs = (maxMs - 1).clamp(0, maxMs);
         }
       }
-      await player.playFromPosition(Duration(milliseconds: startOffsetMs));
+      await player.playFromPosition(
+        Duration(milliseconds: startOffsetMs),
+        volume: sound.volume,
+      );
       _markPlayed(sound.id);
       _notify();
       return true;
