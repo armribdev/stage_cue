@@ -16,8 +16,15 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
     final sound = shown[index];
     switch (widget.mode) {
       case QuickSearchMode():
-        await widget.notifier.previewSound(sound.id);
-        if (mounted) Navigator.of(context).pop();
+        final ok = await widget.notifier.previewSound(sound.id);
+        if (!mounted) return;
+        // Échec : on reste ouvert pour que le message (casque indisponible…)
+        // soit lu, au lieu de fermer l'overlay sur un « rien ne s'est passé ».
+        if (!ok) {
+          _showPreviewFailureSnackBar();
+          return;
+        }
+        Navigator.of(context).pop();
       case MusicPickerMode(playNow: true):
         await _playMusicNow(sound);
       case MusicPickerMode():
@@ -55,7 +62,9 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
   /// expiré et simple indisponibilité réseau.
   void _showPreviewFailureSnackBar() {
     final expired = widget.notifier.driveSessionExpired;
-    final specific = widget.notifier.consumeLastMusicPlaybackError();
+    final specific =
+        widget.notifier.consumeLastMusicPlaybackError() ??
+        widget.notifier.consumeLastPreviewError();
     final message =
         specific ??
         (expired

@@ -7,16 +7,42 @@ part of 'sampler_provider.dart';
 extension SamplerPreviewsAndSession on SamplerNotifier {
   /// Pré-écoute d'un son (recherche-éclair).
   ///
-  /// La musique passe par la régie live ; bruitages/ambiances en fire-and-forget
-  /// depuis le [Sound.startOffsetMs].
+  /// Bruitages/ambiances en fire-and-forget depuis le [Sound.startOffsetMs].
+  /// La musique passe par la régie live — donc en salle — sauf si un casque
+  /// de pré-écoute est configuré : elle prend alors le lecteur d'aperçu
+  /// (play/pause), sans toucher à la régie ni à la salle.
   Future<bool> previewSound(int soundId) async {
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
     if (sound.type == SoundType.music) {
+      if (CueAudioService.instance.isCueActive) {
+        return toggleLibraryPreview(soundId);
+      }
       final padItem = await playMusicBySoundId(soundId);
       return padItem != null;
     }
     return _playEphemeralPreview(sound);
+  }
+
+  /// Écoute au casque d'un pad du plateau, sans le déclencher en salle.
+  ///
+  /// Joue la première variante du pad depuis son point d'entrée. Strict : sans
+  /// casque configuré et disponible, rien ne sort — le refus est exposé via
+  /// [consumeLastPreviewError] (jamais de repli sur la salle, décision 0027).
+  Future<bool> previewPadOnCue(PadItem padItem) async {
+    final sounds = padItem.pad.sounds;
+    if (sounds.isEmpty) return false;
+    return toggleLibraryPreview(sounds.first.id, requireCue: true);
+  }
+
+  /// Message du dernier refus de pré-écoute au casque, sans le consommer.
+  bool get hasPendingPreviewError => _lastPreviewError != null;
+
+  /// Retourne puis efface le message du dernier refus de pré-écoute au casque.
+  String? consumeLastPreviewError() {
+    final message = _lastPreviewError;
+    _lastPreviewError = null;
+    return message;
   }
 
   /// Son en cours d'aperçu dans la bibliothèque, ou `null`.
@@ -28,7 +54,13 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       (_libraryPreviewPlayer?.isPlaying ?? false);
 
   /// Bascule play/pause pour l'aperçu bibliothèque (lecteur unique).
-  Future<bool> toggleLibraryPreview(int soundId) async {
+  ///
+  /// [requireCue] : n'a de sens qu'au casque — échoue plutôt que de sortir sur
+  /// la salle quand aucun casque n'est configuré.
+  Future<bool> toggleLibraryPreview(
+    int soundId, {
+    bool requireCue = false,
+  }) async {
     final player = _libraryPreviewPlayer;
     if (_libraryPreviewSoundId == soundId && player != null) {
       if (player.isPlaying) {
@@ -46,7 +78,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     stopLibraryPreview(notify: false);
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
-    return _startLibraryPreview(sound);
+    return _startLibraryPreview(sound, requireCue: requireCue);
   }
 
   /// Répercute en direct un changement de volume sur l'aperçu bibliothèque de
@@ -67,13 +99,19 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     if (notify) _notify();
   }
 
-  Future<bool> _startLibraryPreview(Sound sound) async {
+  Future<bool> _startLibraryPreview(
+    Sound sound, {
+    bool requireCue = false,
+  }) async {
     try {
       final path = await _resolvePlayablePath(
         sound,
         downloadIfNeeded: allowsSoundDownload,
       );
-      final player = await CueAudioService.instance.createPreviewPlayer(path);
+      final player = await CueAudioService.instance.createPreviewPlayer(
+        path,
+        requireCue: requireCue,
+      );
       _libraryPreviewPlayer = player;
       _libraryPreviewSoundId = sound.id;
       _libraryPreviewSub = player.onPlayerStateChanged.listen((playing) {
@@ -95,6 +133,10 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       _markPlayed(sound.id);
       _notify();
       return true;
+    } on CueUnavailableException catch (e) {
+      stopLibraryPreview(notify: false);
+      _refusePreview(e);
+      return false;
     } catch (e) {
       AudioLoadLog.warn(
         'Aperçu bibliothèque échoué pour « ${sound.title} » : $e',
@@ -102,6 +144,13 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       stopLibraryPreview(notify: false);
       return false;
     }
+  }
+
+  /// Mémorise le refus d'une pré-écoute au casque pour l'afficher une fois, et
+  /// prévient les écrans (le plateau n'a pas d'autre moyen de le savoir).
+  void _refusePreview(CueUnavailableException e) {
+    _lastPreviewError = e.message;
+    _notify();
   }
 
   /// Pré-écoute fire-and-forget depuis le point d'entrée du son.
@@ -136,6 +185,9 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       _markPlayed(sound.id);
       _notify();
       return true;
+    } on CueUnavailableException catch (e) {
+      _refusePreview(e);
+      return false;
     } catch (e) {
       AudioLoadLog.warn('Pré-écoute échouée pour « ${sound.title} » : $e');
       return false;

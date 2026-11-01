@@ -111,6 +111,11 @@ class SamplerNotifier extends ChangeNotifier {
   int? _libraryPreviewSoundId;
   StreamSubscription<bool>? _libraryPreviewSub;
 
+  /// Dernier refus de pré-écoute au casque ([CueUnavailableException]), à
+  /// afficher une fois à l'utilisateur. Hors `copyWith` comme les autres
+  /// drapeaux de session : pur message éphémère, pas un état rendu.
+  String? _lastPreviewError;
+
   /// File de téléchargement priorisée à concurrence bornée (refonte UX P2).
   final DownloadQueue _downloadQueue = DownloadQueue(
     maxConcurrent: 2,

@@ -166,10 +166,9 @@ class AudioLoadLog {
   static void cueDevicesEnumerationFailed(Object error) =>
       warn('Énumération des périphériques de sortie cue échouée — $error');
 
-  static void cueFallbackToSoLoud(Object error) => warn(
-    'Pré-écoute cue (media_kit) indisponible, repli sur la sortie '
-    'principale — $error',
-  );
+  /// Pré-écoute casque refusée (sans repli sur la salle, décision 0027).
+  static void cueRefused(String reason) =>
+      warn('Pré-écoute cue refusée, pas de repli sur la salle — $reason');
 
   static void cueOutputChanged({required bool configured}) => info(
     configured

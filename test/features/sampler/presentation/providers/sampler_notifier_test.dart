@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:stage_cue/core/audio/cue_audio_service.dart';
 import 'package:stage_cue/core/settings/app_preferences.dart';
 import 'package:stage_cue/features/sampler/domain/entities/pad.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
@@ -522,6 +525,79 @@ void main() {
       // slots restent needsDownload → non éligibles
 
       expect(n.debugPickSoundIndex(padItem), 0);
+    });
+  });
+
+  // ── Pré-écoute au casque (décision 0027) ──────────────────────────────────
+
+  group('pré-écoute au casque — jamais de repli sur la salle', () {
+    late MockSoundRepository repo;
+    late SamplerNotifier n;
+    late Directory tmp;
+
+    /// Son dont le fichier existe vraiment : sans cela la résolution du chemin
+    /// échoue avant d'atteindre le choix de la sortie, que l'on veut tester.
+    Sound sound(int id, {SoundType? type}) {
+      final file = File('${tmp.path}/son_$id.wav')
+        ..writeAsBytesSync(List<int>.filled(1024, 0));
+      return Sound(
+        id: id,
+        title: 'Son $id',
+        filePath: file.path,
+        type: type,
+        createdAt: DateTime(2026),
+      );
+    }
+
+    setUp(() {
+      tmp = Directory.systemTemp.createTempSync('stage_cue_cue_');
+      repo = MockSoundRepository();
+      when(() => repo.markSoundPlayed(any())).thenAnswer((_) async {});
+      n = SamplerNotifier(repo, MockLoadSoundsUseCase());
+      CueAudioService.debugOverrideSupported = true;
+      CueAudioService.instance.init(selectedDeviceId: null);
+    });
+
+    tearDown(() {
+      CueAudioService.debugOverrideSupported = null;
+      CueAudioService.instance.init(selectedDeviceId: null);
+      tmp.deleteSync(recursive: true);
+    });
+
+    test(
+      'previewPadOnCue sans casque configuré → refus avec message',
+      () async {
+        final son = sound(10);
+        when(() => repo.getSoundById(10)).thenAnswer((_) async => son);
+        final padItem = PadItem(pad: _multipad(1, [son]));
+
+        expect(await n.previewPadOnCue(padItem), isFalse);
+
+        expect(n.hasPendingPreviewError, isTrue);
+        expect(n.consumeLastPreviewError(), contains('casque'));
+        expect(n.hasPendingPreviewError, isFalse); // consommé une seule fois
+        expect(n.libraryPreviewSoundId, isNull);
+      },
+    );
+
+    test('previewPadOnCue sur un pad sans son → false, sans message', () async {
+      final padItem = PadItem(pad: _pad(1));
+
+      expect(await n.previewPadOnCue(padItem), isFalse);
+      expect(n.hasPendingPreviewError, isFalse);
+    });
+
+    test('musique en recherche-éclair avec casque actif → lecteur cue, '
+        'pas la régie (refus remonté si le casque est HS)', () async {
+      CueAudioService.instance.setSelectedDevice('Casque débranché');
+      final son = sound(10, type: SoundType.music);
+      when(() => repo.getSoundById(10)).thenAnswer((_) async => son);
+
+      expect(await n.previewSound(10), isFalse);
+
+      // Le refus prouve le passage par le lecteur d'aperçu cue : la régie
+      // (salle) n'a jamais été sollicitée.
+      expect(n.consumeLastPreviewError(), isNotNull);
     });
   });
 }

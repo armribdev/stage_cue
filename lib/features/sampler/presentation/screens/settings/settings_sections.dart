@@ -181,9 +181,13 @@ extension _SettingsSections on _SettingsScreenState {
               Text(
                 selectedId == null
                     ? 'Les pré-écoutes sortent sur le périphérique par défaut, '
-                          'comme le reste de l\'application.'
+                          'comme le reste de l\'application : le public les '
+                          'entend. Choisissez un casque pour écouter sans être '
+                          'entendu.'
                     : 'Les pré-écoutes sortent sur ce périphérique, tandis que '
-                          'les pads et la régie restent sur la sortie système.',
+                          'les pads et la régie restent sur la sortie système. '
+                          'Si le périphérique est indisponible, la pré-écoute '
+                          'est refusée : elle ne sort jamais sur la salle.',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
