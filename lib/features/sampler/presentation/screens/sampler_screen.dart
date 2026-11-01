@@ -19,6 +19,7 @@ import '../widgets/section_context_anchor.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
+import '../../../../core/audio/cue_audio_service.dart' show CueAudioService;
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
 import '../../../../core/utils/app_snackbar.dart';
@@ -159,7 +160,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
     // Peek non-destructif : la décision d'afficher (et la consommation) est
     // différée au post-frame — `ModalRoute.of` dépend d'un InheritedWidget et
     // ne peut être lu pendant `initState` (ce listener tourne dès `loadBoards`).
-    if (_notifier.hasPendingMusicPlaybackError) {
+    if (_notifier.hasPendingMusicPlaybackError ||
+        _notifier.hasPendingPreviewError) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         // Un overlay/dialog au-dessus (route non courante) possède le message et
@@ -167,12 +169,17 @@ class _SamplerScreenState extends State<SamplerScreen> {
         // la barrière modale, sans se fermer. On le lui laisse (pas de consume).
         if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
         final musicError = _notifier.consumeLastMusicPlaybackError();
-        if (musicError == null) return;
-        AppSnackBar.show(
-          context,
-          musicError,
-          action: _reconnectSnackBarAction(),
-        );
+        if (musicError != null) {
+          AppSnackBar.show(
+            context,
+            musicError,
+            action: _reconnectSnackBarAction(),
+          );
+        }
+        // Refus de pré-écoute au casque (écoute d'un pad) : jamais muet, sinon
+        // un bouton casque qui ne répond pas passe pour une panne.
+        final previewError = _notifier.consumeLastPreviewError();
+        if (previewError != null) AppSnackBar.show(context, previewError);
       });
     }
 

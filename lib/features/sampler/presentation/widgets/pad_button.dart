@@ -40,6 +40,10 @@ class PadButton extends StatelessWidget {
   /// [isEditable].
   final VoidCallback? onShowSounds;
 
+  /// Écoute le pad au casque sans le déclencher en salle. Visible aussi en
+  /// Mode Spectacle — c'est là qu'on en a besoin.
+  final VoidCallback? onCue;
+
   const PadButton({
     super.key,
     required this.padItem,
@@ -49,6 +53,7 @@ class PadButton extends StatelessWidget {
     this.onRemove,
     this.onEdit,
     this.onShowSounds,
+    this.onCue,
   });
 
   _PadVisual get _visual {
@@ -451,6 +456,7 @@ class PadButton extends StatelessWidget {
   /// est arbitraire (voir maquette : icônes éditer/fermer sur la même ligne
   /// que le titre, jamais flottantes dessus).
   List<(IconData, double, VoidCallback?)> get _iconClusterEntries => [
+    if (onCue != null) (Icons.headphones_rounded, 14.0, onCue),
     if (padItem.totalSoundCount > 1 && onShowSounds != null)
       (Icons.queue_music_rounded, 14.0, onShowSounds),
     if (isEditable && onEdit != null) (Icons.edit_outlined, 14.0, onEdit),

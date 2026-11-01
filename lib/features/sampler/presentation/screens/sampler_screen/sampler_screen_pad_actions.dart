@@ -261,6 +261,12 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
       onShowSounds: padItem.totalSoundCount > 1
           ? () => _showPadSoundPicker(context, padItem)
           : null,
+      // Affiché dès que la sortie séparée est possible (Windows), même sans
+      // casque choisi : l'appui explique alors quoi configurer plutôt que de
+      // laisser le bouton introuvable. Jamais sur un brouillon sans son.
+      onCue: CueAudioService.isSupported && padItem.pad.sounds.isNotEmpty
+          ? () => unawaited(_notifier.previewPadOnCue(padItem))
+          : null,
     );
   }
 

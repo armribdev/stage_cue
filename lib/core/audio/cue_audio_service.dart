@@ -22,6 +22,22 @@ class CueDevice {
   const CueDevice({required this.id, required this.label});
 }
 
+/// La pré-écoute au casque est impossible : aucun device choisi, device
+/// débranché ou média illisible sur ce device.
+///
+/// Levée à la place d'un repli sur la sortie salle : une pré-écoute destinée au
+/// casque ne doit jamais devenir audible du public
+/// ([décision 0027](../../docs/decisions/0027-preecoute-casque-stricte.md)).
+/// [message] est lisible tel quel par l'utilisateur.
+class CueUnavailableException implements Exception {
+  final String message;
+
+  const CueUnavailableException(this.message);
+
+  @override
+  String toString() => 'CueUnavailableException: $message';
+}
+
 /// Gère la sortie de **pré-écoute (cue)** séparée, sur Windows.
 ///
 /// flutter_soloud pilote un moteur unique (pads + régie = sortie « salle ») :
@@ -30,9 +46,11 @@ class CueDevice {
 /// distinct (casque) pendant que la salle continue sur le device système.
 ///
 /// Le cue est **opt-in** : tant qu'aucun device n'est choisi
-/// ([selectedDeviceId] `null`), la pré-écoute retombe sur flutter_soloud —
-/// comportement historique, zéro régression. Support limité à Windows :
-/// sur les autres plateformes, [isSupported] est faux et le repli s'applique.
+/// ([selectedDeviceId] `null`), la pré-écoute ordinaire retombe sur
+/// flutter_soloud (comportement historique). Dès qu'un device est choisi, elle
+/// est **stricte** : si le casque est indisponible, [createPreviewPlayer] lève
+/// [CueUnavailableException] au lieu de basculer sur la salle. Support limité à
+/// Windows : ailleurs [isSupported] est faux et le repli ordinaire s'applique.
 class CueAudioService {
   CueAudioService._();
 
@@ -81,15 +99,7 @@ class CueAudioService {
     if (!isSupported) return const [];
     final player = Player();
     try {
-      var devices = player.state.audioDevices;
-      if (devices.isEmpty) {
-        devices = await player.stream.audioDevices
-            .firstWhere((d) => d.isNotEmpty)
-            .timeout(
-              const Duration(seconds: 2),
-              onTimeout: () => player.state.audioDevices,
-            );
-      }
+      final devices = await _awaitAudioDevices(player);
       _cachedDevices = [
         for (final d in devices)
           if (d.name != 'auto')
@@ -107,6 +117,19 @@ class CueAudioService {
     }
   }
 
+  /// Liste des devices que [player] voit, en attendant brièvement la première
+  /// énumération (vide à la création du lecteur, peuplée de façon asynchrone).
+  static Future<List<AudioDevice>> _awaitAudioDevices(Player player) async {
+    final known = player.state.audioDevices;
+    if (known.isNotEmpty) return known;
+    return player.stream.audioDevices
+        .firstWhere((d) => d.isNotEmpty)
+        .timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => player.state.audioDevices,
+        );
+  }
+
   /// Résout le device media_kit sélectionné, ou `null` s'il faut rester sur
   /// flutter_soloud (non supporté, ou aucun device choisi).
   AudioDevice? _resolveSelectedDevice() {
@@ -119,36 +142,50 @@ class CueAudioService {
         break;
       }
     }
-    // Device connu → on réutilise son libellé ; sinon (cache non peuplé ou
-    // device débranché) on reconstruit par nom : media_kit ne se sert que du
-    // nom, et retombe sur le défaut système s'il est introuvable.
+    // media_kit ne se sert que du nom. Le libellé importe peu ici : la
+    // présence réelle du device est vérifiée à la création du lecteur
+    // ([CuePreviewPlayer.create]), car media_kit retomberait sinon en silence
+    // sur le défaut système — la salle.
     return AudioDevice(id, label);
   }
 
   /// Fabrique un lecteur de pré-écoute routé sur le bon moteur :
   /// media_kit (device cue) si le cue est actif, sinon flutter_soloud.
   ///
-  /// [ephemeral] n'a d'effet que sur le repli soloud (source isolée du cache
+  /// Quand le cue est actif, il n'y a **aucun repli** sur flutter_soloud : un
+  /// échec lève [CueUnavailableException]. [requireCue] étend cette rigueur au
+  /// cas « aucun device choisi » — pour les écoutes qui n'ont de sens qu'au
+  /// casque (pad du plateau) et ne doivent jamais sortir en salle.
+  ///
+  /// [ephemeral] n'a d'effet que sur le chemin soloud (source isolée du cache
   /// des pads) ; media_kit ne partage aucun cache, la distinction est inutile.
   Future<PreviewPlayback> createPreviewPlayer(
     String filePath, {
     bool ephemeral = false,
+    bool requireCue = false,
   }) async {
     final device = _resolveSelectedDevice();
     if (device == null) {
+      if (requireCue) {
+        throw const CueUnavailableException(
+          'Aucune sortie casque configurée — choisissez-en une dans '
+          'Paramètres.',
+        );
+      }
       return ephemeral
           ? AudioPlayerService.createEphemeral(filePath)
           : AudioPlayerService.create(filePath);
     }
     try {
       return await CuePreviewPlayer.create(filePath, device: device);
+    } on CueUnavailableException catch (e) {
+      AudioLoadLog.cueRefused(e.message);
+      rethrow;
     } catch (e) {
-      // Repli soloud si media_kit échoue (device indisponible, format…) :
-      // la pré-écoute reste fonctionnelle sur la sortie par défaut.
-      AudioLoadLog.cueFallbackToSoLoud(e);
-      return ephemeral
-          ? AudioPlayerService.createEphemeral(filePath)
-          : AudioPlayerService.create(filePath);
+      AudioLoadLog.cueRefused('$e');
+      throw const CueUnavailableException(
+        'Sortie casque indisponible — pré-écoute annulée.',
+      );
     }
   }
 }
@@ -179,6 +216,14 @@ class CuePreviewPlayer implements PreviewPlayback {
   }) async {
     final player = Player();
     try {
+      // Sans cette vérification, un device débranché ou introuvable est
+      // accepté par mpv qui joue alors sur le défaut système (la salle).
+      final available = await CueAudioService._awaitAudioDevices(player);
+      if (!available.any((d) => d.name == device.name)) {
+        throw const CueUnavailableException(
+          'Sortie casque introuvable (débranchée ?) — pré-écoute annulée.',
+        );
+      }
       await player.setAudioDevice(device);
       await player.open(Media(filePath), play: false);
       var duration = player.state.duration;
