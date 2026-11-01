@@ -254,6 +254,14 @@ class _SoundEditFormState extends State<SoundEditForm> {
     }
   }
 
+  /// Change le volume du formulaire et le répercute en direct sur l'aperçu
+  /// bibliothèque en cours (l'éditeur de point d'entrée suit via son `volume`).
+  void _setVolume(double value) {
+    final volume = value.clamp(0.0, 1.0);
+    _update(() => _volume = volume);
+    widget.notifier?.setLibraryPreviewVolume(widget.sound.id, volume);
+  }
+
   /// Volume « auto » : mesure la sonie du fichier et règle le curseur pour la
   /// ramener à la sonie cible. N'enregistre rien — passe par `_update`, donc le
   /// formulaire devient « modifié » et l'opérateur peut ajuster avant de valider.
@@ -273,7 +281,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
         );
         return;
       }
-      _update(() => _volume = volume);
+      _setVolume(volume);
     } catch (error) {
       if (!mounted) return;
       showCopyableSnackBar(context, 'Échec de la mesure : $error');
@@ -514,7 +522,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
             min: 0.0,
             max: 1.0,
             label: '${(_volume * 100).round()}%',
-            onChanged: (v) => _update(() => _volume = v.clamp(0.0, 1.0)),
+            onChanged: _setVolume,
           ),
         ),
         SizedBox(
@@ -584,6 +592,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
           filePath: widget.sound.filePath,
           waveform: _waveform,
           initialOffsetMs: _startOffsetMs,
+          volume: _volume,
           onChanged: (ms) => _update(() => _startOffsetMs = ms),
         ),
       ],

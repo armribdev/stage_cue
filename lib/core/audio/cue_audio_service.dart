@@ -232,6 +232,11 @@ class CuePreviewPlayer implements PreviewPlayback {
   }
 
   @override
+  void setVolume(double volume) {
+    unawaited(_player.setVolume(volume.clamp(0.0, 1.0) * 100));
+  }
+
+  @override
   Future<void> pause() async {
     if (_paused) return;
     await _player.pause();

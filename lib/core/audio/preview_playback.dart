@@ -26,6 +26,10 @@ abstract interface class PreviewPlayback {
   /// Retourne false si la voix n'a pas pu démarrer.
   Future<bool> playFromPosition(Duration position, {double volume});
 
+  /// Change le volume (0.0 → 1.0) de la lecture en cours, sans la relancer —
+  /// y compris en pause. Sans effet si rien n'est chargé.
+  void setVolume(double volume);
+
   /// Met la lecture en pause (position conservée).
   Future<void> pause();
 
