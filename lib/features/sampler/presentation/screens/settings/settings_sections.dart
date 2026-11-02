@@ -218,11 +218,8 @@ extension _SettingsSections on _SettingsScreenState {
                   case final room?) ...[
                 const SizedBox(height: 8),
                 Text(
-                  '« $room » est la sortie par défaut de Windows, donc celle '
-                  'de la salle : elle n\'est pas proposée comme casque. Pour '
-                  'l\'utiliser comme casque, choisissez une autre sortie par '
-                  'défaut dans Windows (haut-parleurs de la salle), puis '
-                  'actualisez la liste.',
+                  '« $room » est la sortie par défaut de Windows (la salle) : '
+                  'elle n\'est pas proposée comme casque.',
                   style: Theme.of(
                     context,
                   ).textTheme.bodySmall?.copyWith(color: scheme.onSurface),
@@ -230,21 +227,10 @@ extension _SettingsSections on _SettingsScreenState {
               ],
               const SizedBox(height: 8),
               Text(
-                noExtraOutput
-                    ? 'Sans casque, les pré-écoutes sortent sur la salle : le '
-                          'public les entend. En Mode Spectacle, elles sont '
-                          'désactivées.'
-                    : dropdownValue == null
-                    ? 'Désactivé : les pré-écoutes sortent sur la '
-                          'salle, le public les entend. Choisissez un casque '
-                          'pour écouter sans être entendu. En Mode Spectacle, '
-                          'sans casque, les pré-écoutes sont désactivées.'
-                    : 'Les pré-écoutes sortent sur ce périphérique, tandis que '
-                          'les pads et la régie restent sur la sortie système. '
-                          'Si le périphérique est indisponible, la pré-écoute '
-                          'est refusée : elle ne sort jamais sur la salle. '
-                          'La sortie par défaut du système n\'est pas '
-                          'proposée : c\'est celle de la salle.',
+                noExtraOutput || dropdownValue == null
+                    ? 'Sans casque, les pré-écoutes sortent en salle '
+                          '(désactivées en Mode Spectacle).'
+                    : 'Les pré-écoutes sortent sur ce casque, jamais en salle.',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
