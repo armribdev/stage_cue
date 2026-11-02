@@ -500,7 +500,21 @@ class _SoundEditFormState extends State<SoundEditForm> {
     return TextFormField(
       controller: _nameController,
       onChanged: (v) => _update(() => _displayName = v),
-      decoration: InputDecoration(hintText: widget.sound.title),
+      decoration: InputDecoration(
+        hintText: widget.sound.title,
+        // Croix « tout effacer » : le champ vidé retombe sur le titre du
+        // fichier à l'enregistrement (voir `_resolvedName`).
+        suffixIcon: _nameController.text.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                tooltip: 'Effacer le nom',
+                onPressed: () {
+                  _nameController.clear();
+                  _update(() => _displayName = '');
+                },
+              ),
+      ),
     );
   }
 
