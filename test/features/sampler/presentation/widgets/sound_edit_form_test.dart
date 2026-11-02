@@ -45,6 +45,7 @@ void main() {
     bool isQueueMode = false,
     VoidCallback? onSkip,
     VoidCallback? onSaved,
+    VoidCallback? onMarkedUnprocessed,
     SoundEditFormController? controller,
   }) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
@@ -59,6 +60,7 @@ void main() {
             isQueueMode: isQueueMode,
             onSkip: onSkip,
             onSaved: onSaved,
+            onMarkedUnprocessed: onMarkedUnprocessed,
             controller: controller,
           ),
         ),
@@ -133,6 +135,40 @@ void main() {
     // Une fois validé, le bouton retombe sur « Enregistrer » (inactif).
     expect(button('Enregistrer'), findsOneWidget);
     expect(isEnabled(tester, 'Enregistrer'), isFalse);
+  });
+
+  testWidgets('un son traité peut être remis à traiter', (tester) async {
+    await tester.runAsync(() => repository.markSoundsProcessed([soundId]));
+    var marked = 0;
+    await pumpForm(
+      tester,
+      processed: true,
+      onMarkedUnprocessed: () => marked++,
+    );
+
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Marquer non traité'));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+
+    final row = await tester.runAsync(
+      () => (database.select(
+        database.sounds,
+      )..where((s) => s.id.equals(soundId))).getSingle(),
+    );
+    expect(row?.isProcessed, isFalse);
+    expect(marked, 1);
+    // Le formulaire repasse en « à traiter » : Valider actif, plus de bouton.
+    expect(button('Valider'), findsOneWidget);
+    expect(find.text('Marquer non traité'), findsNothing);
+  });
+
+  testWidgets("un son à traiter n'a pas de bouton « Marquer non traité »", (
+    tester,
+  ) async {
+    await pumpForm(tester, processed: false);
+    expect(find.text('Marquer non traité'), findsNothing);
   });
 
   testWidgets('le contrôleur déclenche l\'enregistrement (Ctrl+Entrée)', (

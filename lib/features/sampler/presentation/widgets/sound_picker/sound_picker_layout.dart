@@ -80,6 +80,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
           ? () => _skipToNext(shown)
           : null,
       onDirtyChanged: (dirty) => setState(() => _editDirty = dirty),
+      onMarkedUnprocessed: () => unawaited(_adoptRefreshedSnapshot()),
       // Nom, type ou tags ont pu changer : on reconstruit l'index plutôt que
       // de recharger la seule liste des sons. En file de traitement, on
       // enchaîne ensuite sur le son suivant.
