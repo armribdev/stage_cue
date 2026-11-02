@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../../../../core/audio/waveform_extractor.dart';
@@ -584,7 +585,9 @@ class _SoundEditFormState extends State<SoundEditForm> {
                 ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ),
-            if (widget.notifier != null)
+            // Outil de développement : en production l'enveloppe est
+            // rafraîchie automatiquement au bump de `kWaveformProbeGeneration`.
+            if (kDebugMode && widget.notifier != null)
               TextButton.icon(
                 onPressed: _isRegeneratingWaveform || _waveformRegenerated
                     ? null
