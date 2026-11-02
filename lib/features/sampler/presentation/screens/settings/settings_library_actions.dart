@@ -19,11 +19,7 @@ extension _SettingsLibraryActions on _SettingsScreenState {
       );
       if (!mounted) return;
       if (update == null) {
-        AppSnackBar.show(
-          context,
-          'Vous avez déjà la dernière version',
-          duration: const Duration(seconds: 2),
-        );
+        _flashConfirmation(_kUpdateAction);
         return;
       }
       await runUpdateFlow(context, update);
@@ -153,11 +149,7 @@ extension _SettingsLibraryActions on _SettingsScreenState {
       );
       return;
     }
-    AppSnackBar.show(
-      context,
-      'Bibliothèque(s) Drive actualisée(s)',
-      duration: const Duration(seconds: 2),
-    );
+    _flashConfirmation(_kDriveRefreshAction);
   }
 
   Future<void> _resolveSyncConflict(domain.Library library) async {
@@ -227,14 +219,6 @@ extension _SettingsLibraryActions on _SettingsScreenState {
       await widget.libraryRepository.removeLibrary(library);
       _indexingProgress.remove(_driveProgressKey(library.id));
 
-      if (mounted) {
-        AppSnackBar.show(
-          context,
-          'Dossier Drive retiré avec succès',
-          duration: const Duration(seconds: 2),
-        );
-      }
-
       await _loadDatabaseInfo();
     } catch (e) {
       if (mounted) {
@@ -255,14 +239,6 @@ extension _SettingsLibraryActions on _SettingsScreenState {
       await _repository.removeWatchedPath(watchedPathEntity);
 
       _indexingProgress.remove(_normalizeWatchedPath(watchedPath.path));
-
-      if (mounted) {
-        AppSnackBar.show(
-          context,
-          'Chemin retiré avec succès',
-          duration: const Duration(seconds: 2),
-        );
-      }
 
       await _loadDatabaseInfo();
     } catch (e) {

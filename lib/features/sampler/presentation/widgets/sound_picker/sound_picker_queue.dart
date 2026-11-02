@@ -40,13 +40,13 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
     await _adoptRefreshedSnapshot();
     if (!mounted || !_unprocessedOnly) return;
     if (next == null) {
-      // Plus rien dans la file (ou le son n'en faisait pas partie).
+      // Plus rien dans la file (ou le son n'en faisait pas partie) : le volet
+      // affiche lui-même « Tous les sons sont traités ».
       if (_unprocessedCount == 0) {
         setState(() {
           _editingSound = null;
           _editDirty = false;
         });
-        _showLocalSnackBar('Tous les sons sont traités.');
       }
       return;
     }

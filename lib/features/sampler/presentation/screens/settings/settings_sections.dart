@@ -388,6 +388,7 @@ extension _SettingsSections on _SettingsScreenState {
   /// (voir `windows/installer/stage_cue.iss`).
   Widget _buildUpdateCard() {
     final scheme = Theme.of(context).colorScheme;
+    final upToDate = _confirmedAction == _kUpdateAction;
     return _buildSettingsSectionCard(
       title: _buildSectionTitleRow(
         icon: Icons.system_update_outlined,
@@ -407,15 +408,17 @@ extension _SettingsSections on _SettingsScreenState {
           ),
           const SizedBox(width: 12),
           OutlinedButton.icon(
-            onPressed: _isCheckingForUpdate ? null : _checkForUpdatesManually,
+            onPressed: _isCheckingForUpdate || upToDate
+                ? null
+                : _checkForUpdatesManually,
             icon: _isCheckingForUpdate
                 ? const SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.refresh, size: 18),
-            label: const Text('Vérifier les mises à jour'),
+                : Icon(upToDate ? Icons.check : Icons.refresh, size: 18),
+            label: Text(upToDate ? 'Déjà à jour' : 'Vérifier les mises à jour'),
           ),
         ],
       ),
@@ -445,10 +448,11 @@ extension _SettingsSections on _SettingsScreenState {
       );
     }
 
+    final refreshed = _confirmedAction == _kDriveRefreshAction;
     return BoxedIconButton(
-      icon: Icons.refresh,
-      tooltip: 'Actualiser depuis Drive',
-      onPressed: _refreshAllFromDrive,
+      icon: refreshed ? Icons.check : Icons.refresh,
+      tooltip: refreshed ? 'Actualisé' : 'Actualiser depuis Drive',
+      onPressed: refreshed ? null : _refreshAllFromDrive,
     );
   }
 
@@ -460,19 +464,16 @@ extension _SettingsSections on _SettingsScreenState {
 
     Widget valueWidget = Text(value, style: valueStyle);
     if (isPath && value.isNotEmpty) {
+      final copied = _confirmedAction == 'copy-path:$value';
       valueWidget = MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: () async {
             await Clipboard.setData(ClipboardData(text: value));
             if (!mounted) return;
-            AppSnackBar.show(
-              context,
-              'Chemin copié',
-              duration: const Duration(seconds: 2),
-            );
+            _flashConfirmation('copy-path:$value');
           },
-          child: Text(value, style: valueStyle),
+          child: Text(copied ? 'Chemin copié ✓' : value, style: valueStyle),
         ),
       );
     }
