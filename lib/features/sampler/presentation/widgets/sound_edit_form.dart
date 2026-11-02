@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../../../../core/audio/waveform_extractor.dart';
+import '../../../../core/logging/app_log.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/app_snackbar.dart';
 import '../../data/repositories/sound_repository.dart';
@@ -41,6 +42,10 @@ class SoundEditForm extends StatefulWidget {
   /// son suivant.
   final VoidCallback? onMarkedUnprocessed;
 
+  /// Notifié après la bascule du favori (écrit en base immédiatement, hors du
+  /// cycle « modifier puis enregistrer ») — l'appelant rafraîchit sa liste.
+  final ValueChanged<bool>? onFavoriteChanged;
+
   /// File de traitement active : « Passer » apparaît en pied de formulaire, et
   /// l'appelant enchaîne sur le son suivant dans [onSaved].
   final bool isQueueMode;
@@ -62,6 +67,7 @@ class SoundEditForm extends StatefulWidget {
     this.onSaved,
     this.onDirtyChanged,
     this.onMarkedUnprocessed,
+    this.onFavoriteChanged,
     this.isQueueMode = false,
     this.onSkip,
     this.autoPlayEntryPoint = false,
@@ -133,11 +139,16 @@ class _SoundEditFormState extends State<SoundEditForm> {
   /// (l'entité reçue en `widget.sound` n'est pas rafraîchie après coup).
   late bool _isProcessed;
 
+  /// Favori : écrit en base dès le tap, donc hors baseline `dirty`.
+  late bool _isFavorite;
+  bool _isTogglingFavorite = false;
+
   @override
   void initState() {
     super.initState();
     final sound = widget.sound;
     _isProcessed = sound.isProcessed;
+    _isFavorite = sound.isFavorite;
     widget.controller?._save = save;
     _displayName = _baseDisplayName = sound.displayName;
     _nameController = TextEditingController(text: _displayName);
@@ -288,6 +299,31 @@ class _SoundEditFormState extends State<SoundEditForm> {
       if (!mounted) return;
       setState(() => _isSaving = false);
       showCopyableSnackBar(context, 'Erreur : $error');
+    }
+  }
+
+  /// Bascule le favori et l'écrit tout de suite : un tap sur l'étoile n'est pas
+  /// une « modification » à valider avec le reste du formulaire.
+  Future<void> _toggleFavorite() async {
+    final notifier = widget.notifier;
+    if (notifier == null || _isTogglingFavorite) return;
+    setState(() => _isTogglingFavorite = true);
+    try {
+      final next = await notifier.toggleSoundFavorite(widget.sound.id);
+      if (!mounted) return;
+      setState(() => _isFavorite = next);
+      widget.onFavoriteChanged?.call(next);
+    } catch (error) {
+      AppLog.warn(
+        'Bascule du favori échouée (son ${widget.sound.id}) : $error',
+      );
+      if (!mounted) return;
+      showCopyableSnackBar(
+        context,
+        'Impossible de modifier le favori : $error',
+      );
+    } finally {
+      if (mounted) setState(() => _isTogglingFavorite = false);
     }
   }
 
@@ -480,6 +516,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
   }
 
   Widget _buildHeader() {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
         SoundTypeAvatar(
@@ -497,6 +534,20 @@ class _SoundEditFormState extends State<SoundEditForm> {
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
         ),
+        if (widget.notifier != null) ...[
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: _isFavorite
+                ? 'Retirer des favoris'
+                : 'Ajouter aux favoris',
+            onPressed: _isTogglingFavorite ? null : _toggleFavorite,
+            icon: Icon(
+              _isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
+              size: 24,
+            ),
+            color: _isFavorite ? scheme.primary : scheme.onSurfaceVariant,
+          ),
+        ],
       ],
     );
   }
