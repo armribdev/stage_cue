@@ -87,6 +87,13 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
           : null,
       onDirtyChanged: (dirty) => setState(() => _editDirty = dirty),
       onMarkedUnprocessed: () => unawaited(_adoptRefreshedSnapshot()),
+      // Le favori est déjà en base et dans l'instantané en mémoire : on met à
+      // jour le son édité (sinon une recréation du formulaire relirait l'ancien
+      // état) et la liste (filtre « favoris », tri).
+      onFavoriteChanged: (isFavorite) {
+        setState(() => _editingSound = sound.copyWith(isFavorite: isFavorite));
+        unawaited(_adoptRefreshedSnapshot(refresh: false));
+      },
       // Nom, type ou tags ont pu changer : on reconstruit l'index plutôt que
       // de recharger la seule liste des sons. En file de traitement, on
       // enchaîne ensuite sur le son suivant.
