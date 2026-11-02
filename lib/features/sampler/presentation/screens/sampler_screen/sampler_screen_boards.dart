@@ -127,7 +127,7 @@ extension _SamplerScreenBoards on _SamplerScreenState {
     );
   }
 
-  /// Actions sur une scène via menu contextuel — clic droit sur le titre (desktop).
+  /// Actions sur une scène via menu contextuel — clic droit sur une scène du menu déroulant (desktop).
   Future<void> _showBoardContextMenu(
     SoundBoard board,
     Offset globalPosition,

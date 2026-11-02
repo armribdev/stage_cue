@@ -180,7 +180,12 @@ class BoardsDrawer extends StatelessWidget {
 // ---------- Sélecteur de scène (desktop) ----------
 
 /// Menu déroulant desktop pour choisir / créer une scène.
-class BoardSceneSelector extends StatelessWidget {
+///
+/// Ouvert via `showMenu` plutôt que `PopupMenuButton.child` : ce dernier pose
+/// son propre `InkWell`, dont le fond de survol (couleur du thème) ne peut pas
+/// être neutralisé sans aussi retirer le survol des lignes du menu. Ici le
+/// survol ne change que la couleur du texte et du chevron.
+class BoardSceneSelector extends StatefulWidget {
   final List<SoundBoard> boards;
   final SoundBoard? selectedBoard;
   final bool isBoardsLoading;
@@ -200,92 +205,152 @@ class BoardSceneSelector extends StatelessWidget {
   });
 
   @override
+  State<BoardSceneSelector> createState() => _BoardSceneSelectorState();
+}
+
+class _BoardSceneSelectorState extends State<BoardSceneSelector> {
+  bool _hovered = false;
+
+  Future<void> _openMenu(BuildContext context) async {
+    final scheme = Theme.of(context).colorScheme;
+    final selectedId = widget.selectedBoard?.id;
+
+    final button = context.findRenderObject()! as RenderBox;
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(
+          Offset(0, button.size.height + 8),
+          ancestor: overlay,
+        ),
+        button.localToGlobal(
+          button.size.bottomRight(const Offset(0, 8)),
+          ancestor: overlay,
+        ),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    final value = await showMenu<Object>(
+      context: context,
+      position: position,
+      popUpAnimationStyle: AnimationStyle.noAnimation,
+      items: [
+        if (widget.isBoardsLoading)
+          const PopupMenuItem<Object>(
+            enabled: false,
+            child: Skeleton(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SkeletonLine(widthFactor: 0.7),
+                  SizedBox(height: 14),
+                  SkeletonLine(widthFactor: 0.5),
+                  SizedBox(height: 14),
+                  SkeletonLine(widthFactor: 0.6),
+                ],
+              ),
+            ),
+          )
+        else if (widget.boards.isEmpty)
+          const PopupMenuItem<Object>(
+            enabled: false,
+            child: Text('Aucune scène'),
+          )
+        else
+          ...widget.boards.map(
+            (board) => PopupMenuItem<Object>(
+              value: board,
+              height: AppMenu.itemHeight,
+              padding: AppMenu.itemPadding,
+              // Clic droit sur une scène de la liste : on ferme le menu puis
+              // on ouvre ses actions (renommer, dupliquer, supprimer) là où
+              // l'on a cliqué.
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onSecondaryTapDown: (details) {
+                  Navigator.of(context).pop();
+                  unawaited(
+                    widget.onBoardContextMenu(board, details.globalPosition),
+                  );
+                },
+                child: SizedBox(
+                  height: AppMenu.itemHeight,
+                  child: Row(
+                    children: [
+                      if (board.id == selectedId)
+                        Icon(
+                          Icons.check_rounded,
+                          size: 18,
+                          color: scheme.primary,
+                        )
+                      else
+                        const SizedBox(width: 18),
+                      const SizedBox(width: AppSpacing.sm),
+                      if (board.color != null) ...[
+                        BoardTileIcon(color: board.color!),
+                        const SizedBox(width: AppSpacing.sm),
+                      ],
+                      Expanded(child: Text(board.name)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        const PopupMenuDivider(),
+        PopupMenuItem<Object>(
+          value: 'create',
+          height: AppMenu.itemHeight,
+          padding: AppMenu.itemPadding,
+          child: const Row(
+            children: [
+              Icon(Icons.add, size: 18),
+              SizedBox(width: AppSpacing.sm),
+              Text('Nouvelle scène'),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (!mounted || value == null) return;
+    if (value is SoundBoard) {
+      await widget.onSelectBoard(value);
+    } else if (value == 'create') {
+      await widget.onCreateBoard();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final color = _hovered ? scheme.onSurface : scheme.onSurfaceVariant;
+    final board = widget.selectedBoard;
 
     return Align(
       alignment: Alignment.centerLeft,
-      child: PopupMenuButton<Object>(
-        tooltip: '',
-        offset: const Offset(0, 48),
-        popUpAnimationStyle: AnimationStyle.noAnimation,
-        onSelected: (value) async {
-          if (value is SoundBoard) {
-            await onSelectBoard(value);
-          } else if (value == 'create') {
-            await onCreateBoard();
-          }
-        },
-        itemBuilder: (context) => [
-          if (isBoardsLoading)
-            const PopupMenuItem<Object>(
-              enabled: false,
-              child: Skeleton(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SkeletonLine(widthFactor: 0.7),
-                    SizedBox(height: 14),
-                    SkeletonLine(widthFactor: 0.5),
-                    SizedBox(height: 14),
-                    SkeletonLine(widthFactor: 0.6),
-                  ],
-                ),
+      // `Builder` : le contexte doit mesurer l'étiquette, pas l'`Align` pleine
+      // largeur, pour ancrer le menu juste sous le nom de la scène.
+      child: Builder(
+        builder: (context) => MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => unawaited(_openMenu(context)),
+            child: BoardTitleLabel(
+              board: board,
+              framed: false,
+              color: color,
+              trailing: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: color,
               ),
-            )
-          else if (boards.isEmpty)
-            const PopupMenuItem<Object>(
-              enabled: false,
-              child: Text('Aucune scène'),
-            )
-          else
-            ...boards.map(
-              (board) => PopupMenuItem<Object>(
-                value: board,
-                height: AppMenu.itemHeight,
-                padding: AppMenu.itemPadding,
-                child: Row(
-                  children: [
-                    if (board.id == selectedBoard?.id)
-                      Icon(Icons.check_rounded, size: 18, color: scheme.primary)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: AppSpacing.sm),
-                    if (board.color != null) ...[
-                      BoardTileIcon(color: board.color!),
-                      const SizedBox(width: AppSpacing.sm),
-                    ],
-                    Expanded(child: Text(board.name)),
-                  ],
-                ),
-              ),
-            ),
-          const PopupMenuDivider(),
-          PopupMenuItem<Object>(
-            value: 'create',
-            height: AppMenu.itemHeight,
-            padding: AppMenu.itemPadding,
-            child: const Row(
-              children: [
-                Icon(Icons.add, size: 18),
-                SizedBox(width: AppSpacing.sm),
-                Text('Nouvelle scène'),
-              ],
-            ),
-          ),
-        ],
-        child: GestureDetector(
-          onSecondaryTapDown: selectedBoard != null
-              ? (details) =>
-                    onBoardContextMenu(selectedBoard!, details.globalPosition)
-              : null,
-          child: BoardTitleLabel(
-            board: selectedBoard,
-            trailing: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 18,
-              color: scheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -298,9 +363,21 @@ class BoardSceneSelector extends StatelessWidget {
 
 /// Pastille titre de scène (point couleur + nom) pour l'AppBar.
 class BoardTitleLabel extends StatelessWidget {
-  const BoardTitleLabel({super.key, this.board, this.trailing});
+  const BoardTitleLabel({
+    super.key,
+    this.board,
+    this.trailing,
+    this.framed = true,
+    this.color,
+  });
 
   final SoundBoard? board;
+
+  /// Couleur du nom (défaut : celle du titre d'AppBar).
+  final Color? color;
+
+  /// `false` : ni fond ni bordure, juste point de couleur + nom.
+  final bool framed;
 
   /// Chevron du sélecteur desktop — absent sur le titre mobile (pas de menu
   /// déroulant, le tiroir des scènes s'ouvre par le hamburger).
@@ -318,11 +395,13 @@ class BoardTitleLabel extends StatelessWidget {
         horizontal: AppSpacing.sm + 2,
         vertical: 6,
       ),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainer,
-        borderRadius: AppRadius.radiusMd,
-        border: Border.fromBorderSide(AppElevation.border(scheme)),
-      ),
+      decoration: framed
+          ? BoxDecoration(
+              color: scheme.surfaceContainer,
+              borderRadius: AppRadius.radiusMd,
+              border: Border.fromBorderSide(AppElevation.border(scheme)),
+            )
+          : null,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -336,7 +415,11 @@ class BoardTitleLabel extends StatelessWidget {
             child: Text(
               board?.name ?? 'Scène',
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ),
           ?trailing,
