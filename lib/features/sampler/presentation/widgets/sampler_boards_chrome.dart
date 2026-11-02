@@ -191,7 +191,7 @@ class BoardSceneSelector extends StatefulWidget {
   final bool isBoardsLoading;
   final Future<void> Function(SoundBoard board) onSelectBoard;
   final Future<void> Function() onCreateBoard;
-  final Future<void> Function(SoundBoard board, Offset position)
+  final Future<bool> Function(SoundBoard board, Offset position)
   onBoardContextMenu;
 
   const BoardSceneSelector({
@@ -265,36 +265,42 @@ class _BoardSceneSelectorState extends State<BoardSceneSelector> {
               value: board,
               height: AppMenu.itemHeight,
               padding: AppMenu.itemPadding,
-              // Clic droit sur une scène de la liste : on ferme le menu puis
-              // on ouvre ses actions (renommer, dupliquer, supprimer) là où
-              // l'on a cliqué.
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onSecondaryTapDown: (details) {
-                  Navigator.of(context).pop();
-                  unawaited(
-                    widget.onBoardContextMenu(board, details.globalPosition),
-                  );
-                },
-                child: SizedBox(
-                  height: AppMenu.itemHeight,
-                  child: Row(
-                    children: [
-                      if (board.id == selectedId)
-                        Icon(
-                          Icons.check_rounded,
-                          size: 18,
-                          color: scheme.primary,
-                        )
-                      else
-                        const SizedBox(width: 18),
-                      const SizedBox(width: AppSpacing.sm),
-                      if (board.color != null) ...[
-                        BoardTileIcon(color: board.color!),
+              // Clic droit sur une scène de la liste : ses actions (renommer,
+              // dupliquer, supprimer) s'ouvrent par-dessus le menu, qui reste
+              // ouvert si on les écarte. Une action choisie change la liste
+              // (nom, suppression) : le menu, devenu périmé, se ferme alors.
+              child: Builder(
+                builder: (itemContext) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onSecondaryTapDown: (details) async {
+                    final acted = await widget.onBoardContextMenu(
+                      board,
+                      details.globalPosition,
+                    );
+                    if (acted && itemContext.mounted) {
+                      Navigator.of(itemContext).pop();
+                    }
+                  },
+                  child: SizedBox(
+                    height: AppMenu.itemHeight,
+                    child: Row(
+                      children: [
+                        if (board.id == selectedId)
+                          Icon(
+                            Icons.check_rounded,
+                            size: 18,
+                            color: scheme.primary,
+                          )
+                        else
+                          const SizedBox(width: 18),
                         const SizedBox(width: AppSpacing.sm),
+                        if (board.color != null) ...[
+                          BoardTileIcon(color: board.color!),
+                          const SizedBox(width: AppSpacing.sm),
+                        ],
+                        Expanded(child: Text(board.name)),
                       ],
-                      Expanded(child: Text(board.name)),
-                    ],
+                    ),
                   ),
                 ),
               ),
