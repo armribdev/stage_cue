@@ -361,7 +361,11 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
       inBoard: inBoard,
       isCurrentVariant: isCurrentVariant,
     );
-    if (_isPadVariant) return action;
+    // En Mode Spectacle sans casque configuré, l'aperçu sortirait en salle :
+    // pas de bouton plutôt qu'un bouton qui ne fait que refuser.
+    if (_isPadVariant || widget.notifier.isRoomPreviewBlockedInLive) {
+      return action;
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

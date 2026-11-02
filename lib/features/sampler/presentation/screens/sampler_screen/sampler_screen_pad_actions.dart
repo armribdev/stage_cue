@@ -263,8 +263,12 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
           : null,
       // Affiché dès que la sortie séparée est possible (Windows), même sans
       // casque choisi : l'appui explique alors quoi configurer plutôt que de
-      // laisser le bouton introuvable. Jamais sur un brouillon sans son.
-      onCue: CueAudioService.isSupported && padItem.pad.sounds.isNotEmpty
+      // laisser le bouton introuvable. Sauf en Mode Spectacle, où l'aperçu est
+      // refusé sans casque : le bouton disparaît. Jamais sur un brouillon sans son.
+      onCue:
+          CueAudioService.isSupported &&
+              !_notifier.isRoomPreviewBlockedInLive &&
+              padItem.pad.sounds.isNotEmpty
           ? () => unawaited(_notifier.previewPadOnCue(padItem))
           : null,
     );

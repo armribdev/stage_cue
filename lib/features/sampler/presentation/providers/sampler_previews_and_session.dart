@@ -87,16 +87,20 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     return _startLibraryPreview(sound, requireCue: requireCue);
   }
 
+  /// Vrai en Mode Spectacle quand une pré-écoute sortirait en salle (sortie
+  /// casque possible sur la plateforme mais aucune choisie). L'UI s'en sert pour
+  /// ne pas proposer les boutons d'aperçu.
+  bool get isRoomPreviewBlockedInLive =>
+      _isLiveSessionActive &&
+      CueAudioService.isSupported &&
+      !CueAudioService.instance.isCueActive;
+
   /// En Mode Spectacle, sur une plateforme capable d'une sortie casque, une
   /// pré-écoute sans casque choisi sortirait en salle : on la refuse (message
   /// via [consumeLastPreviewError]) plutôt que de la laisser entendre du
   /// public. Hors spectacle, ou sans sortie séparée possible, rien ne change.
   bool _refuseRoomPreviewInLive() {
-    if (!_isLiveSessionActive ||
-        !CueAudioService.isSupported ||
-        CueAudioService.instance.isCueActive) {
-      return false;
-    }
+    if (!isRoomPreviewBlockedInLive) return false;
     _refusePreview(
       const CueUnavailableException(
         'Aucun casque configuré — pré-écoute désactivée en Mode Spectacle '
