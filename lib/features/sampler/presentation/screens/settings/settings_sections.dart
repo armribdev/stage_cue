@@ -123,11 +123,20 @@ extension _SettingsSections on _SettingsScreenState {
         listenable: widget.appPreferences,
         builder: (context, _) {
           final selectedId = widget.appPreferences.cueOutputDeviceId;
-          // Le device persisté peut être absent de la liste (débranché) : on
-          // l'ajoute pour que le Dropdown ait toujours une valeur valide.
+          // Le device persisté peut être absent de la liste (débranché) :
+          // `_loadCueDevices` repasse alors la préférence sur « Désactivé ». En
+          // attendant (image intermédiaire), le menu affiche déjà « Désactivé »
+          // pour garder une valeur valide, sauf pendant la toute première
+          // énumération où l'on ne sait encore rien du casque.
           final knownIds = _cueDevices.map((d) => d.id).toSet();
-          final missingSelected =
-              selectedId != null && !knownIds.contains(selectedId);
+          final searchingSelected =
+              selectedId != null &&
+              !_cueDevicesLoaded &&
+              !knownIds.contains(selectedId);
+          final dropdownValue =
+              searchingSelected || knownIds.contains(selectedId)
+              ? selectedId
+              : null;
           // Énumération terminée et rien d'autre que la sortie de la salle :
           // un menu vide serait trompeur, on l'annonce à la place.
           final noExtraOutput = _cueDevicesLoaded && _cueDevices.isEmpty;
@@ -153,12 +162,8 @@ extension _SettingsSections on _SettingsScreenState {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        selectedId == null
-                            ? 'Aucune sortie supplémentaire détectée. Branchez '
-                                  'un casque puis actualisez la liste.'
-                            : 'Le casque choisi est indisponible et aucune '
-                                  'autre sortie supplémentaire n\'est détectée. '
-                                  'Rebranchez-le puis actualisez la liste.',
+                        'Aucune sortie supplémentaire détectée. Branchez un '
+                        'casque puis actualisez la liste.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ),
@@ -168,11 +173,11 @@ extension _SettingsSections on _SettingsScreenState {
                 SizedBox(
                   width: double.infinity,
                   child: DropdownButtonFormField<String?>(
-                    initialValue: selectedId,
+                    // Clé sur la valeur : `initialValue` n'est lu qu'à la
+                    // création du champ, il faut le recréer quand elle change.
+                    key: ValueKey(dropdownValue),
+                    initialValue: dropdownValue,
                     isExpanded: true,
-                    // Pas d'entrée « Défaut système » : la sortie par défaut est
-                    // celle de la salle, elle ne peut pas servir de casque.
-                    hint: const Text('Choisir un casque'),
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(
@@ -182,6 +187,13 @@ extension _SettingsSections on _SettingsScreenState {
                       isDense: true,
                     ),
                     items: [
+                      // « Désactivé » = aucun casque (valeur `null`). Ce n'est
+                      // pas la sortie par défaut du système proposée comme
+                      // casque : celle-ci est la salle, elle reste exclue.
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Désactivé'),
+                      ),
                       for (final device in _cueDevices)
                         DropdownMenuItem<String?>(
                           value: device.id,
@@ -190,11 +202,11 @@ extension _SettingsSections on _SettingsScreenState {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      if (missingSelected)
+                      if (searchingSelected)
                         DropdownMenuItem<String?>(
                           value: selectedId,
                           child: const Text(
-                            'Périphérique indisponible',
+                            'Recherche du périphérique…',
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -222,8 +234,8 @@ extension _SettingsSections on _SettingsScreenState {
                     ? 'Sans casque, les pré-écoutes sortent sur la salle : le '
                           'public les entend. En Mode Spectacle, elles sont '
                           'désactivées.'
-                    : selectedId == null
-                    ? 'Aucun casque choisi : les pré-écoutes sortent sur la '
+                    : dropdownValue == null
+                    ? 'Désactivé : les pré-écoutes sortent sur la '
                           'salle, le public les entend. Choisissez un casque '
                           'pour écouter sans être entendu. En Mode Spectacle, '
                           'sans casque, les pré-écoutes sont désactivées.'
