@@ -5,8 +5,13 @@ import '../../../../core/utils/string_utils.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../utils/tag_category_ui.dart';
+import 'boxed_icon_button.dart';
 
 /// Affiche les tags sélectionnés + un bouton "+" qui ouvre un panneau inline.
+///
+/// Le panneau reste ouvert après chaque sélection (on pose rarement un seul
+/// tag) ; il se referme via sa croix, le bouton « + », ou tout seul quand il
+/// ne reste plus rien à ajouter.
 class TagChipsEditor extends StatefulWidget {
   final List<TagCategoryWithTags> tagCatalog;
   final Set<int> selectedTagIds;
@@ -28,50 +33,73 @@ class TagChipsEditor extends StatefulWidget {
 class _TagChipsEditorState extends State<TagChipsEditor> {
   bool _isPickerOpen = false;
 
-  List<TagItem> get _allTags {
+  // Dérivés du catalogue, recalculés seulement quand celui-ci change (et non à
+  // chaque `build`, appelé à chaque coche/décoche).
+  late List<TagItem> _allTags;
+  late Map<int, Color> _categoryColors;
+  late Map<int, String> _searchKeys;
+
+  @override
+  void initState() {
+    super.initState();
+    _rebuildCatalogCache();
+  }
+
+  @override
+  void didUpdateWidget(TagChipsEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.tagCatalog, widget.tagCatalog)) {
+      _rebuildCatalogCache();
+    }
+  }
+
+  void _rebuildCatalogCache() {
     final byId = <int, TagItem>{};
+    final colors = <int, Color>{};
     for (final cat in widget.tagCatalog) {
+      colors[cat.category.id] = Color(cat.category.color);
       for (final tag in cat.tags) {
         byId[tag.id] = tag;
       }
     }
-    final tags = byId.values.toList();
-    tags.sort(
-      (a, b) =>
-          normalizeForSearch(a.name).compareTo(normalizeForSearch(b.name)),
-    );
-    return tags;
+    final keys = {
+      for (final tag in byId.values) tag.id: normalizeForSearch(tag.name),
+    };
+    // Même ordre partout (puces et panneau) : nom normalisé (insensible à la
+    // casse et aux accents), l'id départageant les homonymes.
+    final tags = byId.values.toList()
+      ..sort((a, b) {
+        final byName = keys[a.id]!.compareTo(keys[b.id]!);
+        return byName != 0 ? byName : a.id.compareTo(b.id);
+      });
+    _allTags = tags;
+    _categoryColors = colors;
+    _searchKeys = keys;
   }
 
-  List<TagItem> get _selectedTags =>
-      (_allTags.where((t) => widget.selectedTagIds.contains(t.id)).toList()
-        ..sort((a, b) => a.name.compareTo(b.name)));
-
-  List<TagItem> get _availableTags =>
-      _allTags.where((t) => !widget.selectedTagIds.contains(t.id)).toList();
-
-  Color? _categoryColor(int categoryId) {
-    for (final c in widget.tagCatalog) {
-      if (c.category.id == categoryId) return Color(c.category.color);
-    }
-    return null;
-  }
+  void _togglePicker() => setState(() => _isPickerOpen = !_isPickerOpen);
 
   @override
   Widget build(BuildContext context) {
-    if (widget.tagCatalog.every((c) => c.tags.isEmpty)) {
-      return const Text('Aucun tag disponible');
+    if (_allTags.isEmpty) {
+      return Text(
+        'Aucun tag disponible',
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      );
     }
 
-    final selectedTags = _selectedTags;
-    final availableTags = _availableTags;
-
-    // Auto-fermeture si tous les tags sont déjà ajoutés
-    if (_isPickerOpen && availableTags.isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _isPickerOpen = false);
-      });
-    }
+    final selectedIds = widget.selectedTagIds;
+    final selectedTags = [
+      for (final t in _allTags)
+        if (selectedIds.contains(t.id)) t,
+    ];
+    final availableTags = [
+      for (final t in _allTags)
+        if (!selectedIds.contains(t.id)) t,
+    ];
+    // Dérivé plutôt que muté depuis `build` : si un tag est retiré plus tard,
+    // le panneau ne se rouvre pas de lui-même.
+    final pickerOpen = _isPickerOpen && availableTags.isNotEmpty;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -82,20 +110,28 @@ class _TagChipsEditorState extends State<TagChipsEditor> {
           runSpacing: 8,
           children: [
             for (final tag in selectedTags) _buildSelectedChip(tag),
-            if (availableTags.isNotEmpty) _buildAddButton(context),
+            if (availableTags.isNotEmpty) _buildAddButton(context, pickerOpen),
           ],
         ),
         AnimatedSize(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
           alignment: Alignment.topLeft,
-          child: _isPickerOpen && availableTags.isNotEmpty
+          child: pickerOpen
               ? Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: _TagPickerPanel(
                     availableTags: availableTags,
                     tagCatalog: widget.tagCatalog,
-                    onSelected: (tag) => widget.onTagAdded(tag.id),
+                    categoryColors: _categoryColors,
+                    searchKeys: _searchKeys,
+                    onSelected: (tag) {
+                      widget.onTagAdded(tag.id);
+                      // Dernier tag disponible : plus rien à proposer.
+                      if (availableTags.length <= 1) {
+                        setState(() => _isPickerOpen = false);
+                      }
+                    },
                     onClose: () => setState(() => _isPickerOpen = false),
                   ),
                 )
@@ -105,36 +141,42 @@ class _TagChipsEditorState extends State<TagChipsEditor> {
     );
   }
 
-  Widget _buildAddButton(BuildContext context) {
-    const size = 34.0;
+  Widget _buildAddButton(BuildContext context, bool open) {
     final scheme = Theme.of(context).colorScheme;
-    final open = _isPickerOpen;
-    return InkWell(
-      onTap: () => setState(() => _isPickerOpen = !_isPickerOpen),
-      borderRadius: BorderRadius.circular(8),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: open ? scheme.primaryContainer : Colors.transparent,
-          border: Border.all(
-            color: open ? scheme.primary : scheme.outlineVariant,
+    return Semantics(
+      button: true,
+      child: Tooltip(
+        message: open ? 'Fermer la liste des tags' : 'Ajouter un tag',
+        child: InkWell(
+          onTap: _togglePicker,
+          borderRadius: AppRadius.radiusSm,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: open ? AppColors.accentSoft : Colors.transparent,
+              border: Border.fromBorderSide(
+                open
+                    ? AppElevation.emphasizedBorder(scheme)
+                    : AppElevation.border(scheme),
+              ),
+              borderRadius: AppRadius.radiusSm,
+            ),
+            child: Icon(
+              open ? Icons.close : Icons.add,
+              size: 16,
+              color: open ? scheme.primary : scheme.onSurfaceVariant,
+            ),
           ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          open ? Icons.close : Icons.add,
-          size: 18,
-          color: open ? scheme.primary : scheme.onSurfaceVariant,
         ),
       ),
     );
   }
 
   Widget _buildSelectedChip(TagItem tag) {
-    final color = _categoryColor(tag.categoryId);
+    final color = _categoryColors[tag.categoryId];
     return InputChip(
       label: Text(tag.name),
       backgroundColor: color?.withAlpha(24),
@@ -149,12 +191,19 @@ class _TagChipsEditorState extends State<TagChipsEditor> {
 class _TagPickerPanel extends StatefulWidget {
   final List<TagItem> availableTags;
   final List<TagCategoryWithTags> tagCatalog;
+  final Map<int, Color> categoryColors;
+
+  /// Clé de recherche (nom normalisé) de chaque tag, calculée une fois par le
+  /// parent plutôt qu'à chaque frappe.
+  final Map<int, String> searchKeys;
   final ValueChanged<TagItem> onSelected;
   final VoidCallback onClose;
 
   const _TagPickerPanel({
     required this.availableTags,
     required this.tagCatalog,
+    required this.categoryColors,
+    required this.searchKeys,
     required this.onSelected,
     required this.onClose,
   });
@@ -164,41 +213,72 @@ class _TagPickerPanel extends StatefulWidget {
 }
 
 class _TagPickerPanelState extends State<_TagPickerPanel> {
-  String _query = '';
+  final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
   int? _categoryFilter;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  String get _query => normalizeForSearch(_searchController.text);
 
   List<TagCategoryWithTags> get _activeCategories {
     final ids = widget.availableTags.map((t) => t.categoryId).toSet();
     return widget.tagCatalog.where((c) => ids.contains(c.category.id)).toList();
   }
 
-  Color? _categoryColor(int categoryId) {
-    for (final c in widget.tagCatalog) {
-      if (c.category.id == categoryId) return Color(c.category.color);
-    }
-    return null;
-  }
-
-  List<TagItem> get _filtered {
-    final q = normalizeForSearch(_query);
+  List<TagItem> _filtered(int? categoryFilter) {
+    final q = _query;
     return widget.availableTags.where((t) {
-      if (_categoryFilter != null && t.categoryId != _categoryFilter) {
+      if (categoryFilter != null && t.categoryId != categoryFilter) {
         return false;
       }
       if (q.isEmpty) return true;
-      return normalizeForSearch(t.name).contains(q);
+      return (widget.searchKeys[t.id] ?? '').contains(q);
     }).toList();
+  }
+
+  /// Sélectionne un tag et prépare l'ajout suivant : recherche vidée (le tag
+  /// choisi disparaît de la liste), filtre de catégorie conservé, focus rendu
+  /// au champ.
+  void _select(TagItem tag) {
+    widget.onSelected(tag);
+    _searchController.clear();
+    _searchFocus.requestFocus();
+    setState(() {});
+  }
+
+  /// Entrée valide le premier résultat d'une recherche saisie.
+  void _submit(int? categoryFilter) {
+    if (_query.isEmpty) return;
+    final results = _filtered(categoryFilter);
+    if (results.isEmpty) {
+      _searchFocus.requestFocus();
+      return;
+    }
+    _select(results.first);
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final filtered = _filtered;
     final categories = _activeCategories;
+    // Le filtre mémorisé peut viser une catégorie dont le dernier tag vient
+    // d'être posé : on l'ignore alors, sinon la liste serait vide sans qu'aucune
+    // pastille de filtre ne soit visible pour s'en dépêtrer.
+    final categoryFilter =
+        categories.any((c) => c.category.id == _categoryFilter)
+        ? _categoryFilter
+        : null;
+    final filtered = _filtered(categoryFilter);
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        border: Border.all(color: scheme.outlineVariant),
+        border: Border.fromBorderSide(AppElevation.border(scheme)),
         borderRadius: AppRadius.radiusLg,
       ),
       child: ClipRRect(
@@ -209,27 +289,29 @@ class _TagPickerPanelState extends State<_TagPickerPanel> {
           children: [
             // En-tête : recherche + fermer
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 10, 8),
+              padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
               child: Row(
                 children: [
                   Expanded(
                     child: TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocus,
                       autofocus: true,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         isDense: true,
-                        hintText: 'Rechercher un tag...',
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        hintText: 'Rechercher un tag… (Entrée pour ajouter)',
+                        prefixIcon: Icon(Icons.search, size: 18),
+                        contentPadding: EdgeInsets.symmetric(vertical: 8),
                       ),
-                      onChanged: (v) => setState(() => _query = v),
+                      onChanged: (_) => setState(() {}),
+                      onSubmitted: (_) => _submit(categoryFilter),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
+                  const SizedBox(width: 4),
+                  BoxedIconButton(
+                    icon: Icons.close,
+                    tooltip: 'Fermer',
                     onPressed: widget.onClose,
-                    icon: const Icon(Icons.close, size: 18),
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
                   ),
                 ],
               ),
@@ -244,16 +326,16 @@ class _TagPickerPanelState extends State<_TagPickerPanel> {
                     _CategoryChip(
                       label: 'Tous',
                       color: null,
-                      selected: _categoryFilter == null,
+                      selected: categoryFilter == null,
                       onTap: () => setState(() => _categoryFilter = null),
                     ),
                     for (final cat in categories)
                       _CategoryChip(
                         label: cat.category.displayLabel,
                         color: Color(cat.category.color),
-                        selected: _categoryFilter == cat.category.id,
+                        selected: categoryFilter == cat.category.id,
                         onTap: () => setState(() {
-                          _categoryFilter = _categoryFilter == cat.category.id
+                          _categoryFilter = categoryFilter == cat.category.id
                               ? null
                               : cat.category.id;
                         }),
@@ -282,10 +364,7 @@ class _TagPickerPanelState extends State<_TagPickerPanel> {
                     children: [
                       for (final tag in filtered)
                         InkWell(
-                          onTap: () {
-                            widget.onSelected(tag);
-                            widget.onClose();
-                          },
+                          onTap: () => _select(tag),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
@@ -299,7 +378,7 @@ class _TagPickerPanelState extends State<_TagPickerPanel> {
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color:
-                                        _categoryColor(tag.categoryId) ??
+                                        widget.categoryColors[tag.categoryId] ??
                                         scheme.outlineVariant,
                                   ),
                                 ),
@@ -345,22 +424,24 @@ class _CategoryChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final accent = color ?? scheme.primary;
+    // Pastille (stade) comme `chipTheme` : pas de rayon codé en dur.
+    const shape = StadiumBorder();
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        customBorder: shape,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           alignment: Alignment.center,
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: selected ? accent.withAlpha(30) : Colors.transparent,
-            border: Border.all(
-              color: selected ? accent : scheme.outlineVariant,
-              width: selected ? 1.5 : 1,
+            shape: StadiumBorder(
+              side: selected
+                  ? BorderSide(color: accent, width: 1.5)
+                  : AppElevation.border(scheme),
             ),
-            borderRadius: BorderRadius.circular(16),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
