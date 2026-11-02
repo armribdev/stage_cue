@@ -17,12 +17,19 @@ class BoxedIconButton extends StatelessWidget {
   final String tooltip;
   final VoidCallback? onPressed;
 
+  /// Cadre rond (cercle) plutôt qu'arrondi `sm` — le côté étant fixe, un rayon
+  /// de [_size] / 2 donne un cercle parfait.
+  final bool circular;
+
+  static const double _size = 32;
+
   const BoxedIconButton({
     super.key,
     this.icon,
     this.child,
     required this.tooltip,
     required this.onPressed,
+    this.circular = false,
   }) : assert(
          (icon == null) != (child == null),
          'Fournir soit icon, soit child — jamais les deux, jamais aucun.',
@@ -31,19 +38,22 @@ class BoxedIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final radius = circular
+        ? BorderRadius.circular(_size / 2)
+        : AppRadius.radiusSm;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Tooltip(
         message: tooltip,
         child: InkWell(
-          borderRadius: AppRadius.radiusSm,
+          borderRadius: radius,
           onTap: onPressed,
           child: Container(
-            width: 32,
-            height: 32,
+            width: _size,
+            height: _size,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              borderRadius: AppRadius.radiusSm,
+              borderRadius: radius,
               border: Border.fromBorderSide(AppElevation.border(scheme)),
             ),
             child:

@@ -11,6 +11,7 @@ import '../../domain/entities/sound_board.dart';
 import '../providers/sampler_provider.dart';
 import 'audio_vu_meter.dart';
 import 'boxed_icon_button.dart';
+import 'circle_hover_button.dart';
 import 'unprocessed_badge.dart';
 import 'waveform_mark_button.dart';
 
@@ -44,13 +45,19 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
       // En session live : la bascule étant la seule action du menu, le hamburger
       // cède la place à un bouton de sortie direct (un clic). Hors session, le
       // hamburger ouvre le tiroir (mode live / bibliothèque / paramètres).
-      leading: isPerformanceMode
-          ? LiveExitButton(onExit: onTogglePerformanceMode)
-          : BoxedIconButton(
-              icon: Icons.menu_rounded,
-              tooltip: 'Menu',
-              onPressed: onOpenMenu,
-            ),
+      // `Center` : le `leading` d'une AppBar impose largeur ET hauteur serrées,
+      // qui étiraient le cadre en rectangle 48×56. Centré, il garde ses 32×32
+      // (cercle parfait) avec de l'air de chaque côté.
+      leading: Center(
+        child: isPerformanceMode
+            ? LiveExitButton(onExit: onTogglePerformanceMode)
+            : BoxedIconButton(
+                icon: Icons.menu_rounded,
+                tooltip: 'Menu',
+                circular: true,
+                onPressed: onOpenMenu,
+              ),
+      ),
       title: BoardTitleLabel(board: selectedBoard),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
@@ -276,23 +283,26 @@ class SamplerDesktopAppBar extends StatelessWidget
     final scheme = Theme.of(context).colorScheme;
     return AppBar(
       automaticallyImplyLeading: false,
-      // Largeur resserrée sur celle de la marque (32px + padding 4px de
-      // chaque côté) : la valeur par défaut (56) laissait un espace mort
-      // avant le sélecteur de scène. `titleSpacing: 0` retire l'espacement
-      // minimal que l'AppBar impose sinon entre `leading` et `title`.
-      leadingWidth: 40,
+      // Largeur resserrée sur celle du fond de survol (40px + 6px de marge de
+      // chaque côté) : la valeur par défaut (56) laissait un espace mort avant
+      // le sélecteur de scène. `titleSpacing: 0` retire l'espacement minimal
+      // que l'AppBar impose sinon entre `leading` et `title`.
+      leadingWidth: 52,
       titleSpacing: 0,
       // Menu hamburger : regroupe mode live / bibliothèque / paramètres. Toujours
       // accessible — c'est la seule porte de sortie du Mode Spectacle.
-      leading: SamplerDesktopMenuButton(
-        unprocessedCount: unprocessedCount,
-        isPerformanceMode: isPerformanceMode,
-        onTogglePerformanceMode: onTogglePerformanceMode,
-        onOpenLibrary: onOpenLibrary,
-        onOpenSettings: onOpenSettings,
-        isWindowsFullScreen: isWindowsFullScreen,
-        onToggleWindowsFullScreen: onToggleWindowsFullScreen,
-        onQuitApp: onQuitApp,
+      // `Center` : sans lui, le `leading` serré étirerait le cadre du bouton.
+      leading: Center(
+        child: SamplerDesktopMenuButton(
+          unprocessedCount: unprocessedCount,
+          isPerformanceMode: isPerformanceMode,
+          onTogglePerformanceMode: onTogglePerformanceMode,
+          onOpenLibrary: onOpenLibrary,
+          onOpenSettings: onOpenSettings,
+          isWindowsFullScreen: isWindowsFullScreen,
+          onToggleWindowsFullScreen: onToggleWindowsFullScreen,
+          onQuitApp: onQuitApp,
+        ),
       ),
       title: BoardSceneSelector(
         boards: boards,
@@ -524,10 +534,10 @@ class LiveExitButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      icon: const LiveModeActiveIcon(),
+    return CircleHoverButton(
       tooltip: 'Quitter la session live',
       onPressed: onExit,
+      builder: (_, _) => const LiveModeActiveIcon(),
     );
   }
 }

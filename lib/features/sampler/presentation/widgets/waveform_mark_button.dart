@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'circle_hover_button.dart';
+
 /// Marque Stage Cue : une forme d'onde dessinée en vectoriel (`CustomPainter`,
 /// pas un asset image) — sert de repère de marque provisoire pour le bouton
-/// menu, en attendant l'identité visuelle définitive. Volontairement sans
-/// cadre/bordure (contrairement à [BoxedIconButton]) : une marque, pas une
-/// action de barre d'outils — seul un effet de survol (couleur + échelle)
-/// signale l'interactivité.
-class WaveformMarkButton extends StatefulWidget {
+/// menu, en attendant l'identité visuelle définitive. Sans cadre au repos ;
+/// au survol, un fond rond ([CircleHoverButton]) et la forme d'onde se teinte
+/// et grossit.
+class WaveformMarkButton extends StatelessWidget {
   const WaveformMarkButton({
     super.key,
     required this.tooltip,
@@ -17,52 +18,21 @@ class WaveformMarkButton extends StatefulWidget {
   final VoidCallback? onPressed;
 
   @override
-  State<WaveformMarkButton> createState() => _WaveformMarkButtonState();
-}
-
-class _WaveformMarkButtonState extends State<WaveformMarkButton> {
-  bool _hovered = false;
-
-  void _setHovered(bool value) {
-    if (_hovered == value) return;
-    setState(() => _hovered = value);
-  }
-
-  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Tooltip(
-        message: widget.tooltip,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => _setHovered(true),
-          onExit: (_) => _setHovered(false),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onPressed,
-            child: SizedBox(
-              width: 32,
-              height: 32,
-              child: Center(
-                child: AnimatedScale(
-                  scale: _hovered ? 1.1 : 1.0,
-                  duration: const Duration(milliseconds: 120),
-                  curve: Curves.easeOut,
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CustomPaint(
-                      painter: _WaveformPainter(
-                        color: _hovered
-                            ? scheme.primary
-                            : scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+    return CircleHoverButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      builder: (context, hovered) => AnimatedScale(
+        scale: hovered ? 1.1 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CustomPaint(
+            painter: _WaveformPainter(
+              color: hovered ? scheme.primary : scheme.onSurfaceVariant,
             ),
           ),
         ),
