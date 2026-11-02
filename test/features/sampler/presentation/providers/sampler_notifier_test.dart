@@ -565,11 +565,12 @@ void main() {
     });
 
     test(
-      'previewPadOnCue sans casque configuré → refus avec message',
+      'previewPadOnCue en spectacle sans casque configuré → refus avec message',
       () async {
         final son = sound(10);
         when(() => repo.getSoundById(10)).thenAnswer((_) async => son);
         final padItem = PadItem(pad: _multipad(1, [son]));
+        n.startLiveSession();
 
         expect(await n.previewPadOnCue(padItem), isFalse);
 
@@ -579,6 +580,19 @@ void main() {
         expect(n.libraryPreviewSoundId, isNull);
       },
     );
+
+    test('previewPadOnCue hors spectacle sans casque → pas de refus '
+        '(sortie par défaut)', () async {
+      final son = sound(10);
+      when(() => repo.getSoundById(10)).thenAnswer((_) async => son);
+      final padItem = PadItem(pad: _multipad(1, [son]));
+
+      await n.previewPadOnCue(padItem);
+
+      // Le lecteur soloud n'existe pas en test (échec générique, avalé) :
+      // l'absence de refus prouve que le chemin « casque requis » n'a pas été pris.
+      expect(n.hasPendingPreviewError, isFalse);
+    });
 
     test('Mode Spectacle sans casque (plateforme capable) → pré-écoute '
         'refusée, jamais en salle', () async {

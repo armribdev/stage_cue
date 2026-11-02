@@ -27,13 +27,17 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
 
   /// Écoute au casque d'un pad du plateau, sans le déclencher en salle.
   ///
-  /// Joue la première variante du pad depuis son point d'entrée. Strict : sans
-  /// casque configuré et disponible, rien ne sort — le refus est exposé via
-  /// [consumeLastPreviewError] (jamais de repli sur la salle, décision 0027).
+  /// Joue la première variante du pad depuis son point d'entrée. Avec un casque
+  /// configuré, c'est strict (jamais de repli sur la salle, décision 0027). Sans
+  /// casque : hors spectacle l'écoute sort sur le périphérique par défaut ; en
+  /// spectacle rien ne sort — le refus est exposé via [consumeLastPreviewError].
   Future<bool> previewPadOnCue(PadItem padItem) async {
     final sounds = padItem.pad.sounds;
     if (sounds.isEmpty) return false;
-    return toggleLibraryPreview(sounds.first.id, requireCue: true);
+    return toggleLibraryPreview(
+      sounds.first.id,
+      requireCue: _isLiveSessionActive,
+    );
   }
 
   /// Message du dernier refus de pré-écoute au casque, sans le consommer.
