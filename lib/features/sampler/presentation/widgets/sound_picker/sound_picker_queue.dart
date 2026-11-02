@@ -98,9 +98,7 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
 
     return Container(
       width: double.infinity,
-      // Le liseré du haut (1 px) s'ajoute au padding du haut : le bas prend
-      // 1 px de plus pour que le bouton soit centré visuellement.
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 9),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
       decoration: BoxDecoration(
         border: Border(top: AppElevation.border(scheme)),
       ),
@@ -150,8 +148,16 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
             child: OutlinedButton(
               onPressed: _toggleUnprocessedOnly,
               style: OutlinedButton.styleFrom(
-                minimumSize: const Size(88, 30),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                // Hauteur auto : texte + padding vertical symétrique. Le thème
+                // est en densité compacte, qui retirerait 8 px à ce padding
+                // (libellé écrasé) — d'où la densité standard locale.
+                visualDensity: VisualDensity.standard,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                minimumSize: const Size(88, 0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 textStyle: const TextStyle(fontSize: 13),
               ),
               child: Text(active ? 'Terminer' : 'Traiter'),
