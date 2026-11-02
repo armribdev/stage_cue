@@ -50,25 +50,33 @@ class UnprocessedDot extends StatelessWidget {
       child: child,
       builder: (context, value, child) {
         if (value <= 0) return child ?? const SizedBox.shrink();
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            ?child,
-            Positioned(
-              top: 4,
-              right: 6,
-              child: IgnorePointer(
-                child: Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: accent,
-                    shape: BoxShape.circle,
+        // `Center` : sous des contraintes serrées (le `leading` d'une `AppBar`
+        // impose toute la hauteur de la barre), un `Stack` seul plaquerait
+        // l'enfant en haut au lieu de le centrer comme le fait le cas sans
+        // point. Les facteurs à 1 gardent le point calé sur l'enfant.
+        return Center(
+          widthFactor: 1,
+          heightFactor: 1,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ?child,
+              Positioned(
+                top: 4,
+                right: 6,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );

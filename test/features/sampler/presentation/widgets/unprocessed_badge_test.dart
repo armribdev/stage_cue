@@ -57,6 +57,34 @@ void main() {
     expect(dot(), findsOneWidget);
   });
 
+  testWidgets(
+    'le point ne décentre pas le bouton dans le leading d\'une AppBar',
+    (tester) async {
+      final count = ValueNotifier<int>(2);
+      const childKey = Key('menu');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            appBar: AppBar(
+              automaticallyImplyLeading: false,
+              leadingWidth: 40,
+              leading: UnprocessedDot(
+                count: count,
+                child: const SizedBox(key: childKey, width: 16, height: 16),
+              ),
+            ),
+          ),
+        ),
+      );
+      final barCenterY = tester.getRect(find.byType(AppBar)).center.dy;
+      expect(tester.getCenter(find.byKey(childKey)).dy, barCenterY);
+
+      count.value = 0;
+      await tester.pump();
+      expect(tester.getCenter(find.byKey(childKey)).dy, barCenterY);
+    },
+  );
+
   test(
     'l\'index publie le nombre de sons non traités à chaque reconstruction',
     () async {
