@@ -4,7 +4,7 @@
 
 part of '../settings_screen.dart';
 
-/// Actions sur les bibliothèques : retrait, actualisation Drive, maintenance.
+/// Actions sur les bibliothèques : retrait, actualisation Drive, mises à jour.
 /// Méthodes de [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsLibraryActions on _SettingsScreenState {
   /// Vérification manuelle : ignore le throttle 6h du check automatique
@@ -158,72 +158,6 @@ extension _SettingsLibraryActions on _SettingsScreenState {
       'Bibliothèque(s) Drive actualisée(s)',
       duration: const Duration(seconds: 2),
     );
-  }
-
-  /// Régénère l'enveloppe waveform de tous les sons déjà en cache
-  /// local (aucun téléchargement Drive forcé — un son non encore mis en
-  /// cache est simplement ignoré). Les enveloppes obsolètes sont déjà
-  /// rafraîchies automatiquement au chargement d'un pad (génération
-  /// `kWaveformProbeGeneration`, hors Mode Spectacle) : cette passe de masse
-  /// sert à forcer le rafraîchissement sans attendre ce chargement.
-  Future<void> _regenerateCachedWaveforms() async {
-    if (_isRegeneratingWaveforms) return;
-
-    final sounds = await _repository.getAllSounds();
-    if (sounds.isEmpty) {
-      if (mounted) {
-        AppSnackBar.show(context, 'Aucun son dans la bibliothèque');
-      }
-      return;
-    }
-
-    setState(() {
-      _isRegeneratingWaveforms = true;
-      _waveformRegenDone = 0;
-      _waveformRegenTotal = sounds.length;
-    });
-
-    var regenerated = 0;
-    var skipped = 0;
-    var failed = 0;
-    var aborted = false;
-
-    for (final sound in sounds) {
-      if (!mounted) return;
-      try {
-        final path = await widget.libraryRepository.resolvePlayablePath(
-          sound,
-          downloadIfNeeded: false,
-        );
-        final probe = await extractWaveform(path);
-        switch (probe.status) {
-          case WaveformProbeStatus.success:
-            await _repository.persistWaveformProbe(sound.id, probe);
-            regenerated++;
-          case WaveformProbeStatus.unsupported:
-            await _repository.persistWaveformProbe(sound.id, probe);
-            failed++;
-          case WaveformProbeStatus.transient:
-            // Moteur audio non initialisé : tous les sons suivants
-            // échoueraient pareil, inutile de continuer la passe.
-            aborted = true;
-        }
-      } catch (_) {
-        // Hors cache local (ou fichier illisible) : ignoré sans mémoriser
-        // d'échec « format » — on ne force pas de téléchargement Drive ici.
-        skipped++;
-      }
-      if (aborted) break;
-      if (mounted) setState(() => _waveformRegenDone++);
-    }
-
-    if (!mounted) return;
-    setState(() => _isRegeneratingWaveforms = false);
-    final summary = aborted
-        ? 'Moteur audio non prêt — $regenerated régénérée(s) avant interruption.'
-        : '$regenerated régénérée(s), $skipped ignorée(s) (hors cache), '
-              '$failed échec(s) de format.';
-    AppSnackBar.show(context, summary);
   }
 
   Future<void> _resolveSyncConflict(domain.Library library) async {
