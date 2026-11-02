@@ -34,6 +34,11 @@ class SoundEditForm extends StatefulWidget {
   /// Notifié à chaque bascule « modifications non enregistrées ».
   final ValueChanged<bool>? onDirtyChanged;
 
+  /// Notifié quand « Marquer non traité » a été écrit en base — l'appelant
+  /// rafraîchit sa liste. Distinct de [onSaved] : pas d'enchaînement sur le
+  /// son suivant.
+  final VoidCallback? onMarkedUnprocessed;
+
   /// File de traitement active : « Passer » apparaît en pied de formulaire, et
   /// l'appelant enchaîne sur le son suivant dans [onSaved].
   final bool isQueueMode;
@@ -50,6 +55,7 @@ class SoundEditForm extends StatefulWidget {
     this.notifier,
     this.onSaved,
     this.onDirtyChanged,
+    this.onMarkedUnprocessed,
     this.isQueueMode = false,
     this.onSkip,
     this.controller,
@@ -248,6 +254,29 @@ class _SoundEditFormState extends State<SoundEditForm> {
     }
   }
 
+  /// Remet le son dans la file « à traiter ». N'écrit que ce drapeau : les
+  /// modifications en cours dans le formulaire restent à enregistrer.
+  Future<void> _markUnprocessed() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+    try {
+      await widget.repository.updateSoundSettings(
+        id: widget.sound.id,
+        isProcessed: false,
+      );
+      if (!mounted) return;
+      setState(() {
+        _isProcessed = false;
+        _isSaving = false;
+      });
+      widget.onMarkedUnprocessed?.call();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      showCopyableSnackBar(context, 'Erreur : $error');
+    }
+  }
+
   /// Change le volume du formulaire et le répercute en direct sur l'aperçu
   /// bibliothèque en cours (l'éditeur de point d'entrée suit via son `volume`).
   void _setVolume(double value) {
@@ -364,6 +393,16 @@ class _SoundEditFormState extends State<SoundEditForm> {
               constraints: const BoxConstraints(maxWidth: 640),
               child: Row(
                 children: [
+                  if (_isProcessed)
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(64, 42),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        foregroundColor: scheme.onSurfaceVariant,
+                      ),
+                      onPressed: _isSaving ? null : _markUnprocessed,
+                      child: const Text('Marquer non traité'),
+                    ),
                   const Spacer(),
                   if (widget.onSkip != null) ...[
                     TextButton(
