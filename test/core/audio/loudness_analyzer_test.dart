@@ -21,6 +21,17 @@ void main() {
     });
   });
 
+  group('autoVolumeForWindows', () {
+    test('enchaîne RMS et volume cible', () {
+      final volume = autoVolumeForWindows(Float32List.fromList([0.2, 0.2]));
+      expect(volume, closeTo(0.5, 1e-6));
+    });
+
+    test('renvoie null pour un audio silencieux', () {
+      expect(autoVolumeForWindows(Float32List.fromList([0.0, 0.001])), isNull);
+    });
+  });
+
   group('autoVolumeForRms', () {
     test('atténue un son plus fort que la cible', () {
       expect(autoVolumeForRms(0.2), closeTo(0.5, 1e-9));

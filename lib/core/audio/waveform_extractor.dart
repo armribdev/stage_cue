@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter_soloud/flutter_soloud.dart';
 
 import 'audio_load_log.dart';
+import 'loudness_analyzer.dart';
 import 'soloud_file_loader.dart';
 
 /// Nombre de barres de l'enveloppe waveform stockée par son (~1 octet/barre).
@@ -64,9 +65,13 @@ class WaveformProbe {
   final WaveformProbeStatus status;
   final Uint8List? bytes;
 
-  const WaveformProbe._(this.status, [this.bytes]);
-  const WaveformProbe.success(Uint8List bytes)
-    : this._(WaveformProbeStatus.success, bytes);
+  /// Volume « auto » (0–1) déduit des mêmes fenêtres RMS que l'enveloppe, donc
+  /// sans second décodage. `null` hors succès ou si aucune fenêtre audible.
+  final double? autoVolume;
+
+  const WaveformProbe._(this.status, [this.bytes, this.autoVolume]);
+  const WaveformProbe.success(Uint8List bytes, {double? autoVolume})
+    : this._(WaveformProbeStatus.success, bytes, autoVolume);
   const WaveformProbe.transient() : this._(WaveformProbeStatus.transient);
   const WaveformProbe.unsupported() : this._(WaveformProbeStatus.unsupported);
 
@@ -139,7 +144,10 @@ Future<WaveformProbe> extractWaveform(
     for (var i = 0; i < pooled.length; i++) {
       out[i] = ((pooled[i] / peak) * 255).round().clamp(0, 255);
     }
-    return WaveformProbe.success(out);
+    return WaveformProbe.success(
+      out,
+      autoVolume: autoVolumeForWindows(samples),
+    );
   } catch (e) {
     AudioLoadLog.trace(
       'extractWaveform: le backend de lecture d\'échantillons a refusé '

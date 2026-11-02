@@ -58,13 +58,16 @@ class LocalSoundDataSource {
   /// Résout les métadonnées d'un fichier audio local.
   /// Retourne `type: null` si le fichier est absent ou si le probe de durée échoue.
   /// La waveform est calculée pour tous les types (régie musique, éditeur du
-  /// point d'entrée des bruitages et ambiances).
+  /// point d'entrée des bruitages et ambiances). Le volume « auto » (gain de
+  /// normalisation) en est un sous-produit : `null` si non mesurable, auquel cas
+  /// le son garde le volume par défaut.
   Future<
     ({
       db_sounds.SoundType? type,
       String? contentHash,
       Uint8List? waveform,
       int? waveformProbeGeneration,
+      double? volume,
     })
   >
   _resolveMetadataForFile(File file) async {
@@ -74,6 +77,7 @@ class LocalSoundDataSource {
         contentHash: null,
         waveform: null,
         waveformProbeGeneration: null,
+        volume: null,
       );
     }
     final probeType = await _probeSoundTypeFromDuration(file);
@@ -84,8 +88,14 @@ class LocalSoundDataSource {
       contentHash: contentHash,
       waveform: probe?.waveformValue,
       waveformProbeGeneration: probe?.generationValue,
+      volume: probe?.autoVolume,
     );
   }
+
+  /// Volume « auto » à écrire à la création : absent (donc défaut de la colonne,
+  /// 1.0) quand la mesure n'a pas abouti.
+  Value<double> _autoVolume(double? volume) =>
+      volume == null ? const Value.absent() : Value(volume);
 
   /// Probe de type par durée SoLoud. Retourne null si le fichier est invalide
   /// ou si SoLoud ne peut pas le lire.

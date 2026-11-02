@@ -63,6 +63,14 @@ double? rmsOfWindows(Float32List windows) {
   return math.sqrt(sumSquares / count);
 }
 
+/// Volume « auto » (0–1) déduit de fenêtres RMS déjà lues (cf. [rmsOfWindows]),
+/// ou `null` si aucune n'est audible. Permet à `extractWaveform` de réutiliser
+/// son décodage au lieu d'en relancer un via [measureRms].
+double? autoVolumeForWindows(Float32List windows) {
+  final rms = rmsOfWindows(windows);
+  return rms == null ? null : autoVolumeForRms(rms);
+}
+
 /// Volume (0–1) qui ramène un son de sonie [rms] à [kAutoVolumeTargetRms].
 double autoVolumeForRms(double rms) {
   if (rms <= 0) return 1.0;
