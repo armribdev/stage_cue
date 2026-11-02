@@ -127,12 +127,13 @@ extension _SamplerScreenBoards on _SamplerScreenState {
     );
   }
 
-  /// Actions sur une scène via menu contextuel — clic droit sur une scène du menu déroulant (desktop).
-  Future<void> _showBoardContextMenu(
+  /// Actions sur une scène via menu contextuel — clic droit sur une scène du
+  /// menu déroulant (desktop). Retourne `true` si une action a été choisie.
+  Future<bool> _showBoardContextMenu(
     SoundBoard board,
     Offset globalPosition,
   ) async {
-    if (!mounted) return;
+    if (!mounted) return false;
     final scheme = Theme.of(context).colorScheme;
     final screenSize = MediaQuery.sizeOf(context);
     final position = RelativeRect.fromLTRB(
@@ -187,7 +188,7 @@ extension _SamplerScreenBoards on _SamplerScreenState {
       ],
     );
 
-    if (!mounted) return;
+    if (value == null || !mounted) return false;
     if (value == 'rename') {
       await _renameBoard(board);
     } else if (value == 'duplicate') {
@@ -195,6 +196,7 @@ extension _SamplerScreenBoards on _SamplerScreenState {
     } else if (value == 'delete') {
       await _deleteBoard(board);
     }
+    return true;
   }
 
   Future<void> _renameBoard(SoundBoard board) async {

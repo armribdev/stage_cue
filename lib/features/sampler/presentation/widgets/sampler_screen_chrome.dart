@@ -242,7 +242,7 @@ class SamplerDesktopAppBar extends StatelessWidget
   final bool isBoardsLoading;
   final Future<void> Function(SoundBoard board) onSelectBoard;
   final Future<void> Function() onCreateBoard;
-  final Future<void> Function(SoundBoard board, Offset position)
+  final Future<bool> Function(SoundBoard board, Offset position)
   onBoardContextMenu;
   final bool isPerformanceMode;
   final VoidCallback onTogglePerformanceMode;
