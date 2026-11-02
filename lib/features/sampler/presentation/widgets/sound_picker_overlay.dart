@@ -510,7 +510,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   @override
   void dispose() {
-    if (_isManage) {
+    // La recherche-éclair garde son aperçu après fermeture (Entrée = audition
+    // puis fermeture) ; les autres sélecteurs ne laissent rien jouer derrière eux.
+    if (!_isQuickSearch && !_isPadVariant) {
       // Pas de notify : évite setState sur SamplerScreen pendant le pop.
       widget.notifier.stopLibraryPreview(notify: false);
     }
