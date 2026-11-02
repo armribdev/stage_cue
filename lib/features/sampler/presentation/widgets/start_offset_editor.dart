@@ -187,10 +187,23 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       ? _kHandleHitHalfWidthDesktop
       : _kHandleHitHalfWidthMobile;
 
-  bool _isNearHandle(double dx, double width, double fraction) {
+  double _fractionOf(num ms) => _duration.inMilliseconds == 0
+      ? 0.0
+      : (ms / _duration.inMilliseconds).clamp(0.0, 1.0);
+
+  /// Le geste en [dx] attrape-t-il la poignée du point d'entrée ? En aperçu,
+  /// quand la tête de lecture est plus proche du curseur que la poignée, c'est
+  /// elle qui l'emporte — sinon, juste après le départ (tête et poignée
+  /// confondues, sur un son long sur des dizaines de secondes), la tête
+  /// jaune serait inattrapable. À égalité, la poignée garde la priorité.
+  bool _grabsHandle(double dx, double width) {
     if (width <= 0) return false;
-    final handleX = width * fraction;
-    return (dx - handleX).abs() <= _handleHitHalfWidth();
+    final handleDistance = (dx - width * _fractionOf(_offsetMs)).abs();
+    if (handleDistance > _handleHitHalfWidth()) return false;
+    if (!_isPreviewing) return true;
+    final playheadDistance =
+        (dx - width * _fractionOf(_playhead.inMilliseconds)).abs();
+    return handleDistance <= playheadDistance;
   }
 
   SystemMouseCursor _waveformCursor() {
@@ -202,8 +215,8 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
         : SystemMouseCursors.click;
   }
 
-  void _updateHandleHover(double dx, double width, double fraction) {
-    final overHandle = _isNearHandle(dx, width, fraction);
+  void _updateHandleHover(double dx, double width) {
+    final overHandle = _grabsHandle(dx, width);
     if (overHandle != _isOverHandle) {
       setState(() => _isOverHandle = overHandle);
     }
@@ -277,12 +290,8 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
     }
 
     final bars = decodeWaveformBars(widget.waveform);
-    final fraction = _duration.inMilliseconds == 0
-        ? 0.0
-        : (_offsetMs / _duration.inMilliseconds).clamp(0.0, 1.0);
-    final playheadFraction = _duration.inMilliseconds == 0
-        ? 0.0
-        : (_playhead.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0);
+    final fraction = _fractionOf(_offsetMs);
+    final playheadFraction = _fractionOf(_playhead.inMilliseconds);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -290,9 +299,6 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
         LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
-            double offsetFraction() => _duration.inMilliseconds == 0
-                ? 0.0
-                : (_offsetMs / _duration.inMilliseconds).clamp(0.0, 1.0);
 
             double fractionAt(double dx) => (dx / width).clamp(0.0, 1.0);
 
@@ -310,11 +316,8 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
               value: cursor,
               child: MouseRegion(
                 cursor: cursor,
-                onHover: (event) => _updateHandleHover(
-                  event.localPosition.dx,
-                  width,
-                  offsetFraction(),
-                ),
+                onHover: (event) =>
+                    _updateHandleHover(event.localPosition.dx, width),
                 onExit: (_) {
                   if (_isDragging) return;
                   if (_isOverHandle) setState(() => _isOverHandle = false);
@@ -326,11 +329,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
                     // le geste déplace la tête de lecture.
                     final scrub =
                         _isPreviewing &&
-                        !_isNearHandle(
-                          event.localPosition.dx,
-                          width,
-                          offsetFraction(),
-                        );
+                        !_grabsHandle(event.localPosition.dx, width);
                     setState(() {
                       _activePointer = event.pointer;
                       _isScrubbingPlayhead = scrub;
@@ -341,11 +340,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
                   onPointerMove: (event) {
                     if (_activePointer != event.pointer) return;
                     dragTo(event.localPosition.dx);
-                    _updateHandleHover(
-                      event.localPosition.dx,
-                      width,
-                      offsetFraction(),
-                    );
+                    _updateHandleHover(event.localPosition.dx, width);
                   },
                   onPointerUp: (event) {
                     if (_activePointer != event.pointer) return;
