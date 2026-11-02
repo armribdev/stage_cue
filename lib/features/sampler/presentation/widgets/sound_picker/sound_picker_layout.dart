@@ -76,6 +76,12 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
       notifier: widget.notifier,
       controller: _editController,
       isQueueMode: _unprocessedOnly,
+      // Trier à l'oreille : l'éditeur joue lui-même depuis le point d'entrée.
+      // Jamais en salle pendant un spectacle (comme le ▶ de la liste).
+      autoPlayEntryPoint:
+          _unprocessedOnly &&
+          _autoPreview &&
+          !widget.notifier.isRoomPreviewBlockedInLive,
       onSkip: _unprocessedOnly && shown.length > 1
           ? () => _skipToNext(shown)
           : null,

@@ -286,8 +286,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   /// bibliothèque (`Sound.isProcessed == false`). Mode gestion uniquement.
   bool _unprocessedOnly = false;
 
-  /// En file de traitement (vue scindée), joue le son ouvert depuis son point
-  /// d'entrée : trier se fait à l'oreille. Désactivable depuis la barre.
+  /// En file de traitement (vue scindée), l'éditeur de point d'entrée joue le
+  /// son ouvert dès son chargement : trier se fait à l'oreille. Désactivable
+  /// depuis la barre.
   bool _autoPreview = true;
 
   // ── État du sélecteur de pad ──────────────────────────────────────────────

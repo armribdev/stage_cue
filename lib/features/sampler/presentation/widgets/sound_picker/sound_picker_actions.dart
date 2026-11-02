@@ -250,15 +250,6 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
       _editingSound = sound;
       _editDirty = false;
     });
-    _autoPreviewIfQueue(sound);
-  }
-
-  /// Lance l'aperçu du son qu'on vient d'ouvrir, en file de traitement
-  /// seulement. Échec silencieux : un son pas encore téléchargé ne doit pas
-  /// noyer la file sous les messages — le ▶ manuel signale l'erreur.
-  void _autoPreviewIfQueue(Sound sound) {
-    if (!_unprocessedOnly || !_autoPreview || !_isSplitLayout) return;
-    unawaited(widget.notifier.toggleLibraryPreview(sound.id));
   }
 
   Future<bool> _confirmDiscardEdits() => AppConfirmDialog.show(
