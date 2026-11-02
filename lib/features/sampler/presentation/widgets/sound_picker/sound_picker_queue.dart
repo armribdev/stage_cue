@@ -98,7 +98,9 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      // Le liseré du haut (1 px) s'ajoute au padding du haut : le bas prend
+      // 1 px de plus pour que le bouton soit centré visuellement.
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 9),
       decoration: BoxDecoration(
         border: Border(top: AppElevation.border(scheme)),
       ),
