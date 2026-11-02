@@ -3,6 +3,7 @@
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stage_cue/core/audio/waveform_extractor.dart';
 import 'package:stage_cue/core/database/database.dart' as db;
 import 'package:stage_cue/core/database/sounds.dart' show SoundType;
 import 'package:stage_cue/features/sampler/data/datasources/local_library_datasource.dart';
@@ -560,6 +561,76 @@ void main() {
       final sound = (await soundsOf(libraryId)).single;
       expect(sound.waveform, isNotNull);
       expect(sound.contentHash, 'hash-a');
+    });
+  });
+
+  group('persistWaveformProbe', () {
+    Future<int> insertSound({Uint8List? waveform, int? generation}) => database
+        .into(database.sounds)
+        .insert(
+          db.SoundsCompanion.insert(
+            title: 'loop',
+            displayName: 'loop',
+            filePath: '/cache/loop.mp3',
+            waveform: Value(waveform),
+            waveformProbeGeneration: Value(generation),
+          ),
+        );
+
+    Future<db.Sound> reload(int id) => (database.select(
+      database.sounds,
+    )..where((s) => s.id.equals(id))).getSingle();
+
+    test('succès : écrit l\'enveloppe et la génération courante', () async {
+      final id = await insertSound();
+
+      await dataSource.persistWaveformProbe(
+        id,
+        WaveformProbe.success(Uint8List.fromList([9, 8, 7])),
+      );
+
+      final sound = await reload(id);
+      expect(sound.waveform, [9, 8, 7]);
+      expect(sound.waveformProbeGeneration, kWaveformProbeGeneration);
+    });
+
+    test('succès sur enveloppe héritée : la remplace et la date', () async {
+      final id = await insertSound(waveform: Uint8List.fromList([1, 2, 3]));
+
+      await dataSource.persistWaveformProbe(
+        id,
+        WaveformProbe.success(Uint8List.fromList([9, 8, 7])),
+      );
+
+      final sound = await reload(id);
+      expect(sound.waveform, [9, 8, 7]);
+      expect(sound.waveformProbeGeneration, kWaveformProbeGeneration);
+    });
+
+    test('unsupported : n\'efface jamais une enveloppe existante', () async {
+      final id = await insertSound(waveform: Uint8List.fromList([1, 2, 3]));
+
+      await dataSource.persistWaveformProbe(
+        id,
+        const WaveformProbe.unsupported(),
+      );
+
+      final sound = await reload(id);
+      expect(sound.waveform, [1, 2, 3]);
+      expect(sound.waveformProbeGeneration, kWaveformProbeGeneration);
+    });
+
+    test('transient : n\'écrit rien', () async {
+      final id = await insertSound(waveform: Uint8List.fromList([1, 2, 3]));
+
+      await dataSource.persistWaveformProbe(
+        id,
+        const WaveformProbe.transient(),
+      );
+
+      final sound = await reload(id);
+      expect(sound.waveform, [1, 2, 3]);
+      expect(sound.waveformProbeGeneration, isNull);
     });
   });
 }

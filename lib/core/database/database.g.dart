@@ -2191,12 +2191,13 @@ class Sound extends DataClass implements Insertable<Sound> {
   /// remplie paresseusement au premier chargement du son musique.
   final Uint8List? waveform;
 
-  /// Génération de la capacité d'extraction (`kWaveformProbeGeneration`) en
-  /// vigueur lors du DERNIER échec « format » de l'extraction waveform. `null` =
-  /// jamais échoué / à (re)tenter. Permet de ne PAS re-sonder en boucle un fichier
-  /// que le backend de sampling refuse, tout en re-tentant AUTOMATIQUEMENT après
-  /// une amélioration de la capacité d'extraction (ex. upgrade flutter_soloud qui
-  /// corrige la lecture d'échantillons sur les noms accentués sous Windows).
+  /// Génération de l'extraction (`kWaveformProbeGeneration`) en vigueur lors de
+  /// la DERNIÈRE tentative aboutie, succès (enveloppe) comme échec « format ».
+  /// `null` = jamais tenté, ou enveloppe antérieure au marquage des succès : à
+  /// (re)tenter. Permet de ne PAS re-sonder en boucle un fichier que le backend
+  /// de sampling refuse, tout en re-tentant AUTOMATIQUEMENT après une
+  /// amélioration de l'extraction (ex. upgrade flutter_soloud, nouvel
+  /// algorithme) — échecs comme enveloppes obsolètes.
   final int? waveformProbeGeneration;
 
   /// Point d'entrée de lecture, en millisecondes depuis le début du fichier :
@@ -2204,8 +2205,10 @@ class Sound extends DataClass implements Insertable<Sound> {
   /// sample 0. 0 = début du fichier. Propriété de contenu comme [waveform].
   final int startOffsetMs;
 
-  /// Son « traité » : passe à true au premier « Enregistrer » depuis la fiche
-  /// de la bibliothèque, ne revient jamais à false. Annotation locale comme
+  /// Son « traité » : passe à true au premier « Enregistrer »/« Valider »
+  /// depuis la fiche de la bibliothèque (y compris sans modification), ou par
+  /// validation en masse de la file « À traiter » ; ne revient jamais à
+  /// false. Annotation locale comme
   /// [isFavorite] : absente de l'export du snapshot dossier.
   final bool isProcessed;
   const Sound({

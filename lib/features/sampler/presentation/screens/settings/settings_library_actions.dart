@@ -162,10 +162,10 @@ extension _SettingsLibraryActions on _SettingsScreenState {
 
   /// Régénère l'enveloppe waveform de tous les sons déjà en cache
   /// local (aucun téléchargement Drive forcé — un son non encore mis en
-  /// cache est simplement ignoré). Utile après une amélioration de
-  /// l'algorithme d'extraction (cf. `kWaveformOversample`) : les enveloppes
-  /// déjà stockées ne sont jamais re-calculées automatiquement, seuls les
-  /// nouveaux imports en bénéficient sans action explicite.
+  /// cache est simplement ignoré). Les enveloppes obsolètes sont déjà
+  /// rafraîchies automatiquement au chargement d'un pad (génération
+  /// `kWaveformProbeGeneration`, hors Mode Spectacle) : cette passe de masse
+  /// sert à forcer le rafraîchissement sans attendre ce chargement.
   Future<void> _regenerateCachedWaveforms() async {
     if (_isRegeneratingWaveforms) return;
 
