@@ -618,6 +618,24 @@ void main() {
       expect(n.hasPendingPreviewError, isFalse);
     });
 
+    test(
+      'isRoomPreviewBlockedInLive : vrai seulement en spectacle, sans casque, '
+      'sur plateforme capable',
+      () {
+        expect(n.isRoomPreviewBlockedInLive, isFalse); // hors spectacle
+
+        n.startLiveSession();
+        expect(n.isRoomPreviewBlockedInLive, isTrue);
+
+        CueAudioService.instance.setSelectedDevice('Casque');
+        expect(n.isRoomPreviewBlockedInLive, isFalse); // casque configuré
+
+        CueAudioService.instance.setSelectedDevice(null);
+        CueAudioService.debugOverrideSupported = false;
+        expect(n.isRoomPreviewBlockedInLive, isFalse); // pas de sortie séparée
+      },
+    );
+
     test('previewPadOnCue sur un pad sans son → false, sans message', () async {
       final padItem = PadItem(pad: _pad(1));
 
