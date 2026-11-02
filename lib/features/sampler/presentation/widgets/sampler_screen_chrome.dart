@@ -69,6 +69,7 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
         BoxedIconButton(
           icon: Icons.search_rounded,
           tooltip: 'Recherche rapide',
+          framed: false,
           onPressed: onQuickSearch,
         ),
       ],
@@ -314,6 +315,7 @@ class SamplerDesktopAppBar extends StatelessWidget
         BoxedIconButton(
           icon: Icons.search_rounded,
           tooltip: 'Recherche rapide (Ctrl+F)',
+          framed: false,
           onPressed: onQuickSearch,
         ),
       ],

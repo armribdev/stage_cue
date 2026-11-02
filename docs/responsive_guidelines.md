@@ -75,7 +75,7 @@ Premier usage concret de `AdaptiveLayout`/`DeviceClass` dans l'app :
 |---|---|---|
 | Navigation | `Drawer` plein écran + `AppBar` + bouton hamburger | Sidebar persistante `_SamplerSidebar` (264px) + `_SamplerToolbar` (48px) |
 | Changer de scène | Ouvrir le drawer, taper sur la scène, le drawer se ferme | Taper directement dans la sidebar (toujours visible) |
-| Actions scène (renommer…) | Long press → `showModalBottomSheet` | Clic droit → `showMenu` (popup contextuel) |
+| Actions scène (renommer…) | Long press → `showModalBottomSheet` | Clic droit sur une scène du menu déroulant → `showMenu` (popup contextuel) |
 | Structure | `Scaffold(appBar, drawer, body)` | `Scaffold(body: Row([sidebar, Expanded(Column([toolbar, content]))]))` |
 
 Les futures refontes d'écran (bibliothèque, settings, sync) doivent **suivre ce
