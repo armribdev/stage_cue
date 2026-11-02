@@ -57,7 +57,6 @@ void main() {
             tagCatalog: const [],
             repository: repository,
             isQueueMode: isQueueMode,
-            queueRemaining: isQueueMode ? 12 : null,
             onSkip: onSkip,
             onSaved: onSaved,
             controller: controller,
@@ -80,7 +79,6 @@ void main() {
 
     expect(button('Valider'), findsOneWidget);
     expect(isEnabled(tester, 'Valider'), isTrue);
-    expect(find.text('À TRAITER'), findsOneWidget);
   });
 
   testWidgets(
@@ -90,36 +88,28 @@ void main() {
 
       expect(button('Enregistrer'), findsOneWidget);
       expect(isEnabled(tester, 'Enregistrer'), isFalse);
-      expect(find.text('À TRAITER'), findsNothing);
     },
   );
 
-  testWidgets(
-    'file de traitement : « Valider et suivant », compteur et Passer',
-    (tester) async {
-      var skipped = 0;
-      await pumpForm(
-        tester,
-        processed: false,
-        isQueueMode: true,
-        onSkip: () => skipped++,
-      );
+  testWidgets('file de traitement : « Valider » et Passer', (tester) async {
+    var skipped = 0;
+    await pumpForm(
+      tester,
+      processed: false,
+      isQueueMode: true,
+      onSkip: () => skipped++,
+    );
 
-      expect(button('Valider et suivant'), findsOneWidget);
-      expect(find.text('12 à traiter'), findsOneWidget);
+    expect(button('Valider'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(TextButton, 'Passer'));
-      expect(skipped, 1);
-    },
-  );
+    await tester.tap(find.widgetWithText(TextButton, 'Passer'));
+    expect(skipped, 1);
+  });
 
-  testWidgets('hors file, pas de bouton « Passer » ni de compteur', (
-    tester,
-  ) async {
+  testWidgets('hors file, pas de bouton « Passer »', (tester) async {
     await pumpForm(tester, processed: false);
 
     expect(find.text('Passer'), findsNothing);
-    expect(find.textContaining('à traiter'), findsNothing);
   });
 
   testWidgets('valider tel quel marque le son traité en base', (tester) async {
@@ -143,7 +133,6 @@ void main() {
     // Une fois validé, le bouton retombe sur « Enregistrer » (inactif).
     expect(button('Enregistrer'), findsOneWidget);
     expect(isEnabled(tester, 'Enregistrer'), isFalse);
-    expect(find.text('À TRAITER'), findsNothing);
   });
 
   testWidgets('le contrôleur déclenche l\'enregistrement (Ctrl+Entrée)', (

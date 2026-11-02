@@ -76,7 +76,6 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
       notifier: widget.notifier,
       controller: _editController,
       isQueueMode: _unprocessedOnly,
-      queueRemaining: _unprocessedOnly ? _unprocessedCount : null,
       onSkip: _unprocessedOnly && shown.length > 1
           ? () => _skipToNext(shown)
           : null,
