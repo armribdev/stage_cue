@@ -49,6 +49,10 @@ class SoundEditForm extends StatefulWidget {
   /// bouton (pas de file, ou plus de son suivant).
   final VoidCallback? onSkip;
 
+  /// Fait jouer l'éditeur de point d'entrée dès l'ouverture du son (lecture auto
+  /// de la file de traitement).
+  final bool autoPlayEntryPoint;
+
   const SoundEditForm({
     super.key,
     required this.sound,
@@ -60,6 +64,7 @@ class SoundEditForm extends StatefulWidget {
     this.onMarkedUnprocessed,
     this.isQueueMode = false,
     this.onSkip,
+    this.autoPlayEntryPoint = false,
     this.controller,
   });
 
@@ -630,6 +635,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
           waveform: _waveform,
           initialOffsetMs: _startOffsetMs,
           volume: _volume,
+          autoPlay: widget.autoPlayEntryPoint,
           onChanged: (ms) => _update(() => _startOffsetMs = ms),
         ),
       ],

@@ -39,6 +39,12 @@ class StartOffsetEditor extends StatefulWidget {
   /// Notifié à chaque changement de valeur (drag, nudge, reset).
   final ValueChanged<int> onChanged;
 
+  /// Lance l'aperçu depuis le point d'entrée dès que la source est chargée
+  /// (file de traitement : trier se fait à l'oreille, tête de lecture visible).
+  /// Lu au chargement seulement ; passer à `false` ensuite coupe l'aperçu en
+  /// cours.
+  final bool autoPlay;
+
   const StartOffsetEditor({
     super.key,
     required this.filePath,
@@ -46,6 +52,7 @@ class StartOffsetEditor extends StatefulWidget {
     required this.initialOffsetMs,
     required this.volume,
     required this.onChanged,
+    this.autoPlay = false,
   });
 
   @override
@@ -83,9 +90,13 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
   void didUpdateWidget(StartOffsetEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.volume != widget.volume) _player?.setVolume(widget.volume);
+    if (oldWidget.autoPlay && !widget.autoPlay && _isPreviewing) {
+      unawaited(_player?.stop());
+    }
   }
 
   Future<void> _load() async {
+    var loaded = false;
     try {
       final player = await CueAudioService.instance.createPreviewPlayer(
         widget.filePath,
@@ -104,6 +115,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
         _syncTicker();
       });
       setState(() => _loading = false);
+      loaded = true;
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -111,6 +123,15 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
         _loadFailed = true;
       });
     }
+    if (!loaded || !mounted || !widget.autoPlay || _duration <= Duration.zero) {
+      return;
+    }
+    // Hors du `try` de chargement : un échec de lecture ne doit pas griser
+    // l'éditeur. Silencieux — un son pas encore prêt ne doit pas noyer la file
+    // sous les messages (le ▶ manuel reste disponible).
+    try {
+      await _togglePreview();
+    } catch (_) {}
   }
 
   @override

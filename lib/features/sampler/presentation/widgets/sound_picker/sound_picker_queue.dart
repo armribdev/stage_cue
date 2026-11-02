@@ -57,7 +57,6 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
       _selectedIndex = index < 0 ? 0 : index;
     });
     _scrollToSelected();
-    _autoPreviewIfQueue(next);
   }
 
   void _scrollToSelected() {
@@ -139,12 +138,9 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
                 iconColor: _autoPreview ? accent : scheme.onSurfaceVariant,
                 active: _autoPreview,
                 flat: true,
-                onPressed: () => setState(() {
-                  _autoPreview = !_autoPreview;
-                  if (!_autoPreview) {
-                    widget.notifier.stopLibraryPreview();
-                  }
-                }),
+                // Désactiver coupe l'aperçu en cours : l'éditeur du volet le
+                // fait lui-même en voyant `autoPlayEntryPoint` retomber.
+                onPressed: () => setState(() => _autoPreview = !_autoPreview),
               ),
             ),
           const SizedBox(width: 4),
