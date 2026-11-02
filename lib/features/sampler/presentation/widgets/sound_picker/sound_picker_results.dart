@@ -325,6 +325,23 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
     );
   }
 
+  /// Bouton d'aperçu play/pause d'une ligne : lecteur d'aperçu unique, depuis le
+  /// point d'entrée du son, jamais sur la voie live (au casque s'il y en a un).
+  Widget _buildPreviewButton(Sound sound, ColorScheme scheme) {
+    final isPlaying = widget.notifier.libraryPreviewIsPlaying(sound.id);
+    return Tooltip(
+      message: isPlaying ? 'Pause' : 'Aperçu depuis le point d\'entrée',
+      child: _roundIconButton(
+        scheme: scheme,
+        icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+        iconColor: scheme.primary,
+        onPressed: () => unawaited(_toggleLibraryPreview(sound)),
+      ),
+    );
+  }
+
+  /// Fin de ligne : aperçu (sauf variante d'un multipad, qui se déclenche
+  /// directement) suivi de l'action propre au mode.
   Widget _buildTrailing(
     Sound sound,
     ColorScheme scheme, {
@@ -334,6 +351,35 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
     required bool inBoard,
     required bool isCurrentVariant,
     required int index,
+  }) {
+    final action = _buildModeAction(
+      sound,
+      scheme,
+      onAir: onAir,
+      queued: queued,
+      onPad: onPad,
+      inBoard: inBoard,
+      isCurrentVariant: isCurrentVariant,
+    );
+    if (_isPadVariant) return action;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildPreviewButton(sound, scheme),
+        const SizedBox(width: 4),
+        action,
+      ],
+    );
+  }
+
+  Widget _buildModeAction(
+    Sound sound,
+    ColorScheme scheme, {
+    required bool onAir,
+    required bool queued,
+    required bool onPad,
+    required bool inBoard,
+    required bool isCurrentVariant,
   }) {
     switch (widget.mode) {
       case QuickSearchMode():
@@ -437,16 +483,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         );
 
       case ManageMode():
-        final isPlaying = widget.notifier.libraryPreviewIsPlaying(sound.id);
-        return Tooltip(
-          message: isPlaying ? 'Pause' : 'Aperçu depuis le point d\'entrée',
-          child: _roundIconButton(
-            scheme: scheme,
-            icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-            iconColor: scheme.primary,
-            onPressed: () => unawaited(_toggleLibraryPreview(sound)),
-          ),
-        );
+        return const SizedBox.shrink();
 
       case PadVariantMode():
         if (isCurrentVariant) {
