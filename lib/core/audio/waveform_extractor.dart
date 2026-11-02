@@ -21,25 +21,30 @@ const int kWaveformBars = 480;
 /// fois quel que soit le nombre de fenêtres demandées).
 const int kWaveformOversample = 8;
 
-/// Génération de la CAPACITÉ d'extraction waveform. À INCRÉMENTER à chaque
-/// montée de version de flutter_soloud (ou changement de logique d'extraction)
-/// susceptible de faire réussir des fichiers auparavant en échec.
+/// Génération de l'ALGORITHME et de la CAPACITÉ d'extraction waveform. À
+/// INCRÉMENTER à chaque montée de version de flutter_soloud ou changement de
+/// logique d'extraction (fenêtrage, réduction, normalisation) dont on veut que
+/// les sons déjà analysés profitent.
 ///
-/// Sert de « tampon » sur les échecs `unsupported` persistés en base
-/// (`sounds.waveformProbeGeneration`) : un fichier marqué en échec sous une
-/// génération < à la génération courante est re-sondé automatiquement. C'est ce
+/// Persistée dans `sounds.waveformProbeGeneration` pour les succès comme pour
+/// les échecs `unsupported` : tout son dont la génération est < à la génération
+/// courante (ou `null` : jamais analysé, ou enveloppe héritée d'avant ce
+/// marquage) est re-sondé automatiquement — voir [waveformNeedsProbe]. C'est ce
 /// qui « guérit » d'un coup les fichiers accentués sous Windows après le passage
-/// en flutter_soloud 4.x (fix conversion UTF-8 de `readSamplesFromFile`).
+/// en flutter_soloud 4.x (fix conversion UTF-8 de `readSamplesFromFile`), et qui
+/// propage un meilleur rendu aux enveloppes déjà stockées.
 ///
 /// - gén. 1 : flutter_soloud 3.x — `readSamplesFromFile` échouait sur les noms
 ///   de fichiers non-ASCII sous Windows (backend de sampling `NoBackend`).
-/// - gén. 2 : flutter_soloud 4.x — conversion UTF-8 corrigée ; re-tente tout
-///   fichier marqué en échec sous une génération antérieure.
+/// - gén. 2 : flutter_soloud 4.x — conversion UTF-8 corrigée ; sur-échantillonnage
+///   RMS + réduction par pic ([kWaveformOversample]) ; les succès portent
+///   désormais aussi leur génération. Re-tente tout fichier marqué en échec sous
+///   une génération antérieure et rafraîchit toute enveloppe sans génération.
 const int kWaveformProbeGeneration = 2;
 
-/// true si une (nouvelle) extraction est justifiée pour un son musique dont
-/// l'enveloppe est absente : jamais tentée (`generation == null`), ou échec
-/// enregistré sous une génération d'extraction devenue obsolète.
+/// true si une (nouvelle) extraction est justifiée : jamais tentée ou enveloppe
+/// héritée d'avant le marquage des succès (`generation == null`), ou résultat
+/// (enveloppe ou échec) produit sous une génération d'extraction obsolète.
 bool waveformNeedsProbe(int? generation) =>
     generation == null || generation < kWaveformProbeGeneration;
 
@@ -79,11 +84,12 @@ class WaveformProbe {
   Uint8List? get waveformValue => bytes;
 
   /// Valeur à écrire dans `sounds.waveformProbeGeneration` :
-  /// - `unsupported` → génération courante (bloque le retry jusqu'au prochain bump) ;
-  /// - `success`/`transient` → null (efface tout marqueur / re-tentera).
-  int? get generationValue => status == WaveformProbeStatus.unsupported
-      ? kWaveformProbeGeneration
-      : null;
+  /// - `success`/`unsupported` → génération courante : l'enveloppe (ou l'échec)
+  ///   a été produite par l'algorithme actuel, rien à refaire avant le
+  ///   prochain bump de [kWaveformProbeGeneration] ;
+  /// - `transient` → null (rien n'a été tenté, on retentera).
+  int? get generationValue =>
+      status == WaveformProbeStatus.transient ? null : kWaveformProbeGeneration;
 }
 
 /// Décode [filePath] hors du thread UI (SoLoud le fait via un isolate interne)

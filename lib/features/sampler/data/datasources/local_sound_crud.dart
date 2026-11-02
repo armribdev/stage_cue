@@ -203,16 +203,21 @@ extension LocalSoundCrud on LocalSoundDataSource {
         .write(db.SoundsCompanion(type: Value(dbType)));
   }
 
-  /// Persiste l'issue d'une extraction waveform (régie musique) : l'enveloppe en
-  /// cas de succès, ou le marqueur de génération d'échec pour un `unsupported`.
-  /// Un échec `transient` (moteur non prêt) n'écrit rien — on retentera.
+  /// Persiste l'issue d'une extraction waveform (régie musique) : l'enveloppe et
+  /// la génération courante en cas de succès, ou le seul marqueur de génération
+  /// pour un `unsupported`. Un échec `unsupported` n'efface JAMAIS une enveloppe
+  /// existante : un re-sondage (rafraîchissement, régénération) qui échoue ne
+  /// doit pas détruire une waveform valable. Un échec `transient` (moteur non
+  /// prêt) n'écrit rien — on retentera.
   Future<void> persistWaveformProbe(int id, WaveformProbe probe) async {
     if (probe.status == WaveformProbeStatus.transient) return;
     await (_database.update(
       _database.sounds,
     )..where((s) => s.id.equals(id))).write(
       db.SoundsCompanion(
-        waveform: Value(probe.waveformValue),
+        waveform: probe.status == WaveformProbeStatus.success
+            ? Value(probe.waveformValue)
+            : const Value.absent(),
         waveformProbeGeneration: Value(probe.generationValue),
       ),
     );

@@ -276,8 +276,9 @@ class SamplerNotifier extends ChangeNotifier {
   }
 
   /// Calcule et persiste l'enveloppe waveform d'un son (tout type) dont le
-  /// fichier vient d'être chargé, si elle manque encore. Réinjecte ensuite le
-  /// son (avec sa waveform) dans le pad en mémoire et notifie — la régie
+  /// fichier vient d'être chargé, si elle manque ou si elle date d'une
+  /// génération d'extraction obsolète (`waveformNeedsProbe`). Réinjecte ensuite
+  /// le son (avec sa waveform) dans le pad en mémoire et notifie — la régie
   /// l'affiche dès qu'elle est prête, sans bloquer le démarrage de la lecture.
   Future<void> _ensureWaveformForSound(
     PadItem padItem,
@@ -286,9 +287,14 @@ class SamplerNotifier extends ChangeNotifier {
   ) async {
     if (index < 0 || index >= padItem.pad.sounds.length) return;
     final sound = padItem.pad.sounds[index];
-    if (sound.waveform != null) return;
-    // Échec « format » déjà acté à la génération courante : ne pas re-sonder.
+    // Génération courante (enveloppe ou échec « format » déjà acté) : rien à faire.
     if (!waveformNeedsProbe(sound.waveformProbeGeneration)) return;
+    // Simple rafraîchissement d'une enveloppe déjà affichable : jamais en Mode
+    // Spectacle. L'extraction décode le fichier entier sur la file native
+    // partagée avec le préchargement (décision 0001) — elle retarderait le
+    // chargement des pads pour un gain purement cosmétique. Reporté à la
+    // prochaine session hors spectacle.
+    if (sound.waveform != null && isLiveSessionActive) return;
 
     // Le board peut changer pendant le décodage (tâche de fond) : on capture son
     // identité pour ne pas muter/notifier un plateau devenu obsolète après l'await.
