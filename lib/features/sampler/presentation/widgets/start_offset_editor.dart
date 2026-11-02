@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -18,6 +20,10 @@ const _kHandleHitHalfWidthMobile = 28.0;
 /// draggable, aperçu audio depuis le point choisi et réglage fin (±0,1 s).
 /// La zone avant le point d'entrée est grisée pour montrer d'un coup d'œil ce
 /// qui sera sauté à la lecture.
+///
+/// Pendant l'aperçu, un clic ou un glissement hors de la poignée déplace la
+/// tête de lecture (l'audio repart à la position relâchée) ; sur la poignée, il
+/// déplace le point d'entrée.
 ///
 /// Charge sa propre source audio (durée + aperçu). Si le fichier n'est pas
 /// disponible localement, l'éditeur s'affiche désactivé avec un message.
@@ -58,6 +64,9 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
   late int _offsetMs;
   bool _isPreviewing = false;
   bool _isDragging = false;
+
+  /// Un geste en cours déplace la tête de lecture (et non la poignée).
+  bool _isScrubbingPlayhead = false;
   bool _isOverHandle = false;
   int? _activePointer;
   Ticker? _ticker;
@@ -136,7 +145,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
   void _syncTicker() {
     if (_isPreviewing) {
       _ticker ??= Ticker((_) {
-        if (!mounted) return;
+        if (!mounted || _isScrubbingPlayhead) return;
         setState(() => _playhead = _player?.position ?? _playhead);
       });
       if (!_ticker!.isActive) _ticker!.start();
@@ -164,10 +173,12 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
   }
 
   SystemMouseCursor _waveformCursor() {
-    if (isNativeDesktopPlatform() || _isDragging || _isOverHandle) {
-      return SystemMouseCursors.resizeLeftRight;
-    }
-    return SystemMouseCursors.click;
+    if (_isDragging || _isOverHandle) return SystemMouseCursors.resizeLeftRight;
+    // En aperçu, hors de la poignée, le geste déplace la tête de lecture.
+    if (_isPreviewing) return SystemMouseCursors.click;
+    return isNativeDesktopPlatform()
+        ? SystemMouseCursors.resizeLeftRight
+        : SystemMouseCursors.click;
   }
 
   void _updateHandleHover(double dx, double width, double fraction) {
@@ -181,8 +192,25 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
     if (!_isDragging && _activePointer == null) return;
     setState(() {
       _isDragging = false;
+      _isScrubbingPlayhead = false;
       _activePointer = null;
     });
+  }
+
+  void _scrubPlayheadTo(double fraction) {
+    setState(() {
+      _playhead = Duration(
+        milliseconds: (fraction * _duration.inMilliseconds).round(),
+      );
+    });
+  }
+
+  /// Relâchement d'un geste sur la tête de lecture : l'audio repart de là.
+  /// Sans effet si l'aperçu s'est arrêté entre-temps (fin de piste).
+  void _commitPlayheadSeek() {
+    final player = _player;
+    if (player == null || !_isPreviewing) return;
+    unawaited(player.playFromPosition(_playhead, volume: widget.volume));
   }
 
   @override
@@ -245,10 +273,15 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
                 ? 0.0
                 : (_offsetMs / _duration.inMilliseconds).clamp(0.0, 1.0);
 
+            double fractionAt(double dx) => (dx / width).clamp(0.0, 1.0);
+
             void seekTo(double dx) {
-              final f = (dx / width).clamp(0.0, 1.0);
-              _setOffsetMs((f * _duration.inMilliseconds).round());
+              _setOffsetMs((fractionAt(dx) * _duration.inMilliseconds).round());
             }
+
+            void dragTo(double dx) => _isScrubbingPlayhead
+                ? _scrubPlayheadTo(fractionAt(dx))
+                : seekTo(dx);
 
             final cursor = _waveformCursor();
 
@@ -268,15 +301,25 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
                 child: Listener(
                   behavior: HitTestBehavior.opaque,
                   onPointerDown: (event) {
+                    // En aperçu, seule la poignée reste attrapable : ailleurs
+                    // le geste déplace la tête de lecture.
+                    final scrub =
+                        _isPreviewing &&
+                        !_isNearHandle(
+                          event.localPosition.dx,
+                          width,
+                          offsetFraction(),
+                        );
                     setState(() {
                       _activePointer = event.pointer;
-                      _isDragging = true;
+                      _isScrubbingPlayhead = scrub;
+                      _isDragging = !scrub;
                     });
-                    seekTo(event.localPosition.dx);
+                    dragTo(event.localPosition.dx);
                   },
                   onPointerMove: (event) {
                     if (_activePointer != event.pointer) return;
-                    seekTo(event.localPosition.dx);
+                    dragTo(event.localPosition.dx);
                     _updateHandleHover(
                       event.localPosition.dx,
                       width,
@@ -285,6 +328,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
                   },
                   onPointerUp: (event) {
                     if (_activePointer != event.pointer) return;
+                    if (_isScrubbingPlayhead) _commitPlayheadSeek();
                     _endDrag();
                   },
                   onPointerCancel: (event) {
