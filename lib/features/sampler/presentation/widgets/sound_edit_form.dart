@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -113,6 +114,12 @@ class _SoundEditFormState extends State<SoundEditForm> {
   bool _tagsFailed = false;
   bool _isSaving = false;
   bool _isRegeneratingWaveform = false;
+
+  /// Vrai brièvement après une régénération réussie : le bouton affiche une
+  /// coche + « Waveform régénérée » avant de reprendre son libellé normal.
+  bool _waveformRegenerated = false;
+  Timer? _regeneratedResetTimer;
+  static const _regeneratedFeedbackDuration = Duration(seconds: 2);
   bool _isMeasuringVolume = false;
   bool _wasDirty = false;
 
@@ -144,6 +151,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
     if (controller != null && controller._save == save) {
       controller._save = null;
     }
+    _regeneratedResetTimer?.cancel();
     _nameController.dispose();
     super.dispose();
   }
@@ -324,8 +332,15 @@ class _SoundEditFormState extends State<SoundEditForm> {
       if (!mounted) return;
       switch (status) {
         case WaveformProbeStatus.success:
-          setState(() => _waveform = updated?.waveform ?? _waveform);
-          showCopyableSnackBar(context, 'Waveform régénérée.');
+          // Confirmation sur le bouton lui-même (coche) plutôt qu'en snackbar.
+          setState(() {
+            _waveform = updated?.waveform ?? _waveform;
+            _waveformRegenerated = true;
+          });
+          _regeneratedResetTimer?.cancel();
+          _regeneratedResetTimer = Timer(_regeneratedFeedbackDuration, () {
+            if (mounted) setState(() => _waveformRegenerated = false);
+          });
         case WaveformProbeStatus.unsupported:
           showCopyableSnackBar(
             context,
@@ -571,15 +586,24 @@ class _SoundEditFormState extends State<SoundEditForm> {
             ),
             if (widget.notifier != null)
               TextButton.icon(
-                onPressed: _isRegeneratingWaveform ? null : _regenerateWaveform,
+                onPressed: _isRegeneratingWaveform || _waveformRegenerated
+                    ? null
+                    : _regenerateWaveform,
                 icon: _isRegeneratingWaveform
                     ? const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.refresh, size: 18),
-                label: const Text('Régénérer la waveform'),
+                    : Icon(
+                        _waveformRegenerated ? Icons.check : Icons.refresh,
+                        size: 18,
+                      ),
+                label: Text(
+                  _waveformRegenerated
+                      ? 'Waveform régénérée'
+                      : 'Régénérer la waveform',
+                ),
               ),
           ],
         ),
