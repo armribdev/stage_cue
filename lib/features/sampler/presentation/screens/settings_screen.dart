@@ -9,7 +9,6 @@ import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart' show OrderingTerm;
 import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/cue_audio_service.dart';
-import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/logging/app_log.dart';
 import '../../../../core/logging/log_export.dart';
@@ -122,9 +121,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isInitialLoad = true;
   bool _isSyncBusy = false;
   bool _isDriveAuthBusy = false;
-  bool _isRegeneratingWaveforms = false;
-  int _waveformRegenDone = 0;
-  int _waveformRegenTotal = 0;
   String? _appVersion;
   bool _isCheckingForUpdate = false;
   bool _isDiagnosticBusy = false;

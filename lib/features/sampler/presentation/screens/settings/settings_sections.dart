@@ -371,8 +371,6 @@ extension _SettingsSections on _SettingsScreenState {
                           unawaited(_toggleAutoDownload(library)),
                     ),
                     _sectionDivider(),
-                    _buildMaintenanceCard(),
-                    _sectionDivider(),
                     _buildDiagnosticSection(),
                     if (Platform.isWindows) ...[
                       _sectionDivider(),
@@ -382,54 +380,6 @@ extension _SettingsSections on _SettingsScreenState {
                 ),
               ),
             ),
-    );
-  }
-
-  /// Carte « Maintenance » : actions ponctuelles sur les données déjà
-  /// indexées, distinctes du scan de nouveaux dossiers (section Éléments indexés).
-  Widget _buildMaintenanceCard() {
-    final scheme = Theme.of(context).colorScheme;
-    return _buildSettingsSectionCard(
-      title: _buildSectionTitleRow(
-        icon: Icons.build_outlined,
-        title: 'Maintenance',
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Régénérer les waveforms des sons déjà en cache local, '
-            'avec l\'algorithme d\'extraction courant. N\'affecte pas les sons '
-            'non encore téléchargés.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-          if (_isRegeneratingWaveforms) ...[
-            const SizedBox(height: 8),
-            Text(
-              'En cours… $_waveformRegenDone / $_waveformRegenTotal',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ],
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _isRegeneratingWaveforms
-                ? null
-                : _regenerateCachedWaveforms,
-            icon: _isRegeneratingWaveforms
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh, size: 18),
-            label: const Text('Régénérer les waveforms en cache'),
-          ),
-        ],
-      ),
     );
   }
 
