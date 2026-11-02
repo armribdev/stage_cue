@@ -16,14 +16,22 @@ import 'waveform_envelope.dart';
 const _kHandleHitHalfWidthDesktop = 14.0;
 const _kHandleHitHalfWidthMobile = 28.0;
 
+/// Écart (px) sous lequel poignée et tête de lecture comptent comme superposées.
+const _kOverlapPx = 8.0;
+
+/// Ce qu'un geste sur la waveform déplace.
+enum _Grab { handle, playhead }
+
 /// Éditeur du point d'entrée d'un son : waveform scrubbable avec une poignée
 /// draggable, aperçu audio depuis le point choisi et réglage fin (±0,1 s).
 /// La zone avant le point d'entrée est grisée pour montrer d'un coup d'œil ce
 /// qui sera sauté à la lecture.
 ///
-/// Pendant l'aperçu, un clic ou un glissement hors de la poignée déplace la
-/// tête de lecture (l'audio repart à la position relâchée) ; sur la poignée, il
-/// déplace le point d'entrée.
+/// La tête de lecture (jaune) est toujours visible et se déplace au glisser :
+/// à l'arrêt elle marque d'où repartira ▶, en aperçu l'audio repart de la
+/// position relâchée. Poignée et tête superposées : pastille en haut = poignée,
+/// repère en bas = tête. En aperçu, un clic ailleurs déplace la tête ; à
+/// l'arrêt, il déplace le point d'entrée.
 ///
 /// Charge sa propre source audio (durée + aperçu). Si le fichier n'est pas
 /// disponible localement, l'éditeur s'affiche désactivé avec un message.
@@ -74,9 +82,12 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
 
   /// Un geste en cours déplace la tête de lecture (et non la poignée).
   bool _isScrubbingPlayhead = false;
-  bool _isOverHandle = false;
+  _Grab? _hover;
   int? _activePointer;
   Ticker? _ticker;
+
+  /// Tête de lecture, toujours affichée. À l'arrêt elle marque d'où repartira
+  /// ▶ : elle suit le point d'entrée tant qu'on ne l'a pas déplacée à la main.
   Duration _playhead = Duration.zero;
 
   @override
@@ -109,9 +120,14 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       _player = player;
       _duration = player.duration;
       _offsetMs = _offsetMs.clamp(0, _duration.inMilliseconds);
+      _playhead = _offset;
       player.onPlayerStateChanged.listen((playing) {
         if (!mounted) return;
-        setState(() => _isPreviewing = playing);
+        setState(() {
+          _isPreviewing = playing;
+          // Arrêt (manuel ou fin de piste) : la tête revient au point d'entrée.
+          if (!playing) _playhead = _offset;
+        });
         _syncTicker();
       });
       setState(() => _loading = false);
@@ -146,7 +162,11 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
   void _setOffsetMs(int ms) {
     final clamped = ms.clamp(0, _duration.inMilliseconds);
     if (clamped == _offsetMs) return;
-    setState(() => _offsetMs = clamped);
+    setState(() {
+      _offsetMs = clamped;
+      // À l'arrêt, la tête reste calée sur le point d'entrée.
+      if (!_isPreviewing) _playhead = _offset;
+    });
     widget.onChanged(clamped);
   }
 
@@ -159,8 +179,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       await player.stop();
       return;
     }
-    _playhead = _offset;
-    await player.playFromPosition(_offset, volume: widget.volume);
+    await player.playFromPosition(_playhead, volume: widget.volume);
   }
 
   void _syncTicker() {
@@ -191,23 +210,40 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       ? 0.0
       : (ms / _duration.inMilliseconds).clamp(0.0, 1.0);
 
-  /// Le geste en [dx] attrape-t-il la poignée du point d'entrée ? En aperçu,
-  /// quand la tête de lecture est plus proche du curseur que la poignée, c'est
-  /// elle qui l'emporte — sinon, juste après le départ (tête et poignée
-  /// confondues, sur un son long sur des dizaines de secondes), la tête
-  /// jaune serait inattrapable. À égalité, la poignée garde la priorité.
-  bool _grabsHandle(double dx, double width) {
-    if (width <= 0) return false;
-    final handleDistance = (dx - width * _fractionOf(_offsetMs)).abs();
-    if (handleDistance > _handleHitHalfWidth()) return false;
-    if (!_isPreviewing) return true;
+  /// Élément attrapable sous le curseur [p], ou `null` s'il n'y en a aucun à
+  /// portée. Le plus proche l'emporte (sinon la zone de la poignée, large,
+  /// avalerait la tête de lecture). Quand les deux sont superposées — cas
+  /// normal à l'arrêt, où la tête repose sur le point d'entrée — la moitié
+  /// haute de la waveform (pastille de la poignée) attrape la poignée, la
+  /// moitié basse (repère de la tête) attrape la tête.
+  _Grab? _hitAt(Offset p, double width) {
+    if (width <= 0) return null;
+    final handleDistance = (p.dx - width * _fractionOf(_offsetMs)).abs();
     final playheadDistance =
-        (dx - width * _fractionOf(_playhead.inMilliseconds)).abs();
-    return handleDistance <= playheadDistance;
+        (p.dx - width * _fractionOf(_playhead.inMilliseconds)).abs();
+    final reach = _handleHitHalfWidth();
+    final nearHandle = handleDistance <= reach;
+    final nearPlayhead = playheadDistance <= reach;
+    if (nearHandle && nearPlayhead) {
+      if ((handleDistance - playheadDistance).abs() <= _kOverlapPx) {
+        return p.dy > _waveHeight / 2 ? _Grab.playhead : _Grab.handle;
+      }
+      return handleDistance < playheadDistance ? _Grab.handle : _Grab.playhead;
+    }
+    if (nearHandle) return _Grab.handle;
+    if (nearPlayhead) return _Grab.playhead;
+    return null;
   }
 
+  /// Cible d'un geste qui démarre en [p] : l'élément touché ; à défaut, en
+  /// aperçu la tête de lecture (le clic la déplace), sinon la poignée.
+  _Grab _grabTarget(Offset p, double width) =>
+      _hitAt(p, width) ?? (_isPreviewing ? _Grab.playhead : _Grab.handle);
+
   SystemMouseCursor _waveformCursor() {
-    if (_isDragging || _isOverHandle) return SystemMouseCursors.resizeLeftRight;
+    if (_isDragging || _isScrubbingPlayhead || _hover != null) {
+      return SystemMouseCursors.resizeLeftRight;
+    }
     // En aperçu, hors de la poignée, le geste déplace la tête de lecture.
     if (_isPreviewing) return SystemMouseCursors.click;
     return isNativeDesktopPlatform()
@@ -215,11 +251,9 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
         : SystemMouseCursors.click;
   }
 
-  void _updateHandleHover(double dx, double width) {
-    final overHandle = _grabsHandle(dx, width);
-    if (overHandle != _isOverHandle) {
-      setState(() => _isOverHandle = overHandle);
-    }
+  void _updateHover(Offset p, double width) {
+    final hover = _hitAt(p, width);
+    if (hover != _hover) setState(() => _hover = hover);
   }
 
   void _endDrag() {
@@ -316,20 +350,17 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
               value: cursor,
               child: MouseRegion(
                 cursor: cursor,
-                onHover: (event) =>
-                    _updateHandleHover(event.localPosition.dx, width),
+                onHover: (event) => _updateHover(event.localPosition, width),
                 onExit: (_) {
-                  if (_isDragging) return;
-                  if (_isOverHandle) setState(() => _isOverHandle = false);
+                  if (_activePointer != null) return;
+                  if (_hover != null) setState(() => _hover = null);
                 },
                 child: Listener(
                   behavior: HitTestBehavior.opaque,
                   onPointerDown: (event) {
-                    // En aperçu, seule la poignée reste attrapable : ailleurs
-                    // le geste déplace la tête de lecture.
                     final scrub =
-                        _isPreviewing &&
-                        !_grabsHandle(event.localPosition.dx, width);
+                        _grabTarget(event.localPosition, width) ==
+                        _Grab.playhead;
                     setState(() {
                       _activePointer = event.pointer;
                       _isScrubbingPlayhead = scrub;
@@ -340,7 +371,6 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
                   onPointerMove: (event) {
                     if (_activePointer != event.pointer) return;
                     dragTo(event.localPosition.dx);
-                    _updateHandleHover(event.localPosition.dx, width);
                   },
                   onPointerUp: (event) {
                     if (_activePointer != event.pointer) return;
@@ -358,16 +388,14 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
                         bars: bars,
                         volume: widget.volume,
                         offsetFraction: fraction,
-                        playheadFraction: _isPreviewing
-                            ? playheadFraction
-                            : null,
+                        playheadFraction: playheadFraction,
                         skippedColor: scheme.onSurfaceVariant.withValues(
                           alpha: 0.28,
                         ),
                         keptColor: scheme.primary,
                         handleColor: scheme.primary,
                         playheadColor: scheme.tertiary,
-                        handleHovered: _isOverHandle || _isDragging,
+                        handleHovered: _hover == _Grab.handle || _isDragging,
                         handleHitHalfWidth: _handleHitHalfWidth(),
                       ),
                     ),
@@ -440,14 +468,14 @@ class _NudgeButton extends StatelessWidget {
 
 /// Waveform de l'éditeur : enveloppe continue remplie (miroir autour de l'axe),
 /// grisée avant le point d'entrée, colorée après ; trait vertical de poignée au
-/// point d'entrée ; tête de lecture optionnelle pendant l'aperçu. Rendu par
+/// point d'entrée ; tête de lecture toujours affichée. Rendu par
 /// enveloppe (plus précis que l'ancien « bâton »), rééchantillonné par pic pour
 /// préserver les crêtes.
 class _OffsetWaveformPainter extends CustomPainter {
   final List<double> bars;
   final double volume;
   final double offsetFraction;
-  final double? playheadFraction;
+  final double playheadFraction;
   final Color skippedColor;
   final Color keptColor;
   final Color handleColor;
@@ -509,19 +537,6 @@ class _OffsetWaveformPainter extends CustomPainter {
       );
     }
 
-    // Tête de lecture (aperçu).
-    final ph = playheadFraction;
-    if (ph != null) {
-      final phX = size.width * ph;
-      canvas.drawLine(
-        Offset(phX, 0),
-        Offset(phX, size.height),
-        Paint()
-          ..color = playheadColor
-          ..strokeWidth = 1.5,
-      );
-    }
-
     // Poignée du point d'entrée : trait vertical + pastille en tête.
     final handlePaint = Paint()
       ..color = handleColor
@@ -546,6 +561,25 @@ class _OffsetWaveformPainter extends CustomPainter {
         Paint()..color = handleColor.withValues(alpha: 0.12),
       );
     }
+
+    // Tête de lecture, par-dessus la poignée : toujours visible, même
+    // superposée au point d'entrée grâce à son repère triangulaire en bas
+    // (la pastille de la poignée est en haut).
+    final phX = size.width * playheadFraction;
+    final playheadPaint = Paint()..color = playheadColor;
+    canvas.drawLine(
+      Offset(phX, 0),
+      Offset(phX, size.height),
+      playheadPaint..strokeWidth = 1.5,
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(phX - 5, size.height)
+        ..lineTo(phX + 5, size.height)
+        ..lineTo(phX, size.height - 8)
+        ..close(),
+      playheadPaint,
+    );
   }
 
   @override
