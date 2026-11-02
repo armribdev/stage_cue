@@ -341,7 +341,8 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
   }
 
   /// Fin de ligne : aperçu (sauf variante d'un multipad, qui se déclenche
-  /// directement) suivi de l'action propre au mode.
+  /// directement, et gestion scindée, où le volet de détails l'offre) suivi de
+  /// l'action propre au mode.
   Widget _buildTrailing(
     Sound sound,
     ColorScheme scheme, {
@@ -362,8 +363,11 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
       isCurrentVariant: isCurrentVariant,
     );
     // En Mode Spectacle sans casque configuré, l'aperçu sortirait en salle :
-    // pas de bouton plutôt qu'un bouton qui ne fait que refuser.
-    if (_isPadVariant || widget.notifier.isRoomPreviewBlockedInLive) {
+    // pas de bouton plutôt qu'un bouton qui ne fait que refuser. Gestion
+    // scindée : l'aperçu est déjà dans le volet de détails (`StartOffsetEditor`).
+    if (_isPadVariant ||
+        _isSplitLayout ||
+        widget.notifier.isRoomPreviewBlockedInLive) {
       return action;
     }
     return Row(
