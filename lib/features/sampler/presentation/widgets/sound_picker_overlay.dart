@@ -567,11 +567,11 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
             if (!_isPadVariant) ...[
               _buildSearchField(scheme),
               _buildTypeFilters(scheme),
-              if (_isManage) _buildQueueBar(scheme),
               _buildFilterDivider(scheme),
             ],
             Expanded(child: results),
             _buildHints(scheme, shown.isNotEmpty),
+            if (_isManage && !_isPadVariant) _buildQueueBar(scheme),
           ],
         ),
       );

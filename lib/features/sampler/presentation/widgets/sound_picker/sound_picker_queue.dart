@@ -4,7 +4,7 @@
 
 part of '../sound_picker_overlay.dart';
 
-/// File de traitement des sons « à traiter » (mode gestion) et sa barre.
+/// File de traitement des sons « à traiter » (mode gestion) et son encart.
 /// Méthodes de [_SoundPickerOverlayState] extraites via extension dans le même `part`.
 extension _SoundPickerQueue on _SoundPickerOverlayState {
   // ── File de traitement (sons « à traiter ») ───────────────────────────────
@@ -81,125 +81,56 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
     unawaited(_editInPane(shown[index]));
   }
 
-  /// Valide en masse les sons non traités actuellement listés (recherche et
-  /// filtres compris), sans les modifier. C'est l'issue de secours pour la
-  /// bibliothèque déjà organisée : la migration a mis tous les sons existants
-  /// « à traiter ».
-  Future<void> _markShownAsProcessed() async {
-    final mode = _manageMode;
-    if (mode == null) return;
-    final ids = [
-      for (final s in _results)
-        if (!s.isProcessed) s.id,
-    ];
-    if (ids.isEmpty) return;
-    final scope = _query.trim().isEmpty
-        ? ''
-        : '\n\nSeuls les sons correspondant à la recherche sont concernés.';
-    final confirmed = await AppConfirmDialog.show(
-      context,
-      title: 'Marquer comme traités',
-      message:
-          'Marquer ${ids.length} son${ids.length > 1 ? 's' : ''} comme '
-          'traité${ids.length > 1 ? 's' : ''} sans les modifier ?$scope',
-      confirmLabel: 'Tout marquer',
-    );
-    if (!confirmed || !mounted) return;
-    try {
-      await mode.repository.markSoundsProcessed(ids);
-    } catch (error) {
-      if (mounted) _showLocalSnackBar('Erreur : $error');
-      return;
-    }
-    await _adoptRefreshedSnapshot();
-    if (!mounted) return;
-    setState(() {
-      _selectedIndex = 0;
-      // Le formulaire ouvert porte encore l'ancien état « à traiter » : on le
-      // recrée (clé incluant isProcessed) sauf s'il a des modifications.
-      final editing = _editingSound;
-      if (editing != null && !_editDirty && ids.contains(editing.id)) {
-        _editingSound = _all.where((s) => s.id == editing.id).firstOrNull;
-      }
-    });
-    _showLocalSnackBar(
-      '${ids.length} son${ids.length > 1 ? 's' : ''} marqué'
-      '${ids.length > 1 ? 's' : ''} comme traité${ids.length > 1 ? 's' : ''}.',
-    );
-  }
-
-  /// Barre de la file de traitement (mode gestion) : bascule « À traiter · N »
-  /// et validation en masse. Masquée tant qu'il n'y a rien à traiter, sauf si
-  /// la file est active (pour pouvoir en sortir).
+  /// Encart de la file de traitement (mode gestion), tout en bas sous la liste
+  /// et sa ligne de raccourcis : propose de passer en mode « traitement des non
+  /// traités ». Gabarit constant d'un état à l'autre — seuls le libellé et le
+  /// bouton (« Traiter » / « Terminer ») changent, jamais la taille de
+  /// l'encart. Masqué tant qu'il n'y a rien à traiter, sauf si la file est
+  /// active (pour pouvoir en sortir).
   Widget _buildQueueBar(ColorScheme scheme) {
     final remaining = _unprocessedCount;
-    if (remaining == 0 && !_unprocessedOnly) return const SizedBox.shrink();
     final active = _unprocessedOnly;
+    if (remaining == 0 && !active) return const SizedBox.shrink();
     final accent = scheme.primary;
-    final canMarkAll = active && _results.any((s) => !s.isProcessed);
+    final plural = remaining > 1 ? 's' : '';
+    final label = active
+        ? 'Traitement · $remaining restant$plural'
+        : '$remaining son$plural non traité$plural';
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 8, 6),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      decoration: BoxDecoration(
+        border: Border(top: AppElevation.border(scheme)),
+      ),
       child: Row(
         children: [
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              canRequestFocus: false,
-              borderRadius: AppRadius.radiusMd,
-              onTap: _toggleUnprocessedOnly,
-              child: Container(
-                height: 30,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: active ? accent.withValues(alpha: 0.12) : null,
-                  borderRadius: AppRadius.radiusMd,
-                  border: Border.all(
-                    color: active
-                        ? accent.withValues(alpha: 0.5)
-                        : scheme.outlineVariant.withValues(alpha: 0.6),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: accent,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'À traiter',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                        color: active ? accent : scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$remaining',
-                      style: AppFonts.monoStyle(
-                        TextStyle(
-                          fontSize: 12,
-                          color: active ? accent : scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                color: active ? accent : scheme.onSurfaceVariant,
               ),
             ),
           ),
-          if (active && _isSplitLayout)
+          // Visible seulement en traitement ; hors file, un vide de même
+          // taille garde l'encart à gabarit constant.
+          if (_isSplitLayout && !active)
+            const SizedBox.square(dimension: _actionButtonSize)
+          else if (_isSplitLayout)
             Tooltip(
               message: _autoPreview
-                  ? 'Lecture auto à l\'ouverture : activée'
-                  : 'Lecture auto à l\'ouverture : désactivée',
+                  ? "Lecture auto à l'ouverture : activée"
+                  : "Lecture auto à l'ouverture : désactivée",
               child: _roundIconButton(
                 scheme: scheme,
                 icon: _autoPreview
@@ -216,26 +147,18 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
                 }),
               ),
             ),
-          const Spacer(),
-          if (canMarkAll)
-            ExcludeFocus(
-              child: Tooltip(
-                message:
-                    'Marquer les sons listés comme traités, sans les '
-                    'modifier',
-                child: TextButton.icon(
-                  onPressed: () => unawaited(_markShownAsProcessed()),
-                  icon: const Icon(Icons.done_all_rounded, size: 16),
-                  label: const Text('Tout marquer traité'),
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(0, 30),
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    textStyle: const TextStyle(fontSize: 12),
-                    foregroundColor: scheme.onSurfaceVariant,
-                  ),
-                ),
+          const SizedBox(width: 4),
+          ExcludeFocus(
+            child: OutlinedButton(
+              onPressed: _toggleUnprocessedOnly,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(88, 30),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                textStyle: const TextStyle(fontSize: 13),
               ),
+              child: Text(active ? 'Terminer' : 'Traiter'),
             ),
+          ),
         ],
       ),
     );

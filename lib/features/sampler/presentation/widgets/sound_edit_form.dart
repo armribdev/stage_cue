@@ -34,14 +34,9 @@ class SoundEditForm extends StatefulWidget {
   /// Notifié à chaque bascule « modifications non enregistrées ».
   final ValueChanged<bool>? onDirtyChanged;
 
-  /// File de traitement active (filtre « À traiter ») : le bouton d'un son non
-  /// traité devient « Valider et suivant » et l'appelant enchaîne sur le son
-  /// suivant dans [onSaved].
+  /// File de traitement active : « Passer » apparaît en pied de formulaire, et
+  /// l'appelant enchaîne sur le son suivant dans [onSaved].
   final bool isQueueMode;
-
-  /// Sons restant à traiter, affiché en pied de formulaire en file de
-  /// traitement. `null` = pas de compteur.
-  final int? queueRemaining;
 
   /// « Passer » : laisse ce son à traiter et ouvre le suivant. `null` = pas de
   /// bouton (pas de file, ou plus de son suivant).
@@ -56,7 +51,6 @@ class SoundEditForm extends StatefulWidget {
     this.onSaved,
     this.onDirtyChanged,
     this.isQueueMode = false,
-    this.queueRemaining,
     this.onSkip,
     this.controller,
   });
@@ -370,13 +364,6 @@ class _SoundEditFormState extends State<SoundEditForm> {
               constraints: const BoxConstraints(maxWidth: 640),
               child: Row(
                 children: [
-                  if (widget.isQueueMode && widget.queueRemaining != null)
-                    Text(
-                      '${widget.queueRemaining} à traiter',
-                      style: AppFonts.monoStyle(
-                        TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                      ),
-                    ),
                   const Spacer(),
                   if (widget.onSkip != null) ...[
                     TextButton(
@@ -412,10 +399,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
     );
   }
 
-  String get _saveLabel {
-    if (_isProcessed) return 'Enregistrer';
-    return widget.isQueueMode ? 'Valider et suivant' : 'Valider';
-  }
+  String get _saveLabel => _isProcessed ? 'Enregistrer' : 'Valider';
 
   /// Une section = libellé en petites capitales + contenu, puis un séparateur
   /// (direction « Console Linear » : pas de `Card` autour d'une section).
@@ -453,34 +437,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
         ),
-        if (!_isProcessed) ...[
-          const SizedBox(width: 12),
-          _buildToProcessBadge(),
-        ],
       ],
-    );
-  }
-
-  /// Pastille « À traiter » : même repère que l'accent de la ligne dans la
-  /// liste, pour relier visuellement les deux.
-  Widget _buildToProcessBadge() {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.12),
-        borderRadius: AppRadius.radiusMd,
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.5)),
-      ),
-      child: Text(
-        'À TRAITER',
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
-          color: scheme.primary,
-        ),
-      ),
     );
   }
 
