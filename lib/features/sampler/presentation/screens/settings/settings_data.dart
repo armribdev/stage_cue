@@ -29,10 +29,20 @@ extension _SettingsData on _SettingsScreenState {
       _cueDevicesLoaded = true;
       _isLoadingCueDevices = false;
     });
+    // Casque choisi mais absent de l'énumération (débranché) : on repasse sur
+    // « Désactivé » plutôt que d'afficher un périphérique fantôme.
+    final selectedId = widget.appPreferences.cueOutputDeviceId;
+    if (selectedId != null && !devices.any((d) => d.id == selectedId)) {
+      AudioLoadLog.info(
+        'Sortie cue : le casque choisi est absent de la liste, retour sur '
+        '« Désactivé ».',
+      );
+      await _setCueDevice(null);
+    }
   }
 
   /// Change le device cue : persistance + application immédiate au moteur.
-  /// `null` n'est pas choisissable dans le menu (état « aucun casque » initial).
+  /// `null` = « Désactivé » (aucun casque).
   Future<void> _setCueDevice(String? deviceId) async {
     CueAudioService.instance.setSelectedDevice(deviceId);
     await widget.appPreferences.setCueOutputDeviceId(deviceId);
