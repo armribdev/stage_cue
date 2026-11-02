@@ -68,8 +68,8 @@ extension _SamplerScreenNavigation on _SamplerScreenState {
       if (!connected) return; // l'utilisateur a annulé le sélecteur de compte
       sync.clearAuthOfflineState();
       await repo.refreshConnectedAccountProfile();
+      // Pas de confirmation : la bannière hors-ligne disparaît d'elle-même.
       await _notifier.loadSounds();
-      if (mounted) AppSnackBar.show(context, 'Session Google renouvelée');
     } on GoogleOAuthNotConfiguredException catch (e) {
       if (mounted) {
         AppSnackBar.show(

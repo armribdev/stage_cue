@@ -88,15 +88,8 @@ extension _SettingsIndexing on _SettingsScreenState {
 
         if (mounted) {
           final n = result.newSoundCount;
-          if (n > 0) {
-            await _offerAddNewSoundsToBoard(n);
-          } else {
-            AppSnackBar.show(
-              context,
-              'Dossier ajouté et indexé',
-              duration: const Duration(seconds: 2),
-            );
-          }
+          // Sans nouveau son : pas de message, le dossier apparaît dans la liste.
+          if (n > 0) await _offerAddNewSoundsToBoard(n);
         }
 
         if (isSafTree && safInfo == null) {
@@ -281,36 +274,18 @@ extension _SettingsIndexing on _SettingsScreenState {
         }
       }
 
-      if (mounted) {
-        final String message;
-        if (init.shouldUpload && !uploadSucceeded) {
-          message = init.indexedNewFiles > 0
+      // Seul l'échec d'envoi se signale : en cas de succès le dossier apparaît,
+      // indexé, dans la liste.
+      if (mounted && init.shouldUpload && !uploadSucceeded) {
+        showCopyableSnackBar(
+          context,
+          init.indexedNewFiles > 0
               ? 'Dossier Drive « $folderName » indexé localement, '
-                    'mais l\'envoi vers Drive a échoué'
+                    "mais l'envoi vers Drive a échoué"
               : 'Dossier Drive « $folderName » lié, '
-                    'mais la BDD n\'a pas pu être créée sur Drive';
-        } else if (!init.hadRemoteSnapshot && uploadSucceeded) {
-          message = 'Dossier Drive « $folderName » configuré et synchronisé';
-        } else if (init.indexedNewFiles > 0) {
-          message =
-              'Dossier Drive « $folderName » mis à jour '
-              '(${init.indexedNewFiles} nouveau(x) fichier(s))';
-        } else {
-          message = 'Dossier Drive « $folderName » lié';
-        }
-        if (init.shouldUpload && !uploadSucceeded) {
-          showCopyableSnackBar(
-            context,
-            message,
-            duration: const Duration(seconds: 3),
-          );
-        } else {
-          AppSnackBar.show(
-            context,
-            message,
-            duration: const Duration(seconds: 3),
-          );
-        }
+                    "mais la BDD n'a pas pu être créée sur Drive",
+          duration: const Duration(seconds: 3),
+        );
       }
 
       await _loadDatabaseInfo();

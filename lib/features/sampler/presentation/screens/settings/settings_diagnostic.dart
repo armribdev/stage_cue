@@ -19,6 +19,8 @@ extension _SettingsDiagnostic on _SettingsScreenState {
     final scheme = Theme.of(context).colorScheme;
     final folder = LogSink.directory?.path;
     final lost = LogSink.lostLines;
+    final exported = _confirmedAction == _kExportLogsAction;
+    final copied = _confirmedAction == _kCopyLogsAction;
     // Boutons côte à côte : `minimumSize` surchargé, sinon le thème global
     // (`Size.fromHeight`) leur donne une largeur infinie et ils disparaissent.
     final buttonStyle = OutlinedButton.styleFrom(
@@ -69,14 +71,20 @@ extension _SettingsDiagnostic on _SettingsScreenState {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.download_outlined, size: 18),
-                label: const Text('Exporter les logs'),
+                    : Icon(
+                        exported ? Icons.check : Icons.download_outlined,
+                        size: 18,
+                      ),
+                label: Text(exported ? 'Logs exportés' : 'Exporter les logs'),
               ),
               OutlinedButton.icon(
                 style: buttonStyle,
                 onPressed: _isDiagnosticBusy ? null : _copyLogsToClipboard,
-                icon: const Icon(Icons.copy_outlined, size: 18),
-                label: const Text('Copier dans le presse-papiers'),
+                icon: Icon(
+                  copied ? Icons.check : Icons.copy_outlined,
+                  size: 18,
+                ),
+                label: Text(copied ? 'Copié' : 'Copier dans le presse-papiers'),
               ),
               if (_isDesktopPlatform)
                 OutlinedButton.icon(
@@ -126,7 +134,7 @@ extension _SettingsDiagnostic on _SettingsScreenState {
         }
         if (!mounted) return;
       }
-      AppSnackBar.show(context, 'Logs exportés : ${p.basename(savedPath)}');
+      _flashConfirmation(_kExportLogsAction);
     } catch (e) {
       AppLog.warn('Export des logs échoué : $e');
       if (!mounted) return;
@@ -152,11 +160,7 @@ extension _SettingsDiagnostic on _SettingsScreenState {
       }
       await Clipboard.setData(ClipboardData(text: text));
       if (!mounted) return;
-      final lines = '\n'.allMatches(text).length + 1;
-      AppSnackBar.show(
-        context,
-        '$lines dernière(s) ligne(s) du journal copiée(s).',
-      );
+      _flashConfirmation(_kCopyLogsAction);
     } catch (e) {
       AppLog.warn('Copie des logs échouée : $e');
       if (!mounted) return;

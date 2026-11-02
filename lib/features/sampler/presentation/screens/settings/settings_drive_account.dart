@@ -115,14 +115,8 @@ extension _SettingsDriveAccount on _SettingsScreenState {
 
     setState(() => _isDriveAuthBusy = true);
     try {
+      // Pas de confirmation : la carte du compte passe à l'état déconnecté.
       await widget.libraryRepository.disconnect();
-      if (mounted) {
-        AppSnackBar.show(
-          context,
-          'Compte Google déconnecté',
-          duration: const Duration(seconds: 2),
-        );
-      }
     } catch (e) {
       if (mounted) {
         showCopyableSnackBar(context, 'Erreur lors de la déconnexion : $e');

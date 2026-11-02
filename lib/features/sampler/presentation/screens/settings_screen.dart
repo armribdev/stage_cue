@@ -103,6 +103,12 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
+/// Clés des contrôles qui affichent une confirmation inline (`_confirmedAction`).
+const _kUpdateAction = 'update';
+const _kDriveRefreshAction = 'drive-refresh';
+const _kExportLogsAction = 'export-logs';
+const _kCopyLogsAction = 'copy-logs';
+
 class _SettingsScreenState extends State<SettingsScreen> {
   List<db.WatchedPath> _watchedPaths = [];
   List<domain.Library> _libraries = [];
@@ -124,6 +130,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _appVersion;
   bool _isCheckingForUpdate = false;
   bool _isDiagnosticBusy = false;
+
+  /// Action dont le bouton affiche brièvement une coche de confirmation (voir
+  /// [_flashConfirmation]) — remplace une snackbar pour un simple « c'est fait ».
+  String? _confirmedAction;
+  Timer? _confirmationTimer;
+
+  /// Affiche une confirmation inline sur le contrôle [action] pendant 2 s.
+  void _flashConfirmation(String action) {
+    _confirmationTimer?.cancel();
+    setState(() => _confirmedAction = action);
+    _confirmationTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _confirmedAction = null);
+    });
+  }
 
   /// Périphériques de sortie de pré-écoute (cue) — Windows uniquement.
   List<CueDevice> _cueDevices = const [];
@@ -201,6 +221,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     widget.libraryRepository.removeListener(_onLibraryRepositoryChanged);
     _avatarCache.dispose();
+    _confirmationTimer?.cancel();
     super.dispose();
   }
 
