@@ -31,6 +31,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
               type: Value(metadata.type),
               contentHash: Value(metadata.contentHash),
               waveform: Value(metadata.waveform),
+              volume: _autoVolume(metadata.volume),
               waveformProbeGeneration: Value(metadata.waveformProbeGeneration),
             ),
           );
@@ -75,6 +76,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
             waveform: Value(metadata.waveform),
+            volume: _autoVolume(metadata.volume),
           ),
         );
     return true;
@@ -106,6 +108,12 @@ extension LocalSoundIndexing on LocalSoundDataSource {
           contentHash: Value(contentHash),
           waveform: Value(probe?.waveformValue),
           waveformProbeGeneration: Value(probe?.generationValue),
+          // Premier fichier réel d'un son Drive : même gain auto qu'à la
+          // création locale. Seulement si le volume est encore au défaut (1.0) —
+          // un snapshot (autre appareil) ou l'opérateur a pu le fixer avant.
+          volume: existing.volume == 1.0
+              ? _autoVolume(probe?.autoVolume)
+              : const Value.absent(),
         ),
       );
       return;
@@ -358,20 +366,10 @@ extension LocalSoundIndexing on LocalSoundDataSource {
     // 3. Métadonnées des nouveaux sons, hors transaction. Court-circuit rapide
     //    quand le fichier n'est pas encore en cache (cas normal : l'indexation
     //    est métadonnées-only), donc pas de probe SoLoud dans ce cas.
-    final creationMetadata =
-        <
-          ({
-            db_sounds.SoundType? type,
-            String? contentHash,
-            Uint8List? waveform,
-            int? waveformProbeGeneration,
-          })
-        >[];
-    for (final entry in creations) {
-      creationMetadata.add(
+    final creationMetadata = [
+      for (final entry in creations)
         await _resolveMetadataForFile(File(entry.localPath)),
-      );
-    }
+    ];
 
     // 4. Écriture : un seul batch, donc une seule transaction.
     await _database.batch((batch) {
@@ -397,6 +395,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
             relativePath: Value(entry.relativePath),
             contentHash: Value(metadata.contentHash),
             waveform: Value(metadata.waveform),
+            volume: _autoVolume(metadata.volume),
             driveFileId: Value(entry.driveFileId),
             driveMd5: Value(entry.driveMd5),
             folderId: Value(entry.folderId),
@@ -492,6 +491,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
                   type: Value(metadata.type),
                   contentHash: Value(metadata.contentHash),
                   waveform: Value(metadata.waveform),
+                  volume: _autoVolume(metadata.volume),
                   waveformProbeGeneration: Value(
                     metadata.waveformProbeGeneration,
                   ),
