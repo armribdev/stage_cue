@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -12,7 +11,6 @@ import '../providers/sampler_provider.dart';
 import 'audio_vu_meter.dart';
 import 'boxed_icon_button.dart';
 import 'circle_hover_button.dart';
-import 'unprocessed_badge.dart';
 import 'waveform_mark_button.dart';
 
 part 'sampler_boards_chrome.dart';
@@ -255,12 +253,8 @@ class SamplerDesktopAppBar extends StatelessWidget
   final VoidCallback? onToggleWindowsFullScreen;
   final VoidCallback? onQuitApp;
 
-  /// Sons restant à traiter (badge du menu). `null` = pas de badge.
-  final ValueListenable<int>? unprocessedCount;
-
   const SamplerDesktopAppBar({
     super.key,
-    this.unprocessedCount,
     required this.selectedBoard,
     required this.boards,
     required this.isBoardsLoading,
@@ -294,7 +288,6 @@ class SamplerDesktopAppBar extends StatelessWidget
       // `Center` : sans lui, le `leading` serré étirerait le cadre du bouton.
       leading: Center(
         child: SamplerDesktopMenuButton(
-          unprocessedCount: unprocessedCount,
           isPerformanceMode: isPerformanceMode,
           onTogglePerformanceMode: onTogglePerformanceMode,
           onOpenLibrary: onOpenLibrary,
@@ -346,13 +339,8 @@ class SamplerDesktopMenuButton extends StatelessWidget {
   final VoidCallback? onToggleWindowsFullScreen;
   final VoidCallback? onQuitApp;
 
-  /// Sons restant à traiter : pastille sur « Gérer la bibliothèque » et point
-  /// sur le bouton menu. `null` = pas de badge.
-  final ValueListenable<int>? unprocessedCount;
-
   const SamplerDesktopMenuButton({
     super.key,
-    this.unprocessedCount,
     required this.isPerformanceMode,
     required this.onTogglePerformanceMode,
     required this.onOpenLibrary,
@@ -423,10 +411,6 @@ class SamplerDesktopMenuButton extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               const Text('Gérer la bibliothèque'),
-              if (unprocessedCount case final count?) ...[
-                const SizedBox(width: AppSpacing.sm),
-                UnprocessedCountPill(count: count),
-              ],
             ],
           ),
         ),
@@ -511,14 +495,10 @@ class SamplerDesktopMenuButton extends StatelessWidget {
 
     return Builder(
       builder: (buttonContext) {
-        final button = WaveformMarkButton(
+        return WaveformMarkButton(
           tooltip: 'Menu',
           onPressed: () => unawaited(_openMenu(buttonContext)),
         );
-        final count = unprocessedCount;
-        return count == null
-            ? button
-            : UnprocessedDot(count: count, child: button);
       },
     );
   }

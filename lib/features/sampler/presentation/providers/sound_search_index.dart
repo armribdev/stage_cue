@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
 import '../../../../core/sync/local_availability_probe.dart' as probe;
 import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
@@ -65,18 +63,8 @@ class SoundSearchIndex {
   SoundSearchSnapshot? _current;
   Future<SoundSearchSnapshot>? _inFlight;
 
-  /// Nombre de sons jamais traités (`Sound.isProcessed == false`), tenu à jour à
-  /// chaque reconstruction de l'instantané. Alimente le badge « à traiter » des
-  /// menus. Conserve sa dernière valeur après [invalidate] : mieux vaut un
-  /// compteur légèrement périmé qu'un badge qui clignote le temps du rechargement.
-  final ValueNotifier<int> unprocessedCount = ValueNotifier<int>(0);
-
   /// Instantané disponible sans attente, `null` avant le premier chargement.
   SoundSearchSnapshot? get current => _current;
-
-  void _publishUnprocessedCount(List<Sound> sounds) {
-    unprocessedCount.value = sounds.where((s) => !s.isProcessed).length;
-  }
 
   /// Instantané courant s'il existe, sinon premier chargement.
   Future<SoundSearchSnapshot> ensureLoaded() {
@@ -108,7 +96,6 @@ class SoundSearchIndex {
     final next = List<Sound>.from(snapshot.sounds);
     next[index] = update(next[index]);
     _current = snapshot.withSounds(next);
-    _publishUnprocessedCount(next);
   }
 
   /// Jette l'instantané : le prochain accès repart de la base (changement de
@@ -140,7 +127,6 @@ class SoundSearchIndex {
       probedAt: probeIsFresh ? previous.probedAt : now,
     );
     _current = snapshot;
-    _publishUnprocessedCount(sounds);
     return snapshot;
   }
 

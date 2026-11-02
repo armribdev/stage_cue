@@ -288,7 +288,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
             key: prefersDesktopUi ? null : _scaffoldKey,
             appBar: prefersDesktopUi
                 ? SamplerDesktopAppBar(
-                    unprocessedCount: _notifier.unprocessedSoundCount,
                     selectedBoard: selectedBoard,
                     boards: boards,
                     isBoardsLoading: isBoardsLoading,
@@ -316,7 +315,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
             drawer: prefersDesktopUi
                 ? null
                 : BoardsDrawer(
-                    unprocessedCount: _notifier.unprocessedSoundCount,
                     boards: boards,
                     selectedBoard: selectedBoard,
                     isBoardsLoading: isBoardsLoading,
