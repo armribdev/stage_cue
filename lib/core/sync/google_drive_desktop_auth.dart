@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:google_sign_in_all_platforms/google_sign_in_all_platforms.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
-import 'package:googleapis_auth/googleapis_auth.dart' as auth;
+import 'package:googleapis_auth/auth_io.dart' as auth;
 import 'package:http/http.dart' as http;
 import 'drive_account_profile.dart';
 import 'drive_client.dart';
@@ -73,6 +74,14 @@ const String _kPostAuthPageHtml = '''
 </body>
 </html>
 ''';
+
+/// Port de redirection du consentement OAuth. Doit correspondre à l'URI
+/// `http://localhost:8000` déclarée dans la console Google Cloud (c'est le port
+/// par défaut qu'utilisait `google_sign_in_all_platforms`).
+const int _kConsentRedirectPort = 8000;
+
+/// Au-delà, on considère que l'utilisateur a abandonné le navigateur.
+const Duration _kConsentTimeout = Duration(minutes: 2);
 
 const List<String> _kDriveScopes = [
   'openid',
@@ -246,27 +255,95 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
 
   @override
   Future<DriveClient?> connect() async {
-    // `signIn()` tente d'abord `signInOffline()` et renvoie le jeton stocké tel
-    // quel, sans ouvrir le navigateur. Or `connect()` n'est appelé qu'une fois
-    // la reconnexion silencieuse écartée (jeton révoqué ou expiré) : y relire le
-    // même jeton « réussissait » en quelques secondes puis Drive le rejetait de
-    // nouveau, sans issue autre que se déconnecter à la main. On force donc le
-    // consentement en ligne, qui écrase le jeton stocké.
+    final obtained = await _requestConsent();
+    if (obtained == null) {
+      return null;
+    }
+    final refreshToken = obtained.refreshToken;
+    SyncLog.driveCredentialsIssued(
+      hasRefreshToken: refreshToken != null && refreshToken.isNotEmpty,
+      scopeCount: obtained.scopes.length,
+    );
+    final credentials = GoogleSignInCredentials(
+      accessToken: obtained.accessToken.data,
+      refreshToken: refreshToken,
+      scopes: obtained.scopes,
+      tokenType: obtained.accessToken.type,
+      idToken: obtained.idToken,
+    );
+    await _persistRefreshedCredentials(credentials, obtained);
+    return _clientForCredentials(
+      credentials,
+      accessTokenExpiry: obtained.accessToken.expiry,
+    );
+  }
+
+  /// Consentement OAuth dans le navigateur. Null si abandonné ou délai dépassé.
+  ///
+  /// On n'utilise pas `GoogleSignIn.signIn()` / `signInOnline()` : leur URL
+  /// d'autorisation n'a pas `prompt=consent`. Or, tant que l'utilisateur a déjà
+  /// accordé l'accès, Google saute l'écran de consentement **et ne renvoie pas
+  /// de refresh token** — la session mourait alors au bout d'une heure, sans
+  /// renouvellement possible. Avec `prompt=consent` le refresh token est
+  /// toujours émis. (`signIn()` relisait en plus le jeton stocké sans ouvrir le
+  /// navigateur.)
+  Future<auth.AccessCredentials?> _requestConsent() async {
     SyncLog.info(
       'Drive : consentement OAuth — navigateur ouvert, en attente de la '
       'réponse.',
     );
-    final credentials = await _signIn.signInOnline();
-    if (credentials == null) {
+    final httpClient = http.Client();
+    try {
+      return await auth
+          .obtainAccessCredentialsViaUserConsent(
+            auth.ClientId(
+              GoogleOAuthConfig.clientId,
+              GoogleOAuthConfig.clientSecret,
+            ),
+            _kDriveScopes,
+            httpClient,
+            (url) => unawaited(_openConsentPage(url)),
+            listenPort: _kConsentRedirectPort,
+            customPostAuthPage: _kPostAuthPageHtml,
+          )
+          .timeout(_kConsentTimeout);
+    } on TimeoutException {
+      SyncLog.warn(
+        'Drive : consentement OAuth abandonné — aucune réponse du navigateur '
+        'en ${_kConsentTimeout.inMinutes} min.',
+      );
       return null;
+    } on auth.UserConsentException catch (e) {
+      SyncLog.warn('Drive : consentement OAuth refusé — ${e.message}');
+      return null;
+    } finally {
+      httpClient.close();
     }
-    final refreshToken = credentials.refreshToken;
-    SyncLog.driveCredentialsIssued(
-      hasRefreshToken: refreshToken != null && refreshToken.isNotEmpty,
-      scopeCount: credentials.scopes.length,
+  }
+
+  Future<void> _openConsentPage(String url) async {
+    final uri = Uri.parse(url);
+    final target = uri.replace(
+      queryParameters: {
+        ...uri.queryParameters,
+        'access_type': 'offline',
+        'prompt': 'consent',
+      },
     );
-    final expiry = await _resolveAccessTokenExpiry(credentials);
-    return _clientForCredentials(credentials, accessTokenExpiry: expiry);
+    // Pas de `url_launcher` dans le projet : on lance l'opener natif (cf.
+    // l'ouverture du dossier des logs).
+    final (String executable, List<String> args) = Platform.isWindows
+        ? ('rundll32', ['url.dll,FileProtocolHandler', target.toString()])
+        : Platform.isMacOS
+        ? ('open', [target.toString()])
+        : ('xdg-open', [target.toString()]);
+    try {
+      await Process.start(executable, args, mode: ProcessStartMode.detached);
+    } catch (e) {
+      SyncLog.warn(
+        'Drive : navigateur impossible à ouvrir pour le consentement — $e',
+      );
+    }
   }
 
   @override
@@ -285,6 +362,16 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
       expiresIn: expiry?.difference(DateTime.now().toUtc()),
       scopeCount: stored.credentials.scopes.length,
     );
+    final canRefresh =
+        storedRefreshToken != null && storedRefreshToken.isNotEmpty;
+    final accessTokenExpired =
+        expiry == null || expiry.isBefore(DateTime.now());
+    if (!canRefresh && accessTokenExpired) {
+      // Jeton périmé et rien pour en obtenir un autre : renvoyer un client
+      // ferait afficher « Connecté » pour une session qui échouera au premier
+      // appel. La raison est déjà journalisée par `driveStoredSession`.
+      return null;
+    }
     final accessTokenExpiry = expiry == null || expiry.isBefore(DateTime.now())
         ? DateTime.now().toUtc().subtract(const Duration(seconds: 1))
         : expiry;
@@ -300,21 +387,6 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
       }
       return null;
     }
-  }
-
-  Future<DateTime> _resolveAccessTokenExpiry(
-    GoogleSignInCredentials credentials,
-  ) async {
-    final stored = await _loadStoredCredentials();
-    if (stored != null &&
-        stored.credentials.accessToken == credentials.accessToken) {
-      final expiresAt = stored.expiresAt;
-      if (expiresAt != null && expiresAt.isAfter(DateTime.now())) {
-        return expiresAt;
-      }
-      return DateTime.now().toUtc().subtract(const Duration(seconds: 1));
-    }
-    return DateTime.now().toUtc().add(_kDefaultAccessTokenLifetime);
   }
 
   @override
