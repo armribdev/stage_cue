@@ -182,8 +182,9 @@ class SyncLog {
 
   static void driveSignedIn() => info('Drive : connexion réussie.');
 
-  static void driveSignInCancelled() =>
-      info('Drive : connexion annulée (aucune session obtenue).');
+  static void driveSignInCancelled() => info(
+    'Drive : connexion annulée ou délai dépassé (aucune session obtenue).',
+  );
 
   static void driveSignInFailed(Object error) =>
       warn('Drive : connexion échouée — $error');
@@ -218,22 +219,132 @@ class SyncLog {
 
   static void driveSignedOut() => info('Drive : déconnexion.');
 
+  static String? _lastAuthRejectedCause;
   static DateTime? _lastAuthRejectedAt;
 
-  /// Drive a rejeté le jeton (401 / accès refusé). Une rafale d'appels
-  /// parallèles échoue d'un seul bloc : une ligne par minute suffit.
-  static void driveAuthRejected() {
+  /// Drive a rejeté le jeton (401, accès refusé, refresh impossible). Une rafale
+  /// d'appels parallèles échoue d'un seul bloc : une ligne par minute **et par
+  /// cause** suffit. La cause fait partie de la clé — dédupliquer sur le seul
+  /// délai masquait le second rejet (jeton frais refusé à son tour), qui est
+  /// précisément celui qui explique une reconnexion sans effet.
+  ///
+  /// [cause] décrit l'erreur (statut HTTP, type d'exception, message OAuth),
+  /// jamais un jeton : `LogRedactor` n'est qu'un filet.
+  static void driveAuthRejected(String cause) {
     final now = DateTime.now();
     final last = _lastAuthRejectedAt;
-    if (last != null && now.difference(last) < const Duration(minutes: 1)) {
+    if (cause == _lastAuthRejectedCause &&
+        last != null &&
+        now.difference(last) < const Duration(minutes: 1)) {
       return;
     }
+    _lastAuthRejectedCause = cause;
     _lastAuthRejectedAt = now;
-    warn(
-      'Drive : jeton rejeté par l\'API (401) — renouvellement de la session '
-      'nécessaire.',
-    );
+    warn('Drive : jeton rejeté par l\'API — $cause.');
   }
+
+  /// Un appel Drive a été rejeté en cours d'usage : tentative de renouvellement
+  /// silencieux de la session avant de rejouer l'appel.
+  static void driveRenewStarted() =>
+      info('Drive : appel rejeté, renouvellement silencieux de la session.');
+
+  /// Le renouvellement silencieux a abouti et l'appel rejoué est passé.
+  static void driveRenewSucceeded() =>
+      info('Drive : session renouvelée, appel rejoué avec succès.');
+
+  /// Une OAuth interactive devient nécessaire. [reason] dit pourquoi — c'est ce
+  /// qui distingue « aucune session stockée » de « jeton frais aussi rejeté ».
+  static void driveInteractiveRequired(String reason) =>
+      warn('Drive : reconnexion interactive requise — $reason.');
+
+  /// Entrée dans le flux interactif (navigateur) et pourquoi.
+  static void driveInteractiveStarted(String reason) =>
+      info('Drive : reconnexion interactive lancée — $reason.');
+
+  /// Jetons obtenus par un consentement en ligne. Sans refresh token la session
+  /// ne survit pas à l'expiration du jeton d'accès (~1 h) : c'est le cas qui
+  /// ressemble à « ça marche puis ça casse tout seul ».
+  static void driveCredentialsIssued({
+    required bool hasRefreshToken,
+    required int scopeCount,
+  }) {
+    final message =
+        'Drive : consentement obtenu — refresh token '
+        '${hasRefreshToken ? 'présent' : 'ABSENT'}, $scopeCount scope(s).';
+    if (hasRefreshToken) {
+      info(message);
+    } else {
+      warn(
+        '$message La session expirera avec le jeton d\'accès (~1 h) sans '
+        'renouvellement possible.',
+      );
+    }
+  }
+
+  static String? _lastStoredSessionSignature;
+
+  /// État du jeton stocké à chaque reconnexion silencieuse (jamais sa valeur).
+  ///
+  /// La veille la rejoue toutes les quelques minutes : on ne dit la ligne en
+  /// `info` que lorsque l'état **change**, sinon en `trace`. Un jeton périmé
+  /// sans refresh token est un échec certain, donc `warn`.
+  static void driveStoredSession({
+    required bool hasRefreshToken,
+    required Duration? expiresIn,
+    required int scopeCount,
+  }) {
+    final expiry = expiresIn == null
+        ? 'expiration inconnue'
+        : expiresIn.isNegative
+        ? 'jeton d\'accès périmé (sera rafraîchi)'
+        : 'jeton d\'accès valide encore ${expiresIn.inMinutes} min';
+    final message =
+        'Drive : session stockée — refresh token '
+        '${hasRefreshToken ? 'présent' : 'ABSENT'}, $expiry, '
+        '$scopeCount scope(s).';
+    final signature = '$hasRefreshToken|${expiresIn?.isNegative}|$scopeCount';
+    final changed = signature != _lastStoredSessionSignature;
+    _lastStoredSessionSignature = signature;
+    final unrecoverable =
+        !hasRefreshToken && (expiresIn == null || expiresIn.isNegative);
+    if (unrecoverable) {
+      warn('$message Aucun moyen de la renouveler.');
+    } else if (changed) {
+      info(message);
+    } else {
+      trace(message);
+    }
+  }
+
+  /// Le jeton d'accès a été rafraîchi par le client OAuth (environ toutes les
+  /// heures) : seule trace que le refresh token fonctionne encore.
+  static void driveTokenRefreshed({required Duration validFor}) => info(
+    'Drive : jeton d\'accès rafraîchi (valide ${validFor.inMinutes} min).',
+  );
+
+  /// Le jeton rafraîchi n'a pas pu être écrit dans le stockage sécurisé : au
+  /// prochain lancement l'ancien sera relu et rejeté.
+  static void driveTokenPersistFailed(Object error) =>
+      warn('Drive : jeton rafraîchi non persisté — $error');
+
+  /// Appel Drive rejoué après une erreur transitoire (quota, réseau, 5xx).
+  static void driveRetry({
+    required int attempt,
+    required int maxAttempts,
+    required Object error,
+  }) => trace('Drive : nouvel essai $attempt/$maxAttempts — $error');
+
+  /// Appel Drive abandonné après épuisement des essais sur erreur transitoire.
+  static void driveRetriesExhausted({
+    required int attempts,
+    required Object error,
+  }) => warn('Drive : abandon après $attempts essai(s) — $error');
+
+  /// Le navigateur de dossiers Drive n'a pas pu lister.
+  static void driveFolderListFailed({
+    required String where,
+    required Object error,
+  }) => warn('Drive : liste des dossiers impossible ($where) — $error');
 
   // ── Cache & téléchargements ────────────────────────────────────────────────
 

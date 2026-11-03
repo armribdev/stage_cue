@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/sync/sync_log.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/sync/drive_models.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
@@ -137,6 +138,10 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
       return;
     }
     if (!connected) {
+      SyncLog.info(
+        'Sélecteur de dossiers Drive fermé : connexion non établie '
+        '(annulée ou délai dépassé).',
+      );
       Navigator.of(context).pop();
       return;
     }
@@ -182,6 +187,10 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
         _isLoading = false;
       });
     } catch (e) {
+      SyncLog.driveFolderListFailed(
+        where: _isHome ? 'accueil' : 'sous-dossier',
+        error: e,
+      );
       if (!mounted) {
         return;
       }

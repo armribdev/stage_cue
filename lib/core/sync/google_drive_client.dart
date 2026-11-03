@@ -63,7 +63,33 @@ class GoogleDriveClient implements DriveClient {
   static bool _isAuthError(Object error) {
     if (error is AccessDeniedException) return true;
     if (error is drive.DetailedApiRequestError) return error.status == 401;
-    return false;
+    return _isRefreshTokenRevoked(error);
+  }
+
+  /// Le rafraîchissement du jeton d'accès a été refusé par Google parce que le
+  /// refresh token est révoqué ou périmé (`invalid_grant`).
+  ///
+  /// googleapis_auth le remonte en `ServerRequestFailedException` (HTTP 400), pas
+  /// en `AccessDeniedException` : sans ce cas, une révocation (ou l'expiration à
+  /// 7 jours d'une appli OAuth en mode « Testing ») sortait en erreur brute au
+  /// lieu de déclencher la reconnexion.
+  static bool _isRefreshTokenRevoked(Object error) =>
+      error is ServerRequestFailedException &&
+      error.message.toLowerCase().contains('invalid_grant');
+
+  /// Cause lisible d'un rejet d'auth, pour le journal : statut HTTP, type
+  /// d'exception et message OAuth — jamais un jeton.
+  static String _authCause(Object error) {
+    if (error is drive.DetailedApiRequestError) {
+      return 'HTTP ${error.status} ${error.message ?? ''}'.trim();
+    }
+    if (error is AccessDeniedException) {
+      return 'accès refusé — ${error.message}';
+    }
+    if (error is ServerRequestFailedException) {
+      return 'échec OAuth (HTTP ${error.statusCode}) — ${error.message}';
+    }
+    return '${error.runtimeType}: $error';
   }
 
   static bool _isOAuthClientConfigurationError(Object error) {
@@ -134,6 +160,13 @@ class GoogleDriveClient implements DriveClient {
   /// Nombre total de tentatives pour les appels rejouables.
   static const int _maxAttempts = 4;
 
+  /// Journalise le rejet d'auth puis fournit l'exception à lever : un seul
+  /// chemin, pour qu'aucun site ne convertisse un 401 en silence.
+  static DriveAuthException _authRejected(Object error) {
+    SyncLog.driveAuthRejected(_authCause(error));
+    return const DriveAuthException();
+  }
+
   /// Exécute [fn] et convertit toute erreur d'auth en [DriveAuthException],
   /// les autres en [DriveRequestException] quand elles sont descriptibles.
   ///
@@ -146,8 +179,7 @@ class GoogleDriveClient implements DriveClient {
       return await fn();
     } catch (e) {
       if (_isAuthError(e) || _isOAuthClientConfigurationError(e)) {
-        SyncLog.driveAuthRejected();
-        throw const DriveAuthException();
+        throw _authRejected(e);
       }
       throw _describe(e);
     }
@@ -162,13 +194,23 @@ class GoogleDriveClient implements DriveClient {
         return await fn();
       } catch (e) {
         if (_isAuthError(e) || _isOAuthClientConfigurationError(e)) {
-          SyncLog.driveAuthRejected();
-          throw const DriveAuthException();
+          throw _authRejected(e);
         }
         attempt++;
         if (attempt >= _maxAttempts || !_isTransient(e)) {
+          // Épuisement sur erreur transitoire = décision d'abandonner ; une
+          // erreur définitive est laissée à l'appelant, qui sait si elle est
+          // attendue (404 d'un manifest absent, par exemple).
+          if (_isTransient(e)) {
+            SyncLog.driveRetriesExhausted(attempts: attempt, error: e);
+          }
           throw _describe(e);
         }
+        SyncLog.driveRetry(
+          attempt: attempt + 1,
+          maxAttempts: _maxAttempts,
+          error: e,
+        );
         await Future<void>.delayed(_backoff(attempt));
       }
     }
@@ -477,11 +519,11 @@ class GoogleDriveClient implements DriveClient {
               as drive.File;
       return _toDriveFile(f);
     } on drive.DetailedApiRequestError catch (e) {
-      if (_isAuthError(e)) throw const DriveAuthException();
+      if (_isAuthError(e)) throw _authRejected(e);
       if (e.status == 404) return null;
       rethrow;
-    } on AccessDeniedException {
-      throw const DriveAuthException();
+    } on AccessDeniedException catch (e) {
+      throw _authRejected(e);
     }
   }
 
@@ -567,11 +609,11 @@ class GoogleDriveClient implements DriveClient {
       }
       return owners.first.emailAddress;
     } on drive.DetailedApiRequestError catch (e) {
-      if (_isAuthError(e)) throw const DriveAuthException();
+      if (_isAuthError(e)) throw _authRejected(e);
       if (e.status == 404 || e.status == 403) return null;
       rethrow;
-    } on AccessDeniedException {
-      throw const DriveAuthException();
+    } on AccessDeniedException catch (e) {
+      throw _authRejected(e);
     }
   }
 
@@ -596,11 +638,11 @@ class GoogleDriveClient implements DriveClient {
       }
       return owners.first.emailAddress;
     } on drive.DetailedApiRequestError catch (e) {
-      if (_isAuthError(e)) throw const DriveAuthException();
+      if (_isAuthError(e)) throw _authRejected(e);
       if (e.status == 404 || e.status == 403) return null;
       rethrow;
-    } on AccessDeniedException {
-      throw const DriveAuthException();
+    } on AccessDeniedException catch (e) {
+      throw _authRejected(e);
     }
   }
 
