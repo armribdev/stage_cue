@@ -71,6 +71,16 @@ class Sound {
     this.isProcessed = false,
   }) : displayName = displayName ?? title;
 
+  /// Dossier source du son : le dossier de PREMIER niveau de sa bibliothèque
+  /// (les sous-dossiers se rattachent à lui), `''` pour un fichier à la racine.
+  /// `null` pour un son local, sans chemin relatif.
+  String? get sourceFolder {
+    final path = relativePath;
+    if (path == null || path.isEmpty) return null;
+    final separator = path.indexOf('/');
+    return separator < 0 ? '' : path.substring(0, separator);
+  }
+
   /// Copie avec champs remplacés. Les paramètres omis conservent leur valeur :
   /// cette copie ne sait donc pas remettre un champ à `null` — elle sert à
   /// rafraîchir en mémoire un son déjà chargé (favori, dernière lecture, type)

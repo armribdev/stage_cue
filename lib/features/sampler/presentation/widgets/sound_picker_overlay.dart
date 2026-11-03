@@ -286,6 +286,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   /// bibliothèque (`Sound.isProcessed == false`). Mode gestion uniquement.
   bool _unprocessedOnly = false;
 
+  /// Restreint le mode gestion à un dossier source (`Sound.sourceFolder`) ;
+  /// `null` = tous. Se combine avec la file de traitement.
+  String? _sourceFolderFilter;
+
   /// En file de traitement (vue scindée), l'éditeur de point d'entrée joue le
   /// son ouvert dès son chargement : trier se fait à l'oreille. Désactivable
   /// depuis la barre.
@@ -310,6 +314,11 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   bool get _isSplitLayout =>
       _isManage && !SoundPickerOverlay._isMobile(context);
   bool get _isPadVariant => widget.mode is PadVariantMode;
+
+  /// Sans champ de recherche ni filtres de type : la variante d'un multipad et
+  /// la file de traitement (qui n'offre que le filtre par dossier). Le focus
+  /// clavier (↑↓, Entrée) est alors porté par la liste, pas par un champ.
+  bool get _isSearchless => _isPadVariant || _unprocessedOnly;
 
   /// Bibliothèque du board actif : null = board local. Un board rattaché à une
   /// bibliothèque ne propose que les sons de celle-ci. Un board local (null)
@@ -365,9 +374,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     PadVariantMode() => '',
   };
 
-  /// Sons de toute la bibliothèque encore à traiter (indépendant des filtres et
-  /// de la recherche : c'est le « reste à faire » global).
-  int get _unprocessedCount => _all.where((s) => !s.isProcessed).length;
+  /// Sons encore à traiter : indépendant de la recherche et du type, mais borné
+  /// au dossier source choisi (« reste à faire » du dossier en cours de tri).
+  int get _unprocessedCount =>
+      _all.where((s) => !s.isProcessed && _matchesSourceFolder(s)).length;
 
   String get _emptyMessage {
     if (_isManage && _unprocessedOnly && _query.isEmpty) {
@@ -567,7 +577,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
       final listPane = TextFieldTapRegion(
         child: Column(
           children: [
-            if (!_isPadVariant) ...[
+            if (_unprocessedOnly) ...[
+              _buildQueueHeader(scheme),
+              _buildFilterDivider(scheme),
+            ] else if (!_isPadVariant) ...[
               _buildSearchField(scheme),
               _buildTypeFilters(scheme),
               _buildFilterDivider(scheme),

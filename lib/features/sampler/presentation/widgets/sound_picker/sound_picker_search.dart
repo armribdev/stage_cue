@@ -81,6 +81,27 @@ extension _SoundPickerSearch on _SoundPickerOverlayState {
 
   DateTime _recencyKey(Sound s) => s.lastPlayedAt ?? s.createdAt;
 
+  bool _matchesSourceFolder(Sound sound) =>
+      _sourceFolderFilter == null || sound.sourceFolder == _sourceFolderFilter;
+
+  /// Dossiers sources proposés au filtre, triés par nom, avec leur nombre de
+  /// sons à traiter. Calculés sur toute la bibliothèque (pas sur les résultats) :
+  /// le dossier choisi reste dans la liste même une fois entièrement traité.
+  List<({String folder, int unprocessed})> get _sourceFolders {
+    final unprocessedByFolder = <String, int>{};
+    for (final sound in _all) {
+      final folder = sound.sourceFolder;
+      if (folder == null) continue;
+      unprocessedByFolder[folder] =
+          (unprocessedByFolder[folder] ?? 0) + (sound.isProcessed ? 0 : 1);
+    }
+    final folders = [
+      for (final e in unprocessedByFolder.entries)
+        (folder: e.key, unprocessed: e.value),
+    ]..sort((a, b) => a.folder.toLowerCase().compareTo(b.folder.toLowerCase()));
+    return folders;
+  }
+
   List<Sound> get _results {
     // Variante d'un multipad : ordre figé sur les slots du pad (l'index doit
     // rester aligné avec `pad.sounds` pour `playPadSoundAtIndex`) — jamais
@@ -104,6 +125,9 @@ extension _SoundPickerSearch on _SoundPickerOverlayState {
         continue;
       }
       if (_isManage && _unprocessedOnly && sound.isProcessed) {
+        continue;
+      }
+      if (!_matchesSourceFolder(sound)) {
         continue;
       }
 
