@@ -10,6 +10,18 @@ import 'sounds.dart';
 
 part 'database.g.dart';
 
+/// Tags de la catégorie MUSIQUE (nom → alias de recherche), par genre /
+/// instrumentation. L'émotion se pose avec EMOTION_STYLE et le décor avec
+/// AMBIANCE — pas de catégorie dédiée.
+const Map<String, List<String>> _musicTagCatalog = {
+  'Piano': ['pianiste'],
+  'Orchestral': ['orchestre', 'symphonique'],
+  'Cordes': ['violon', 'violoncelle', 'quatuor'],
+  'Électro': ['synthé', 'synthétiseur', 'electronique'],
+  'Drone': ['nappe', 'ambient'],
+  'Guitare': ['acoustique'],
+};
+
 @DriftDatabase(
   tables: [
     Libraries,
@@ -33,7 +45,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 40;
+  int get schemaVersion => 41;
 
   @override
   MigrationStrategy get migration {
@@ -43,6 +55,7 @@ class AppDatabase extends _$AppDatabase {
         await _createGlobalIdentityIndexes();
         await _createBoardKeyIndex();
         await _seedDefaultTagsIfEmpty();
+        await _ensureMusicTags();
       },
       onUpgrade: _withUpgradeLogging((m, from, to) async {
         if (from < 2) {
@@ -406,6 +419,12 @@ class AppDatabase extends _$AppDatabase {
           // Index créé à la main (pas déclaré sur la table) : emporté par la
           // recréation, il faut le reposer.
           await _createGlobalIdentityIndexes();
+        }
+        if (from < 41) {
+          // Catalogue MUSIQUE étoffé (genre + usage) : sans lui, la catégorie
+          // ne contenait qu'« Musique d'ambiance » et la musique ne se triait
+          // pas. Données seules, aucun changement de schéma.
+          await _ensureMusicTags();
         }
       }),
       beforeOpen: (details) async {
@@ -926,6 +945,50 @@ class AppDatabase extends _$AppDatabase {
       await ensureAlias('musique de fond');
       await ensureAlias('ambiance musicale');
       await ensureAlias('instrumental');
+    });
+  }
+
+  /// Complète la catégorie MUSIQUE avec le catalogue [_musicTagCatalog] :
+  /// genre/instrumentation + usage en scène, sans créer de catégorie.
+  ///
+  /// Idempotent (`INSERT OR IGNORE` sur les clés d'unicité `tags` et
+  /// `tag_aliases`) : sert à la fois à l'installation neuve et à la migration
+  /// des bases existantes. Un alias déjà pris par un autre tag est ignoré, il
+  /// ne fait jamais échouer la migration.
+  Future<void> _ensureMusicTags() async {
+    await transaction(() async {
+      // Garantit la catégorie (bases dont la v32 n'aurait pas tourné).
+      await _ensureMusicCategoryTags();
+      final categoryRow = await customSelect(
+        'SELECT id FROM tag_categories WHERE name = ? LIMIT 1',
+        variables: [Variable<String>('MUSIQUE')],
+      ).getSingle();
+      final categoryId = categoryRow.read<int>('id');
+
+      for (final entry in _musicTagCatalog.entries) {
+        final normalizedTag = _normalize(entry.key);
+        await customStatement(
+          'INSERT OR IGNORE INTO tags (category_id, name, normalized_name) '
+          'VALUES (?, ?, ?)',
+          [categoryId, entry.key, normalizedTag],
+        );
+        final tagRow = await customSelect(
+          'SELECT id FROM tags WHERE category_id = ? AND normalized_name = ? '
+          'LIMIT 1',
+          variables: [
+            Variable<int>(categoryId),
+            Variable<String>(normalizedTag),
+          ],
+        ).getSingle();
+        final tagId = tagRow.read<int>('id');
+        for (final alias in entry.value) {
+          await customStatement(
+            'INSERT OR IGNORE INTO tag_aliases (tag_id, alias, normalized_alias) '
+            'VALUES (?, ?, ?)',
+            [tagId, alias, _normalize(alias)],
+          );
+        }
+      }
     });
   }
 
