@@ -425,37 +425,6 @@ extension _SettingsSections on _SettingsScreenState {
     );
   }
 
-  /// Bouton « Actualiser depuis Drive » : relit les dossiers Drive liés et
-  /// indexe les fichiers ajoutés directement sur Drive. Absent tant qu'aucune
-  /// bibliothèque Drive n'est connectée ; devient un indicateur d'activité
-  /// pendant l'actualisation.
-  Widget? _buildDriveRefreshAction() {
-    final hasDriveLibrary = _libraries.any(
-      (library) => library.isConnectedToDrive,
-    );
-    if (!hasDriveLibrary) return null;
-
-    if (_isSyncBusy) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16),
-        child: Center(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
-    }
-
-    final refreshed = _confirmedAction == _kDriveRefreshAction;
-    return BoxedIconButton(
-      icon: refreshed ? Icons.check : Icons.refresh,
-      tooltip: refreshed ? 'Actualisé' : 'Actualiser depuis Drive',
-      onPressed: refreshed ? null : _refreshAllFromDrive,
-    );
-  }
-
   Widget _buildInfoRow(String label, String value, {bool isPath = false}) {
     final valueStyle = TextStyle(
       color: isPath ? Theme.of(context).colorScheme.onSurfaceVariant : null,

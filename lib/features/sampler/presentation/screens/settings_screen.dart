@@ -30,7 +30,6 @@ import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../widgets/app_form_dialog.dart';
 import '../widgets/app_modal.dart';
-import '../widgets/boxed_icon_button.dart';
 import '../widgets/drive_folder_picker.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
@@ -237,9 +236,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final body = _buildSettingsBody();
     final syncPill = SyncStatusPill(
       syncController: widget.syncController,
+      hasDriveLibrary: _libraries.any((library) => library.isConnectedToDrive),
+      isRefreshing: _isSyncBusy,
+      refreshed: _confirmedAction == _kDriveRefreshAction,
       onTap: _onSyncPillTap,
     );
-    final actions = <Widget>[?_buildDriveRefreshAction(), syncPill];
+    final actions = <Widget>[syncPill];
 
     if (widget.isModal) {
       return AppModalShell(title: 'Paramètres', actions: actions, body: body);
