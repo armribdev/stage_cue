@@ -7,21 +7,30 @@ import '../providers/sync_controller.dart';
 /// Indique une session Google expirée signalée par [SyncController].
 bool isDriveAuthExpired(SyncState state) => state.authExpired;
 
-/// Indicateur de synchro Drive compact et non bloquant, destiné à la barre de
-/// la page Paramètres.
+/// Indicateur de synchro Drive compact, qui sert aussi de bouton
+/// « Actualiser depuis Drive », destiné à la barre de la page Paramètres.
 ///
-/// Caché tant que la synchro est `idle` (aucun bruit pour un usage 100 % local) ;
-/// dès qu'une bibliothèque Drive est en jeu, il rend l'état d'un coup d'œil
-/// (couleur + libellé court) et déclenche [onTap] (résolution de conflit ou
-/// défilement vers la section Drive).
+/// Caché tant qu'aucune bibliothèque Drive n'est en jeu et que la synchro est
+/// `idle` (aucun bruit pour un usage 100 % local). Sinon il rend l'état d'un
+/// coup d'œil (couleur + libellé court) et déclenche [onTap] : résolution de
+/// conflit ou actualisation, au choix de l'appelant. [isRefreshing] (passe
+/// manuelle en cours) et [refreshed] (passe manuelle terminée sans incident)
+/// priment sur le statut du contrôleur, qui ne bouge pas quand le pull n'a rien
+/// à fusionner.
 class SyncStatusPill extends StatelessWidget {
   final SyncController syncController;
+  final bool hasDriveLibrary;
+  final bool isRefreshing;
+  final bool refreshed;
   final VoidCallback onTap;
 
   const SyncStatusPill({
     super.key,
     required this.syncController,
+    required this.hasDriveLibrary,
     required this.onTap,
+    this.isRefreshing = false,
+    this.refreshed = false,
   });
 
   @override
@@ -30,18 +39,27 @@ class SyncStatusPill extends StatelessWidget {
       listenable: syncController,
       builder: (context, _) {
         final status = syncController.state.status;
-        if (status == SyncStatus.idle) return const SizedBox.shrink();
+        if (status == SyncStatus.idle && !hasDriveLibrary && !isRefreshing) {
+          return const SizedBox.shrink();
+        }
 
         final scheme = Theme.of(context).colorScheme;
-        final (color, label, icon, spinning) = _visuals(status, scheme);
+        final (color, label, icon, spinning) = isRefreshing
+            ? _visuals(SyncStatus.syncing, scheme)
+            : refreshed && status != SyncStatus.conflict
+            ? (scheme.primary, 'Actualisé', Icons.check, false)
+            : _visuals(status, scheme);
+        final canTap = !isRefreshing && !refreshed;
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2),
           child: Tooltip(
-            message: 'Synchronisation Drive',
+            message: status == SyncStatus.conflict
+                ? 'Résoudre le conflit'
+                : 'Actualiser depuis Drive',
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
-              onTap: onTap,
+              onTap: canTap ? onTap : null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 child: Row(
@@ -113,10 +131,12 @@ class SyncStatusPill extends StatelessWidget {
         Icons.error_outline_rounded,
         false,
       ),
+      // Bibliothèque Drive liée mais rien synchronisé depuis le lancement :
+      // la pastille reste l'invitation à actualiser.
       SyncStatus.idle => (
         scheme.onSurfaceVariant,
-        '',
-        Icons.cloud_outlined,
+        'Actualiser',
+        Icons.refresh,
         false,
       ),
     };
