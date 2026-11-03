@@ -10,6 +10,9 @@ extension TagCategoryUi on TagCategory {
   String get displayLabel => switch (name) {
     'ACTION' => 'Actions',
     'OBJET' => 'Objets',
+    'MATIERE' => 'Matières',
+    'AMBIANCE' => 'Ambiances',
+    'EMOTION_STYLE' => 'Émotion / style',
     'MUSIQUE' => 'Musique',
     _ => _toSentenceCase(name),
   };
