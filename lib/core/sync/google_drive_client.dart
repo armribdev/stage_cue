@@ -36,6 +36,7 @@ const int _findInFoldersChunk = 40;
 class GoogleDriveClient implements DriveClient {
   final drive.DriveApi _api;
   final http.Client _httpClient;
+  bool _disposed = false;
 
   GoogleDriveClient(this._api, this._httpClient);
 
@@ -703,8 +704,14 @@ class GoogleDriveClient implements DriveClient {
     return null;
   }
 
+  /// Idempotent : le `DelegatingClient` de googleapis_auth lève un `StateError`
+  /// à la 2e fermeture, et plusieurs chemins de reconnexion (`reconnectSilently`
+  /// qui garde un `previous` capturé avant son `await`, renouvellement de jeton
+  /// concurrent) peuvent légitimement relâcher le même client.
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     _httpClient.close();
   }
 }
