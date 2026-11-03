@@ -237,16 +237,34 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
   ) {
     _credentialSubscription?.cancel();
     _credentialSubscription = client.credentialUpdates.listen((creds) {
+      SyncLog.driveTokenRefreshed(
+        validFor: creds.accessToken.expiry.difference(DateTime.now().toUtc()),
+      );
       unawaited(_persistRefreshedCredentials(base, creds));
     });
   }
 
   @override
   Future<DriveClient?> connect() async {
-    final credentials = await _signIn.signIn();
+    // `signIn()` tente d'abord `signInOffline()` et renvoie le jeton stocké tel
+    // quel, sans ouvrir le navigateur. Or `connect()` n'est appelé qu'une fois
+    // la reconnexion silencieuse écartée (jeton révoqué ou expiré) : y relire le
+    // même jeton « réussissait » en quelques secondes puis Drive le rejetait de
+    // nouveau, sans issue autre que se déconnecter à la main. On force donc le
+    // consentement en ligne, qui écrase le jeton stocké.
+    SyncLog.info(
+      'Drive : consentement OAuth — navigateur ouvert, en attente de la '
+      'réponse.',
+    );
+    final credentials = await _signIn.signInOnline();
     if (credentials == null) {
       return null;
     }
+    final refreshToken = credentials.refreshToken;
+    SyncLog.driveCredentialsIssued(
+      hasRefreshToken: refreshToken != null && refreshToken.isNotEmpty,
+      scopeCount: credentials.scopes.length,
+    );
     final expiry = await _resolveAccessTokenExpiry(credentials);
     return _clientForCredentials(credentials, accessTokenExpiry: expiry);
   }
@@ -260,6 +278,13 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
     }
 
     final expiry = stored.expiresAt;
+    final storedRefreshToken = stored.credentials.refreshToken;
+    SyncLog.driveStoredSession(
+      hasRefreshToken:
+          storedRefreshToken != null && storedRefreshToken.isNotEmpty,
+      expiresIn: expiry?.difference(DateTime.now().toUtc()),
+      scopeCount: stored.credentials.scopes.length,
+    );
     final accessTokenExpiry = expiry == null || expiry.isBefore(DateTime.now())
         ? DateTime.now().toUtc().subtract(const Duration(seconds: 1))
         : expiry;
@@ -384,7 +409,13 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
     if (idToken != null) {
       payload['id_token'] = idToken;
     }
-    await _saveStoredToken(jsonEncode(payload));
+    try {
+      await _saveStoredToken(jsonEncode(payload));
+    } catch (e) {
+      // Appelé en `unawaited` : sans ce garde l'échec d'écriture serait une
+      // erreur non gérée, et le jeton périmé serait relu au lancement suivant.
+      SyncLog.driveTokenPersistFailed(e);
+    }
   }
 
   static Future<DriveAccountProfile?> _resolveProfile(

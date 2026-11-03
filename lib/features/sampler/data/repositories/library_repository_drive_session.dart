@@ -116,14 +116,20 @@ extension LibraryRepositoryDriveSession on LibraryRepository {
     try {
       return await action(client);
     } on DriveAuthException {
+      SyncLog.driveRenewStarted();
       final refreshed = await _remintDriveClientSilently();
+      String reason = 'aucune session stockée à renouveler en silence';
       if (refreshed != null) {
         try {
-          return await action(refreshed);
+          final result = await action(refreshed);
+          SyncLog.driveRenewSucceeded();
+          return result;
         } on DriveAuthException {
           // Deuxième 401 : le token frais est lui aussi rejeté.
+          reason = 'le jeton renouvelé est lui aussi rejeté';
         }
       }
+      SyncLog.driveInteractiveRequired(reason);
       _requiresInteractiveReconnect = true;
       _notifyDriveSessionChanged();
       rethrow;
@@ -154,6 +160,7 @@ extension LibraryRepositoryDriveSession on LibraryRepository {
   /// un 401 si on réutilisait un token périmé sans le renouveler.
   Future<bool> ensureDriveConnected() async {
     if (_requiresInteractiveReconnect) {
+      SyncLog.driveInteractiveStarted('session rejetée précédemment');
       if (_activeClient != null) {
         _activeClient!.dispose();
         _activeClient = null;
@@ -181,6 +188,7 @@ extension LibraryRepositoryDriveSession on LibraryRepository {
     }
 
     // Le refresh silencieux a échoué (session révoquée ou inexistante).
+    SyncLog.driveInteractiveStarted('reconnexion silencieuse impossible');
     if (_activeClient != null) {
       _activeClient!.dispose();
       _activeClient = null;

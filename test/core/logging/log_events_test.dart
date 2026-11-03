@@ -249,12 +249,31 @@ void main() {
       expect(out, isNot(contains('a0AfH6SMBsecret')));
     });
 
-    test('un jeton rejeté en rafale n\'écrit qu\'une ligne', () async {
+    test('un rejet répété pour la même cause n\'écrit qu\'une ligne', () async {
       for (var i = 0; i < 10; i++) {
-        SyncLog.driveAuthRejected();
+        SyncLog.driveAuthRejected('HTTP 401 cause-rafale');
       }
       final out = await flushed();
-      expect('jeton rejeté'.allMatches(out).length, lessThanOrEqualTo(1));
+      expect('cause-rafale'.allMatches(out).length, 1);
+    });
+
+    test('une cause différente n\'est pas masquée par la précédente', () async {
+      SyncLog.driveAuthRejected('HTTP 401 cause-a');
+      SyncLog.driveAuthRejected('échec OAuth (HTTP 400) — cause-b');
+      final out = await flushed();
+      expect(out, contains('cause-a'));
+      expect(out, contains('cause-b'));
+    });
+
+    test('un jeton périmé sans refresh token est signalé en warn', () async {
+      SyncLog.driveStoredSession(
+        hasRefreshToken: false,
+        expiresIn: const Duration(minutes: -3),
+        scopeCount: 6,
+      );
+      final out = await flushed();
+      expect(out, contains('refresh token ABSENT'));
+      expect(out, contains(RegExp(r'WARN  Sync   Drive : session stockée')));
     });
   });
 }

@@ -273,6 +273,10 @@ class LibraryRepository extends ChangeNotifier {
 
   /// Token expiré ou révoqué : libère la session et exige un OAuth interactif.
   Future<void> invalidateAuthSession() async {
+    SyncLog.driveInteractiveRequired(
+      'session invalidée par un appel Drive rejeté (lecture, synchro ou '
+      'téléchargement)',
+    );
     _requiresInteractiveReconnect = true;
     await releaseDriveSession();
   }
