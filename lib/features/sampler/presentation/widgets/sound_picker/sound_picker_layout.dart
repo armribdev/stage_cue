@@ -109,7 +109,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
     int selectedIndex,
   ) {
     final results = _buildResults(scheme, shown, selectedIndex);
-    if (!_isPadVariant) return results;
+    if (!_isSearchless) return results;
     return Focus(focusNode: _focusNode, autofocus: true, child: results);
   }
 
@@ -331,6 +331,146 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
                 children: [segmentedControl, ...trailingActions],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// En-tête de la file de traitement : à la place de la recherche et des
+  /// filtres de type, seulement le retour (page pleine) et le filtre de dossier.
+  Widget _buildQueueHeader(ColorScheme scheme) {
+    return SizedBox(
+      height: 52,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+        child: Row(
+          children: [
+            if (widget._isFullPage)
+              ExcludeFocus(
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => unawaited(Navigator.of(context).maybePop()),
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            const SizedBox(width: 10),
+            Expanded(child: _buildSourceFolderFilter(scheme)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Pastille « source » de la file de traitement : restreint la liste aux sons
+  /// d'un dossier de premier niveau. Absente tant qu'il n'y a pas au moins deux
+  /// dossiers à départager.
+  Widget _buildSourceFolderFilter(ColorScheme scheme) {
+    final folders = _sourceFolders;
+    if (folders.length < 2) return const SizedBox.shrink();
+
+    String labelOf(String folder) => folder.isEmpty ? 'Racine' : folder;
+    final selected = _sourceFolderFilter;
+
+    // Enregistrement `({String? folder})` : un `null` nu comme valeur d'item
+    // serait pris pour une annulation du menu et n'appellerait pas onSelected.
+    return ExcludeFocus(
+      child: PopupMenuButton<({String? folder})>(
+        tooltip: 'Filtrer par dossier source',
+        position: PopupMenuPosition.under,
+        onSelected: (choice) {
+          setState(() {
+            _sourceFolderFilter = choice.folder;
+            _selectedIndex = 0;
+          });
+          if (!_unprocessedOnly || !_isSplitLayout) return;
+          final first = _shownResults(_results).firstOrNull;
+          if (first != null) unawaited(_editInPane(first));
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: (folder: null),
+            child: Text(
+              'Tous les dossiers',
+              style: TextStyle(
+                fontWeight: selected == null ? FontWeight.w600 : null,
+              ),
+            ),
+          ),
+          for (final entry in folders)
+            PopupMenuItem(
+              value: (folder: entry.folder),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      labelOf(entry.folder),
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: selected == entry.folder
+                            ? FontWeight.w600
+                            : null,
+                      ),
+                    ),
+                  ),
+                  if (entry.unprocessed > 0) ...[
+                    const SizedBox(width: 12),
+                    Text(
+                      '${entry.unprocessed}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainer,
+            borderRadius: AppRadius.radiusMd,
+            border: Border.all(
+              color: selected == null
+                  ? scheme.outlineVariant.withValues(alpha: 0.6)
+                  : scheme.primary,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              Icon(
+                Icons.folder_outlined,
+                size: 16,
+                color: selected == null
+                    ? scheme.onSurfaceVariant
+                    : scheme.primary,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  selected == null ? 'Dossier' : labelOf(selected),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: selected == null
+                        ? scheme.onSurfaceVariant
+                        : scheme.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                Icons.arrow_drop_down_rounded,
+                size: 18,
+                color: scheme.onSurfaceVariant,
+              ),
+            ],
           ),
         ),
       ),

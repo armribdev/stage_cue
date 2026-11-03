@@ -77,7 +77,7 @@ extension _SoundPickerNavigation on _SoundPickerOverlayState {
       return KeyEventResult.handled;
     }
     // Pas de champ de recherche pour intercepter Entrée dans ce mode.
-    if (_isPadVariant &&
+    if (_isSearchless &&
         !isRepeat &&
         event.logicalKey == LogicalKeyboardKey.enter) {
       unawaited(_onSubmit());

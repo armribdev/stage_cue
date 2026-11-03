@@ -13,9 +13,22 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
   /// premier son : l'utilisateur n'a plus qu'à valider ou corriger.
   void _toggleUnprocessedOnly() {
     final next = !_unprocessedOnly;
+    // La file n'offre ni recherche, ni filtre de type : on les remet à zéro pour
+    // qu'aucun filtre devenu invisible ne continue de s'appliquer. Le filtre de
+    // dossier, lui, n'existe qu'en file.
+    _searchDebounce?.cancel();
+    _controller.clear();
     setState(() {
       _unprocessedOnly = next;
       _selectedIndex = 0;
+      _query = '';
+      _tagMatchSetsPerToken = const [];
+      _typeFilter = null;
+      _sourceFolderFilter = null;
+    });
+    // Le champ de recherche (qui portait le focus clavier) apparaît ou disparaît.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
     });
     if (!next || !_isSplitLayout) return;
     final first = _shownResults(_results).firstOrNull;
