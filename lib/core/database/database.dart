@@ -10,17 +10,41 @@ import 'sounds.dart';
 
 part 'database.g.dart';
 
-/// Tags de la catégorie MUSIQUE (nom → alias de recherche), par genre /
-/// instrumentation. L'émotion se pose avec EMOTION_STYLE et le décor avec
-/// AMBIANCE — pas de catégorie dédiée.
-const Map<String, List<String>> _musicTagCatalog = {
-  'Piano': ['pianiste'],
-  'Orchestral': ['orchestre', 'symphonique'],
-  'Cordes': ['violon', 'violoncelle', 'quatuor'],
-  'Électro': ['synthé', 'synthétiseur', 'electronique'],
-  'Drone': ['nappe', 'ambient'],
-  'Guitare': ['acoustique'],
+/// Tags ajoutés après le seed initial : catégorie → (nom du tag → alias de
+/// recherche). Voir `docs/tags.md` pour le rôle de chaque catégorie.
+///
+/// - MUSIQUE décrit ce qui distingue une musique à l'usage (voix, tempo), pas
+///   l'instrumentation : l'ambiance se pose avec EMOTION_STYLE.
+/// - Une entrée dont le tag existe déjà (Magie, Romantique) n'ajoute que ses
+///   alias : `INSERT OR IGNORE` sur la clé d'unicité des tags.
+const Map<String, Map<String, List<String>>> _extraTagCatalog = {
+  'MUSIQUE': {
+    'Chant': ['voix', 'vocal', 'chanson', 'chanté', 'paroles'],
+    'Instrumental': ['sans paroles', 'sans voix'],
+    'Lent': ['slow', 'tempo lent', 'très lent'],
+    'Rythmé': ['rapide', 'dansant', 'tempo rapide'],
+  },
+  'EMOTION_STYLE': {
+    'Joyeux': ['joie', 'gai', 'heureux', 'festif'],
+    'Énergique': ['dynamique', 'entraînant'],
+    'Nostalgique': ['nostalgie'],
+    'Angoisse': ['angoissant', 'anxiété', 'peur'],
+    'Calme': ['paisible', 'serein', 'apaisant', 'relaxant'],
+    'Magie': ['merveilleux'],
+    'Romantique': ['amour', 'sensuel'],
+  },
 };
+
+/// Tags d'instrumentation posés par la v41 puis retirés en v42 (nom normalisé).
+/// Seuls ceux qu'aucun son n'utilise sont supprimés.
+const List<String> _withdrawnInstrumentTags = [
+  'piano',
+  'orchestral',
+  'cordes',
+  'electro',
+  'drone',
+  'guitare',
+];
 
 @DriftDatabase(
   tables: [
@@ -45,7 +69,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 41;
+  int get schemaVersion => 42;
 
   @override
   MigrationStrategy get migration {
@@ -55,7 +79,7 @@ class AppDatabase extends _$AppDatabase {
         await _createGlobalIdentityIndexes();
         await _createBoardKeyIndex();
         await _seedDefaultTagsIfEmpty();
-        await _ensureMusicTags();
+        await _ensureExtraTags();
       },
       onUpgrade: _withUpgradeLogging((m, from, to) async {
         if (from < 2) {
@@ -420,11 +444,13 @@ class AppDatabase extends _$AppDatabase {
           // recréation, il faut le reposer.
           await _createGlobalIdentityIndexes();
         }
-        if (from < 41) {
-          // Catalogue MUSIQUE étoffé (genre + usage) : sans lui, la catégorie
-          // ne contenait qu'« Musique d'ambiance » et la musique ne se triait
-          // pas. Données seules, aucun changement de schéma.
-          await _ensureMusicTags();
+        if (from < 42) {
+          // Vocabulaire musique : la v41 posait des instruments (Piano, Cordes…),
+          // peu utiles à la recherche ; on les retire (sauf s'ils sont déjà posés
+          // sur un son) au profit de la voix, du tempo et de l'ambiance
+          // (EMOTION_STYLE). Données seules, aucun changement de schéma.
+          await _ensureExtraTags();
+          await _removeUnusedInstrumentTags();
         }
       }),
       beforeOpen: (details) async {
@@ -948,47 +974,97 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Complète la catégorie MUSIQUE avec le catalogue [_musicTagCatalog] :
-  /// genre/instrumentation + usage en scène, sans créer de catégorie.
+  /// Complète le catalogue de tags avec [_extraTagCatalog], sans créer de
+  /// catégorie (hors MUSIQUE, garantie par [_ensureMusicCategoryTags]).
   ///
   /// Idempotent (`INSERT OR IGNORE` sur les clés d'unicité `tags` et
   /// `tag_aliases`) : sert à la fois à l'installation neuve et à la migration
   /// des bases existantes. Un alias déjà pris par un autre tag est ignoré, il
   /// ne fait jamais échouer la migration.
-  Future<void> _ensureMusicTags() async {
+  Future<void> _ensureExtraTags() async {
     await transaction(() async {
       // Garantit la catégorie (bases dont la v32 n'aurait pas tourné).
       await _ensureMusicCategoryTags();
-      final categoryRow = await customSelect(
-        'SELECT id FROM tag_categories WHERE name = ? LIMIT 1',
-        variables: [Variable<String>('MUSIQUE')],
-      ).getSingle();
-      final categoryId = categoryRow.read<int>('id');
 
-      for (final entry in _musicTagCatalog.entries) {
-        final normalizedTag = _normalize(entry.key);
-        await customStatement(
-          'INSERT OR IGNORE INTO tags (category_id, name, normalized_name) '
-          'VALUES (?, ?, ?)',
-          [categoryId, entry.key, normalizedTag],
-        );
-        final tagRow = await customSelect(
-          'SELECT id FROM tags WHERE category_id = ? AND normalized_name = ? '
-          'LIMIT 1',
-          variables: [
-            Variable<int>(categoryId),
-            Variable<String>(normalizedTag),
-          ],
-        ).getSingle();
-        final tagId = tagRow.read<int>('id');
-        for (final alias in entry.value) {
-          await customStatement(
-            'INSERT OR IGNORE INTO tag_aliases (tag_id, alias, normalized_alias) '
-            'VALUES (?, ?, ?)',
-            [tagId, alias, _normalize(alias)],
+      for (final category in _extraTagCatalog.entries) {
+        final categoryRow = await customSelect(
+          'SELECT id FROM tag_categories WHERE name = ? LIMIT 1',
+          variables: [Variable<String>(category.key)],
+        ).getSingleOrNull();
+        if (categoryRow == null) {
+          // Catégorie supprimée à la main : on ne la recrée pas (couleur et
+          // ordre d'affichage sont un choix), mais on ne se tait pas.
+          AppLog.warn(
+            'Catégorie de tags « ${category.key} » absente : '
+            '${category.value.length} tag(s) du catalogue non ajouté(s).',
           );
+          continue;
+        }
+        final categoryId = categoryRow.read<int>('id');
+
+        for (final entry in category.value.entries) {
+          final normalizedTag = _normalize(entry.key);
+          await customStatement(
+            'INSERT OR IGNORE INTO tags (category_id, name, normalized_name) '
+            'VALUES (?, ?, ?)',
+            [categoryId, entry.key, normalizedTag],
+          );
+          final tagRow = await customSelect(
+            'SELECT id FROM tags WHERE category_id = ? AND normalized_name = ? '
+            'LIMIT 1',
+            variables: [
+              Variable<int>(categoryId),
+              Variable<String>(normalizedTag),
+            ],
+          ).getSingle();
+          final tagId = tagRow.read<int>('id');
+          for (final alias in entry.value) {
+            await customStatement(
+              'INSERT OR IGNORE INTO tag_aliases '
+              '(tag_id, alias, normalized_alias) VALUES (?, ?, ?)',
+              [tagId, alias, _normalize(alias)],
+            );
+          }
         }
       }
+    });
+  }
+
+  /// Retire les tags d'instrumentation de la v41 ([_withdrawnInstrumentTags])
+  /// qu'aucun son n'utilise, avec leurs alias. Ceux déjà posés sur un son sont
+  /// conservés : les supprimer effacerait un tagging fait par l'utilisateur.
+  ///
+  /// Les clés étrangères ne sont pas activées (cf. `database.md`) : le
+  /// `ON DELETE CASCADE` ne joue pas, les alias sont donc supprimés à la main.
+  Future<void> _removeUnusedInstrumentTags() async {
+    final placeholders = List.filled(
+      _withdrawnInstrumentTags.length,
+      '?',
+    ).join(',');
+    // Tags MUSIQUE retirés et non utilisés, réutilisé pour les alias puis les tags.
+    final unused =
+        'SELECT id FROM tags WHERE normalized_name IN ($placeholders) '
+        "AND category_id = (SELECT id FROM tag_categories WHERE name = 'MUSIQUE') "
+        'AND id NOT IN (SELECT tag_id FROM sound_tags)';
+    final args = [
+      for (final n in _withdrawnInstrumentTags) Variable<String>(n),
+    ];
+
+    await transaction(() async {
+      await customUpdate(
+        'DELETE FROM tag_aliases WHERE tag_id IN ($unused)',
+        variables: args,
+        updates: {tagAliases},
+      );
+      final removed = await customUpdate(
+        'DELETE FROM tags WHERE id IN ($unused)',
+        variables: args,
+        updates: {tagItems},
+      );
+      AppLog.info(
+        "Tags d'instrumentation retirés : $removed "
+        '(ceux déjà posés sur un son sont conservés).',
+      );
     });
   }
 

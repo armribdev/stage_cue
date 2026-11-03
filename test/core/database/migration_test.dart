@@ -251,78 +251,172 @@ void main() {
     );
   }
 
-  test(
-    'une base v40 reçoit les tags MUSIQUE sans nouvelle catégorie ni perte',
-    () async {
-      var database = db.AppDatabase.forTesting(NativeDatabase(file));
-      final categoriesBefore = await database
-          .customSelect('SELECT COUNT(*) AS c FROM tag_categories')
-          .getSingle();
+  test("une base v40 reçoit les tags MUSIQUE et d'ambiance sans nouvelle "
+      'catégorie ni perte', () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    final categoriesBefore = await database
+        .customSelect('SELECT COUNT(*) AS c FROM tag_categories')
+        .getSingle();
 
-      // Une base fraîche a déjà le catalogue ; on la ramène à l'état v40 : seul
-      // « Musique d'ambiance » reste dans MUSIQUE.
-      await database.customStatement(
-        "DELETE FROM tag_aliases WHERE tag_id IN (SELECT id FROM tags WHERE "
-        "category_id = (SELECT id FROM tag_categories WHERE name = 'MUSIQUE') "
-        "AND normalized_name <> 'musique d''ambiance')",
-      );
-      await database.customStatement(
-        "DELETE FROM tags WHERE category_id = "
-        "(SELECT id FROM tag_categories WHERE name = 'MUSIQUE') "
-        "AND normalized_name <> 'musique d''ambiance'",
-      );
-      final ambianceBefore = await database
-          .customSelect(
-            "SELECT id FROM tags WHERE normalized_name = 'musique d''ambiance'",
-          )
-          .getSingle();
-      await database.customStatement('PRAGMA user_version = 40');
-      await database.close();
+    // Une base fraîche a déjà le catalogue ; on la ramène à l'état v40 : seul
+    // « Musique d'ambiance » reste dans MUSIQUE, et les tags d'ambiance
+    // ajoutés en v42 (et leurs alias) disparaissent.
+    const added =
+        "('chant','instrumental','lent','rythme','joyeux','energique',"
+        "'nostalgique','angoisse','calme')";
+    await database.customStatement(
+      'DELETE FROM tag_aliases WHERE tag_id IN '
+      '(SELECT id FROM tags WHERE normalized_name IN $added)',
+    );
+    await database.customStatement(
+      'DELETE FROM tags WHERE normalized_name IN $added',
+    );
+    await database.customStatement(
+      "DELETE FROM tag_aliases WHERE normalized_alias IN "
+      "('merveilleux','amour','sensuel')",
+    );
+    final ambianceBefore = await database
+        .customSelect(
+          "SELECT id FROM tags WHERE normalized_name = 'musique d''ambiance'",
+        )
+        .getSingle();
+    await database.customStatement('PRAGMA user_version = 40');
+    await database.close();
 
-      database = db.AppDatabase.forTesting(NativeDatabase(file));
-      final music = await database
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    Future<Set<String>> tagNames(String category) async {
+      final rows = await database
           .customSelect(
             'SELECT t.name AS name FROM tags t JOIN tag_categories c '
-            "ON c.id = t.category_id WHERE c.name = 'MUSIQUE'",
+            'ON c.id = t.category_id WHERE c.name = ?',
+            variables: [Variable<String>(category)],
           )
           .get();
-      final names = music.map((r) => r.read<String>('name')).toSet();
-      expect(
-        names,
-        containsAll([
-          "Musique d'ambiance",
-          'Piano',
-          'Orchestral',
-          'Cordes',
-          'Électro',
-          'Drone',
-          'Guitare',
-        ]),
+      return rows.map((r) => r.read<String>('name')).toSet();
+    }
+
+    final music = await tagNames('MUSIQUE');
+    expect(
+      music,
+      containsAll(["Musique d'ambiance", 'Chant', 'Instrumental', 'Lent']),
+    );
+    expect(music, contains('Rythmé'));
+    // Plus d'instrumentation : ce n'est pas ce qu'on cherche en musique.
+    expect(music, isNot(contains('Piano')));
+    expect(
+      await tagNames('EMOTION_STYLE'),
+      containsAll([
+        'Joyeux',
+        'Énergique',
+        'Nostalgique',
+        'Angoisse',
+        'Calme',
+        'Magie',
+        'Romantique',
+      ]),
+    );
+
+    // Pas de nouvelle catégorie, tag d'origine conservé (même id : les tags déjà
+    // posés sur des sons restent valides), et les alias sont bien cherchables,
+    // y compris ceux ajoutés à un tag qui existait déjà.
+    final categoriesAfter = await database
+        .customSelect('SELECT COUNT(*) AS c FROM tag_categories')
+        .getSingle();
+    expect(categoriesAfter.read<int>('c'), categoriesBefore.read<int>('c'));
+    final ambianceAfter = await database
+        .customSelect(
+          "SELECT id FROM tags WHERE normalized_name = 'musique d''ambiance'",
+        )
+        .getSingle();
+    expect(ambianceAfter.read<int>('id'), ambianceBefore.read<int>('id'));
+    Future<String> aliasTarget(String alias) async {
+      final row = await database
+          .customSelect(
+            'SELECT t.name AS name FROM tag_aliases a JOIN tags t '
+            'ON t.id = a.tag_id WHERE a.normalized_alias = ?',
+            variables: [Variable<String>(alias)],
+          )
+          .getSingle();
+      return row.read<String>('name');
+    }
+
+    expect(await aliasTarget('voix'), 'Chant');
+    expect(await aliasTarget('merveilleux'), 'Magie');
+    expect(await aliasTarget('sensuel'), 'Romantique');
+
+    await database.close();
+  });
+
+  test('la v42 retire les instruments de la v41 inutilisés et garde ceux '
+      'posés sur un son', () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    // État v41 : Piano et Cordes existent, avec un alias ; Cordes est posé sur
+    // un son.
+    final music =
+        (await database
+                .customSelect(
+                  "SELECT id FROM tag_categories WHERE name = 'MUSIQUE'",
+                )
+                .getSingle())
+            .read<int>('id');
+    for (final entry in {'Piano': 'pianiste', 'Cordes': 'violon'}.entries) {
+      await database.customStatement(
+        'INSERT INTO tags (category_id, name, normalized_name) '
+        "VALUES ($music, '${entry.key}', '${entry.key.toLowerCase()}')",
       );
+      await database.customStatement(
+        'INSERT INTO tag_aliases (tag_id, alias, normalized_alias) VALUES '
+        "((SELECT id FROM tags WHERE normalized_name = '${entry.key.toLowerCase()}'),"
+        " '${entry.value}', '${entry.value}')",
+      );
+    }
+    await database.customStatement(
+      "INSERT INTO sounds (title, file_path, display_name) "
+      "VALUES ('s', '/s.wav', 's')",
+    );
+    await database.customStatement(
+      'INSERT INTO sound_tags (sound_id, tag_id) VALUES '
+      "((SELECT id FROM sounds LIMIT 1), "
+      "(SELECT id FROM tags WHERE normalized_name = 'cordes'))",
+    );
+    await database.customStatement('PRAGMA user_version = 41');
+    await database.close();
 
-      // Pas de nouvelle catégorie, tag d'origine conservé (même id : les tags déjà
-      // posés sur des sons restent valides), et un alias est bien cherchable.
-      final categoriesAfter = await database
-          .customSelect('SELECT COUNT(*) AS c FROM tag_categories')
-          .getSingle();
-      expect(categoriesAfter.read<int>('c'), categoriesBefore.read<int>('c'));
-      final ambianceAfter = await database
-          .customSelect(
-            "SELECT id FROM tags WHERE normalized_name = 'musique d''ambiance'",
-          )
-          .getSingle();
-      expect(ambianceAfter.read<int>('id'), ambianceBefore.read<int>('id'));
-      final alias = await database
-          .customSelect(
-            "SELECT t.name AS name FROM tag_aliases a JOIN tags t "
-            "ON t.id = a.tag_id WHERE a.normalized_alias = 'violon'",
-          )
-          .getSingle();
-      expect(alias.read<String>('name'), 'Cordes');
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    Future<int> count(String sql) async =>
+        (await database.customSelect(sql).getSingle()).read<int>('c');
 
-      await database.close();
-    },
-  );
+    expect(
+      await count(
+        "SELECT COUNT(*) AS c FROM tags WHERE normalized_name = 'piano'",
+      ),
+      0,
+      reason: 'instrument inutilisé : retiré',
+    );
+    expect(
+      await count(
+        "SELECT COUNT(*) AS c FROM tag_aliases WHERE normalized_alias = 'pianiste'",
+      ),
+      0,
+      reason: 'son alias part avec lui (pas de cascade, FK désactivées)',
+    );
+    expect(
+      await count(
+        "SELECT COUNT(*) AS c FROM tags WHERE normalized_name = 'cordes'",
+      ),
+      1,
+      reason: 'posé sur un son : conservé',
+    );
+    expect(
+      await count(
+        "SELECT COUNT(*) AS c FROM tag_aliases WHERE normalized_alias = 'violon'",
+      ),
+      1,
+    );
+    expect(await count('SELECT COUNT(*) AS c FROM sound_tags'), 1);
+
+    await database.close();
+  });
 
   test('la migration est idempotente : une base à jour rembobinée en v35 '
       'passe sans erreur', () async {
