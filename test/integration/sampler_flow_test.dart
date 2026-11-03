@@ -25,6 +25,8 @@ import 'package:stage_cue/features/sampler/domain/entities/pad.dart'
 import 'package:stage_cue/features/sampler/presentation/screens/sampler_screen.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/pad_item.dart'
     show PadCard;
+import 'package:stage_cue/features/sampler/presentation/widgets/sampler_screen_chrome.dart'
+    show BoardSceneSelector;
 import 'package:stage_cue/features/sampler/presentation/widgets/threshold_draggable.dart'
     show kPadDragSlop;
 
@@ -206,9 +208,15 @@ void main() {
   ///
   /// En layout desktop les plateaux ne sont pas listés à l'écran : ils vivent
   /// dans le menu porté par le titre de la scène courante. Il faut donc ouvrir
-  /// ce menu avant de pouvoir choisir.
+  /// ce menu avant de pouvoir choisir. On vise le chevron : le sélecteur lui-même
+  /// est un `Align` pleine largeur dont le centre n'est pas cliquable.
   Future<void> selectBoard(WidgetTester tester, String boardName) async {
-    await tester.tap(find.byType(PopupMenuButton<Object>).first);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(BoardSceneSelector),
+        matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
+      ),
+    );
     await flushIo(tester);
     // `.last` : le nom apparaît aussi dans le titre si c'est la scène courante.
     await tester.tap(find.text(boardName).last);
