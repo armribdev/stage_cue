@@ -32,8 +32,8 @@ son vite, en direct, en tapant un ou deux mots dans le sélecteur de sons.
 | `OBJET` | Objets | L'accessoire utilisé ou évoqué | Porte, Téléphone, Voiture, Clés |
 | `MATIERE` | Matières | La texture sonore, quand l'objet précis manque | Bois, Métal, Eau, Gravier |
 | `AMBIANCE` | Ambiances | Le décor sonore : lieu, météo, moment, époque, genre, foule | Pluie, Forêt, Nuit, Médiéval, Horreur, Foule |
-| `EMOTION_STYLE` | Émotion / style | La couleur émotionnelle ou le style de la scène | Tension, Comédie, Épique, Mystérieux |
-| `MUSIQUE` | Musique | Le genre et l'instrumentation d'une musique | Piano, Orchestral, Drone, Guitare |
+| `EMOTION_STYLE` | Émotion / style | L'ambiance d'une scène ou d'une musique : émotion, énergie, style | Tension, Joyeux, Nostalgique, Angoisse, Calme, Épique |
+| `MUSIQUE` | Musique | Ce qui distingue une musique à l'usage : voix et tempo | Chant, Instrumental, Lent, Rythmé |
 
 Un même mot peut exister dans deux catégories quand il désigne deux choses
 distinctes : « Verre » est à la fois un OBJET (le gobelet) et une MATIERE (le
@@ -45,16 +45,23 @@ Elle mélange lieu, météo, moment, époque et genre. C'est voulu : ces axes se
 cherchent tous de la même façon (un mot) et les séparer multiplierait les
 catégories sans rien apporter à la recherche.
 
-### MUSIQUE : genre et instrumentation seulement
+### MUSIQUE : voix et tempo, pas l'ambiance ni les instruments
 
-L'émotion se pose avec `EMOTION_STYLE`, le décor avec `AMBIANCE` — pas de
-catégorie dédiée à la musique pour cela. Le catalogue est
-`_musicTagCatalog` dans `lib/core/database/database.dart`.
+On cherche une musique par l'ambiance qu'elle installe (« joyeux »,
+« angoisse », « nostalgique »), jamais par son instrumentation : l'ambiance se
+pose donc avec `EMOTION_STYLE`, qui sert aussi aux bruitages, et `MUSIQUE` ne
+garde que la voix (Chant / Instrumental) et le tempo (Lent / Rythmé). Les
+instruments (Piano, Cordes, Guitare…) posés par la v41 ont été retirés en v42,
+sauf ceux déjà posés sur un son.
+
+Le vocabulaire d'ambiance musicale vient des mots que l'on met déjà dans les
+noms de fichiers de musique (Nostalgie, Joie, Triste, Angoisse, Tension…). Pas
+de tag d'animaux ni de « Feu » : volontairement écartés.
 
 ## Où ça vit dans le code
 
 - Seed initial et migrations de données : `lib/core/database/database.dart`
-  (`_seedDefaultTagsIfEmpty`, `_ensureMusicTags`). Il n'existe pas de création
+  (`_seedDefaultTagsIfEmpty`, `_extraTagCatalog` et `_ensureExtraTags`). Il n'existe pas de création
   de tag ou de catégorie depuis l'interface : tout nouveau tag passe par une
   migration de données.
 - Libellés affichés : `TagCategoryUi.displayLabel`
