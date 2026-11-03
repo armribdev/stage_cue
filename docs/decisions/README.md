@@ -48,5 +48,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0025](0025-journal-fichier-persistant.md) | Journal fichier persistant, borné et masqué, exportable depuis les réglages | acceptée |
 | [0026](0026-verification-sha256-de-l-installeur.md) | Vérification SHA-256 de l'installeur avant lancement de la mise à jour | acceptée |
 | [0027](0027-preecoute-casque-stricte.md) | Pré-écoute au casque stricte : jamais de repli sur la salle | acceptée |
+| [0028](0028-consentement-oauth-desktop-avec-refresh-token.md) | Consentement OAuth desktop maison, pour toujours obtenir un refresh token | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.
