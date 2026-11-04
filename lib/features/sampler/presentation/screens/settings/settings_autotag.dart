@@ -31,12 +31,13 @@ extension _SettingsAutoTag on _SettingsScreenState {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Pose des tags d\'ambiance (Triste, Tension, Joyeux…) sur vos '
-                'musiques non traitées, d\'après le son, directement sur cet '
-                'appareil. Les tags restent à valider : un son n\'est '
-                'jamais marqué traité automatiquement, et ceux que vous avez '
-                'déjà traités ou tagués ne sont pas touchés. L\'analyse se '
-                'fait en arrière-plan, jamais en Mode Spectacle.',
+                'Pose des tags d’ambiance (Triste, Tension, Joyeux…) sur vos '
+                'musiques, d’après le son, directement sur cet appareil, dès '
+                'qu’elles sont indexées. Ces tags sont à part des vôtres : '
+                'vous pouvez les masquer (ils restent en mémoire et l’IA ne '
+                'les repose pas). Un son que vous passez en « traité » n’est '
+                'plus analysé. L’analyse se fait en arrière-plan, jamais en '
+                'Mode Spectacle.',
                 style: muted,
               ),
               const SizedBox(height: 12),

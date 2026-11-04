@@ -221,7 +221,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     }
     final entries = await Future.wait(
       sounds.map((sound) async {
-        final tags = await _repository.getTagsForSound(sound.id);
+        final tags = await _repository.getVisibleTagsForSound(sound.id);
         return MapEntry(sound.id, tags);
       }),
     );
