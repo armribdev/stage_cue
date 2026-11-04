@@ -371,6 +371,10 @@ extension _SettingsSections on _SettingsScreenState {
                           unawaited(_toggleAutoDownload(library)),
                     ),
                     _sectionDivider(),
+                    if (widget.autoTagPack != null) ...[
+                      _buildAutoTagSection(widget.autoTagPack!),
+                      _sectionDivider(),
+                    ],
                     _buildDiagnosticSection(),
                     if (Platform.isWindows) ...[
                       _sectionDivider(),

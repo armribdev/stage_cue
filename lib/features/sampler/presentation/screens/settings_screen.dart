@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart' show OrderingTerm;
 import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/cue_audio_service.dart';
+import '../../../../core/autotag/auto_tag_pack_controller.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/logging/app_log.dart';
 import '../../../../core/logging/log_export.dart';
@@ -48,6 +49,7 @@ part 'settings/settings_data.dart';
 part 'settings/settings_diagnostic.dart';
 part 'settings/settings_drive_account.dart';
 part 'settings/settings_add_folder.dart';
+part 'settings/settings_autotag.dart';
 part 'settings/settings_indexing.dart';
 part 'settings/settings_library_actions.dart';
 part 'settings/settings_labels.dart';
@@ -60,6 +62,10 @@ class SettingsScreen extends StatefulWidget {
   final SyncController syncController;
   final AutoSyncCoordinator autoSyncCoordinator;
   final AppPreferences appPreferences;
+
+  /// Pack de modèles de l'analyse automatique ; `null` hors poste de bureau
+  /// (la section est alors absente).
+  final AutoTagPackController? autoTagPack;
   final bool isModal;
   final bool scrollToDriveSection;
 
@@ -70,6 +76,7 @@ class SettingsScreen extends StatefulWidget {
     required this.syncController,
     required this.autoSyncCoordinator,
     required this.appPreferences,
+    this.autoTagPack,
     this.isModal = false,
     this.scrollToDriveSection = false,
   });
@@ -82,6 +89,7 @@ class SettingsScreen extends StatefulWidget {
     required SyncController syncController,
     required AutoSyncCoordinator autoSyncCoordinator,
     required AppPreferences appPreferences,
+    AutoTagPackController? autoTagPack,
     bool scrollToDriveSection = false,
   }) {
     return openAdaptiveScreen(
@@ -92,6 +100,7 @@ class SettingsScreen extends StatefulWidget {
         syncController: syncController,
         autoSyncCoordinator: autoSyncCoordinator,
         appPreferences: appPreferences,
+        autoTagPack: autoTagPack,
         isModal: isModal,
         scrollToDriveSection: scrollToDriveSection,
       ),
