@@ -24,6 +24,7 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
           _showPreviewFailureSnackBar();
           return;
         }
+        _keepPreviewOnClose = true;
         Navigator.of(context).pop();
       case MusicPickerMode(playNow: true):
         await _playMusicNow(sound);
