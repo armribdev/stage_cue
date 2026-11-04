@@ -24,11 +24,19 @@ le binaire.
   seule, quantifiée int8 sur les seuls `MatMul`, ~480 Mo). Les mots
   (« Triste », « Angoisse »…) sont comparés à des vecteurs texte précalculés
   (15 × 512 flottants, ~31 Ko) : aucun encodeur texte à l'exécution.
-- **Voix et tempo** (tags `MUSIQUE`) : têtes Essentia/MTG converties en ONNX
-  (~24 Mo). La voix (Chant / Instrumental) vient de la tête
-  `voice_instrumental` ; le tempo (Lent / Rythmé) se dériverait des thèmes MTG
-  `slow` / `fast` / `upbeat`, **sans qualité mesurée à ce jour** : à valider
-  avant de poser ces tags automatiquement.
+- **Voix et tempo** (tags `MUSIQUE`) : **non posés pour l'instant.** Mesuré le
+  2026-11-04 sur 29 morceaux (têtes Essentia/MTG, ~24 Mo en ONNX). Le **tempo**
+  (thèmes MTG `slow` / `fast` / `upbeat`) est inutilisable : probabilités ≈ 0
+  partout, un morceau nommé « Très lent » (0,06) ne se distingue pas du reste —
+  Lent / Rythmé ne sont donc pas posés automatiquement. La **voix**
+  (`voice_instrumental`) sépare proprement (morceaux chantés ≥ 0,75,
+  « Instrumental » ≤ 0,22, cohérent avec les noms de fichiers), mais exige un
+  front-end audio supplémentaire en Dart (mel 16 kHz, patchs EffNet) et un second
+  modèle pour deux tags : **suite documentée, hors de cette décision.** Alternative
+  sans modèle de plus, testée : MuQ-MuLan en zéro-shot (« chanté » contre
+  « instrumental ») donne AUC 0,91 contre la voix Essentia, mais sans seuil propre
+  (un piano instrumental dépasse un morceau chanté) — ne convient pas à un tag
+  posé sans validation (`tool/autotag/probe_voice_zero_shot.py`).
 - **Les tags sont appliqués directement**, pas proposés. Le son **reste « non
   traité »** (`isProcessed = false`) jusqu'à ce que l'utilisateur valide ou
   retire les tags. L'analyse ne touche **jamais** un son déjà traité ni un
@@ -95,17 +103,45 @@ le binaire.
   **non testés** ; 480 Mo en mémoire exclut probablement le mobile.
 - **Synchro Drive** : le pull remplace les `sound_tags` d'un dossier par ceux du
   distant ([0003](0003-snapshots-par-dossier-et-fusion-board-par-board.md)). L'analyse
-  tourne donc **après** le pull, puis publie ; si un pull réécrit les tags d'un
-  dossier, remettre `auto_tagged_at` à `null` pour les sons qui n'ont plus de
-  tag, sinon ils ne seraient jamais ré-analysés.
-- **Jamais en Mode Spectacle** ni pendant un déclenchement : suspendue comme la
-  veille Drive ([0022](0022-veille-drive-en-cours-de-session.md)), dans un isolate dédié.
-  Réservée aux sons de type musique (le type en base est la source).
-- **Point ouvert** : `sound_tags` n'a pas de colonne d'origine, donc impossible
-  de distinguer un tag posé par le modèle d'un tag posé à la main sur un son
-  encore non traité. Un « retirer les tags automatiques » ne doit pas supprimer
-  les tags manuels : soit on ne l'offre que sur un son jamais édité, soit on
-  ajoute une origine (ce qui touche le format du snapshot — décision à part).
+  tourne donc **après** le pull (`AutoSyncCoordinator`, à la fin de chaque passe, de
+  la veille et au retour au premier plan) et un push est planifié quand elle a posé
+  des tags. Un pull qui efface les tags d'un son qui en portait rouvre sa décision
+  (`auto_tagged_at` remis à `null`, empreinte conservée : aucune ré-analyse du
+  fichier), et ses tags sont reposés au passage suivant.
+- **Planification** : une passe d'analyse est un passage séparé de la passe de
+  synchro (elle dure des minutes et ne doit jamais retenir « Actualiser »). Elle ne
+  démarre pas, ou s'arrête entre deux sons, en **Mode Spectacle**, app en
+  **arrière-plan** ou **passe de synchro en cours**. Elle tourne aussi en usage 100 %
+  local. Le Mode Spectacle n'a pas de signal de sortie : elle reprend au tick de
+  veille suivant (≤ 5 min). Le décodage ne tient la file SoLoud que ≈ 100 ms par clip.
+  Réservée aux sons de type **musique** (le type en base est la source), non traités,
+  sans tag, dont le fichier est **déjà sur l'appareil** ; poste de bureau seulement.
+  `sounds.auto_embedding` (v44) garde l'empreinte de chaque son : le recentrage se
+  recalcule sans ré-analyser, y compris quand le vocabulaire d'ambiances s'élargit.
+- **Règle de pose** : par ambiance, score recentré sur la moyenne **et normalisé par
+  l'écart-type** de la bibliothèque analysée ; une ambiance n'est posée qu'à
+  **z ≥ 1,0**, **3 tags au plus**, et **rien tant que 50 sons ne sont pas analysés**.
+  Les 15 ambiances pointent vers des tags EMOTION_STYLE existants (Merveilleux →
+  Magie, Dramatique → Drame, Sensuel → Romantique) ; l'analyse ne crée jamais de tag.
+  Le seuil est un choix prudent sur 26 morceaux, sans vérité terrain (ex. « Piano
+  triste » z = 0,8 ne reçoit aucun tag) : à recaler sur une bibliothèque plus grande.
+  L'éligibilité est **revérifiée au moment de poser** (un son traité ou tagué
+  entre-temps est laissé intact). Les écritures locales d'analyse ne déclenchent
+  pas de push.
+- **Pack** : `muq_audio_int8.onnx` (~480 Mo) est une asset de la GitHub Release
+  `autotag-pack-1` du dépôt ; adresse, taille et **SHA-256 sont dans le binaire**
+  (`AutoTagPackRelease`), donc une release altérée est refusée. Téléchargé en `.part`,
+  vérifié au fil du flux, puis renommé ; annulable ; supprimable depuis Paramètres →
+  Analyse automatique, qui affiche l'attribution CC BY-NC. Sans pack, l'analyse ne
+  fait rien : l'installer vaut consentement.
+- **Origine des tags (point ouvert résolu sans colonne d'origine)** : un son non
+  traité qui s'ouvre avec des tags **et** une marque `auto_tagged_at` affiche un
+  bandeau « Tags posés automatiquement d'après le son — vérifiez-les, puis validez ».
+  Pas d'origine par tag, donc pas de format de snapshot modifié, et pas d'action
+  « retirer les tags automatiques » : on retire un tag par sa croix, ou on valide.
+  Le bandeau disparaît à la validation (le son devient traité). Limite assumée : des
+  tags ajoutés à la main sur un son non traité ailleurs que dans ce formulaire seraient
+  couverts par le même bandeau.
 - **`flutter_onnxruntime` fournit la bibliothèque native, pas l'API.** Son API Dart
   passe par un canal de plateforme dont le gestionnaire exécute l'inférence sur le
   thread de l'interface (Windows : threads plateforme et Dart fusionnés) : mesuré,
