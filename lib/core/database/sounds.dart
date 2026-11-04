@@ -179,6 +179,13 @@ class Sounds extends Table {
   /// false. Annotation locale comme
   /// [isFavorite] : absente de l'export du snapshot dossier.
   BoolColumn get isProcessed => boolean().withDefault(const Constant(false))();
+
+  /// Date de la dernière analyse automatique du son (tags posés par le modèle
+  /// embarqué, cf. décision 0029). `null` = jamais analysé : candidat à
+  /// l'analyse. Renseignée même si l'analyse n'a posé aucun tag, pour ne pas
+  /// ré-analyser en boucle. Annotation locale comme [isProcessed] : absente de
+  /// l'export du snapshot dossier.
+  DateTimeColumn get autoTaggedAt => dateTime().nullable()();
 }
 
 class SoundBoards extends Table {

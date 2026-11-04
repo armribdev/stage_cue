@@ -69,7 +69,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 42;
+  int get schemaVersion => 43;
 
   @override
   MigrationStrategy get migration {
@@ -451,6 +451,15 @@ class AppDatabase extends _$AppDatabase {
           // (EMOTION_STYLE). Données seules, aucun changement de schéma.
           await _ensureExtraTags();
           await _removeUnusedInstrumentTags();
+        }
+        if (from < 43) {
+          // Marque d'analyse automatique des tags (décision 0029). Null = jamais
+          // analysé, donc tous les sons existants sont candidats. Gardé par un
+          // test d'existence : un upgrade depuis < 40 passe par `alterTable`, qui
+          // recrée `sounds` au schéma courant — colonne déjà présente.
+          if (!await _columnExists('sounds', 'auto_tagged_at')) {
+            await m.addColumn(sounds, sounds.autoTaggedAt);
+          }
         }
       }),
       beforeOpen: (details) async {

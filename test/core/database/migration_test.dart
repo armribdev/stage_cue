@@ -418,6 +418,39 @@ void main() {
     await database.close();
   });
 
+  test(
+    'une base v42 gagne auto_tagged_at, null pour les sons existants',
+    () async {
+      var database = db.AppDatabase.forTesting(NativeDatabase(file));
+      await database.customStatement(
+        "INSERT INTO sounds (title, file_path, display_name, is_processed) "
+        "VALUES ('s', '/s.wav', 's', 1)",
+      );
+      await database.customStatement(
+        'ALTER TABLE sounds DROP COLUMN auto_tagged_at',
+      );
+      await database.customStatement('PRAGMA user_version = 42');
+      await database.close();
+
+      database = db.AppDatabase.forTesting(NativeDatabase(file));
+      final sound = await database.select(database.sounds).getSingle();
+      expect(sound.title, 's', reason: 'les données doivent survivre');
+      expect(sound.isProcessed, isTrue);
+      // Null = jamais analysé : tous les sons existants deviennent candidats.
+      expect(sound.autoTaggedAt, isNull);
+
+      // La colonne doit être écrivable, et la date ressortir à la seconde près.
+      final when = DateTime.utc(2026, 11, 4, 9, 30, 15);
+      await (database.update(database.sounds)
+            ..where((s) => s.id.equals(sound.id)))
+          .write(db.SoundsCompanion(autoTaggedAt: Value(when)));
+      final updated = await database.select(database.sounds).getSingle();
+      expect(updated.autoTaggedAt?.toUtc(), when);
+
+      await database.close();
+    },
+  );
+
   test('la migration est idempotente : une base à jour rembobinée en v35 '
       'passe sans erreur', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));
