@@ -283,77 +283,145 @@ void main() {
       },
     );
 
-    test('un pull qui efface des tags rouvre la décision d’analyse', () async {
-      final lib = await database
-          .into(database.libraries)
-          .insert(
-            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/cache'),
-          );
-      final folder = await database
-          .into(database.libraryFolders)
-          .insert(
-            db.LibraryFoldersCompanion.insert(
-              libraryId: lib,
-              driveFolderId: 'F',
-              relativePath: const Value(''),
-            ),
-          );
-      final decidedAt = DateTime.utc(2026, 11, 4);
-      Future<int> addSound(
-        String name, {
-        bool embedding = true,
-        bool processed = false,
+    group('tags de l’IA (décision 0030)', () {
+      late int lib;
+      late int folder;
+      late int soundId;
+      late int tagA;
+      late int tagB;
+
+      setUp(() async {
+        lib = await database
+            .into(database.libraries)
+            .insert(
+              db.LibrariesCompanion.insert(name: 'A', localRootPath: '/cache'),
+            );
+        folder = await database
+            .into(database.libraryFolders)
+            .insert(
+              db.LibraryFoldersCompanion.insert(
+                libraryId: lib,
+                driveFolderId: 'F',
+                relativePath: const Value(''),
+              ),
+            );
+        soundId = await database
+            .into(database.sounds)
+            .insert(
+              db.SoundsCompanion.insert(
+                title: 'a',
+                displayName: 'a',
+                filePath: '/cache/a.mp3',
+                libraryId: Value(lib),
+                relativePath: const Value('a.mp3'),
+                driveFileId: const Value('id-a'),
+                folderId: Value(folder),
+              ),
+            );
+        final tags = await database.select(database.tagItems).get();
+        tagA = tags[0].id;
+        tagB = tags[1].id;
+      });
+
+      Future<void> setAuto(
+        int tag, {
+        bool hidden = false,
+        required DateTime at,
       }) => database
-          .into(database.sounds)
-          .insert(
-            db.SoundsCompanion.insert(
-              title: name,
-              displayName: name,
-              filePath: '/cache/$name.mp3',
-              libraryId: Value(lib),
-              relativePath: Value('$name.mp3'),
-              driveFileId: Value('id-$name'),
-              folderId: Value(folder),
-              isProcessed: Value(processed),
-              autoTaggedAt: Value(decidedAt),
-              autoEmbedding: Value(embedding ? Uint8List(2048) : null),
+          .into(database.soundAutoTags)
+          .insertOnConflictUpdate(
+            db.SoundAutoTagsCompanion.insert(
+              soundId: soundId,
+              tagId: tag,
+              hidden: Value(hidden),
+              updatedAt: Value(at),
             ),
           );
-      final tagId =
-          (await database
-                  .customSelect("SELECT id FROM tags WHERE name = 'Sombre'")
-                  .getSingle())
-              .read<int>('id');
-      Future<void> tag(int soundId) => database
-          .into(database.soundTags)
-          .insert(db.SoundTagsCompanion.insert(soundId: soundId, tagId: tagId));
 
-      final erased = await addSound('erased');
-      final untouched = await addSound('untouched'); // décidé sans tag
-      final processed = await addSound('processed', processed: true);
-      final noEmbedding = await addSound('noembedding', embedding: false);
+      Future<Map<int, (bool, DateTime)>> autoTags() async => {
+        for (final r in await database.select(database.soundAutoTags).get())
+          r.tagId: (r.hidden, r.updatedAt),
+      };
 
-      // Le distant (snapshot sans aucun tag) est exporté AVANT que le local ne
-      // reçoive ses tags automatiques, non publiés.
-      final snapshotPath = p.join(tempDir.path, 'folder.db');
-      await store.exportFolderSnapshot(folder, snapshotPath);
-      for (final id in [erased, processed, noEmbedding]) {
-        await tag(id);
+      /// Exporte l'état courant puis le rejoue sur la base, après que [mutate]
+      /// a changé le local : le snapshot joue le rôle du distant.
+      Future<void> pullRemoteThen(Future<void> Function() mutate) async {
+        final path = p.join(tempDir.path, 'auto.db');
+        await store.exportFolderSnapshot(folder, path);
+        await mutate();
+        await store.mergeFolderSnapshot(folder, path);
       }
 
-      await store.mergeFolderSnapshot(folder, snapshotPath);
+      test('un tag masqué voyage avec sa mémoire dans le snapshot', () async {
+        final t0 = DateTime.utc(2026, 11, 4, 10);
+        await setAuto(tagA, at: t0);
+        await setAuto(tagB, hidden: true, at: t0);
+        final path = p.join(tempDir.path, 'auto.db');
+        await store.exportFolderSnapshot(folder, path);
 
-      Future<DateTime?> mark(int id) async => (await (database.select(
-        database.sounds,
-      )..where((s) => s.id.equals(id))).getSingle()).autoTaggedAt;
-      expect(await mark(erased), isNull, reason: 'tags perdus : à re-décider');
-      expect(await mark(untouched), isNotNull, reason: 'n’avait pas de tags');
-      expect(await mark(processed), isNotNull, reason: 'traité : hors champ');
-      expect(await mark(noEmbedding), isNotNull, reason: 'rien à re-décider');
-      final erasedRow = await (database.select(
-        database.sounds,
-      )..where((s) => s.id.equals(erased))).getSingle();
-      expect(erasedRow.autoEmbedding, isNotNull, reason: 'empreinte conservée');
+        // Autre appareil : même son, aucun tag d'IA.
+        await database.delete(database.soundAutoTags).go();
+        await store.mergeFolderSnapshot(folder, path);
+
+        final auto = await autoTags();
+        expect(auto[tagA]?.$1, isFalse);
+        expect(auto[tagB]?.$1, isTrue, reason: 'masqué reste masqué');
+      });
+
+      test(
+        'un pull ne supprime jamais un tag d’IA présent seulement en local',
+        () async {
+          final t0 = DateTime.utc(2026, 11, 4, 10);
+          await pullRemoteThen(() => setAuto(tagA, at: t0));
+          expect((await autoTags()).keys, contains(tagA));
+        },
+      );
+
+      test(
+        'dernière écriture gagnante : le masquage local récent résiste',
+        () async {
+          final old = DateTime.utc(2026, 11, 4, 10);
+          final recent = DateTime.utc(2026, 11, 4, 12);
+          await setAuto(tagA, at: old);
+          await pullRemoteThen(() => setAuto(tagA, hidden: true, at: recent));
+          expect((await autoTags())[tagA]?.$1, isTrue);
+        },
+      );
+
+      test(
+        'dernière écriture gagnante : un rétablissement distant plus récent passe',
+        () async {
+          final old = DateTime.utc(2026, 11, 4, 10);
+          final recent = DateTime.utc(2026, 11, 4, 12);
+          await setAuto(tagA, at: recent);
+          final path = p.join(tempDir.path, 'auto.db');
+          await store.exportFolderSnapshot(folder, path);
+          await setAuto(tagA, hidden: true, at: old);
+
+          await store.mergeFolderSnapshot(folder, path);
+
+          expect((await autoTags())[tagA]?.$1, isFalse);
+        },
+      );
+
+      test(
+        'les tags de l’utilisateur ne sont pas touchés par ceux de l’IA',
+        () async {
+          await database
+              .into(database.soundTags)
+              .insert(
+                db.SoundTagsCompanion.insert(soundId: soundId, tagId: tagA),
+              );
+          await setAuto(tagB, at: DateTime.utc(2026, 11, 4, 10));
+          final path = p.join(tempDir.path, 'auto.db');
+          await store.exportFolderSnapshot(folder, path);
+          await store.mergeFolderSnapshot(folder, path);
+
+          final user = await database.select(database.soundTags).get();
+          expect(user.map((r) => r.tagId), [tagA]);
+          expect((await autoTags()).keys, [tagB]);
+        },
+      );
     });
 
     test('upsert préserve l\'id du son (liens pad intacts)', () async {

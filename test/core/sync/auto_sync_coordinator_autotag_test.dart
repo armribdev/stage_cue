@@ -5,6 +5,7 @@
 
 import 'dart:async';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -85,6 +86,7 @@ void main() {
       syncController,
       preferences,
       autoTag: autoTag,
+      autoTagDelay: const Duration(milliseconds: 30),
     );
   });
 
@@ -251,5 +253,65 @@ void main() {
     await plain.refreshNow();
     await pump();
     expect(events, isEmpty);
+  });
+
+  group('indexation de sons', () {
+    Future<void> insertSound(String name) => database
+        .into(database.sounds)
+        .insert(
+          db.SoundsCompanion.insert(
+            title: name,
+            displayName: name,
+            filePath: '/x/$name.mp3',
+          ),
+        );
+
+    Future<void> afterDelay() =>
+        Future<void>.delayed(const Duration(milliseconds: 150));
+
+    test('des sons insérés déclenchent l’analyse après le délai de grâce, '
+        'une seule fois pour tout le lot', () async {
+      coordinator.start();
+      await pump();
+      events.clear(); // le lancement a déjà passé son propre passage
+
+      for (var i = 0; i < 20; i++) {
+        await insertSound('s$i');
+      }
+      await pump();
+      expect(events, isEmpty, reason: 'pas avant le délai de grâce');
+      await afterDelay();
+
+      expect(events.where((e) => e == 'autotag'), hasLength(1));
+    });
+
+    test(
+      'mode local : l’indexation de sons déclenche aussi l’analyse',
+      () async {
+        preferences.allows = false;
+        coordinator.start();
+        await pump();
+        events.clear();
+
+        await insertSound('local');
+        await afterDelay();
+
+        expect(events, contains('autotag'));
+      },
+    );
+
+    test('une simple modification de son ne déclenche rien', () async {
+      await insertSound('a');
+      coordinator.start();
+      await pump();
+      events.clear();
+
+      await (database.update(
+        database.sounds,
+      )).write(const db.SoundsCompanion(isFavorite: Value(true)));
+      await afterDelay();
+
+      expect(events, isEmpty);
+    });
   });
 }

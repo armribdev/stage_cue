@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:drift/drift.dart' show TableUpdate;
+import 'package:drift/drift.dart'
+    show TableUpdate, TableUpdateQuery, UpdateKind;
 
 import '../../features/sampler/data/models/indexing_progress.dart';
 import '../../features/sampler/data/repositories/library_repository.dart';
@@ -27,6 +28,10 @@ const Duration _watchInterval = Duration(minutes: 5);
 /// fichiers sur Drive depuis un navigateur — sonderait Drive à chaque
 /// aller-retour.
 const Duration _watchResumeThrottle = Duration(minutes: 1);
+
+/// Délai de grâce après l'insertion de sons avant de lancer l'analyse : une
+/// indexation en insère des centaines à la suite, on attend qu'elle se calme.
+const Duration _autoTagAfterIndexingDelay = Duration(seconds: 10);
 
 /// Ce qui a déclenché une passe de synchronisation. Détermine **jusqu'où elle
 /// va**, pas ce qu'elle fait : la séquence (indexer → tirer → ré-élaguer) est la
@@ -106,6 +111,12 @@ class AutoSyncCoordinator {
 
   StreamSubscription<Set<TableUpdate>>? _subscription;
 
+  /// Écoute des insertions de sons (indexation), pour analyser les nouveautés
+  /// sans attendre le prochain tick (décision 0030).
+  StreamSubscription<Set<TableUpdate>>? _insertSubscription;
+  Timer? _autoTagDebounce;
+  final Duration _autoTagDelay;
+
   /// Veille périodique. Créé par [start], donc absent en test tant que
   /// [start] n'est pas appelé.
   Timer? _watchTimer;
@@ -159,13 +170,25 @@ class AutoSyncCoordinator {
     this._syncController,
     this._appPreferences, {
     AutoTagService? autoTag,
-  }) : _autoTag = autoTag;
+    Duration autoTagDelay = _autoTagAfterIndexingDelay,
+  }) : _autoTag = autoTag,
+       _autoTagDelay = autoTagDelay;
 
   /// Démarre l'écoute des modifications, la veille, et lance un pull initial en
   /// arrière-plan.
   void start() {
     _appPreferences.addListener(_onConnectivityModeChanged);
     _subscription = _database.tableUpdates().listen(_onTablesUpdated);
+    if (_autoTag != null) {
+      _insertSubscription = _database
+          .tableUpdates(
+            TableUpdateQuery.onTableName(
+              'sounds',
+              limitUpdateKind: UpdateKind.insert,
+            ),
+          )
+          .listen((_) => _onSoundsInserted());
+    }
     // Ménage des téléchargements interrompus (app tuée, coupure) : hors du pull
     // initial, qui ne tourne qu'en mode connecté — ces résidus occupent le
     // disque même en usage 100 % local.
@@ -235,6 +258,13 @@ class AutoSyncCoordinator {
     );
     if (!touchesUserData) return;
     await _schedulePushForConnectedLibraries();
+  }
+
+  /// Des sons viennent d'être indexés : analyse après un délai de grâce, qui se
+  /// repousse tant que l'indexation continue d'en insérer.
+  void _onSoundsInserted() {
+    _autoTagDebounce?.cancel();
+    _autoTagDebounce = Timer(_autoTagDelay, _scheduleAutoTag);
   }
 
   Future<void> _schedulePushForConnectedLibraries() async {
@@ -551,6 +581,8 @@ class AutoSyncCoordinator {
     _appPreferences.removeListener(_onConnectivityModeChanged);
     _watchTimer?.cancel();
     _watchTimer = null;
+    _autoTagDebounce?.cancel();
+    _insertSubscription?.cancel();
     _subscription?.cancel();
   }
 }
