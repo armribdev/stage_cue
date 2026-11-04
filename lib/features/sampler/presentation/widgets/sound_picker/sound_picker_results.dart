@@ -205,12 +205,27 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ScrollingTextSpan(
-                        animate: isSelected || _hoveredIndex == index,
-                        span: buildHighlightedSpan(
-                          sound.displayName,
-                          _highlightTokens,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: ScrollingTextSpan(
+                              animate: isSelected || _hoveredIndex == index,
+                              span: buildHighlightedSpan(
+                                sound.displayName,
+                                _highlightTokens,
+                              ),
+                            ),
+                          ),
+                          // Favori : l'étoile suit directement le titre.
+                          if (_isQuickSearch && sound.isFavorite) ...[
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.star_rounded,
+                              size: 16,
+                              color: scheme.primary,
+                            ),
+                          ],
+                        ],
                       ),
                       _buildSubtitle(
                         sound,
@@ -297,12 +312,14 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
       );
     }
 
+    // Recherche rapide : pas de libellé de type, l'avatar l'indique déjà.
     return Row(
       children: [
-        Text(
-          _typeLabel(sound.type),
-          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-        ),
+        if (!_isQuickSearch)
+          Text(
+            _typeLabel(sound.type),
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
         if (_isLibrary && inBoard) ...[
           const SizedBox(width: 6),
           Text(
@@ -314,7 +331,6 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
           ),
         ],
         if (_isQuickSearch && _localIds != null && !_isLocal(sound)) ...[
-          const SizedBox(width: 6),
           Icon(
             Icons.cloud_outlined,
             size: 13,
@@ -391,23 +407,10 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
   }) {
     switch (widget.mode) {
       case QuickSearchMode():
-        final fav = sound.isFavorite;
         final playedInSession = widget.notifier.hasPlayedInSession(sound.id);
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (fav) ...[
-              SizedBox(
-                width: _actionButtonSize,
-                height: _actionButtonSize,
-                child: Icon(
-                  Icons.star_rounded,
-                  size: 18,
-                  color: scheme.primary,
-                ),
-              ),
-              const SizedBox(width: 4),
-            ],
             if (playedInSession) ...[
               Tooltip(
                 message:
