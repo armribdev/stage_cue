@@ -10,6 +10,7 @@ import '../datasources/local_tag_datasource.dart';
 import '../models/indexing_progress.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../domain/entities/tag_category_with_tags.dart';
+import '../../domain/entities/sound_auto_tag.dart';
 import '../../domain/entities/tag_item.dart';
 
 /// Repository pour la gestion des sons et des pads
@@ -336,6 +337,24 @@ class SoundRepository {
 
   Future<List<TagItem>> getTagsForSound(int soundId) async {
     return await _tagDataSource.getTagsForSound(soundId);
+  }
+
+  /// Tags visibles d'un son : les siens plus ceux de l'IA non masqués.
+  Future<List<TagItem>> getVisibleTagsForSound(int soundId) async {
+    return await _tagDataSource.getVisibleTagsForSound(soundId);
+  }
+
+  /// Tags trouvés par l'IA pour un son, masqués compris.
+  Future<List<SoundAutoTag>> getAutoTagsForSound(int soundId) async {
+    return await _tagDataSource.getAutoTagsForSound(soundId);
+  }
+
+  Future<void> setAutoTagHidden(
+    int soundId,
+    int tagId, {
+    required bool hidden,
+  }) async {
+    await _tagDataSource.setAutoTagHidden(soundId, tagId, hidden: hidden);
   }
 
   /// Tags de tous les sons en une requête (index de recherche).

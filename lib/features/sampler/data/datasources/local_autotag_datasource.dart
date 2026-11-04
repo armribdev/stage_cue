@@ -32,8 +32,8 @@ class AutoTagApplyResult {
   final int soundsTagged;
   final int tagsInserted;
 
-  /// Sons laissés intacts parce que traités, taggés ou retypés entre l'analyse
-  /// et la décision.
+  /// Sons laissés intacts parce que traités ou retypés entre l'analyse et la
+  /// décision.
   final int soundsNoLongerEligible;
   const AutoTagApplyResult({
     required this.soundsTagged,
@@ -42,10 +42,12 @@ class AutoTagApplyResult {
   });
 }
 
-/// Accès base de l'analyse automatique des tags (décision 0029).
+/// Accès base de l'analyse automatique des tags (décisions 0029 et 0030).
 ///
-/// Un son est **éligible** s'il est de type musique, non traité et sans tag :
-/// l'analyse ne touche jamais un son que l'utilisateur a déjà validé ou tagué.
+/// Un son est **éligible** s'il est de type musique et non traité : passer un
+/// son en « traité » à la main fige ses tags, l'IA n'y revient plus. Les tags de
+/// l'IA vont dans `sound_auto_tags`, jamais dans `sound_tags` (ceux de
+/// l'utilisateur).
 class LocalAutoTagDataSource {
   final db.AppDatabase _database;
 
@@ -54,8 +56,7 @@ class LocalAutoTagDataSource {
   /// Condition d'éligibilité, sur l'alias `sounds`. `type = 1` est
   /// `SoundType.music` (index de l'enum, cf. `sounds.dart`).
   static const String _eligibleSql =
-      'sounds.type = 1 AND sounds.is_processed = 0 '
-      'AND NOT EXISTS (SELECT 1 FROM sound_tags st WHERE st.sound_id = sounds.id)';
+      'sounds.type = 1 AND sounds.is_processed = 0';
 
   /// Sons éligibles jamais analysés ni écartés (pas d'empreinte, pas de marque).
   Future<List<domain.Sound>> soundsToAnalyze() async {
@@ -99,12 +100,14 @@ class LocalAutoTagDataSource {
           .write(db.SoundsCompanion(autoTaggedAt: Value(when)));
 
   /// Applique les [decisions] en une transaction : revérifie l'éligibilité de
-  /// chaque son (l'utilisateur a pu le traiter ou le tagger depuis l'analyse),
-  /// pose les tags de [categoryName] puis renseigne `auto_tagged_at` — même
-  /// quand rien n'est posé, pour ne pas décider en boucle.
+  /// chaque son (l'utilisateur a pu le traiter depuis l'analyse), enregistre ses
+  /// tags dans `sound_auto_tags` de [categoryName], puis renseigne
+  /// `auto_tagged_at` — même quand rien n'est posé, pour ne pas décider en boucle.
   ///
-  /// Un nom de tag introuvable est ignoré (catalogue modifié à la main) : on ne
-  /// crée jamais de tag.
+  /// Une ligne existante n'est **jamais modifiée** : un tag que l'utilisateur a
+  /// masqué reste masqué. Un son qui a déjà des tags d'IA (reçus d'un autre
+  /// appareil par la synchro) n'est pas recalculé. Un nom de tag introuvable est
+  /// ignoré (catalogue modifié à la main) : on ne crée jamais de tag.
   Future<AutoTagApplyResult> applyDecisions(
     List<AutoTagDecision> decisions, {
     required String categoryName,
@@ -132,21 +135,28 @@ class LocalAutoTagDataSource {
               variables: [Variable<int>(decision.soundId)],
             )
             .get();
+        final alreadyHasAutoTags = await _database
+            .customSelect(
+              'SELECT 1 FROM sound_auto_tags WHERE sound_id = ? LIMIT 1',
+              variables: [Variable<int>(decision.soundId)],
+            )
+            .get();
         if (eligible.isEmpty) {
           notEligible++;
-        } else {
+        } else if (alreadyHasAutoTags.isEmpty) {
           var inserted = 0;
           for (final name in decision.tagNames) {
             final tagId = tagIds[name];
             if (tagId == null) continue;
             await _database
-                .into(_database.soundTags)
+                .into(_database.soundAutoTags)
                 .insert(
-                  db.SoundTagsCompanion.insert(
+                  db.SoundAutoTagsCompanion.insert(
                     soundId: decision.soundId,
                     tagId: tagId,
-                    addedAt: Value(when),
+                    updatedAt: Value(when),
                   ),
+                  mode: InsertMode.insertOrIgnore,
                 );
             inserted++;
           }

@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stage_cue/core/database/database.dart' as db;
@@ -99,5 +100,99 @@ void main() {
 
     final result = await dataSource.findSoundIdsByTagQuery('xyzzyplugh');
     expect(result, isEmpty);
+  });
+
+  group('tags de l’IA (décision 0030)', () {
+    Future<void> linkAuto(int soundId, int tagId, {bool hidden = false}) =>
+        database
+            .into(database.soundAutoTags)
+            .insert(
+              db.SoundAutoTagsCompanion.insert(
+                soundId: soundId,
+                tagId: tagId,
+                hidden: Value(hidden),
+              ),
+            );
+
+    test('la recherche trouve un son par un tag de l’IA visible', () async {
+      final categoryId = await insertCategory();
+      final tagId = await insertTag('Angoisse', categoryId);
+      final soundId = await insertSound('Musique');
+      await linkAuto(soundId, tagId);
+
+      expect(await dataSource.findSoundIdsByTagQuery('angoisse'), {soundId});
+    });
+
+    test('un tag de l’IA masqué n’est plus cherché', () async {
+      final categoryId = await insertCategory();
+      final tagId = await insertTag('Angoisse', categoryId);
+      final soundId = await insertSound('Musique');
+      await linkAuto(soundId, tagId, hidden: true);
+
+      expect(await dataSource.findSoundIdsByTagQuery('angoisse'), isEmpty);
+    });
+
+    test('tags visibles = ceux de l’utilisateur + ceux de l’IA non masqués, '
+        'sans doublon', () async {
+      final categoryId = await insertCategory();
+      final mine = await insertTag('Calme', categoryId);
+      final both = await insertTag('Sombre', categoryId);
+      final ai = await insertTag('Tension', categoryId);
+      final masked = await insertTag('Triste', categoryId);
+      final soundId = await insertSound('Musique');
+      await linkSoundTag(soundId, mine);
+      await linkSoundTag(soundId, both);
+      await linkAuto(soundId, both);
+      await linkAuto(soundId, ai);
+      await linkAuto(soundId, masked, hidden: true);
+
+      final visible = await dataSource.getVisibleTagsForSound(soundId);
+      expect(visible.map((t) => t.name), ['Calme', 'Sombre', 'Tension']);
+
+      final all = await dataSource.getTagsForAllSounds();
+      expect(all[soundId]!.map((t) => t.name).toSet(), {
+        'Calme',
+        'Sombre',
+        'Tension',
+      });
+      expect(all[soundId]!.length, 3, reason: 'Sombre n’est listé qu’une fois');
+    });
+
+    test('getTagsForSound ne renvoie que les tags de l’utilisateur : '
+        'l’édition ne les mélange pas à ceux de l’IA', () async {
+      final categoryId = await insertCategory();
+      final mine = await insertTag('Calme', categoryId);
+      final ai = await insertTag('Tension', categoryId);
+      final soundId = await insertSound('Musique');
+      await linkSoundTag(soundId, mine);
+      await linkAuto(soundId, ai);
+
+      final user = await dataSource.getTagsForSound(soundId);
+      expect(user.map((t) => t.name), ['Calme']);
+    });
+
+    test(
+      'masquer puis rétablir : la ligne reste, seul l’état change',
+      () async {
+        final categoryId = await insertCategory();
+        final tagId = await insertTag('Tension', categoryId);
+        final soundId = await insertSound('Musique');
+        await linkAuto(soundId, tagId);
+
+        await dataSource.setAutoTagHidden(soundId, tagId, hidden: true);
+        var auto = await dataSource.getAutoTagsForSound(soundId);
+        expect(auto, hasLength(1));
+        expect(auto.single.hidden, isTrue);
+        expect(await dataSource.getVisibleTagsForSound(soundId), isEmpty);
+
+        await dataSource.setAutoTagHidden(soundId, tagId, hidden: false);
+        auto = await dataSource.getAutoTagsForSound(soundId);
+        expect(auto.single.hidden, isFalse);
+        expect(
+          (await dataSource.getVisibleTagsForSound(soundId)).single.name,
+          'Tension',
+        );
+      },
+    );
   });
 }
