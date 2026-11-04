@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -334,6 +333,11 @@ class LibrarySnapshotStore {
         INNER JOIN sound_tags st ON st.tag_id = ti.id
         INNER JOIN sounds s ON s.id = st.sound_id
         WHERE s.folder_id = $folderId
+        UNION
+        SELECT DISTINCT ti.* FROM tags ti
+        INNER JOIN sound_auto_tags sa ON sa.tag_id = ti.id
+        INNER JOIN sounds s ON s.id = sa.sound_id
+        WHERE s.folder_id = $folderId
       ''');
       await _database.customStatement('''
         CREATE TABLE snap.tag_categories AS
@@ -344,6 +348,14 @@ class LibrarySnapshotStore {
         CREATE TABLE snap.sound_tags AS
         SELECT st.* FROM sound_tags st
         INNER JOIN sounds s ON s.id = st.sound_id
+        WHERE s.folder_id = $folderId
+      ''');
+      // Tags de l'IA, masqués compris : la mémoire de ce que l'utilisateur a
+      // écarté voyage aussi (décision 0030).
+      await _database.customStatement('''
+        CREATE TABLE snap.sound_auto_tags AS
+        SELECT sa.* FROM sound_auto_tags sa
+        INNER JOIN sounds s ON s.id = sa.sound_id
         WHERE s.folder_id = $folderId
       ''');
       await _database.customStatement('''
@@ -392,16 +404,6 @@ class LibrarySnapshotStore {
           await _importTags();
         }
         if (await _snapHasTable('sound_tags')) {
-          // Sons du dossier qui portent des tags avant remplacement : ceux qui
-          // n'en ont plus ensuite les ont perdus au profit du distant.
-          final taggedBefore = await _database
-              .customSelect(
-                'SELECT DISTINCT st.sound_id AS id FROM sound_tags st '
-                'JOIN sounds s ON s.id = st.sound_id WHERE s.folder_id = ?',
-                variables: [Variable<int>(folderId)],
-              )
-              .map((r) => r.read<int>('id'))
-              .get();
           // Remplace les tags du dossier (le distant fait foi) avant réimport.
           await _database.customStatement(
             'DELETE FROM sound_tags WHERE sound_id IN '
@@ -409,40 +411,13 @@ class LibrarySnapshotStore {
             [folderId],
           );
           await _importSoundTags();
-          await _reopenAutoTagDecisions(taggedBefore);
+        }
+        if (await _snapHasTable('sound_auto_tags')) {
+          await _mergeSoundAutoTags();
         }
       });
     } finally {
       await _detachSnapshot();
-    }
-  }
-
-  /// Rouvre la décision d'analyse automatique des sons de [soundIds] qui n'ont
-  /// plus aucun tag : un pull vient de remplacer leurs tags par ceux du distant
-  /// (qui ne les avait pas encore reçus), et sans cela `auto_tagged_at` les
-  /// laisserait sans tag pour toujours. L'empreinte est conservée : la décision
-  /// se refait sans ré-analyser le fichier (décision 0029). Un son traité entre-
-  /// temps est laissé tel quel.
-  Future<void> _reopenAutoTagDecisions(List<int> soundIds) async {
-    var reopened = 0;
-    const chunk = 500;
-    for (var i = 0; i < soundIds.length; i += chunk) {
-      final ids = soundIds.sublist(i, math.min(i + chunk, soundIds.length));
-      final marks = List.filled(ids.length, '?').join(',');
-      reopened += await _database.customUpdate(
-        'UPDATE sounds SET auto_tagged_at = NULL '
-        'WHERE id IN ($marks) AND auto_tagged_at IS NOT NULL '
-        'AND auto_embedding IS NOT NULL AND is_processed = 0 '
-        'AND NOT EXISTS (SELECT 1 FROM sound_tags st WHERE st.sound_id = sounds.id)',
-        variables: [for (final id in ids) Variable<int>(id)],
-        updates: {_database.sounds},
-      );
-    }
-    if (reopened > 0) {
-      SyncLog.info(
-        'Pull : $reopened son(s) ont perdu leurs tags automatiques au profit '
-        'du distant — décision d’analyse rouverte.',
-      );
     }
   }
 
@@ -703,6 +678,51 @@ class LibrarySnapshotStore {
             ),
             mode: InsertMode.insertOrIgnore,
           );
+    }
+  }
+
+  /// Fusionne les tags de l'IA du snapshot (décision 0030) : **union**, jamais de
+  /// suppression, et pour une paire (son, tag) connue des deux côtés la dernière
+  /// modification gagne (`updated_at`) — c'est ce qui propage un masquage ou un
+  /// rétablissement. Un snapshot sans cette table (appareil plus ancien) laisse
+  /// les tags locaux intacts.
+  Future<void> _mergeSoundAutoTags() async {
+    final rows = await _database
+        .customSelect('SELECT * FROM snap.sound_auto_tags')
+        .get();
+    for (final row in rows) {
+      final soundId = _soundIdMap[row.read<int>('sound_id')];
+      final tagId = _tagIdMap[row.read<int>('tag_id')];
+      if (soundId == null || tagId == null) continue;
+      final hidden = row.read<int>('hidden') != 0;
+      final updatedAt = row.read<DateTime>('updated_at');
+
+      final existing =
+          await (_database.select(_database.soundAutoTags)..where(
+                (t) => t.soundId.equals(soundId) & t.tagId.equals(tagId),
+              ))
+              .getSingleOrNull();
+      if (existing == null) {
+        await _database
+            .into(_database.soundAutoTags)
+            .insert(
+              db.SoundAutoTagsCompanion.insert(
+                soundId: soundId,
+                tagId: tagId,
+                hidden: Value(hidden),
+                updatedAt: Value(updatedAt),
+              ),
+            );
+      } else if (updatedAt.isAfter(existing.updatedAt)) {
+        await (_database.update(_database.soundAutoTags)
+              ..where((t) => t.soundId.equals(soundId) & t.tagId.equals(tagId)))
+            .write(
+              db.SoundAutoTagsCompanion(
+                hidden: Value(hidden),
+                updatedAt: Value(updatedAt),
+              ),
+            );
+      }
     }
   }
 
