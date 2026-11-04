@@ -307,6 +307,10 @@ class AutoSyncCoordinator {
     return pass;
   }
 
+  /// Demande un passage d'analyse (pack tout juste installé…). Sans effet si
+  /// quelque chose s'y oppose : le prochain tick ou la prochaine passe reprendra.
+  void requestAutoTag() => _scheduleAutoTag();
+
   /// Raison de ne pas analyser (ou d'arrêter une analyse en cours), `null` si
   /// rien ne s'y oppose. Même logique que la veille, en plus strict : l'analyse
   /// charge le processeur, pas seulement le réseau.

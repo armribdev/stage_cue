@@ -29,6 +29,7 @@ extension _SamplerScreenNavigation on _SamplerScreenState {
       syncController: widget.services.syncController,
       autoSyncCoordinator: widget.services.autoSyncCoordinator,
       appPreferences: widget.services.appPreferences,
+      autoTagPack: widget.services.autoTagPack,
       scrollToDriveSection: scrollToDriveSection,
     );
     if (!mounted) return;
