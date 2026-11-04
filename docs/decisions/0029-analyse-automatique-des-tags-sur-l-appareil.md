@@ -106,5 +106,15 @@ le binaire.
   encore non traité. Un « retirer les tags automatiques » ne doit pas supprimer
   les tags manuels : soit on ne l'offre que sur un son jamais édité, soit on
   ajoute une origine (ce qui touche le format du snapshot — décision à part).
-- Ajouter `flutter_onnxruntime` à `pubspec.yaml` lors de l'implémentation, pas
-  avant : cette entrée l'autorise, la migration v43 ne l'exige pas.
+- **`flutter_onnxruntime` fournit la bibliothèque native, pas l'API.** Son API Dart
+  passe par un canal de plateforme dont le gestionnaire exécute l'inférence sur le
+  thread de l'interface (Windows : threads plateforme et Dart fusionnés) : mesuré,
+  ≈ 410 ms de gel complet du thread Dart par clip de 10 s, 8 images rendues en
+  2,4 s — inacceptable hors Mode Spectacle (un déclenchement de pad attendrait).
+  Le paquet est donc gardé pour télécharger et embarquer `onnxruntime` à la
+  compilation sur chaque plateforme, mais `OnnxSession` appelle l'API C par FFI
+  depuis un isolate de travail (`MuqAnalyzer`) : écart maximal entre deux ticks de
+  8 ms pendant l'inférence : 11 ms. Les rangs de la table `OrtApi` viennent de
+  `onnxruntime_c_api.h` (ORT 1.28) et ne changent pas entre versions (on demande
+  l'API 17). Vérifié sous Windows seulement ; le chargement de la bibliothèque
+  est prévu pour Linux et macOS, non éprouvé.
