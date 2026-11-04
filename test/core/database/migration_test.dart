@@ -484,7 +484,8 @@ void main() {
   );
 
   test(
-    'une base v44 gagne sound_auto_tags, vide, sans toucher aux tags',
+    'une base v44 gagne sound_auto_tags (avec score), vide, sans toucher aux '
+    'tags',
     () async {
       var database = db.AppDatabase.forTesting(NativeDatabase(file));
       await database.customStatement(
@@ -508,20 +509,82 @@ void main() {
         reason: 'les tags de l’utilisateur ne bougent pas',
       );
 
-      // Écriture, masquage, et clé primaire (soundId, tagId) unique.
+      // Écriture avec son score, et clé primaire (soundId, tagId) unique.
       final tagId = (await database.select(database.tagItems).get()).first.id;
       await database
           .into(database.soundAutoTags)
-          .insert(db.SoundAutoTagsCompanion.insert(soundId: 1, tagId: tagId));
+          .insert(
+            db.SoundAutoTagsCompanion.insert(
+              soundId: 1,
+              tagId: tagId,
+              score: 0.5,
+            ),
+          );
       final row = await database.select(database.soundAutoTags).getSingle();
-      expect(row.hidden, isFalse);
+      expect(row.score, 0.5);
       expect(row.updatedAt, isNotNull);
       await expectLater(
         database
             .into(database.soundAutoTags)
-            .insert(db.SoundAutoTagsCompanion.insert(soundId: 1, tagId: tagId)),
+            .insert(
+              db.SoundAutoTagsCompanion.insert(
+                soundId: 1,
+                tagId: tagId,
+                score: 0.1,
+              ),
+            ),
         throwsA(anything),
       );
+
+      await database.close();
+    },
+  );
+
+  test(
+    'une base v45 recrée sound_auto_tags avec score et rouvre la décision des '
+    'sons déjà empreints (sans toucher aux écartés)',
+    () async {
+      var database = db.AppDatabase.forTesting(NativeDatabase(file));
+      await database.customStatement(
+        "INSERT INTO sounds (title, file_path, display_name, auto_tagged_at, "
+        "auto_embedding) VALUES ('analysé', '/a.wav', 'a', 1000, X'00')",
+      );
+      await database.customStatement(
+        "INSERT INTO sounds (title, file_path, display_name, auto_tagged_at) "
+        "VALUES ('écarté', '/b.wav', 'b', 1000)",
+      );
+      // Forme v45 : `hidden`, pas de `score`.
+      await database.customStatement('DROP TABLE sound_auto_tags');
+      await database.customStatement('''
+        CREATE TABLE sound_auto_tags (
+          sound_id INTEGER NOT NULL, tag_id INTEGER NOT NULL,
+          hidden INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (sound_id, tag_id)
+        )
+      ''');
+      await database.customStatement(
+        'INSERT INTO sound_auto_tags (sound_id, tag_id) '
+        'VALUES (1, (SELECT id FROM tags LIMIT 1))',
+      );
+      await database.customStatement('PRAGMA user_version = 45');
+      await database.close();
+
+      database = db.AppDatabase.forTesting(NativeDatabase(file));
+      expect(await database.select(database.soundAutoTags).get(), isEmpty);
+      final sounds = {
+        for (final s in await database.select(database.sounds).get())
+          s.title: s,
+      };
+      expect(sounds['analysé']!.autoTaggedAt, isNull, reason: 'à re-décider');
+      expect(sounds['analysé']!.autoEmbedding, isNotNull, reason: 'gardée');
+      expect(sounds['écarté']!.autoTaggedAt, isNotNull);
+
+      final columns = await database
+          .customSelect('PRAGMA table_info(sound_auto_tags)')
+          .get();
+      final names = columns.map((c) => c.read<String>('name')).toSet();
+      expect(names, containsAll(['score', 'updated_at']));
+      expect(names, isNot(contains('hidden')));
 
       await database.close();
     },

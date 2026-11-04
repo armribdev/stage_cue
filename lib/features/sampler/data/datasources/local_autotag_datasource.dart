@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/database.dart' as db;
+import '../../domain/entities/auto_tag_suggestion.dart';
 import '../../domain/entities/sound.dart' as domain;
 import '../models/sound_model.dart';
 
@@ -18,17 +19,17 @@ class AnalyzedSound {
   });
 }
 
-/// Tags d'ambiance à poser sur un son (peut être vide : la décision est alors
-/// « rien à poser » et le son est marqué comme décidé).
+/// Suggestions d'ambiance à enregistrer pour un son (peut être vide : la
+/// décision est alors « rien à suggérer » et le son est marqué comme décidé).
 class AutoTagDecision {
   final int soundId;
-  final List<String> tagNames;
-  const AutoTagDecision(this.soundId, this.tagNames);
+  final List<AutoTagSuggestion> suggestions;
+  const AutoTagDecision(this.soundId, this.suggestions);
 }
 
 /// Bilan de [LocalAutoTagDataSource.applyDecisions].
 class AutoTagApplyResult {
-  /// Sons qui ont reçu au moins un tag.
+  /// Sons qui ont reçu au moins une suggestion, et nombre de suggestions.
   final int soundsTagged;
   final int tagsInserted;
 
@@ -42,12 +43,12 @@ class AutoTagApplyResult {
   });
 }
 
-/// Accès base de l'analyse automatique des tags (décisions 0029 et 0030).
+/// Accès base de l'analyse automatique des tags (décisions 0029 à 0031).
 ///
 /// Un son est **éligible** s'il est de type musique et non traité : passer un
-/// son en « traité » à la main fige ses tags, l'IA n'y revient plus. Les tags de
-/// l'IA vont dans `sound_auto_tags`, jamais dans `sound_tags` (ceux de
-/// l'utilisateur).
+/// son en « traité » à la main fige ses suggestions, l'IA n'y revient plus. Les
+/// suggestions de l'IA vont dans `sound_auto_tags` avec leur score, jamais dans
+/// `sound_tags` (ceux de l'utilisateur).
 class LocalAutoTagDataSource {
   final db.AppDatabase _database;
 
@@ -101,13 +102,14 @@ class LocalAutoTagDataSource {
 
   /// Applique les [decisions] en une transaction : revérifie l'éligibilité de
   /// chaque son (l'utilisateur a pu le traiter depuis l'analyse), enregistre ses
-  /// tags dans `sound_auto_tags` de [categoryName], puis renseigne
-  /// `auto_tagged_at` — même quand rien n'est posé, pour ne pas décider en boucle.
+  /// suggestions dans `sound_auto_tags` (tags de [categoryName]), puis renseigne
+  /// `auto_tagged_at` — même quand rien n'est suggéré, pour ne pas décider en
+  /// boucle.
   ///
-  /// Une ligne existante n'est **jamais modifiée** : un tag que l'utilisateur a
-  /// masqué reste masqué. Un son qui a déjà des tags d'IA (reçus d'un autre
-  /// appareil par la synchro) n'est pas recalculé. Un nom de tag introuvable est
-  /// ignoré (catalogue modifié à la main) : on ne crée jamais de tag.
+  /// Une ligne existante n'est **jamais modifiée**. Un son qui a déjà des
+  /// suggestions (reçues d'un autre appareil par la synchro) n'est pas recalculé.
+  /// Un nom de tag introuvable est ignoré (catalogue modifié à la main) : on ne
+  /// crée jamais de tag.
   Future<AutoTagApplyResult> applyDecisions(
     List<AutoTagDecision> decisions, {
     required String categoryName,
@@ -145,8 +147,8 @@ class LocalAutoTagDataSource {
           notEligible++;
         } else if (alreadyHasAutoTags.isEmpty) {
           var inserted = 0;
-          for (final name in decision.tagNames) {
-            final tagId = tagIds[name];
+          for (final suggestion in decision.suggestions) {
+            final tagId = tagIds[suggestion.tagName];
             if (tagId == null) continue;
             await _database
                 .into(_database.soundAutoTags)
@@ -154,6 +156,7 @@ class LocalAutoTagDataSource {
                   db.SoundAutoTagsCompanion.insert(
                     soundId: decision.soundId,
                     tagId: tagId,
+                    score: suggestion.score,
                     updatedAt: Value(when),
                   ),
                   mode: InsertMode.insertOrIgnore,

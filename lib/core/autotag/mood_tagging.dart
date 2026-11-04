@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../../features/sampler/domain/entities/auto_tag_suggestion.dart';
 import 'muq_analyzer.dart' show kMuqLatentSize;
 
 /// Ambiance reconnue par le modèle et tag de la base qu'elle pose.
@@ -117,13 +118,20 @@ class MoodStats {
   }
 }
 
-/// Règle qui transforme les scores d'un son en tags d'ambiance.
+/// Règle qui transforme les scores d'un son en suggestions de tags d'ambiance.
 ///
-/// Conservatrice : mieux vaut aucun tag qu'un mauvais tag. Une ambiance n'est
-/// retenue que si son score dépasse la moyenne de la bibliothèque d'au moins
+/// Conservatrice : mieux vaut aucune suggestion qu'une mauvaise. Une ambiance
+/// n'est retenue que si son score dépasse la moyenne de la bibliothèque d'au moins
 /// [minZScore] écarts-types ; au plus [maxTags] tags distincts ; et rien du tout
 /// tant que la bibliothèque compte moins de [minLibrarySize] sons analysés
 /// (moyennes et écarts-types encore instables).
+///
+/// Le score d'une suggestion est la part de son ambiance dans la **répartition
+/// du son** : softmax des écarts réduits (z) des 15 ambiances. C'est une
+/// confiance relative — « cette ambiance domine-t-elle les autres pour ce
+/// son » —, pas une probabilité calibrée : aucune vérité terrain ne permet de la
+/// calibrer. Deux ambiances qui pointent vers le même tag (Sensuel et Romantique)
+/// s'additionnent.
 abstract final class MoodTagRule {
   static const int minLibrarySize = 50;
   static const double minZScore = 1.0;
@@ -132,8 +140,11 @@ abstract final class MoodTagRule {
   /// Écart-type en deçà duquel une ambiance ne discrimine rien.
   static const double _minStd = 1e-4;
 
-  /// Noms de tags à poser, du plus marqué au moins marqué (peut être vide).
-  static List<String> tagNames(List<double> scores, MoodStats stats) {
+  /// Suggestions du son, de la plus à la moins confiante (peut être vide).
+  static List<AutoTagSuggestion> suggestions(
+    List<double> scores,
+    MoodStats stats,
+  ) {
     if (scores.length != kMoods.length) {
       throw ArgumentError(
         '${scores.length} scores au lieu de ${kMoods.length}',
@@ -141,20 +152,27 @@ abstract final class MoodTagRule {
     }
     if (stats.sampleCount < minLibrarySize) return const [];
 
-    final ranked = <(int, double)>[];
-    for (var m = 0; m < kMoods.length; m++) {
-      if (stats.std[m] < _minStd) continue;
-      final z = (scores[m] - stats.mean[m]) / stats.std[m];
-      if (z >= minZScore) ranked.add((m, z));
-    }
-    ranked.sort((a, b) => b.$2.compareTo(a.$2));
+    // Une ambiance qui ne discrimine rien pèse comme une ambiance moyenne (z = 0).
+    final z = [
+      for (var m = 0; m < kMoods.length; m++)
+        stats.std[m] < _minStd
+            ? 0.0
+            : (scores[m] - stats.mean[m]) / stats.std[m],
+    ];
+    final weights = [for (final v in z) math.exp(v)];
+    final total = weights.fold<double>(0, (a, b) => a + b);
 
-    final tags = <String>[];
-    for (final (m, _) in ranked) {
+    final byTag = <String, double>{};
+    final qualified = <String>{};
+    for (var m = 0; m < kMoods.length; m++) {
       final tag = kMoods[m].tagName;
-      if (!tags.contains(tag)) tags.add(tag);
-      if (tags.length == maxTags) break;
+      byTag[tag] = (byTag[tag] ?? 0) + weights[m] / total;
+      if (stats.std[m] >= _minStd && z[m] >= minZScore) qualified.add(tag);
     }
-    return tags;
+
+    final ranked = [
+      for (final tag in qualified) AutoTagSuggestion(tag, byTag[tag] ?? 0),
+    ]..sort((a, b) => b.score.compareTo(a.score));
+    return ranked.take(maxTags).toList();
   }
 }

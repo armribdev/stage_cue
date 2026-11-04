@@ -70,7 +70,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 45;
+  int get schemaVersion => 46;
 
   @override
   MigrationStrategy get migration {
@@ -482,6 +482,20 @@ class AppDatabase extends _$AppDatabase {
               PRIMARY KEY (sound_id, tag_id)
             )
           ''');
+        }
+        if (from < 46) {
+          // Les tags de l'IA deviennent des suggestions avec un score (décision
+          // 0031) : plus de masquage, une confiance par ligne. La table de la v45
+          // n'avait ni l'un ni l'autre et n'a jamais été publiée : on la recrée,
+          // et on rouvre la décision des sons dont l'empreinte est déjà en base
+          // (recalcul sans ré-analyse du fichier). Les sons écartés (format…)
+          // n'ont pas d'empreinte : leur marque reste.
+          await customStatement('DROP TABLE IF EXISTS sound_auto_tags');
+          await m.createTable(soundAutoTags);
+          await customStatement(
+            'UPDATE sounds SET auto_tagged_at = NULL '
+            'WHERE auto_embedding IS NOT NULL',
+          );
         }
       }),
       beforeOpen: (details) async {

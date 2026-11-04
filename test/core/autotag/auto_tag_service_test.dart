@@ -14,7 +14,6 @@ import 'package:stage_cue/core/autotag/muq_analyzer.dart';
 import 'package:stage_cue/core/database/database.dart' as db;
 import 'package:stage_cue/core/database/sounds.dart' as db_types;
 import 'package:stage_cue/features/sampler/data/datasources/local_autotag_datasource.dart';
-import 'package:stage_cue/features/sampler/data/datasources/local_tag_datasource.dart';
 
 /// Empreinte « identité » : score[m] = embedding[m] avec les vecteurs texte
 /// ci-dessous. [spike] met l'ambiance [mood] à 1, le reste à 0.
@@ -139,7 +138,7 @@ void main() {
     return ids;
   }
 
-  /// Tags de l'IA d'un son (masqués compris).
+  /// Suggestions de l'IA d'un son.
   Future<List<String>> tagNames(int soundId) async {
     final rows = await database
         .customSelect(
@@ -284,33 +283,27 @@ void main() {
     expect(await tagNames(ids[9]), ['Magie'], reason: 'les autres suivent');
   });
 
-  test(
-    'un tag masqué reste en mémoire : jamais reposé, jamais supprimé',
-    () async {
-      final ids = await addLibrary();
-      await service().run(stopReason: never);
-      final angoisse =
-          (await database
-                  .customSelect("SELECT id FROM tags WHERE name = 'Angoisse'")
-                  .getSingle())
-              .read<int>('id');
-      await LocalTagDataSource(
-        database,
-      ).setAutoTagHidden(ids[4], angoisse, hidden: true);
+  test('chaque suggestion est enregistrée avec sa confiance, jamais modifiée '
+      'ensuite', () async {
+    final ids = await addLibrary();
+    await service().run(stopReason: never);
+    Future<db.SoundAutoTag> row() async =>
+        (await database.select(database.soundAutoTags).get()).singleWhere(
+          (r) => r.soundId == ids[4],
+        );
+    final first = await row();
+    expect(first.score, inExclusiveRange(0, 1));
 
-      // Décision rejouée (ex. marque remise à zéro) : la ligne masquée ne bouge pas.
-      await (database.update(database.sounds)
-            ..where((s) => s.id.equals(ids[4])))
-          .write(const db.SoundsCompanion(autoTaggedAt: Value(null)));
-      await service().run(stopReason: never);
+    // Décision rejouée (marque remise à zéro) : la ligne existante ne bouge pas.
+    await (database.update(database.sounds)..where((s) => s.id.equals(ids[4])))
+        .write(const db.SoundsCompanion(autoTaggedAt: Value(null)));
+    await service().run(stopReason: never);
 
-      final rows = await database.select(database.soundAutoTags).get();
-      final row = rows.singleWhere((r) => r.soundId == ids[4]);
-      expect(row.tagId, angoisse);
-      expect(row.hidden, isTrue);
-      expect(await tagNames(ids[4]), ['Angoisse'], reason: 'toujours en base');
-    },
-  );
+    final again = await row();
+    expect(again.score, first.score);
+    expect(again.updatedAt, first.updatedAt);
+    expect(await tagNames(ids[4]), ['Angoisse']);
+  });
 
   test(
     'tags d’IA reçus d’un autre appareil : le son n’est pas recalculé',
@@ -324,7 +317,11 @@ void main() {
       await database
           .into(database.soundAutoTags)
           .insert(
-            db.SoundAutoTagsCompanion.insert(soundId: ids[4], tagId: tristeId),
+            db.SoundAutoTagsCompanion.insert(
+              soundId: ids[4],
+              tagId: tristeId,
+              score: 0.4,
+            ),
           );
 
       await service().run(stopReason: never);

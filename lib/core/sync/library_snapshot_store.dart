@@ -350,11 +350,13 @@ class LibrarySnapshotStore {
         INNER JOIN sounds s ON s.id = st.sound_id
         WHERE s.folder_id = $folderId
       ''');
-      // Tags de l'IA, masqués compris : la mémoire de ce que l'utilisateur a
-      // écarté voyage aussi (décision 0030).
+      // Suggestions de l'IA avec leur score (décision 0031). `hidden` n'existe
+      // plus ici, mais un appareil en v45 le lit encore à la fusion : on le publie
+      // à 0 (jamais masqué) plutôt que de lui faire échouer le pull.
       await _database.customStatement('''
         CREATE TABLE snap.sound_auto_tags AS
-        SELECT sa.* FROM sound_auto_tags sa
+        SELECT sa.sound_id, sa.tag_id, 0 AS hidden, sa.score, sa.updated_at
+        FROM sound_auto_tags sa
         INNER JOIN sounds s ON s.id = sa.sound_id
         WHERE s.folder_id = $folderId
       ''');
@@ -413,7 +415,16 @@ class LibrarySnapshotStore {
           await _importSoundTags();
         }
         if (await _snapHasTable('sound_auto_tags')) {
-          await _mergeSoundAutoTags();
+          if (await _snapColumnExists('sound_auto_tags', 'score')) {
+            await _mergeSoundAutoTags();
+          } else {
+            // Appareil en v45 : ses tags de l'IA n'ont pas de score et étaient
+            // des tags à part entière, pas des suggestions (décision 0031).
+            SyncLog.info(
+              'Snapshot : tags de l\'IA d\'un appareil plus ancien (sans '
+              'score) ignorés.',
+            );
+          }
         }
       });
     } finally {
@@ -681,11 +692,10 @@ class LibrarySnapshotStore {
     }
   }
 
-  /// Fusionne les tags de l'IA du snapshot (décision 0030) : **union**, jamais de
-  /// suppression, et pour une paire (son, tag) connue des deux côtés la dernière
-  /// modification gagne (`updated_at`) — c'est ce qui propage un masquage ou un
-  /// rétablissement. Un snapshot sans cette table (appareil plus ancien) laisse
-  /// les tags locaux intacts.
+  /// Fusionne les suggestions de l'IA du snapshot (décisions 0030 et 0031) :
+  /// **union**, jamais de suppression, et pour une paire (son, tag) connue des
+  /// deux côtés la dernière modification gagne (`updated_at`). Un snapshot sans
+  /// cette table laisse les suggestions locales intactes.
   Future<void> _mergeSoundAutoTags() async {
     final rows = await _database
         .customSelect('SELECT * FROM snap.sound_auto_tags')
@@ -694,7 +704,7 @@ class LibrarySnapshotStore {
       final soundId = _soundIdMap[row.read<int>('sound_id')];
       final tagId = _tagIdMap[row.read<int>('tag_id')];
       if (soundId == null || tagId == null) continue;
-      final hidden = row.read<int>('hidden') != 0;
+      final score = row.read<double>('score');
       final updatedAt = row.read<DateTime>('updated_at');
 
       final existing =
@@ -709,7 +719,7 @@ class LibrarySnapshotStore {
               db.SoundAutoTagsCompanion.insert(
                 soundId: soundId,
                 tagId: tagId,
-                hidden: Value(hidden),
+                score: score,
                 updatedAt: Value(updatedAt),
               ),
             );
@@ -718,7 +728,7 @@ class LibrarySnapshotStore {
               ..where((t) => t.soundId.equals(soundId) & t.tagId.equals(tagId)))
             .write(
               db.SoundAutoTagsCompanion(
-                hidden: Value(hidden),
+                score: Value(score),
                 updatedAt: Value(updatedAt),
               ),
             );
