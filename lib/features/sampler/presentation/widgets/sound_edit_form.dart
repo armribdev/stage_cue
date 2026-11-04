@@ -825,22 +825,26 @@ class _SoundEditFormState extends State<SoundEditForm> {
       onTagRemoved: (id) => _update(() => _tagIds.remove(id)),
     );
     final status = _analysisStatus;
-    final showStatus = widget.autoTag != null && status != null;
-    if (_autoTags.isEmpty && !showStatus) return editor;
+    // Analysé : rien à dire, les suggestions parlent d'elles-mêmes. Sinon : le
+    // bouton « Analyser », ou la raison pour laquelle le son ne peut pas l'être.
+    final showStatus =
+        widget.autoTag != null &&
+        status != null &&
+        status != SoundAnalysisStatus.analyzed;
+    final hasPending = _autoTags.any((s) => !_tagIds.contains(s.tag.id));
+    if (!hasPending && !showStatus) return editor;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         editor,
-        if (_autoTags.isNotEmpty) ...[
+        if (hasPending) ...[
           const SizedBox(height: 14),
           AutoTagChips(
             suggestions: _autoTags,
             colors: _categoryColorsByTagId(),
             acceptedTagIds: _tagIds,
             // Accepter = ajouter aux tags du son, enregistré avec le formulaire.
-            onToggle: (s) => _update(() {
-              if (!_tagIds.remove(s.tag.id)) _tagIds.add(s.tag.id);
-            }),
+            onAdd: (s) => _update(() => _tagIds.add(s.tag.id)),
           ),
         ],
         if (showStatus) ...[
