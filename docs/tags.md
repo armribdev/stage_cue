@@ -73,26 +73,37 @@ de tag d'animaux ni de « Feu » : volontairement écartés.
   l'instantané mémoire `SoundSearchIndex` (voir
   [0017](decisions/0017-index-de-recherche-en-memoire.md)).
 
-## Tags posés automatiquement
+## Tags de l’IA
 
 Sur un poste de bureau, une analyse du son (modèle embarqué, voir
-[0029](decisions/0029-analyse-automatique-des-tags-sur-l-appareil.md)) pose des tags
-d'ambiance (`EMOTION_STYLE`) sur les **musiques non traitées et sans tag**, à partir de
-l'audio. Elle exige le pack de modèles (Paramètres → Analyse automatique, ~480 Mo).
+[0029](decisions/0029-analyse-automatique-des-tags-sur-l-appareil.md) et
+[0030](decisions/0030-tags-de-l-ia-en-couche-separee-et-masquables.md)) trouve des
+tags d’ambiance (`EMOTION_STYLE`) pour les **musiques**, d’après l’audio, dès
+qu’elles sont indexées et que leur fichier est sur l’appareil. Elle exige le pack de
+modèles (Paramètres → Analyse automatique, ~480 Mo).
+
+Chaque son a donc **deux couches de tags** :
+
+- **ses tags** (`sound_tags`) : ajoutés et retirés librement ;
+- **les tags de l’IA** (`sound_auto_tags`) : on peut les **masquer** ou les rétablir,
+  jamais les supprimer. Un tag masqué n’est plus affiché ni cherché, mais reste en
+  base : l’IA ne le repose pas, et la synchro le transmet aux autres appareils.
+
+Recherche, listes et sélecteur utilisent l’union des tags visibles (les siens + ceux de
+l’IA non masqués). Le formulaire du son sépare les deux : l’éditeur habituel, puis la
+zone « Trouvés par l’IA » (pastilles à masquer, puis liste des masqués à rétablir).
 
 - **Quels tags** : Joyeux, Triste, Nostalgique, Épique, Angoisse, Tension, Mystérieux,
   Romantique, Calme, Magie, Sombre, Énergique, Léger, Drame. Au plus 3 par son, et
   seulement ceux qui ressortent nettement par rapport au reste de la bibliothèque
-  analysée : mieux vaut aucun tag qu'un mauvais. Rien n'est posé tant que 50 musiques
-  n'ont pas été analysées.
-- **Jamais** sur un son déjà traité ou déjà tagué, ni sur un bruitage ou une ambiance.
-  Voix (Chant / Instrumental) et tempo (Lent / Rythmé) **ne sont pas** posés
+  analysée : mieux vaut aucun tag qu’un mauvais. Rien n’est posé tant que 50 musiques
+  n’ont pas été analysées.
+- **Passer un son en « traité » fige ses tags** : l’IA ne l’analyse plus. Elle ne touche
+  jamais un bruitage ni une ambiance.
+- Voix (Chant / Instrumental) et tempo (Lent / Rythmé) **ne sont pas** posés
   automatiquement (tempo : inutilisable ; voix : suite possible, cf. 0029).
-- **Le son reste « non traité »** : ouvert dans le formulaire d'édition, il affiche
-  « Tags posés automatiquement d'après le son » ; on retire un tag par sa croix, puis
-  on valide.
 - **Ajouter une ambiance** : un tag nouveau passe par une migration de données comme
-  d'habitude ; il faut en plus une ligne dans `kMoods` (`lib/core/autotag/mood_tagging.dart`)
+  d’habitude ; il faut en plus une ligne dans `kMoods` (`lib/core/autotag/mood_tagging.dart`)
   et le vecteur texte correspondant dans `assets/autotag/text_latents.f32`
   (`tool/autotag/gen_text_latents.py`, **même ordre**). Les empreintes déjà calculées
   servent telles quelles : pas de ré-analyse des fichiers.
