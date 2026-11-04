@@ -287,9 +287,18 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
     final textTheme = Theme.of(context).textTheme;
 
     if (_loading) {
-      // Placeholder à la forme de la waveform pendant l'extraction.
-      return const Skeleton(
-        child: SkeletonBox(height: _waveHeight, intensity: 0.85),
+      // Placeholder à la forme de la waveform pendant l'extraction ; la barre
+      // de contrôles est déjà là (désactivée) pour que rien ne « saute » à
+      // l'arrivée de la source.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Skeleton(
+            child: SkeletonBox(height: _waveHeight, intensity: 0.85),
+          ),
+          const SizedBox(height: 8),
+          _buildControls(context),
+        ],
       );
     }
 
@@ -406,38 +415,47 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
           },
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            IconButton.filledTonal(
-              onPressed: _togglePreview,
-              icon: Icon(
-                _isPreviewing ? Icons.stop_rounded : Icons.play_arrow_rounded,
-              ),
-              tooltip: _isPreviewing ? 'Arrêter' : 'Aperçu depuis le point',
-            ),
-            const SizedBox(width: 4),
-            _NudgeButton(
-              icon: Icons.fast_rewind_rounded,
-              onPressed: _offsetMs > 0
-                  ? () => _nudge(-_nudgeStep.inMilliseconds)
-                  : null,
-              tooltip: '-0,1 s',
-            ),
-            _NudgeButton(
-              icon: Icons.fast_forward_rounded,
-              onPressed: _offsetMs < _duration.inMilliseconds
-                  ? () => _nudge(_nudgeStep.inMilliseconds)
-                  : null,
-              tooltip: '+0,1 s',
-            ),
-            const Spacer(),
-            Text(
-              '${_fmt(_offset)} / ${_fmt(_duration)}',
-              style: AppFonts.monoStyle(
-                textTheme.labelLarge!.copyWith(color: scheme.onSurface),
-              ),
-            ),
-          ],
+        _buildControls(context),
+      ],
+    );
+  }
+
+  /// Barre ▶ / ±0,1 s / position. Affichée dès le chargement (boutons
+  /// désactivés, durée inconnue) pour éviter qu'elle n'apparaisse d'un coup.
+  Widget _buildControls(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final ready = !_loading;
+    return Row(
+      children: [
+        IconButton.filledTonal(
+          onPressed: ready ? _togglePreview : null,
+          icon: Icon(
+            _isPreviewing ? Icons.stop_rounded : Icons.play_arrow_rounded,
+          ),
+          tooltip: _isPreviewing ? 'Arrêter' : 'Aperçu depuis le point',
+        ),
+        const SizedBox(width: 4),
+        _NudgeButton(
+          icon: Icons.fast_rewind_rounded,
+          onPressed: ready && _offsetMs > 0
+              ? () => _nudge(-_nudgeStep.inMilliseconds)
+              : null,
+          tooltip: '-0,1 s',
+        ),
+        _NudgeButton(
+          icon: Icons.fast_forward_rounded,
+          onPressed: ready && _offsetMs < _duration.inMilliseconds
+              ? () => _nudge(_nudgeStep.inMilliseconds)
+              : null,
+          tooltip: '+0,1 s',
+        ),
+        const Spacer(),
+        Text(
+          '${_fmt(_offset)} / ${ready ? _fmt(_duration) : '–:––.–'}',
+          style: AppFonts.monoStyle(
+            textTheme.labelLarge!.copyWith(color: scheme.onSurface),
+          ),
         ),
       ],
     );
