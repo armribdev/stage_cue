@@ -1882,6 +1882,17 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _autoTaggedAtMeta = const VerificationMeta(
+    'autoTaggedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> autoTaggedAt = GeneratedColumn<DateTime>(
+    'auto_tagged_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1904,6 +1915,7 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     waveformProbeGeneration,
     startOffsetMs,
     isProcessed,
+    autoTaggedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2058,6 +2070,15 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         ),
       );
     }
+    if (data.containsKey('auto_tagged_at')) {
+      context.handle(
+        _autoTaggedAtMeta,
+        autoTaggedAt.isAcceptableOrUnknown(
+          data['auto_tagged_at']!,
+          _autoTaggedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2149,6 +2170,10 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_processed'],
       )!,
+      autoTaggedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}auto_tagged_at'],
+      ),
     );
   }
 
@@ -2211,6 +2236,13 @@ class Sound extends DataClass implements Insertable<Sound> {
   /// false. Annotation locale comme
   /// [isFavorite] : absente de l'export du snapshot dossier.
   final bool isProcessed;
+
+  /// Date de la dernière analyse automatique du son (tags posés par le modèle
+  /// embarqué, cf. décision 0029). `null` = jamais analysé : candidat à
+  /// l'analyse. Renseignée même si l'analyse n'a posé aucun tag, pour ne pas
+  /// ré-analyser en boucle. Annotation locale comme [isProcessed] : absente de
+  /// l'export du snapshot dossier.
+  final DateTime? autoTaggedAt;
   const Sound({
     required this.id,
     required this.title,
@@ -2232,6 +2264,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     this.waveformProbeGeneration,
     required this.startOffsetMs,
     required this.isProcessed,
+    this.autoTaggedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2278,6 +2311,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     }
     map['start_offset_ms'] = Variable<int>(startOffsetMs);
     map['is_processed'] = Variable<bool>(isProcessed);
+    if (!nullToAbsent || autoTaggedAt != null) {
+      map['auto_tagged_at'] = Variable<DateTime>(autoTaggedAt);
+    }
     return map;
   }
 
@@ -2323,6 +2359,9 @@ class Sound extends DataClass implements Insertable<Sound> {
           : Value(waveformProbeGeneration),
       startOffsetMs: Value(startOffsetMs),
       isProcessed: Value(isProcessed),
+      autoTaggedAt: autoTaggedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(autoTaggedAt),
     );
   }
 
@@ -2356,6 +2395,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       ),
       startOffsetMs: serializer.fromJson<int>(json['startOffsetMs']),
       isProcessed: serializer.fromJson<bool>(json['isProcessed']),
+      autoTaggedAt: serializer.fromJson<DateTime?>(json['autoTaggedAt']),
     );
   }
   @override
@@ -2386,6 +2426,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       ),
       'startOffsetMs': serializer.toJson<int>(startOffsetMs),
       'isProcessed': serializer.toJson<bool>(isProcessed),
+      'autoTaggedAt': serializer.toJson<DateTime?>(autoTaggedAt),
     };
   }
 
@@ -2410,6 +2451,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     Value<int?> waveformProbeGeneration = const Value.absent(),
     int? startOffsetMs,
     bool? isProcessed,
+    Value<DateTime?> autoTaggedAt = const Value.absent(),
   }) => Sound(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -2433,6 +2475,7 @@ class Sound extends DataClass implements Insertable<Sound> {
         : this.waveformProbeGeneration,
     startOffsetMs: startOffsetMs ?? this.startOffsetMs,
     isProcessed: isProcessed ?? this.isProcessed,
+    autoTaggedAt: autoTaggedAt.present ? autoTaggedAt.value : this.autoTaggedAt,
   );
   Sound copyWithCompanion(SoundsCompanion data) {
     return Sound(
@@ -2474,6 +2517,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       isProcessed: data.isProcessed.present
           ? data.isProcessed.value
           : this.isProcessed,
+      autoTaggedAt: data.autoTaggedAt.present
+          ? data.autoTaggedAt.value
+          : this.autoTaggedAt,
     );
   }
 
@@ -2499,13 +2545,14 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('waveform: $waveform, ')
           ..write('waveformProbeGeneration: $waveformProbeGeneration, ')
           ..write('startOffsetMs: $startOffsetMs, ')
-          ..write('isProcessed: $isProcessed')
+          ..write('isProcessed: $isProcessed, ')
+          ..write('autoTaggedAt: $autoTaggedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     title,
     displayName,
@@ -2526,7 +2573,8 @@ class Sound extends DataClass implements Insertable<Sound> {
     waveformProbeGeneration,
     startOffsetMs,
     isProcessed,
-  );
+    autoTaggedAt,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2550,7 +2598,8 @@ class Sound extends DataClass implements Insertable<Sound> {
           $driftBlobEquality.equals(other.waveform, this.waveform) &&
           other.waveformProbeGeneration == this.waveformProbeGeneration &&
           other.startOffsetMs == this.startOffsetMs &&
-          other.isProcessed == this.isProcessed);
+          other.isProcessed == this.isProcessed &&
+          other.autoTaggedAt == this.autoTaggedAt);
 }
 
 class SoundsCompanion extends UpdateCompanion<Sound> {
@@ -2574,6 +2623,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<int?> waveformProbeGeneration;
   final Value<int> startOffsetMs;
   final Value<bool> isProcessed;
+  final Value<DateTime?> autoTaggedAt;
   const SoundsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -2595,6 +2645,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.waveformProbeGeneration = const Value.absent(),
     this.startOffsetMs = const Value.absent(),
     this.isProcessed = const Value.absent(),
+    this.autoTaggedAt = const Value.absent(),
   });
   SoundsCompanion.insert({
     this.id = const Value.absent(),
@@ -2617,6 +2668,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.waveformProbeGeneration = const Value.absent(),
     this.startOffsetMs = const Value.absent(),
     this.isProcessed = const Value.absent(),
+    this.autoTaggedAt = const Value.absent(),
   }) : title = Value(title),
        displayName = Value(displayName),
        filePath = Value(filePath);
@@ -2641,6 +2693,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<int>? waveformProbeGeneration,
     Expression<int>? startOffsetMs,
     Expression<bool>? isProcessed,
+    Expression<DateTime>? autoTaggedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2664,6 +2717,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
         'waveform_probe_generation': waveformProbeGeneration,
       if (startOffsetMs != null) 'start_offset_ms': startOffsetMs,
       if (isProcessed != null) 'is_processed': isProcessed,
+      if (autoTaggedAt != null) 'auto_tagged_at': autoTaggedAt,
     });
   }
 
@@ -2688,6 +2742,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<int?>? waveformProbeGeneration,
     Value<int>? startOffsetMs,
     Value<bool>? isProcessed,
+    Value<DateTime?>? autoTaggedAt,
   }) {
     return SoundsCompanion(
       id: id ?? this.id,
@@ -2711,6 +2766,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           waveformProbeGeneration ?? this.waveformProbeGeneration,
       startOffsetMs: startOffsetMs ?? this.startOffsetMs,
       isProcessed: isProcessed ?? this.isProcessed,
+      autoTaggedAt: autoTaggedAt ?? this.autoTaggedAt,
     );
   }
 
@@ -2781,6 +2837,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     if (isProcessed.present) {
       map['is_processed'] = Variable<bool>(isProcessed.value);
     }
+    if (autoTaggedAt.present) {
+      map['auto_tagged_at'] = Variable<DateTime>(autoTaggedAt.value);
+    }
     return map;
   }
 
@@ -2806,7 +2865,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('waveform: $waveform, ')
           ..write('waveformProbeGeneration: $waveformProbeGeneration, ')
           ..write('startOffsetMs: $startOffsetMs, ')
-          ..write('isProcessed: $isProcessed')
+          ..write('isProcessed: $isProcessed, ')
+          ..write('autoTaggedAt: $autoTaggedAt')
           ..write(')'))
         .toString();
   }
@@ -8136,6 +8196,7 @@ typedef $$SoundsTableCreateCompanionBuilder =
       Value<int?> waveformProbeGeneration,
       Value<int> startOffsetMs,
       Value<bool> isProcessed,
+      Value<DateTime?> autoTaggedAt,
     });
 typedef $$SoundsTableUpdateCompanionBuilder =
     SoundsCompanion Function({
@@ -8159,6 +8220,7 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<int?> waveformProbeGeneration,
       Value<int> startOffsetMs,
       Value<bool> isProcessed,
+      Value<DateTime?> autoTaggedAt,
     });
 
 final class $$SoundsTableReferences
@@ -8353,6 +8415,11 @@ class $$SoundsTableFilterComposer
 
   ColumnFilters<bool> get isProcessed => $composableBuilder(
     column: $table.isProcessed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get autoTaggedAt => $composableBuilder(
+    column: $table.autoTaggedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8577,6 +8644,11 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get autoTaggedAt => $composableBuilder(
+    column: $table.autoTaggedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LibrariesTableOrderingComposer get libraryId {
     final $$LibrariesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -8702,6 +8774,11 @@ class $$SoundsTableAnnotationComposer
 
   GeneratedColumn<bool> get isProcessed => $composableBuilder(
     column: $table.isProcessed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get autoTaggedAt => $composableBuilder(
+    column: $table.autoTaggedAt,
     builder: (column) => column,
   );
 
@@ -8881,6 +8958,7 @@ class $$SoundsTableTableManager
                 Value<int?> waveformProbeGeneration = const Value.absent(),
                 Value<int> startOffsetMs = const Value.absent(),
                 Value<bool> isProcessed = const Value.absent(),
+                Value<DateTime?> autoTaggedAt = const Value.absent(),
               }) => SoundsCompanion(
                 id: id,
                 title: title,
@@ -8902,6 +8980,7 @@ class $$SoundsTableTableManager
                 waveformProbeGeneration: waveformProbeGeneration,
                 startOffsetMs: startOffsetMs,
                 isProcessed: isProcessed,
+                autoTaggedAt: autoTaggedAt,
               ),
           createCompanionCallback:
               ({
@@ -8925,6 +9004,7 @@ class $$SoundsTableTableManager
                 Value<int?> waveformProbeGeneration = const Value.absent(),
                 Value<int> startOffsetMs = const Value.absent(),
                 Value<bool> isProcessed = const Value.absent(),
+                Value<DateTime?> autoTaggedAt = const Value.absent(),
               }) => SoundsCompanion.insert(
                 id: id,
                 title: title,
@@ -8946,6 +9026,7 @@ class $$SoundsTableTableManager
                 waveformProbeGeneration: waveformProbeGeneration,
                 startOffsetMs: startOffsetMs,
                 isProcessed: isProcessed,
+                autoTaggedAt: autoTaggedAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(
