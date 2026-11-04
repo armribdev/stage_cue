@@ -222,7 +222,6 @@ class SoundPickerOverlay extends StatefulWidget {
 const _itemExtent = 72.0;
 const _actionButtonSize = 30.0;
 const _overlayMaxWidth = 720.0;
-const _splitMaxWidth = 1280.0;
 const _maxVisibleTags = 3;
 
 class _SoundPickerOverlayState extends State<SoundPickerOverlay> {

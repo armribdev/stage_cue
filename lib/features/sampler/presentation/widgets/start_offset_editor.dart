@@ -19,6 +19,11 @@ const _kHandleHitHalfWidthMobile = 28.0;
 /// Écart (px) sous lequel poignée et tête de lecture comptent comme superposées.
 const _kOverlapPx = 8.0;
 
+/// Marge horizontale de part et d'autre de la piste : pastille de la poignée
+/// (rayon 5,5 au survol) et repère de la tête (±5) restent entiers, même au
+/// tout début ou à la toute fin du son, sans dépasser du cadre de l'éditeur.
+const _kTrackInset = 7.0;
+
 /// Ce qu'un geste sur la waveform déplace.
 enum _Grab { handle, playhead }
 
@@ -217,10 +222,13 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
   /// haute de la waveform (pastille de la poignée) attrape la poignée, la
   /// moitié basse (repère de la tête) attrape la tête.
   _Grab? _hitAt(Offset p, double width) {
-    if (width <= 0) return null;
-    final handleDistance = (p.dx - width * _fractionOf(_offsetMs)).abs();
+    final track = width - 2 * _kTrackInset;
+    if (track <= 0) return null;
+    final handleDistance =
+        (p.dx - _kTrackInset - track * _fractionOf(_offsetMs)).abs();
     final playheadDistance =
-        (p.dx - width * _fractionOf(_playhead.inMilliseconds)).abs();
+        (p.dx - _kTrackInset - track * _fractionOf(_playhead.inMilliseconds))
+            .abs();
     final reach = _handleHitHalfWidth();
     final nearHandle = handleDistance <= reach;
     final nearPlayhead = playheadDistance <= reach;
@@ -293,8 +301,11 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Skeleton(
-            child: SkeletonBox(height: _waveHeight, intensity: 0.85),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: _kTrackInset),
+            child: Skeleton(
+              child: SkeletonBox(height: _waveHeight, intensity: 0.85),
+            ),
           ),
           const SizedBox(height: 8),
           _buildControls(context),
@@ -343,7 +354,12 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
           builder: (context, constraints) {
             final width = constraints.maxWidth;
 
-            double fractionAt(double dx) => (dx / width).clamp(0.0, 1.0);
+            double fractionAt(double dx) {
+              final track = width - 2 * _kTrackInset;
+              return track <= 0
+                  ? 0.0
+                  : ((dx - _kTrackInset) / track).clamp(0.0, 1.0);
+            }
 
             void seekTo(double dx) {
               _setOffsetMs((fractionAt(dx) * _duration.inMilliseconds).round());
@@ -517,11 +533,21 @@ class _OffsetWaveformPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0) return;
+    final track = size.width - 2 * _kTrackInset;
+    if (track <= 0) return;
+    // `CustomPaint` ne rogne pas : seul le halo de survol (fond, large) peut
+    // approcher le bord, on le coupe plutôt que de le laisser déborder.
+    canvas.clipRect(Offset.zero & size);
     final centerY = size.height / 2;
-    final offsetX = size.width * offsetFraction;
+    // Piste (waveform) en coordonnées locales, décalée de la marge.
+    final trackOffsetX = track * offsetFraction;
+    final offsetX = _kTrackInset + trackOffsetX;
+    final trackSize = Size(track, size.height);
+    canvas.save();
+    canvas.translate(_kTrackInset, 0);
 
     if (bars.isNotEmpty) {
-      final count = WaveformEnvelope.pointCountFor(size.width);
+      final count = WaveformEnvelope.pointCountFor(track);
       if (count > 0) {
         // L'enveloppe stockée est normalisée au pic : on la met à l'échelle du
         // volume pour montrer le niveau réellement restitué.
@@ -529,16 +555,16 @@ class _OffsetWaveformPainter extends CustomPainter {
           for (final amp in WaveformEnvelope.resample(bars, count))
             amp * volume,
         ];
-        final path = WaveformEnvelope.buildPath(amps, size);
+        final path = WaveformEnvelope.buildPath(amps, trackSize);
         // Même enveloppe remplie deux fois, découpée au point d'entrée : grisée
         // avant (sautée à la lecture), colorée après.
         canvas.save();
-        canvas.clipRect(Rect.fromLTRB(0, 0, offsetX, size.height));
+        canvas.clipRect(Rect.fromLTRB(0, 0, trackOffsetX, size.height));
         canvas.drawPath(path, Paint()..color = skippedColor);
         canvas.restore();
 
         canvas.save();
-        canvas.clipRect(Rect.fromLTRB(offsetX, 0, size.width, size.height));
+        canvas.clipRect(Rect.fromLTRB(trackOffsetX, 0, track, size.height));
         canvas.drawPath(path, Paint()..color = keptColor);
         canvas.restore();
       }
@@ -546,14 +572,19 @@ class _OffsetWaveformPainter extends CustomPainter {
       // Pas de waveform : ligne médiane, grisée avant le point d'entrée.
       final baseline = Paint()..strokeWidth = 2;
       baseline.color = skippedColor;
-      canvas.drawLine(Offset(0, centerY), Offset(offsetX, centerY), baseline);
+      canvas.drawLine(
+        Offset(0, centerY),
+        Offset(trackOffsetX, centerY),
+        baseline,
+      );
       baseline.color = keptColor;
       canvas.drawLine(
-        Offset(offsetX, centerY),
-        Offset(size.width, centerY),
+        Offset(trackOffsetX, centerY),
+        Offset(track, centerY),
         baseline,
       );
     }
+    canvas.restore();
 
     // Poignée du point d'entrée : trait vertical + pastille en tête.
     final handlePaint = Paint()
@@ -583,7 +614,7 @@ class _OffsetWaveformPainter extends CustomPainter {
     // Tête de lecture, par-dessus la poignée : toujours visible, même
     // superposée au point d'entrée grâce à son repère triangulaire en bas
     // (la pastille de la poignée est en haut).
-    final phX = size.width * playheadFraction;
+    final phX = _kTrackInset + track * playheadFraction;
     final playheadPaint = Paint()..color = playheadColor;
     canvas.drawLine(
       Offset(phX, 0),

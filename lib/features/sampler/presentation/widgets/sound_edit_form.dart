@@ -549,52 +549,47 @@ class _SoundEditFormState extends State<SoundEditForm> {
           decoration: BoxDecoration(
             border: Border(top: AppElevation.border(scheme)),
           ),
-          // Même largeur max et même centrage que le contenu, pour que le
-          // bouton reste aligné sur le bord droit du formulaire.
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: Row(
-                children: [
-                  if (_isProcessed)
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(64, 42),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        foregroundColor: scheme.onSurfaceVariant,
-                      ),
-                      onPressed: _isSaving ? null : _markUnprocessed,
-                      child: const Text('Marquer non traité'),
-                    ),
-                  const Spacer(),
-                  if (widget.onSkip != null) ...[
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(64, 42),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                      ),
-                      onPressed: _isSaving ? null : widget.onSkip,
-                      child: const Text('Passer'),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(64, 42),
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                    ),
-                    onPressed: _canSave ? _save : null,
-                    child: _isSaving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(_saveLabel),
+          // Barre pleine largeur du volet (comme son filet) : les boutons
+          // collent aux bords au lieu de flotter au milieu de la colonne.
+          child: Row(
+            children: [
+              if (_isProcessed)
+                TextButton(
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(64, 42),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    foregroundColor: scheme.onSurfaceVariant,
                   ),
-                ],
+                  onPressed: _isSaving ? null : _markUnprocessed,
+                  child: const Text('Marquer non traité'),
+                ),
+              const Spacer(),
+              if (widget.onSkip != null) ...[
+                TextButton(
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(64, 42),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                  onPressed: _isSaving ? null : widget.onSkip,
+                  child: const Text('Passer'),
+                ),
+                const SizedBox(width: 8),
+              ],
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(64, 42),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                ),
+                onPressed: _canSave ? _save : null,
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(_saveLabel),
               ),
-            ),
+            ],
           ),
         ),
       ],
@@ -633,11 +628,17 @@ class _SoundEditFormState extends State<SoundEditForm> {
         ),
         const SizedBox(width: 14),
         Expanded(
-          child: Text(
-            widget.sound.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          // Une seule ligne : l'en-tête garde la même hauteur quel que soit le
+          // titre, sinon tout le formulaire se décale d'un son à l'autre. Le
+          // titre complet reste lisible au survol.
+          child: Tooltip(
+            message: widget.sound.title,
+            child: Text(
+              widget.sound.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
           ),
         ),
         if (widget.notifier != null) ...[

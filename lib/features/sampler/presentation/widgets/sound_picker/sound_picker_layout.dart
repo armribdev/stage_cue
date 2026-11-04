@@ -9,35 +9,21 @@ part of '../sound_picker_overlay.dart';
 extension _SoundPickerLayout on _SoundPickerOverlayState {
   /// Gestion en volet scindé : sons à gauche, infos du son sélectionné à droite.
   ///
-  /// Le bloc entier est borné en largeur et centré : sur un grand écran, la
-  /// liste et le formulaire ne s'étirent pas aux deux bords de la fenêtre.
+  /// Pleine largeur, sans marges latérales : la liste a une largeur bornée et
+  /// le formulaire borne et centre lui-même son contenu ([SoundEditForm]).
   Widget _buildSplit(ColorScheme scheme, Widget listPane, List<Sound> shown) {
     final border = AppElevation.border(scheme);
     return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth.clamp(0.0, _splitMaxWidth);
-        final isCapped = constraints.maxWidth > _splitMaxWidth;
-        return Center(
-          child: Container(
-            width: width,
-            height: constraints.maxHeight,
-            decoration: BoxDecoration(
-              // Filets latéraux seulement quand le bloc flotte au centre.
-              border: isCapped ? Border.symmetric(vertical: border) : null,
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: (width * 0.4).clamp(320.0, 460.0),
-                  child: listPane,
-                ),
-                Container(width: 1, color: border.color),
-                Expanded(child: _buildEditPane(scheme, shown)),
-              ],
-            ),
+      builder: (context, constraints) => Row(
+        children: [
+          SizedBox(
+            width: (constraints.maxWidth * 0.4).clamp(320.0, 460.0),
+            child: listPane,
           ),
-        );
-      },
+          Container(width: 1, color: border.color),
+          Expanded(child: _buildEditPane(scheme, shown)),
+        ],
+      ),
     );
   }
 
