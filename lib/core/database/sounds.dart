@@ -186,6 +186,15 @@ class Sounds extends Table {
   /// ré-analyser en boucle. Annotation locale comme [isProcessed] : absente de
   /// l'export du snapshot dossier.
   DateTimeColumn get autoTaggedAt => dateTime().nullable()();
+
+  /// Empreinte audio calculée par le modèle d'analyse (MuQ-MuLan, décision
+  /// 0029) : 512 flottants 32 bits petit-boutiste, moyenne des latents des
+  /// clips, non renormalisée. `null` = jamais analysé, ou non analysable (alors
+  /// [autoTaggedAt] est renseignée). Conservée pour que le recentrage par
+  /// ambiance sur la bibliothèque (et un vocabulaire d'ambiances élargi) se
+  /// recalcule sans ré-analyser le son. Annotation locale comme [autoTaggedAt] :
+  /// absente de l'export du snapshot dossier.
+  BlobColumn get autoEmbedding => blob().nullable()();
 }
 
 class SoundBoards extends Table {

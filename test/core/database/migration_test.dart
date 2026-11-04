@@ -451,6 +451,38 @@ void main() {
     },
   );
 
+  test(
+    'une base v43 gagne auto_embedding, null pour les sons existants',
+    () async {
+      var database = db.AppDatabase.forTesting(NativeDatabase(file));
+      await database.customStatement(
+        "INSERT INTO sounds (title, file_path, display_name, auto_tagged_at) "
+        "VALUES ('s', '/s.wav', 's', 1700000000)",
+      );
+      await database.customStatement(
+        'ALTER TABLE sounds DROP COLUMN auto_embedding',
+      );
+      await database.customStatement('PRAGMA user_version = 43');
+      await database.close();
+
+      database = db.AppDatabase.forTesting(NativeDatabase(file));
+      final sound = await database.select(database.sounds).getSingle();
+      expect(sound.title, 's', reason: 'les données doivent survivre');
+      expect(sound.autoTaggedAt, isNotNull, reason: 'la v43 est conservée');
+      expect(sound.autoEmbedding, isNull);
+
+      // Le BLOB doit faire l'aller-retour octet pour octet.
+      final bytes = Uint8List.fromList(List.generate(2048, (i) => i % 251));
+      await (database.update(database.sounds)
+            ..where((s) => s.id.equals(sound.id)))
+          .write(db.SoundsCompanion(autoEmbedding: Value(bytes)));
+      final updated = await database.select(database.sounds).getSingle();
+      expect(updated.autoEmbedding, orderedEquals(bytes));
+
+      await database.close();
+    },
+  );
+
   test('la migration est idempotente : une base à jour rembobinée en v35 '
       'passe sans erreur', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));
