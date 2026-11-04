@@ -31,12 +31,13 @@ void main() {
 
   tearDown(() => database.close());
 
-  Sound soundOf({required bool processed}) => Sound(
+  Sound soundOf({required bool processed, DateTime? autoTaggedAt}) => Sound(
     id: soundId,
     title: 'porte',
     filePath: '/introuvable/porte.wav',
     createdAt: DateTime(2026, 10, 8),
     isProcessed: processed,
+    autoTaggedAt: autoTaggedAt,
   );
 
   Future<void> pumpForm(
@@ -47,6 +48,7 @@ void main() {
     VoidCallback? onSaved,
     VoidCallback? onMarkedUnprocessed,
     SoundEditFormController? controller,
+    DateTime? autoTaggedAt,
   }) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -54,7 +56,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SoundEditForm(
-            sound: soundOf(processed: processed),
+            sound: soundOf(processed: processed, autoTaggedAt: autoTaggedAt),
             tagCatalog: const [],
             repository: repository,
             isQueueMode: isQueueMode,
@@ -188,5 +190,71 @@ void main() {
       )..where((s) => s.id.equals(soundId))).getSingle(),
     );
     expect(row?.isProcessed, isTrue);
+  });
+
+  group('tags posés par l’analyse automatique', () {
+    const hint = 'Tags posés automatiquement';
+
+    /// Laisse la lecture des tags (vraie E/S Drift) se terminer, puis redessine.
+    Future<void> loadTags(WidgetTester tester) async {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      await tester.pump();
+    }
+
+    Future<void> tagTheSound() async {
+      final tagId =
+          (await database
+                  .customSelect("SELECT id FROM tags WHERE name = 'Sombre'")
+                  .getSingle())
+              .read<int>('id');
+      await database
+          .into(database.soundTags)
+          .insert(db.SoundTagsCompanion.insert(soundId: soundId, tagId: tagId));
+    }
+
+    testWidgets('son à traiter, tagué et analysé : bandeau affiché', (
+      tester,
+    ) async {
+      await tagTheSound();
+      await pumpForm(
+        tester,
+        processed: false,
+        autoTaggedAt: DateTime(2026, 11, 4),
+      );
+      await loadTags(tester);
+      expect(find.textContaining(hint), findsOneWidget);
+    });
+
+    testWidgets('son traité : pas de bandeau', (tester) async {
+      await tagTheSound();
+      await pumpForm(
+        tester,
+        processed: true,
+        autoTaggedAt: DateTime(2026, 11, 4),
+      );
+      await loadTags(tester);
+      expect(find.textContaining(hint), findsNothing);
+    });
+
+    testWidgets('jamais analysé (tags manuels) : pas de bandeau', (
+      tester,
+    ) async {
+      await tagTheSound();
+      await pumpForm(tester, processed: false);
+      await loadTags(tester);
+      expect(find.textContaining(hint), findsNothing);
+    });
+
+    testWidgets('analysé mais sans tag : pas de bandeau', (tester) async {
+      await pumpForm(
+        tester,
+        processed: false,
+        autoTaggedAt: DateTime(2026, 11, 4),
+      );
+      await loadTags(tester);
+      expect(find.textContaining(hint), findsNothing);
+    });
   });
 }

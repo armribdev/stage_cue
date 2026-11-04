@@ -712,11 +712,42 @@ class _SoundEditFormState extends State<SoundEditForm> {
         ),
       );
     }
-    return TagChipsEditor(
+    final editor = TagChipsEditor(
       tagCatalog: widget.tagCatalog,
       selectedTagIds: _tagIds,
       onTagAdded: (id) => _update(() => _tagIds.add(id)),
       onTagRemoved: (id) => _update(() => _tagIds.remove(id)),
+    );
+    // Un son non traité qui arrive avec des tags et une marque d'analyse : ce
+    // sont ceux du modèle (décision 0029). Le son reste « à valider » jusqu'au
+    // prochain enregistrement — retirer un tag se fait par sa croix.
+    final proposedByModel =
+        !_isProcessed &&
+        widget.sound.autoTaggedAt != null &&
+        _baseTagIds.isNotEmpty;
+    if (!proposedByModel) return editor;
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.auto_awesome_outlined, size: 14, color: scheme.primary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Tags posés automatiquement d’après le son — vérifiez-les, '
+                'puis validez.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        editor,
+      ],
     );
   }
 
