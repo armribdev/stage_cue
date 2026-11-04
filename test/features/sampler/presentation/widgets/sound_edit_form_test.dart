@@ -2,6 +2,7 @@
 // peut être validé tel quel (sans modification), un son déjà traité exige une
 // modification. En file de traitement, le libellé annonce l'enchaînement.
 
+import 'package:drift/drift.dart' show Value, Variable;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,13 +32,12 @@ void main() {
 
   tearDown(() => database.close());
 
-  Sound soundOf({required bool processed, DateTime? autoTaggedAt}) => Sound(
+  Sound soundOf({required bool processed}) => Sound(
     id: soundId,
     title: 'porte',
     filePath: '/introuvable/porte.wav',
     createdAt: DateTime(2026, 10, 8),
     isProcessed: processed,
-    autoTaggedAt: autoTaggedAt,
   );
 
   Future<void> pumpForm(
@@ -48,7 +48,6 @@ void main() {
     VoidCallback? onSaved,
     VoidCallback? onMarkedUnprocessed,
     SoundEditFormController? controller,
-    DateTime? autoTaggedAt,
   }) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -56,7 +55,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SoundEditForm(
-            sound: soundOf(processed: processed, autoTaggedAt: autoTaggedAt),
+            sound: soundOf(processed: processed),
             tagCatalog: const [],
             repository: repository,
             isQueueMode: isQueueMode,
@@ -192,9 +191,7 @@ void main() {
     expect(row?.isProcessed, isTrue);
   });
 
-  group('tags posés par l’analyse automatique', () {
-    const hint = 'Tags posés automatiquement';
-
+  group('tags de l’IA (décision 0030)', () {
     /// Laisse la lecture des tags (vraie E/S Drift) se terminer, puis redessine.
     Future<void> loadTags(WidgetTester tester) async {
       await tester.runAsync(
@@ -203,58 +200,107 @@ void main() {
       await tester.pump();
     }
 
-    Future<void> tagTheSound() async {
-      final tagId =
-          (await database
-                  .customSelect("SELECT id FROM tags WHERE name = 'Sombre'")
-                  .getSingle())
-              .read<int>('id');
+    Future<int> tagId(String name) async =>
+        (await database
+                .customSelect(
+                  'SELECT id FROM tags WHERE name = ?',
+                  variables: [Variable<String>(name)],
+                )
+                .getSingle())
+            .read<int>('id');
+
+    Future<void> autoTag(String name, {bool hidden = false}) async {
       await database
-          .into(database.soundTags)
-          .insert(db.SoundTagsCompanion.insert(soundId: soundId, tagId: tagId));
+          .into(database.soundAutoTags)
+          .insert(
+            db.SoundAutoTagsCompanion.insert(
+              soundId: soundId,
+              tagId: await tagId(name),
+              hidden: Value(hidden),
+            ),
+          );
     }
 
-    testWidgets('son à traiter, tagué et analysé : bandeau affiché', (
-      tester,
-    ) async {
-      await tagTheSound();
-      await pumpForm(
-        tester,
-        processed: false,
-        autoTaggedAt: DateTime(2026, 11, 4),
-      );
-      await loadTags(tester);
-      expect(find.textContaining(hint), findsOneWidget);
-    });
+    Future<List<db.SoundAutoTag>> autoRows() =>
+        database.select(database.soundAutoTags).get();
 
-    testWidgets('son traité : pas de bandeau', (tester) async {
-      await tagTheSound();
-      await pumpForm(
-        tester,
-        processed: true,
-        autoTaggedAt: DateTime(2026, 11, 4),
-      );
-      await loadTags(tester);
-      expect(find.textContaining(hint), findsNothing);
-    });
-
-    testWidgets('jamais analysé (tags manuels) : pas de bandeau', (
-      tester,
-    ) async {
-      await tagTheSound();
+    testWidgets('les tags de l’IA s’affichent à part, avec l’invitation à '
+        'vérifier tant que le son n’est pas traité', (tester) async {
+      await autoTag('Sombre');
       await pumpForm(tester, processed: false);
       await loadTags(tester);
-      expect(find.textContaining(hint), findsNothing);
+
+      expect(
+        find.byKey(ValueKey('auto-tag-${await tagId('Sombre')}')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('vérifiez-les, puis validez'), findsOneWidget);
     });
 
-    testWidgets('analysé mais sans tag : pas de bandeau', (tester) async {
-      await pumpForm(
-        tester,
-        processed: false,
-        autoTaggedAt: DateTime(2026, 11, 4),
-      );
+    testWidgets('son traité : mêmes tags, sans invitation à valider', (
+      tester,
+    ) async {
+      await autoTag('Sombre');
+      await pumpForm(tester, processed: true);
       await loadTags(tester);
-      expect(find.textContaining(hint), findsNothing);
+
+      expect(find.textContaining('Trouvés par l’IA'), findsOneWidget);
+      expect(find.textContaining('vérifiez-les'), findsNothing);
+    });
+
+    testWidgets('aucun tag d’IA : aucune zone', (tester) async {
+      await pumpForm(tester, processed: false);
+      await loadTags(tester);
+      expect(find.textContaining('Trouvés par l’IA'), findsNothing);
+    });
+
+    testWidgets('masquer : la ligne reste en base, masquée, et peut être '
+        'rétablie', (tester) async {
+      await autoTag('Sombre');
+      final id = await tagId('Sombre');
+      await pumpForm(tester, processed: false);
+      await loadTags(tester);
+
+      // Croix de la pastille (identifiée par son infobulle).
+      await tester.tap(find.byTooltip('Masquer ce tag'));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
+
+      var rows = await tester.runAsync(autoRows) ?? [];
+      expect(rows, hasLength(1), reason: 'jamais supprimée');
+      expect(rows.single.hidden, isTrue);
+      expect(find.byKey(ValueKey('auto-tag-hidden-$id')), findsOneWidget);
+
+      await tester.tap(find.byKey(ValueKey('auto-tag-hidden-$id')));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
+
+      rows = await tester.runAsync(autoRows) ?? [];
+      expect(rows.single.hidden, isFalse);
+      expect(find.byKey(ValueKey('auto-tag-$id')), findsOneWidget);
+    });
+
+    testWidgets('valider n’écrit jamais un tag de l’IA parmi ceux de '
+        'l’utilisateur', (tester) async {
+      await autoTag('Sombre');
+      await pumpForm(tester, processed: false);
+      await loadTags(tester);
+
+      await tester.tap(button('Valider'));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pump();
+
+      final user = await tester.runAsync(
+        () => database.select(database.soundTags).get(),
+      );
+      expect(user, isEmpty);
+      expect(await tester.runAsync(autoRows), hasLength(1));
     });
   });
 }

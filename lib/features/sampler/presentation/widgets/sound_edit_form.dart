@@ -10,9 +10,11 @@ import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/app_snackbar.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
+import '../../domain/entities/sound_auto_tag.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
+import 'auto_tag_chips.dart';
 import 'sound_type_picker.dart';
 import 'start_offset_editor.dart';
 import 'tag_chips_editor.dart';
@@ -122,6 +124,10 @@ class _SoundEditFormState extends State<SoundEditForm> {
   late SoundType? _baseType;
   Set<int> _baseTagIds = <int>{};
 
+  /// Tags trouvés par l’IA (masqués compris). Écrits en base dès le geste, hors
+  /// baseline `dirty` : masquer n’est pas une modification à enregistrer.
+  List<SoundAutoTag> _autoTags = const [];
+
   bool _tagsLoaded = false;
   bool _tagsFailed = false;
   bool _isSaving = false;
@@ -177,9 +183,20 @@ class _SoundEditFormState extends State<SoundEditForm> {
     try {
       final tags = await widget.repository.getTagsForSound(widget.sound.id);
       if (!mounted) return;
+      // Les tags de l’IA sont facultatifs : un échec de lecture ne bloque rien.
+      var auto = const <SoundAutoTag>[];
+      try {
+        auto = await widget.repository.getAutoTagsForSound(widget.sound.id);
+      } catch (error) {
+        AppLog.warn(
+          'Tags de l’IA illisibles (son ${widget.sound.id}) : $error',
+        );
+      }
+      if (!mounted) return;
       setState(() {
         _tagIds = tags.map((t) => t.id).toSet();
         _baseTagIds = {..._tagIds};
+        _autoTags = auto;
         _tagsLoaded = true;
       });
     } catch (error) {
@@ -718,37 +735,55 @@ class _SoundEditFormState extends State<SoundEditForm> {
       onTagAdded: (id) => _update(() => _tagIds.add(id)),
       onTagRemoved: (id) => _update(() => _tagIds.remove(id)),
     );
-    // Un son non traité qui arrive avec des tags et une marque d'analyse : ce
-    // sont ceux du modèle (décision 0029). Le son reste « à valider » jusqu'au
-    // prochain enregistrement — retirer un tag se fait par sa croix.
-    final proposedByModel =
-        !_isProcessed &&
-        widget.sound.autoTaggedAt != null &&
-        _baseTagIds.isNotEmpty;
-    if (!proposedByModel) return editor;
-    final scheme = Theme.of(context).colorScheme;
+    if (_autoTags.isEmpty) return editor;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(Icons.auto_awesome_outlined, size: 14, color: scheme.primary),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'Tags posés automatiquement d’après le son — vérifiez-les, '
-                'puis validez.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
         editor,
+        const SizedBox(height: 14),
+        AutoTagChips(
+          tags: _autoTags,
+          colors: _categoryColorsByTagId(),
+          awaitingValidation: !_isProcessed,
+          onHide: (t) => _setAutoTagHidden(t, hidden: true),
+          onRestore: (t) => _setAutoTagHidden(t, hidden: false),
+        ),
       ],
     );
+  }
+
+  Map<int, Color> _categoryColorsByTagId() => {
+    for (final cat in widget.tagCatalog)
+      for (final tag in cat.tags) tag.id: Color(cat.category.color),
+  };
+
+  /// Masque ou rétablit un tag de l’IA, tout de suite : la ligne reste en base
+  /// (mémoire de l’IA), seul son état change.
+  Future<void> _setAutoTagHidden(
+    SoundAutoTag auto, {
+    required bool hidden,
+  }) async {
+    try {
+      await widget.repository.setAutoTagHidden(
+        widget.sound.id,
+        auto.tag.id,
+        hidden: hidden,
+      );
+      widget.notifier?.invalidateSearchIndex();
+      if (!mounted) return;
+      setState(() {
+        _autoTags = [
+          for (final t in _autoTags)
+            if (t.tag.id == auto.tag.id)
+              SoundAutoTag(tag: t.tag, hidden: hidden)
+            else
+              t,
+        ];
+      });
+    } catch (error) {
+      if (!mounted) return;
+      showCopyableSnackBar(context, 'Impossible de modifier ce tag : $error');
+    }
   }
 
   Widget _colorSwatch({
