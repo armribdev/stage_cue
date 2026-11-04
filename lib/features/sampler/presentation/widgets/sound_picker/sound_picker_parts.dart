@@ -29,45 +29,22 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
     return null;
   }
 
-  Widget _buildTagRow(ColorScheme scheme, List<TagItem> tags) {
-    final visible = tags.take(_maxVisibleTags).toList();
-    final overflow = tags.length - visible.length;
-    return Row(
-      children: [
-        for (final tag in visible) ...[
-          _buildTagChip(scheme, tag),
-          const SizedBox(width: 4),
-        ],
-        if (overflow > 0)
-          Text(
-            '+$overflow',
-            style: TextStyle(
-              fontSize: 10,
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
+  Widget _buildTagRow(List<TagItem> tags) {
+    return TagPillRow(
+      compact: true,
+      maxVisible: _maxVisibleTags,
+      tags: [
+        for (final tag in tags)
+          (
+            label: buildHighlightedSpan(
+              tag.name,
+              _highlightTokens
+                  .where((t) => tag.normalizedName.contains(t))
+                  .toList(),
             ),
+            color: _categoryColor(tag.categoryId),
           ),
       ],
-    );
-  }
-
-  Widget _buildTagChip(ColorScheme scheme, TagItem tag) {
-    final color = _categoryColor(tag.categoryId);
-    final matchingTokens = _highlightTokens
-        .where((t) => tag.normalizedName.contains(t))
-        .toList();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration: BoxDecoration(
-        color: color?.withAlpha(24),
-        borderRadius: BorderRadius.circular(4),
-        border: color == null ? null : Border.all(color: color),
-      ),
-      child: Text.rich(
-        buildHighlightedSpan(tag.name, matchingTokens),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontSize: 10, color: color ?? scheme.onSurfaceVariant),
-      ),
     );
   }
 

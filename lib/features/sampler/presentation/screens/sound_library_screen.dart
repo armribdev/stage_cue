@@ -17,6 +17,7 @@ import '../../domain/usecases/add_sound_to_board_usecase.dart';
 import '../utils/sound_type_ui.dart';
 import '../widgets/app_bottom_sheet.dart';
 import '../widgets/sound_picker_actions.dart';
+import '../widgets/tag_pill.dart';
 
 /// Résultat renvoyé à la fermeture de [SoundLibraryScreen].
 class SoundLibraryScreenResult {
@@ -266,14 +267,9 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
     final matchingTokens = highlightTokens
         .where((t) => tag.normalizedName.contains(t))
         .toList();
-    return Chip(
-      label: Text.rich(
-        buildHighlightedSpan(tag.name, matchingTokens),
-        style: const TextStyle(fontSize: 11),
-      ),
-      visualDensity: VisualDensity.compact,
-      backgroundColor: color?.withAlpha(24),
-      side: color == null ? null : BorderSide(color: color),
+    return TagPill.rich(
+      label: buildHighlightedSpan(tag.name, matchingTokens),
+      color: color,
     );
   }
 
