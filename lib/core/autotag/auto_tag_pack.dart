@@ -10,18 +10,25 @@ class AutoTagPack {
   /// Nom du modèle d'ambiance (MuQ-MuLan, partie audio, int8 sur les MatMul).
   static const String modelFileName = 'muq_audio_int8.onnx';
 
-  final Directory root;
-  const AutoTagPack(this.root);
+  final Future<Directory> Function() _resolveRoot;
 
-  /// Dossier du pack sous le dossier de support de l'application.
-  static Future<AutoTagPack> inSupportDirectory() async {
-    final support = await getApplicationSupportDirectory();
-    return AutoTagPack(Directory(p.join(support.path, 'autotag_pack')));
-  }
+  /// Pack dans un dossier connu (tests).
+  AutoTagPack(Directory root) : _resolveRoot = (() async => root);
 
-  File get modelFile => File(p.join(root.path, modelFileName));
+  /// Pack sous le dossier de support de l'application, résolu à la demande
+  /// (`path_provider` est asynchrone).
+  AutoTagPack.inSupportDirectory()
+    : _resolveRoot = (() async {
+        final support = await getApplicationSupportDirectory();
+        return Directory(p.join(support.path, 'autotag_pack'));
+      });
+
+  Future<Directory> root() => _resolveRoot();
+
+  Future<File> modelFile() async =>
+      File(p.join((await root()).path, modelFileName));
 
   /// Le téléchargement écrit en `.part` puis renomme : un fichier au nom final
   /// est donc toujours complet.
-  Future<bool> get isInstalled => modelFile.exists();
+  Future<bool> isInstalled() async => (await modelFile()).exists();
 }

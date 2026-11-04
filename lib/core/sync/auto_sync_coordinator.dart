@@ -6,6 +6,7 @@ import '../../features/sampler/data/models/indexing_progress.dart';
 import '../../features/sampler/data/repositories/library_repository.dart';
 import '../../features/sampler/domain/entities/library.dart';
 import '../../features/sampler/presentation/providers/sync_controller.dart';
+import '../autotag/auto_tag_service.dart';
 import '../database/database.dart' as db;
 import '../settings/app_preferences.dart';
 import 'drive_client.dart';
@@ -99,6 +100,10 @@ class AutoSyncCoordinator {
   final SyncController _syncController;
   final AppPreferences _appPreferences;
 
+  /// Analyse automatique des tags (décision 0029) ; `null` = fonction absente
+  /// (tests, plateformes non prises en charge).
+  final AutoTagService? _autoTag;
+
   StreamSubscription<Set<TableUpdate>>? _subscription;
 
   /// Veille périodique. Créé par [start], donc absent en test tant que
@@ -128,16 +133,33 @@ class AutoSyncCoordinator {
   /// temps que la synchro décide s'il y a des boards distants à fusionner.
   void Function()? onInitialPullSettled;
 
+  /// Appelé quand l'analyse automatique vient de poser des tags : l'UI doit
+  /// jeter son index de recherche (il ne les connaît pas).
+  void Function()? onTagsAutoApplied;
+
   // Vrai pendant une passe : supprime les schedulePush déclenchés par le
   // merge en-place (le contenu vient du distant, pas d'une édition locale).
   bool _ignoreUpdates = false;
+
+  /// Vrai pendant l'analyse automatique : ses écritures (empreinte et marque
+  /// d'analyse par son) sont des annotations locales, sans rien à publier. Drapeau
+  /// distinct de [_ignoreUpdates] : une passe de synchro peut se chevaucher avec
+  /// elle, et le premier à finir ne doit pas rabaisser celui de l'autre.
+  bool _autoTagWriting = false;
+
+  /// Passage d'analyse en vol. Distinct de [_passInFlight] : l'analyse dure des
+  /// minutes et ne doit jamais retenir un « Actualiser » manuel.
+  Future<void>? _autoTagInFlight;
+
+  bool _disposed = false;
 
   AutoSyncCoordinator(
     this._database,
     this._repository,
     this._syncController,
-    this._appPreferences,
-  );
+    this._appPreferences, {
+    AutoTagService? autoTag,
+  }) : _autoTag = autoTag;
 
   /// Démarre l'écoute des modifications, la veille, et lance un pull initial en
   /// arrière-plan.
@@ -151,7 +173,9 @@ class AutoSyncCoordinator {
     unawaited(_initialPull());
     _watchTimer = Timer.periodic(
       _watchInterval,
-      (_) => unawaited(_runWatchPass()),
+      // Le tick relance aussi l'analyse : c'est ce qui la reprend après un Mode
+      // Spectacle, qui n'a pas de signal de sortie à écouter.
+      (_) => unawaited(_runWatchPass().whenComplete(_scheduleAutoTag)),
     );
   }
 
@@ -177,9 +201,10 @@ class AutoSyncCoordinator {
     if (last != null &&
         DateTime.now().difference(last) < _watchResumeThrottle) {
       SyncLog.trace('veille : reprise trop rapprochée, sonde sautée');
+      _scheduleAutoTag();
       return;
     }
-    unawaited(_runWatchPass());
+    unawaited(_runWatchPass().whenComplete(_scheduleAutoTag));
   }
 
   /// L'app passe en arrière-plan : la veille se tait jusqu'au retour.
@@ -192,7 +217,11 @@ class AutoSyncCoordinator {
   }
 
   Future<void> _onTablesUpdated(Set<TableUpdate> updates) async {
-    if (_ignoreUpdates || !_appPreferences.allowsNetworkSync) return;
+    if (_ignoreUpdates ||
+        _autoTagWriting ||
+        !_appPreferences.allowsNetworkSync) {
+      return;
+    }
     // Ignorer les écritures ne touchant QUE des tables de bookkeeping de
     // synchro : sinon le push se relancerait en boucle.
     // - `libraries` : révision mise à jour après un push ;
@@ -205,7 +234,10 @@ class AutoSyncCoordinator {
       (u) => !bookkeepingTables.contains(u.table),
     );
     if (!touchesUserData) return;
+    await _schedulePushForConnectedLibraries();
+  }
 
+  Future<void> _schedulePushForConnectedLibraries() async {
     final libraries = await _connectedLibraries();
     for (final library in libraries) {
       _syncController.schedulePush(library);
@@ -262,12 +294,63 @@ class AutoSyncCoordinator {
       SyncLog.trace('passe ${trigger.name} : rejoint la passe en cours');
       return inFlight;
     }
-    final pass = _runPass(
-      trigger,
-      onIndexProgress: onIndexProgress,
-    ).whenComplete(() => _passInFlight = null);
+    final pass = _runPass(trigger, onIndexProgress: onIndexProgress).whenComplete(
+      () {
+        _passInFlight = null;
+        // L'analyse vient APRÈS le pull : le pull remplace les tags d'un dossier
+        // par ceux du distant, et publier des tags posés avant lui les ferait
+        // écraser (décision 0029).
+        _scheduleAutoTag();
+      },
+    );
     _passInFlight = pass;
     return pass;
+  }
+
+  /// Raison de ne pas analyser (ou d'arrêter une analyse en cours), `null` si
+  /// rien ne s'y oppose. Même logique que la veille, en plus strict : l'analyse
+  /// charge le processeur, pas seulement le réseau.
+  String? _autoTagStopReason() {
+    if (_disposed) return 'application en cours d’arrêt';
+    if (_isBackgrounded) return 'app en arrière-plan';
+    if (_syncController.isAutoSyncPaused) return 'Mode Spectacle';
+    if (_passInFlight != null) return 'synchronisation en cours';
+    return null;
+  }
+
+  /// Lance un passage d'analyse automatique si rien ne s'y oppose. Idempotent :
+  /// sans effet si un passage tourne déjà ou si la fonction est absente.
+  void _scheduleAutoTag() {
+    final service = _autoTag;
+    if (service == null || _autoTagInFlight != null) return;
+    final blocked = _autoTagStopReason();
+    if (blocked != null) {
+      SyncLog.trace('analyse auto : différée ($blocked)');
+      return;
+    }
+    _autoTagInFlight = _runAutoTag(
+      service,
+    ).whenComplete(() => _autoTagInFlight = null);
+  }
+
+  Future<void> _runAutoTag(AutoTagService service) async {
+    _autoTagWriting = true;
+    final AutoTagReport report;
+    try {
+      report = await service.run(stopReason: _autoTagStopReason);
+    } finally {
+      _autoTagWriting = false;
+    }
+    if (report.tagsInserted > 0) onTagsAutoApplied?.call();
+    // Publier : seuls les tags comptent, mais pendant le passage les éditions de
+    // l'utilisateur ont été ignorées elles aussi (drapeau) — un push les rattrape.
+    final wroteSomething =
+        report.analyzed > 0 ||
+        report.tagsInserted > 0 ||
+        report.notAnalyzable.isNotEmpty;
+    if (wroteSomething && _appPreferences.allowsNetworkSync) {
+      await _schedulePushForConnectedLibraries();
+    }
   }
 
   /// Séquence canonique, partagée par les trois déclencheurs.
@@ -460,6 +543,7 @@ class AutoSyncCoordinator {
   }
 
   void dispose() {
+    _disposed = true;
     _appPreferences.removeListener(_onConnectivityModeChanged);
     _watchTimer?.cancel();
     _watchTimer = null;

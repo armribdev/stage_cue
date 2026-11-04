@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -391,6 +392,16 @@ class LibrarySnapshotStore {
           await _importTags();
         }
         if (await _snapHasTable('sound_tags')) {
+          // Sons du dossier qui portent des tags avant remplacement : ceux qui
+          // n'en ont plus ensuite les ont perdus au profit du distant.
+          final taggedBefore = await _database
+              .customSelect(
+                'SELECT DISTINCT st.sound_id AS id FROM sound_tags st '
+                'JOIN sounds s ON s.id = st.sound_id WHERE s.folder_id = ?',
+                variables: [Variable<int>(folderId)],
+              )
+              .map((r) => r.read<int>('id'))
+              .get();
           // Remplace les tags du dossier (le distant fait foi) avant réimport.
           await _database.customStatement(
             'DELETE FROM sound_tags WHERE sound_id IN '
@@ -398,10 +409,40 @@ class LibrarySnapshotStore {
             [folderId],
           );
           await _importSoundTags();
+          await _reopenAutoTagDecisions(taggedBefore);
         }
       });
     } finally {
       await _detachSnapshot();
+    }
+  }
+
+  /// Rouvre la décision d'analyse automatique des sons de [soundIds] qui n'ont
+  /// plus aucun tag : un pull vient de remplacer leurs tags par ceux du distant
+  /// (qui ne les avait pas encore reçus), et sans cela `auto_tagged_at` les
+  /// laisserait sans tag pour toujours. L'empreinte est conservée : la décision
+  /// se refait sans ré-analyser le fichier (décision 0029). Un son traité entre-
+  /// temps est laissé tel quel.
+  Future<void> _reopenAutoTagDecisions(List<int> soundIds) async {
+    var reopened = 0;
+    const chunk = 500;
+    for (var i = 0; i < soundIds.length; i += chunk) {
+      final ids = soundIds.sublist(i, math.min(i + chunk, soundIds.length));
+      final marks = List.filled(ids.length, '?').join(',');
+      reopened += await _database.customUpdate(
+        'UPDATE sounds SET auto_tagged_at = NULL '
+        'WHERE id IN ($marks) AND auto_tagged_at IS NOT NULL '
+        'AND auto_embedding IS NOT NULL AND is_processed = 0 '
+        'AND NOT EXISTS (SELECT 1 FROM sound_tags st WHERE st.sound_id = sounds.id)',
+        variables: [for (final id in ids) Variable<int>(id)],
+        updates: {_database.sounds},
+      );
+    }
+    if (reopened > 0) {
+      SyncLog.info(
+        'Pull : $reopened son(s) ont perdu leurs tags automatiques au profit '
+        'du distant — décision d’analyse rouverte.',
+      );
     }
   }
 

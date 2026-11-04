@@ -128,6 +128,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
     // attente par la garde anti « Scène 1 » fantôme.
     widget.services.syncController.onLibraryMerged = _onLibraryMerged;
     widget.services.autoSyncCoordinator.onInitialPullSettled = _onLibraryMerged;
+    widget.services.autoSyncCoordinator.onTagsAutoApplied = _onTagsAutoApplied;
     _notifier.loadBoards();
     if (isNativeDesktopPlatform()) {
       HardwareKeyboard.instance.addHandler(_handlePadHotkeyEvent);
@@ -152,6 +153,12 @@ class _SamplerScreenState extends State<SamplerScreen> {
     // est jeté avant le rechargement, qui le reconstruira.
     _notifier.invalidateSearchIndex();
     _notifier.loadBoards();
+  }
+
+  void _onTagsAutoApplied() {
+    if (!mounted) return;
+    // L'index de recherche ne connaît pas les tags que l'analyse vient de poser.
+    _notifier.invalidateSearchIndex();
   }
 
   void _onStateChanged() {
@@ -190,6 +197,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   void dispose() {
     widget.services.syncController.onLibraryMerged = null;
     widget.services.autoSyncCoordinator.onInitialPullSettled = null;
+    widget.services.autoSyncCoordinator.onTagsAutoApplied = null;
     if (isNativeDesktopPlatform()) {
       HardwareKeyboard.instance.removeHandler(_handlePadHotkeyEvent);
     }

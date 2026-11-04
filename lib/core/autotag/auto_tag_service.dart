@@ -119,7 +119,7 @@ class AutoTagService {
     // ── 1. Analyse ──────────────────────────────────────────────────────────
     final candidates = await _data.soundsToAnalyze();
     if (candidates.isNotEmpty) {
-      if (!await _pack.isInstalled) {
+      if (!await _pack.isInstalled()) {
         if (!_packMissingReported) {
           _packMissingReported = true;
           AppLog.info(
@@ -142,7 +142,7 @@ class AutoTagService {
           final roots = await _libraryRoots();
           AutoTagEmbedder? embedder;
           try {
-            embedder = await _openEmbedder(_pack.modelFile.path);
+            embedder = await _openEmbedder((await _pack.modelFile()).path);
             var consecutiveFailures = 0;
             for (final sound in local) {
               interruptedBy = stopReason();
