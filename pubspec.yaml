@@ -95,6 +95,12 @@ flutter:
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
 
+  # Vecteurs texte des ambiances de l'analyse automatique (ADR 0029) : 15 × 512
+  # flottants, générés par tool/autotag/gen_text_latents.py. Livrés avec l'app
+  # (le vocabulaire évolue avec elle), pas avec le pack de modèles.
+  assets:
+    - assets/autotag/text_latents.f32
+
   # Polices de la direction "Console Linear" — fichiers variables bundlés en
   # local (licence OFL) pour rester utilisable sans réseau en régie live.
   fonts:

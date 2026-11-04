@@ -202,4 +202,4 @@ void main() {
   );
 }
 
-String _textLatentsPath() => 'tool/autotag/text_latents.f32';
+String _textLatentsPath() => 'assets/autotag/text_latents.f32';

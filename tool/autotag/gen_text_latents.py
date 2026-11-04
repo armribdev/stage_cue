@@ -1,8 +1,8 @@
 """Génère text_latents.f32 : 15 vecteurs texte MuQ-MuLan (15 x 512 float32 little-endian).
 
 L'ORDRE DES LIGNES EST CELUI DE MOODS ci-dessous ; le code Dart
-(lib/core/autotag/mood_catalog.dart) doit l'utiliser à l'identique.
-Usage : python gen_text_latents.py [sortie.f32]
+(lib/core/autotag/mood_tagging.dart, kMoods) doit l'utiliser à l'identique.
+Usage : python gen_text_latents.py [sortie.f32]   (défaut : assets/autotag/text_latents.f32)
 """
 import sys
 
@@ -21,7 +21,7 @@ MOODS = {  # tag FR -> description EN
     "Sensuel": "sensual seductive smooth",
 }
 
-out = sys.argv[1] if len(sys.argv) > 1 else "text_latents.f32"
+out = sys.argv[1] if len(sys.argv) > 1 else "../../assets/autotag/text_latents.f32"
 m = MuQMuLan.from_pretrained("OpenMuQ/MuQ-MuLan-large").eval()
 with torch.no_grad():
     t = m(texts=[f"{d} music" for d in MOODS.values()]).numpy().astype("<f4")
