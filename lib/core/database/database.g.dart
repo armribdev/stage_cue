@@ -1893,6 +1893,18 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _autoEmbeddingMeta = const VerificationMeta(
+    'autoEmbedding',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> autoEmbedding =
+      GeneratedColumn<Uint8List>(
+        'auto_embedding',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1916,6 +1928,7 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     startOffsetMs,
     isProcessed,
     autoTaggedAt,
+    autoEmbedding,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2079,6 +2092,15 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         ),
       );
     }
+    if (data.containsKey('auto_embedding')) {
+      context.handle(
+        _autoEmbeddingMeta,
+        autoEmbedding.isAcceptableOrUnknown(
+          data['auto_embedding']!,
+          _autoEmbeddingMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2174,6 +2196,10 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}auto_tagged_at'],
       ),
+      autoEmbedding: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}auto_embedding'],
+      ),
     );
   }
 
@@ -2243,6 +2269,15 @@ class Sound extends DataClass implements Insertable<Sound> {
   /// ré-analyser en boucle. Annotation locale comme [isProcessed] : absente de
   /// l'export du snapshot dossier.
   final DateTime? autoTaggedAt;
+
+  /// Empreinte audio calculée par le modèle d'analyse (MuQ-MuLan, décision
+  /// 0029) : 512 flottants 32 bits petit-boutiste, moyenne des latents des
+  /// clips, non renormalisée. `null` = jamais analysé, ou non analysable (alors
+  /// [autoTaggedAt] est renseignée). Conservée pour que le recentrage par
+  /// ambiance sur la bibliothèque (et un vocabulaire d'ambiances élargi) se
+  /// recalcule sans ré-analyser le son. Annotation locale comme [autoTaggedAt] :
+  /// absente de l'export du snapshot dossier.
+  final Uint8List? autoEmbedding;
   const Sound({
     required this.id,
     required this.title,
@@ -2265,6 +2300,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     required this.startOffsetMs,
     required this.isProcessed,
     this.autoTaggedAt,
+    this.autoEmbedding,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2314,6 +2350,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     if (!nullToAbsent || autoTaggedAt != null) {
       map['auto_tagged_at'] = Variable<DateTime>(autoTaggedAt);
     }
+    if (!nullToAbsent || autoEmbedding != null) {
+      map['auto_embedding'] = Variable<Uint8List>(autoEmbedding);
+    }
     return map;
   }
 
@@ -2362,6 +2401,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       autoTaggedAt: autoTaggedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(autoTaggedAt),
+      autoEmbedding: autoEmbedding == null && nullToAbsent
+          ? const Value.absent()
+          : Value(autoEmbedding),
     );
   }
 
@@ -2396,6 +2438,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       startOffsetMs: serializer.fromJson<int>(json['startOffsetMs']),
       isProcessed: serializer.fromJson<bool>(json['isProcessed']),
       autoTaggedAt: serializer.fromJson<DateTime?>(json['autoTaggedAt']),
+      autoEmbedding: serializer.fromJson<Uint8List?>(json['autoEmbedding']),
     );
   }
   @override
@@ -2427,6 +2470,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       'startOffsetMs': serializer.toJson<int>(startOffsetMs),
       'isProcessed': serializer.toJson<bool>(isProcessed),
       'autoTaggedAt': serializer.toJson<DateTime?>(autoTaggedAt),
+      'autoEmbedding': serializer.toJson<Uint8List?>(autoEmbedding),
     };
   }
 
@@ -2452,6 +2496,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     int? startOffsetMs,
     bool? isProcessed,
     Value<DateTime?> autoTaggedAt = const Value.absent(),
+    Value<Uint8List?> autoEmbedding = const Value.absent(),
   }) => Sound(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -2476,6 +2521,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     startOffsetMs: startOffsetMs ?? this.startOffsetMs,
     isProcessed: isProcessed ?? this.isProcessed,
     autoTaggedAt: autoTaggedAt.present ? autoTaggedAt.value : this.autoTaggedAt,
+    autoEmbedding: autoEmbedding.present
+        ? autoEmbedding.value
+        : this.autoEmbedding,
   );
   Sound copyWithCompanion(SoundsCompanion data) {
     return Sound(
@@ -2520,6 +2568,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       autoTaggedAt: data.autoTaggedAt.present
           ? data.autoTaggedAt.value
           : this.autoTaggedAt,
+      autoEmbedding: data.autoEmbedding.present
+          ? data.autoEmbedding.value
+          : this.autoEmbedding,
     );
   }
 
@@ -2546,7 +2597,8 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('waveformProbeGeneration: $waveformProbeGeneration, ')
           ..write('startOffsetMs: $startOffsetMs, ')
           ..write('isProcessed: $isProcessed, ')
-          ..write('autoTaggedAt: $autoTaggedAt')
+          ..write('autoTaggedAt: $autoTaggedAt, ')
+          ..write('autoEmbedding: $autoEmbedding')
           ..write(')'))
         .toString();
   }
@@ -2574,6 +2626,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     startOffsetMs,
     isProcessed,
     autoTaggedAt,
+    $driftBlobEquality.hash(autoEmbedding),
   ]);
   @override
   bool operator ==(Object other) =>
@@ -2599,7 +2652,8 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.waveformProbeGeneration == this.waveformProbeGeneration &&
           other.startOffsetMs == this.startOffsetMs &&
           other.isProcessed == this.isProcessed &&
-          other.autoTaggedAt == this.autoTaggedAt);
+          other.autoTaggedAt == this.autoTaggedAt &&
+          $driftBlobEquality.equals(other.autoEmbedding, this.autoEmbedding));
 }
 
 class SoundsCompanion extends UpdateCompanion<Sound> {
@@ -2624,6 +2678,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<int> startOffsetMs;
   final Value<bool> isProcessed;
   final Value<DateTime?> autoTaggedAt;
+  final Value<Uint8List?> autoEmbedding;
   const SoundsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -2646,6 +2701,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.startOffsetMs = const Value.absent(),
     this.isProcessed = const Value.absent(),
     this.autoTaggedAt = const Value.absent(),
+    this.autoEmbedding = const Value.absent(),
   });
   SoundsCompanion.insert({
     this.id = const Value.absent(),
@@ -2669,6 +2725,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.startOffsetMs = const Value.absent(),
     this.isProcessed = const Value.absent(),
     this.autoTaggedAt = const Value.absent(),
+    this.autoEmbedding = const Value.absent(),
   }) : title = Value(title),
        displayName = Value(displayName),
        filePath = Value(filePath);
@@ -2694,6 +2751,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<int>? startOffsetMs,
     Expression<bool>? isProcessed,
     Expression<DateTime>? autoTaggedAt,
+    Expression<Uint8List>? autoEmbedding,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2718,6 +2776,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (startOffsetMs != null) 'start_offset_ms': startOffsetMs,
       if (isProcessed != null) 'is_processed': isProcessed,
       if (autoTaggedAt != null) 'auto_tagged_at': autoTaggedAt,
+      if (autoEmbedding != null) 'auto_embedding': autoEmbedding,
     });
   }
 
@@ -2743,6 +2802,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<int>? startOffsetMs,
     Value<bool>? isProcessed,
     Value<DateTime?>? autoTaggedAt,
+    Value<Uint8List?>? autoEmbedding,
   }) {
     return SoundsCompanion(
       id: id ?? this.id,
@@ -2767,6 +2827,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       startOffsetMs: startOffsetMs ?? this.startOffsetMs,
       isProcessed: isProcessed ?? this.isProcessed,
       autoTaggedAt: autoTaggedAt ?? this.autoTaggedAt,
+      autoEmbedding: autoEmbedding ?? this.autoEmbedding,
     );
   }
 
@@ -2840,6 +2901,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     if (autoTaggedAt.present) {
       map['auto_tagged_at'] = Variable<DateTime>(autoTaggedAt.value);
     }
+    if (autoEmbedding.present) {
+      map['auto_embedding'] = Variable<Uint8List>(autoEmbedding.value);
+    }
     return map;
   }
 
@@ -2866,7 +2930,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('waveformProbeGeneration: $waveformProbeGeneration, ')
           ..write('startOffsetMs: $startOffsetMs, ')
           ..write('isProcessed: $isProcessed, ')
-          ..write('autoTaggedAt: $autoTaggedAt')
+          ..write('autoTaggedAt: $autoTaggedAt, ')
+          ..write('autoEmbedding: $autoEmbedding')
           ..write(')'))
         .toString();
   }
@@ -8197,6 +8262,7 @@ typedef $$SoundsTableCreateCompanionBuilder =
       Value<int> startOffsetMs,
       Value<bool> isProcessed,
       Value<DateTime?> autoTaggedAt,
+      Value<Uint8List?> autoEmbedding,
     });
 typedef $$SoundsTableUpdateCompanionBuilder =
     SoundsCompanion Function({
@@ -8221,6 +8287,7 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<int> startOffsetMs,
       Value<bool> isProcessed,
       Value<DateTime?> autoTaggedAt,
+      Value<Uint8List?> autoEmbedding,
     });
 
 final class $$SoundsTableReferences
@@ -8420,6 +8487,11 @@ class $$SoundsTableFilterComposer
 
   ColumnFilters<DateTime> get autoTaggedAt => $composableBuilder(
     column: $table.autoTaggedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get autoEmbedding => $composableBuilder(
+    column: $table.autoEmbedding,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8649,6 +8721,11 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<Uint8List> get autoEmbedding => $composableBuilder(
+    column: $table.autoEmbedding,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LibrariesTableOrderingComposer get libraryId {
     final $$LibrariesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -8779,6 +8856,11 @@ class $$SoundsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get autoTaggedAt => $composableBuilder(
     column: $table.autoTaggedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get autoEmbedding => $composableBuilder(
+    column: $table.autoEmbedding,
     builder: (column) => column,
   );
 
@@ -8959,6 +9041,7 @@ class $$SoundsTableTableManager
                 Value<int> startOffsetMs = const Value.absent(),
                 Value<bool> isProcessed = const Value.absent(),
                 Value<DateTime?> autoTaggedAt = const Value.absent(),
+                Value<Uint8List?> autoEmbedding = const Value.absent(),
               }) => SoundsCompanion(
                 id: id,
                 title: title,
@@ -8981,6 +9064,7 @@ class $$SoundsTableTableManager
                 startOffsetMs: startOffsetMs,
                 isProcessed: isProcessed,
                 autoTaggedAt: autoTaggedAt,
+                autoEmbedding: autoEmbedding,
               ),
           createCompanionCallback:
               ({
@@ -9005,6 +9089,7 @@ class $$SoundsTableTableManager
                 Value<int> startOffsetMs = const Value.absent(),
                 Value<bool> isProcessed = const Value.absent(),
                 Value<DateTime?> autoTaggedAt = const Value.absent(),
+                Value<Uint8List?> autoEmbedding = const Value.absent(),
               }) => SoundsCompanion.insert(
                 id: id,
                 title: title,
@@ -9027,6 +9112,7 @@ class $$SoundsTableTableManager
                 startOffsetMs: startOffsetMs,
                 isProcessed: isProcessed,
                 autoTaggedAt: autoTaggedAt,
+                autoEmbedding: autoEmbedding,
               ),
           withReferenceMapper: (p0) => p0
               .map(

@@ -69,7 +69,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 43;
+  int get schemaVersion => 44;
 
   @override
   MigrationStrategy get migration {
@@ -459,6 +459,13 @@ class AppDatabase extends _$AppDatabase {
           // recrée `sounds` au schéma courant — colonne déjà présente.
           if (!await _columnExists('sounds', 'auto_tagged_at')) {
             await m.addColumn(sounds, sounds.autoTaggedAt);
+          }
+        }
+        if (from < 44) {
+          // Empreinte audio de l'analyse automatique (décision 0029). Même
+          // garde que ci-dessus. Null pour tous : aucun son n'a été analysé.
+          if (!await _columnExists('sounds', 'auto_embedding')) {
+            await m.addColumn(sounds, sounds.autoEmbedding);
           }
         }
       }),
