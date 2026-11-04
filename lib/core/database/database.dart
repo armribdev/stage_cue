@@ -60,6 +60,7 @@ const List<String> _withdrawnInstrumentTags = [
     TagCategories,
     TagItems,
     SoundTags,
+    SoundAutoTags,
     TagAliases,
   ],
 )
@@ -69,7 +70,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 44;
+  int get schemaVersion => 45;
 
   @override
   MigrationStrategy get migration {
@@ -467,6 +468,20 @@ class AppDatabase extends _$AppDatabase {
           if (!await _columnExists('sounds', 'auto_embedding')) {
             await m.addColumn(sounds, sounds.autoEmbedding);
           }
+        }
+        if (from < 45) {
+          // Tags de l'IA en couche séparée, masquables (décision 0030).
+          await customStatement('''
+            CREATE TABLE IF NOT EXISTS sound_auto_tags (
+              sound_id INTEGER NOT NULL
+                REFERENCES sounds (id) ON DELETE CASCADE,
+              tag_id INTEGER NOT NULL
+                REFERENCES tags (id) ON DELETE CASCADE,
+              hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1)),
+              updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)),
+              PRIMARY KEY (sound_id, tag_id)
+            )
+          ''');
         }
       }),
       beforeOpen: (details) async {

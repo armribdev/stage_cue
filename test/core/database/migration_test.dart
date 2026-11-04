@@ -483,6 +483,50 @@ void main() {
     },
   );
 
+  test(
+    'une base v44 gagne sound_auto_tags, vide, sans toucher aux tags',
+    () async {
+      var database = db.AppDatabase.forTesting(NativeDatabase(file));
+      await database.customStatement(
+        "INSERT INTO sounds (title, file_path, display_name) "
+        "VALUES ('s', '/s.wav', 's')",
+      );
+      await database.customStatement(
+        'INSERT INTO sound_tags (sound_id, tag_id) '
+        'VALUES (1, (SELECT id FROM tags LIMIT 1))',
+      );
+      await database.customStatement('DROP TABLE sound_auto_tags');
+      await database.customStatement('PRAGMA user_version = 44');
+      await database.close();
+
+      database = db.AppDatabase.forTesting(NativeDatabase(file));
+      final auto = await database.select(database.soundAutoTags).get();
+      expect(auto, isEmpty);
+      expect(
+        (await database.select(database.soundTags).get()),
+        hasLength(1),
+        reason: 'les tags de l’utilisateur ne bougent pas',
+      );
+
+      // Écriture, masquage, et clé primaire (soundId, tagId) unique.
+      final tagId = (await database.select(database.tagItems).get()).first.id;
+      await database
+          .into(database.soundAutoTags)
+          .insert(db.SoundAutoTagsCompanion.insert(soundId: 1, tagId: tagId));
+      final row = await database.select(database.soundAutoTags).getSingle();
+      expect(row.hidden, isFalse);
+      expect(row.updatedAt, isNotNull);
+      await expectLater(
+        database
+            .into(database.soundAutoTags)
+            .insert(db.SoundAutoTagsCompanion.insert(soundId: 1, tagId: tagId)),
+        throwsA(anything),
+      );
+
+      await database.close();
+    },
+  );
+
   test('la migration est idempotente : une base à jour rembobinée en v35 '
       'passe sans erreur', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));

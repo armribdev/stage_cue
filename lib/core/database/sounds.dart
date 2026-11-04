@@ -314,6 +314,29 @@ class SoundTags extends Table {
   Set<Column> get primaryKey => {soundId, tagId};
 }
 
+/// Tags trouvés par l'analyse automatique (décision 0030) : une couche à part de
+/// [SoundTags], qui ne contient que les tags posés par l'utilisateur.
+///
+/// Une ligne n'est **jamais supprimée** : la retirer de l'affichage, c'est la
+/// [hidden] (masquée). C'est ce qui garde la mémoire du résultat de l'IA — elle
+/// ne repose pas un tag que l'utilisateur a écarté — et ce qui se synchronise
+/// entre appareils (dernière écriture gagnante, par [updatedAt]).
+class SoundAutoTags extends Table {
+  IntColumn get soundId =>
+      integer().references(Sounds, #id, onDelete: KeyAction.cascade)();
+  IntColumn get tagId =>
+      integer().references(TagItems, #id, onDelete: KeyAction.cascade)();
+
+  /// Masqué par l'utilisateur : ni affiché, ni cherché, mais conservé.
+  BoolColumn get hidden => boolean().withDefault(const Constant(false))();
+
+  /// Dernière modification (pose ou masquage) — arbitre la fusion de synchro.
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {soundId, tagId};
+}
+
 class TagAliases extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get tagId =>
