@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../../../../core/autotag/auto_tag_analysis.dart';
 import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/logging/app_log.dart';
@@ -56,6 +57,11 @@ class SamplerNotifier extends ChangeNotifier {
   final LibraryRepository? _libraryRepository;
 
   final AppPreferences? _appPreferences;
+
+  /// État et déclenchement de l'analyse automatique des tags, pour la fiche d'un
+  /// son. Posé après construction (comme les callbacks de `AutoSyncCoordinator`) ;
+  /// `null` = fonction absente (mobile, tests).
+  AutoTagAnalysis? autoTagAnalysis;
 
   int? _activeBoardIdValue;
 

@@ -19,6 +19,24 @@ class AnalyzedSound {
   });
 }
 
+/// Marques d'analyse d'un son, telles qu'écrites en base.
+class SoundAnalysisMarks {
+  final bool isMusic;
+  final bool isProcessed;
+
+  /// Une empreinte audio est stockée.
+  final bool hasEmbedding;
+
+  /// `auto_tagged_at` renseigné : décision prise, ou son écarté pour de bon.
+  final bool decided;
+  const SoundAnalysisMarks({
+    required this.isMusic,
+    required this.isProcessed,
+    required this.hasEmbedding,
+    required this.decided,
+  });
+}
+
 /// Suggestions d'ambiance à enregistrer pour un son (peut être vide : la
 /// décision est alors « rien à suggérer » et le son est marqué comme décidé).
 class AutoTagDecision {
@@ -70,6 +88,26 @@ class LocalAutoTagDataSource {
             ))
             .get();
     return rows.map(SoundModel.toEntity).toList();
+  }
+
+  /// Marques d'analyse d'un son, `null` s'il n'existe plus.
+  Future<SoundAnalysisMarks?> marksOf(int soundId) async {
+    final row = await _database
+        .customSelect(
+          'SELECT COALESCE(type = 1, 0) AS is_music, is_processed, '
+          'auto_embedding IS NOT NULL AS has_embedding, '
+          'auto_tagged_at IS NOT NULL AS decided '
+          'FROM sounds WHERE id = ?',
+          variables: [Variable<int>(soundId)],
+        )
+        .getSingleOrNull();
+    if (row == null) return null;
+    return SoundAnalysisMarks(
+      isMusic: row.read<int>('is_music') != 0,
+      isProcessed: row.read<int>('is_processed') != 0,
+      hasEmbedding: row.read<int>('has_embedding') != 0,
+      decided: row.read<int>('decided') != 0,
+    );
   }
 
   /// Empreinte de tous les sons analysés — éligibles ou non, décidés ou non :

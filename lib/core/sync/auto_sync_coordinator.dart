@@ -7,6 +7,7 @@ import '../../features/sampler/data/models/indexing_progress.dart';
 import '../../features/sampler/data/repositories/library_repository.dart';
 import '../../features/sampler/domain/entities/library.dart';
 import '../../features/sampler/presentation/providers/sync_controller.dart';
+import '../autotag/auto_tag_analysis.dart';
 import '../autotag/auto_tag_service.dart';
 import '../database/database.dart' as db;
 import '../settings/app_preferences.dart';
@@ -337,9 +338,17 @@ class AutoSyncCoordinator {
     return pass;
   }
 
-  /// Demande un passage d'analyse (pack tout juste installé…). Sans effet si
-  /// quelque chose s'y oppose : le prochain tick ou la prochaine passe reprendra.
-  void requestAutoTag() => _scheduleAutoTag();
+  /// Demande un passage d'analyse (pack tout juste installé, bouton de la fiche
+  /// d'un son…), [firstSoundId] en tête de file. Sans effet si quelque chose s'y
+  /// oppose : le prochain tick ou la prochaine passe reprendra. Renvoie cette
+  /// raison, `null` si un passage est parti.
+  String? requestAutoTag({int? firstSoundId}) =>
+      _scheduleAutoTag(firstSoundId: firstSoundId);
+
+  /// Vue de l'analyse pour la fiche d'un son ; `null` si la fonction est absente.
+  late final AutoTagAnalysis? autoTagAnalysis = _autoTag == null
+      ? null
+      : AutoTagAnalysis(_autoTag, (id) => requestAutoTag(firstSoundId: id));
 
   /// Raison de ne pas analyser (ou d'arrêter une analyse en cours), `null` si
   /// rien ne s'y oppose. Même logique que la veille, en plus strict : l'analyse
@@ -353,25 +362,32 @@ class AutoSyncCoordinator {
   }
 
   /// Lance un passage d'analyse automatique si rien ne s'y oppose. Idempotent :
-  /// sans effet si un passage tourne déjà ou si la fonction est absente.
-  void _scheduleAutoTag() {
+  /// sans effet si un passage tourne déjà ou si la fonction est absente. Renvoie
+  /// la raison du refus, `null` si un passage est parti.
+  String? _scheduleAutoTag({int? firstSoundId}) {
     final service = _autoTag;
-    if (service == null || _autoTagInFlight != null) return;
+    if (service == null) return 'analyse indisponible sur cet appareil';
+    if (_autoTagInFlight != null) return 'une analyse est déjà en cours';
     final blocked = _autoTagStopReason();
     if (blocked != null) {
       SyncLog.trace('analyse auto : différée ($blocked)');
-      return;
+      return blocked;
     }
     _autoTagInFlight = _runAutoTag(
       service,
+      firstSoundId: firstSoundId,
     ).whenComplete(() => _autoTagInFlight = null);
+    return null;
   }
 
-  Future<void> _runAutoTag(AutoTagService service) async {
+  Future<void> _runAutoTag(AutoTagService service, {int? firstSoundId}) async {
     _autoTagWriting = true;
     final AutoTagReport report;
     try {
-      report = await service.run(stopReason: _autoTagStopReason);
+      report = await service.run(
+        stopReason: _autoTagStopReason,
+        firstSoundId: firstSoundId,
+      );
     } finally {
       _autoTagWriting = false;
     }

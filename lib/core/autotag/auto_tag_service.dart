@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:path/path.dart' as p;
 
 import '../../features/sampler/data/datasources/local_autotag_datasource.dart';
@@ -11,6 +12,7 @@ import '../utils/path_unicode.dart';
 import 'audio_stream_info.dart';
 import 'auto_tag_embedder.dart';
 import 'auto_tag_pack.dart';
+import 'auto_tag_status.dart';
 import 'mood_tagging.dart';
 
 /// Bilan d'un passage de [AutoTagService.run].
@@ -91,14 +93,48 @@ class AutoTagService {
 
   bool get isRunning => _running;
 
+  /// Ce que fait le passage en cours (fiche d'un son : « en cours », « en
+  /// attente »). Repasse à [AutoTagActivity.idle] une fois la décision écrite.
+  final ValueNotifier<AutoTagActivity> activity = ValueNotifier(
+    AutoTagActivity.idle,
+  );
+
+  /// Où en est l'analyse de ce son, ou `null` s'il n'existe plus. Un passage en
+  /// cours prime sur ce que dit la base.
+  Future<SoundAnalysisStatus?> statusOf(int soundId) async {
+    final live = activity.value.liveStatusOf(soundId);
+    if (live != null) return live;
+    final marks = await _data.marksOf(soundId);
+    if (marks == null) return null;
+    final eligible = marks.isMusic && !marks.isProcessed;
+    if (marks.hasEmbedding) {
+      // Un son traité ne reçoit plus de suggestion : son empreinte est le
+      // dernier mot, rien n'est « en attente ».
+      return marks.decided || !eligible
+          ? SoundAnalysisStatus.analyzed
+          : SoundAnalysisStatus.awaitingSuggestions;
+    }
+    if (marks.decided) return SoundAnalysisStatus.skipped;
+    if (!marks.isMusic) return SoundAnalysisStatus.notMusic;
+    if (marks.isProcessed) return SoundAnalysisStatus.processed;
+    return await _pack.isInstalled()
+        ? SoundAnalysisStatus.pending
+        : SoundAnalysisStatus.packMissing;
+  }
+
   /// Un passage. [stopReason] est interrogée entre deux sons : une valeur
   /// non nulle (« Mode Spectacle »…) arrête l'analyse, la décision se fait
-  /// quand même sur ce qui est déjà analysé. Ne lève jamais.
-  Future<AutoTagReport> run({required String? Function() stopReason}) async {
+  /// quand même sur ce qui est déjà analysé. [firstSoundId] passe en tête de
+  /// file (analyse demandée depuis la fiche d'un son). Ne lève jamais.
+  Future<AutoTagReport> run({
+    required String? Function() stopReason,
+    int? firstSoundId,
+  }) async {
     if (_running) return const AutoTagReport();
     _running = true;
+    activity.value = const AutoTagActivity(running: true);
     try {
-      return await _run(stopReason);
+      return await _run(stopReason, firstSoundId);
     } catch (e, stackTrace) {
       AppLog.severe(
         'Analyse auto : passage abandonné sur erreur inattendue.',
@@ -108,10 +144,14 @@ class AutoTagService {
       return const AutoTagReport();
     } finally {
       _running = false;
+      activity.value = AutoTagActivity.idle;
     }
   }
 
-  Future<AutoTagReport> _run(String? Function() stopReason) async {
+  Future<AutoTagReport> _run(
+    String? Function() stopReason,
+    int? firstSoundId,
+  ) async {
     var analyzed = 0;
     var failed = 0;
     var notDownloaded = 0;
@@ -133,7 +173,9 @@ class AutoTagService {
         final available = await _probeAvailable(candidates);
         final local = [
           for (final s in candidates)
-            if (available.contains(s.id)) s,
+            if (available.contains(s.id) && s.id == firstSoundId) s,
+          for (final s in candidates)
+            if (available.contains(s.id) && s.id != firstSoundId) s,
         ];
         notDownloaded = candidates.length - local.length;
         if (local.isNotEmpty) {
@@ -142,6 +184,11 @@ class AutoTagService {
             '${notDownloaded > 0 ? ' ($notDownloaded pas encore téléchargée(s))' : ''}.',
           );
           final roots = await _libraryRoots();
+          final queued = {for (final s in local) s.id};
+          activity.value = AutoTagActivity(
+            running: true,
+            queuedSoundIds: queued,
+          );
           AutoTagEmbedder? embedder;
           try {
             embedder = await _openEmbedder((await _pack.modelFile()).path);
@@ -149,6 +196,12 @@ class AutoTagService {
             for (final sound in local) {
               interruptedBy = stopReason();
               if (interruptedBy != null) break;
+              queued.remove(sound.id);
+              activity.value = AutoTagActivity(
+                running: true,
+                currentSoundId: sound.id,
+                queuedSoundIds: queued,
+              );
               try {
                 final file = await _localFile(sound, roots);
                 if (file == null) {

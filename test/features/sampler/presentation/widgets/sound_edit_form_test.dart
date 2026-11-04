@@ -6,10 +6,34 @@ import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stage_cue/core/autotag/auto_tag_analysis.dart';
+import 'package:stage_cue/core/autotag/auto_tag_status.dart';
 import 'package:stage_cue/core/database/database.dart' as db;
 import 'package:stage_cue/features/sampler/data/repositories/sound_repository.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/sound_edit_form.dart';
+
+/// Vue d'analyse factice : l'état est piloté par le test.
+class FakeAutoTagAnalysis implements AutoTagAnalysis {
+  SoundAnalysisStatus? status;
+  String? refusal;
+  final started = <int>[];
+  @override
+  final ValueNotifier<AutoTagActivity> activity = ValueNotifier(
+    AutoTagActivity.idle,
+  );
+
+  FakeAutoTagAnalysis(this.status);
+
+  @override
+  Future<SoundAnalysisStatus?> statusOf(int soundId) async => status;
+
+  @override
+  String? start(int soundId) {
+    started.add(soundId);
+    return refusal;
+  }
+}
 
 void main() {
   late db.AppDatabase database;
@@ -48,6 +72,7 @@ void main() {
     VoidCallback? onSaved,
     VoidCallback? onMarkedUnprocessed,
     SoundEditFormController? controller,
+    AutoTagAnalysis? autoTag,
   }) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -63,6 +88,7 @@ void main() {
             onSaved: onSaved,
             onMarkedUnprocessed: onMarkedUnprocessed,
             controller: controller,
+            autoTag: autoTag,
           ),
         ),
       ),
@@ -293,6 +319,83 @@ void main() {
 
       expect(await userRows(tester), isEmpty);
       expect(await tester.runAsync(autoRows), hasLength(1));
+    });
+  });
+
+  group('état de l’analyse IA', () {
+    Future<void> load(WidgetTester tester) async {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      await tester.pump();
+    }
+
+    Future<FakeAutoTagAnalysis> pumpWith(
+      WidgetTester tester,
+      SoundAnalysisStatus? status,
+    ) async {
+      final analysis = FakeAutoTagAnalysis(status);
+      await pumpForm(tester, processed: false, autoTag: analysis);
+      await load(tester);
+      return analysis;
+    }
+
+    testWidgets('sans analyse (mobile) : aucune zone', (tester) async {
+      await pumpForm(tester, processed: false);
+      await load(tester);
+      expect(find.textContaining('Analyse IA'), findsNothing);
+    });
+
+    testWidgets('pas encore analysé : le dit et propose « Analyser »', (
+      tester,
+    ) async {
+      final analysis = await pumpWith(tester, SoundAnalysisStatus.pending);
+      expect(find.textContaining('pas encore analysé'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('auto-tag-start')));
+      await tester.pump();
+
+      expect(analysis.started, [soundId]);
+      // Demandé : en attente, plus de bouton.
+      expect(find.textContaining('en attente'), findsOneWidget);
+      expect(find.byKey(const ValueKey('auto-tag-start')), findsNothing);
+    });
+
+    testWidgets('lancement refusé : la raison est affichée, le bouton reste', (
+      tester,
+    ) async {
+      final analysis = await pumpWith(tester, SoundAnalysisStatus.pending);
+      analysis.refusal = 'Mode Spectacle';
+
+      await tester.tap(find.byKey(const ValueKey('auto-tag-start')));
+      await tester.pump();
+
+      expect(find.textContaining('Mode Spectacle'), findsOneWidget);
+      expect(find.byKey(const ValueKey('auto-tag-start')), findsOneWidget);
+      // Laisse la snackbar expirer (son minuteur ne doit pas rester en suspens).
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    for (final status in SoundAnalysisStatus.values.where(
+      (s) => s != SoundAnalysisStatus.pending,
+    )) {
+      testWidgets('${status.name} : texte, jamais de bouton', (tester) async {
+        await pumpWith(tester, status);
+        expect(find.byKey(const ValueKey('auto-tag-status')), findsOneWidget);
+        expect(find.byKey(const ValueKey('auto-tag-start')), findsNothing);
+      });
+    }
+
+    testWidgets('la fin d’un passage rafraîchit l’état', (tester) async {
+      final analysis = await pumpWith(tester, SoundAnalysisStatus.pending);
+
+      analysis.status = SoundAnalysisStatus.analyzed;
+      analysis.activity.value = const AutoTagActivity(running: true);
+      analysis.activity.value = AutoTagActivity.idle;
+      await load(tester);
+
+      expect(find.textContaining('analysé.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('auto-tag-start')), findsNothing);
     });
   });
 }

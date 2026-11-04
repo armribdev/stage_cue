@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../../../../core/audio/waveform_extractor.dart';
+import '../../../../core/autotag/auto_tag_analysis.dart';
+import '../../../../core/autotag/auto_tag_status.dart';
 import '../../../../core/logging/app_log.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/app_snackbar.dart';
@@ -15,6 +17,7 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
 import 'auto_tag_chips.dart';
+import 'auto_tag_status_row.dart';
 import 'sound_type_picker.dart';
 import 'start_offset_editor.dart';
 import 'tag_chips_editor.dart';
@@ -60,12 +63,17 @@ class SoundEditForm extends StatefulWidget {
   /// de la file de traitement).
   final bool autoPlayEntryPoint;
 
+  /// État et déclenchement de l'analyse IA des tags ; `null` = fonction absente
+  /// (mobile) : la zone d'état n'est pas affichée.
+  final AutoTagAnalysis? autoTag;
+
   const SoundEditForm({
     super.key,
     required this.sound,
     required this.tagCatalog,
     required this.repository,
     this.notifier,
+    this.autoTag,
     this.onSaved,
     this.onDirtyChanged,
     this.onMarkedUnprocessed,
@@ -128,6 +136,15 @@ class _SoundEditFormState extends State<SoundEditForm> {
   /// l’ajoute à [_tagIds], donc à la baseline `dirty` comme tout autre tag.
   List<SoundAutoTag> _autoTags = const [];
 
+  /// Où en est l'analyse IA de ce son (`null` = inconnu ou fonction absente).
+  SoundAnalysisStatus? _analysisStatus;
+
+  /// L'utilisateur a cliqué « Analyser » et le passage n'est pas fini : le son
+  /// s'affiche « en attente » même si le passage n'a pas encore bâti sa file.
+  bool _analysisRequested = false;
+  SoundAnalysisStatus? _lastLiveStatus;
+  bool _lastRunning = false;
+
   bool _tagsLoaded = false;
   bool _tagsFailed = false;
   bool _isSaving = false;
@@ -164,10 +181,79 @@ class _SoundEditFormState extends State<SoundEditForm> {
     _type = _baseType = sound.type;
     _waveform = sound.waveform;
     _loadTags();
+    final autoTag = widget.autoTag;
+    if (autoTag != null) {
+      final activity = autoTag.activity.value;
+      _lastRunning = activity.running;
+      _lastLiveStatus = activity.liveStatusOf(sound.id);
+      autoTag.activity.addListener(_onAnalysisActivity);
+      unawaited(_refreshAnalysis());
+    }
+  }
+
+  /// Le passage d'analyse a bougé : on ne relit l'état que si cela concerne ce
+  /// son (son tour, sa file) ou si le passage vient de se terminer — il vient
+  /// alors d'écrire ses empreintes et ses suggestions.
+  void _onAnalysisActivity() {
+    final activity = widget.autoTag?.activity.value;
+    if (activity == null) return;
+    final live = activity.liveStatusOf(widget.sound.id);
+    final changed = live != _lastLiveStatus || activity.running != _lastRunning;
+    final finished = _lastRunning && !activity.running;
+    _lastLiveStatus = live;
+    _lastRunning = activity.running;
+    if (changed) unawaited(_refreshAnalysis(reloadSuggestions: finished));
+  }
+
+  Future<void> _refreshAnalysis({bool reloadSuggestions = false}) async {
+    final autoTag = widget.autoTag;
+    if (autoTag == null) return;
+    try {
+      final status = await autoTag.statusOf(widget.sound.id);
+      final suggestions = reloadSuggestions
+          ? await widget.repository.getAutoTagsForSound(widget.sound.id)
+          : null;
+      if (!mounted) return;
+      final finishedRequest =
+          _analysisRequested && !autoTag.activity.value.running;
+      setState(() {
+        _analysisStatus = status;
+        if (suggestions != null) _autoTags = suggestions;
+        if (finishedRequest) _analysisRequested = false;
+      });
+      // Le passage est fini et le son n'a pas été pris : ne pas laisser le clic
+      // sans réponse.
+      if (finishedRequest && status == SoundAnalysisStatus.pending) {
+        showCopyableSnackBar(
+          context,
+          'Analyse non faite pour ce son : son fichier n’est sans doute pas '
+          'encore téléchargé sur cet appareil, ou l’analyse a été interrompue.',
+        );
+      }
+    } catch (error) {
+      AppLog.warn(
+        'État de l’analyse IA illisible (son ${widget.sound.id}) : $error',
+      );
+    }
+  }
+
+  void _startAnalysis() {
+    final autoTag = widget.autoTag;
+    if (autoTag == null || _analysisRequested) return;
+    final refusal = autoTag.start(widget.sound.id);
+    if (refusal != null) {
+      showCopyableSnackBar(
+        context,
+        'Analyse impossible pour l’instant : $refusal.',
+      );
+      return;
+    }
+    setState(() => _analysisRequested = true);
   }
 
   @override
   void dispose() {
+    widget.autoTag?.activity.removeListener(_onAnalysisActivity);
     // Le nouvel état (autre son) s'attache avant que celui-ci soit démonté :
     // ne détacher que si la poignée pointe encore sur nous.
     final controller = widget.controller;
@@ -288,6 +374,8 @@ class _SoundEditFormState extends State<SoundEditForm> {
         _wasDirty = false;
         widget.onDirtyChanged?.call(false);
       }
+      // Type ou « traité » ont pu changer : l'éligibilité à l'analyse aussi.
+      unawaited(_refreshAnalysis());
       widget.onSaved?.call();
     } catch (error) {
       if (!mounted) return;
@@ -311,6 +399,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
         _isProcessed = false;
         _isSaving = false;
       });
+      unawaited(_refreshAnalysis());
       widget.onMarkedUnprocessed?.call();
     } catch (error) {
       if (!mounted) return;
@@ -735,21 +824,35 @@ class _SoundEditFormState extends State<SoundEditForm> {
       onTagAdded: (id) => _update(() => _tagIds.add(id)),
       onTagRemoved: (id) => _update(() => _tagIds.remove(id)),
     );
-    if (_autoTags.isEmpty) return editor;
+    final status = _analysisStatus;
+    final showStatus = widget.autoTag != null && status != null;
+    if (_autoTags.isEmpty && !showStatus) return editor;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         editor,
-        const SizedBox(height: 14),
-        AutoTagChips(
-          suggestions: _autoTags,
-          colors: _categoryColorsByTagId(),
-          acceptedTagIds: _tagIds,
-          // Accepter = ajouter aux tags du son, enregistré avec le formulaire.
-          onToggle: (s) => _update(() {
-            if (!_tagIds.remove(s.tag.id)) _tagIds.add(s.tag.id);
-          }),
-        ),
+        if (_autoTags.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          AutoTagChips(
+            suggestions: _autoTags,
+            colors: _categoryColorsByTagId(),
+            acceptedTagIds: _tagIds,
+            // Accepter = ajouter aux tags du son, enregistré avec le formulaire.
+            onToggle: (s) => _update(() {
+              if (!_tagIds.remove(s.tag.id)) _tagIds.add(s.tag.id);
+            }),
+          ),
+        ],
+        if (showStatus) ...[
+          const SizedBox(height: 10),
+          AutoTagStatusRow(
+            // Demandée, pas encore dans la file du passage : déjà « en attente ».
+            status: _analysisRequested && status == SoundAnalysisStatus.pending
+                ? SoundAnalysisStatus.queued
+                : status,
+            onStart: _startAnalysis,
+          ),
+        ],
       ],
     );
   }
