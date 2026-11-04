@@ -60,3 +60,27 @@ String? _builtPluginDir() {
   }
   return null;
 }
+
+/// Chemin de la bibliothèque ONNX Runtime construite avec l'application, ou
+/// `null` (tests sautés : voir [soloudNativeSkipReason] pour le principe).
+String? onnxRuntimeLibraryPath() {
+  final names = Platform.isWindows
+      ? ['onnxruntime.dll']
+      : ['libonnxruntime.so'];
+  final dirs = Platform.isWindows
+      ? [
+          for (final m in ['Debug', 'Release', 'Profile'])
+            'build/windows/x64/runner/$m',
+        ]
+      : [
+          for (final m in ['debug', 'release', 'profile'])
+            'build/linux/x64/$m/bundle/lib',
+        ];
+  for (final d in dirs) {
+    for (final n in names) {
+      final f = File('$d/$n');
+      if (f.existsSync()) return f.absolute.path;
+    }
+  }
+  return null;
+}

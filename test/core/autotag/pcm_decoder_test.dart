@@ -8,7 +8,7 @@ import 'package:stage_cue/core/autotag/audio_stream_info.dart';
 import 'package:stage_cue/core/autotag/pcm_decoder.dart';
 
 import 'audio_stream_info_test.dart' show wavBytes;
-import 'native_soloud.dart';
+import 'native_libs.dart';
 
 const _fixtures = 'test/fixtures/autotag';
 
