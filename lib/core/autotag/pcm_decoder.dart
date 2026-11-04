@@ -63,8 +63,8 @@ bool isUsableClip(Float32List clip, int sampleRate) {
 /// une erreur inattendue.
 ///
 /// Le décodage natif est sérialisé sur la file unique de SoLoud
-/// ([enqueueSoLoudFileTask], ADR 0001) et le travail lourd (lecture,
-/// rééchantillonnage) s'exécute dans un isolate.
+/// ([enqueueSoLoudFileTask], ADR 0001), un clip à la fois, et le travail lourd
+/// (lecture, rééchantillonnage) s'exécute dans des isolates.
 Future<List<Float32List>> decodeAnalysisClips(
   File file, {
   int clipSeconds = kClipSeconds,
@@ -74,51 +74,29 @@ Future<List<Float32List>> decodeAnalysisClips(
     info.durationSeconds,
     clipSeconds: clipSeconds,
   );
-  final request = _DecodeRequest(
-    path: file.path,
-    sampleRate: info.sampleRate,
-    starts: starts,
-    clipSeconds: clipSeconds,
-  );
-  final clips = await enqueueSoLoudFileTask(
-    () => Isolate.run(() => _decodeAndResample(request)),
-  );
-  final usable = [
-    for (final c in clips)
-      if (isUsableClip(c, kAnalysisSampleRate)) c,
-  ];
-  if (usable.isEmpty) throw const AudioNotAnalyzable('clips silencieux');
-  return usable;
-}
-
-class _DecodeRequest {
-  final String path;
-  final int sampleRate;
-  final List<int> starts;
-  final int clipSeconds;
-  const _DecodeRequest({
-    required this.path,
-    required this.sampleRate,
-    required this.starts,
-    required this.clipSeconds,
-  });
-}
-
-List<Float32List> _decodeAndResample(_DecodeRequest r) {
-  final frames = r.sampleRate * r.clipSeconds;
-  return [
-    for (final start in r.starts)
-      resamplePcm(
-        readLeftChannelWindow(
-          r.path,
+  final frames = info.sampleRate * clipSeconds;
+  final clips = <Float32List>[];
+  for (final start in starts) {
+    // La file de décodage natif n'est tenue que le temps de la lecture d'un
+    // clip (≈ 100 ms) : un chargement de pad qui s'y glisse n'attend jamais
+    // plus. Le rééchantillonnage, lui, tourne hors file.
+    final raw = await enqueueSoLoudFileTask(
+      () => Isolate.run(
+        () => readLeftChannelWindow(
+          file.path,
           startSeconds: start,
           frames: frames,
-          endSeconds: start + r.clipSeconds + _windowMarginSeconds,
+          endSeconds: start + clipSeconds + _windowMarginSeconds,
         ),
-        r.sampleRate,
-        kAnalysisSampleRate,
       ),
-  ];
+    );
+    final clip = await Isolate.run(
+      () => resamplePcm(raw, info.sampleRate, kAnalysisSampleRate),
+    );
+    if (isUsableClip(clip, kAnalysisSampleRate)) clips.add(clip);
+  }
+  if (clips.isEmpty) throw const AudioNotAnalyzable('clips silencieux');
+  return clips;
 }
 
 // ── Lecture native ──────────────────────────────────────────────────────────
