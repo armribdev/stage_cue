@@ -6038,6 +6038,326 @@ class SoundTagsCompanion extends UpdateCompanion<SoundTag> {
   }
 }
 
+class $SoundAutoTagsTable extends SoundAutoTags
+    with TableInfo<$SoundAutoTagsTable, SoundAutoTag> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SoundAutoTagsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _soundIdMeta = const VerificationMeta(
+    'soundId',
+  );
+  @override
+  late final GeneratedColumn<int> soundId = GeneratedColumn<int>(
+    'sound_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES sounds (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _tagIdMeta = const VerificationMeta('tagId');
+  @override
+  late final GeneratedColumn<int> tagId = GeneratedColumn<int>(
+    'tag_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES tags (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _hiddenMeta = const VerificationMeta('hidden');
+  @override
+  late final GeneratedColumn<bool> hidden = GeneratedColumn<bool>(
+    'hidden',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("hidden" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [soundId, tagId, hidden, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sound_auto_tags';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SoundAutoTag> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('sound_id')) {
+      context.handle(
+        _soundIdMeta,
+        soundId.isAcceptableOrUnknown(data['sound_id']!, _soundIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_soundIdMeta);
+    }
+    if (data.containsKey('tag_id')) {
+      context.handle(
+        _tagIdMeta,
+        tagId.isAcceptableOrUnknown(data['tag_id']!, _tagIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tagIdMeta);
+    }
+    if (data.containsKey('hidden')) {
+      context.handle(
+        _hiddenMeta,
+        hidden.isAcceptableOrUnknown(data['hidden']!, _hiddenMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {soundId, tagId};
+  @override
+  SoundAutoTag map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SoundAutoTag(
+      soundId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sound_id'],
+      )!,
+      tagId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tag_id'],
+      )!,
+      hidden: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}hidden'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SoundAutoTagsTable createAlias(String alias) {
+    return $SoundAutoTagsTable(attachedDatabase, alias);
+  }
+}
+
+class SoundAutoTag extends DataClass implements Insertable<SoundAutoTag> {
+  final int soundId;
+  final int tagId;
+
+  /// Masqué par l'utilisateur : ni affiché, ni cherché, mais conservé.
+  final bool hidden;
+
+  /// Dernière modification (pose ou masquage) — arbitre la fusion de synchro.
+  final DateTime updatedAt;
+  const SoundAutoTag({
+    required this.soundId,
+    required this.tagId,
+    required this.hidden,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['sound_id'] = Variable<int>(soundId);
+    map['tag_id'] = Variable<int>(tagId);
+    map['hidden'] = Variable<bool>(hidden);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  SoundAutoTagsCompanion toCompanion(bool nullToAbsent) {
+    return SoundAutoTagsCompanion(
+      soundId: Value(soundId),
+      tagId: Value(tagId),
+      hidden: Value(hidden),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory SoundAutoTag.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SoundAutoTag(
+      soundId: serializer.fromJson<int>(json['soundId']),
+      tagId: serializer.fromJson<int>(json['tagId']),
+      hidden: serializer.fromJson<bool>(json['hidden']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'soundId': serializer.toJson<int>(soundId),
+      'tagId': serializer.toJson<int>(tagId),
+      'hidden': serializer.toJson<bool>(hidden),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  SoundAutoTag copyWith({
+    int? soundId,
+    int? tagId,
+    bool? hidden,
+    DateTime? updatedAt,
+  }) => SoundAutoTag(
+    soundId: soundId ?? this.soundId,
+    tagId: tagId ?? this.tagId,
+    hidden: hidden ?? this.hidden,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  SoundAutoTag copyWithCompanion(SoundAutoTagsCompanion data) {
+    return SoundAutoTag(
+      soundId: data.soundId.present ? data.soundId.value : this.soundId,
+      tagId: data.tagId.present ? data.tagId.value : this.tagId,
+      hidden: data.hidden.present ? data.hidden.value : this.hidden,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SoundAutoTag(')
+          ..write('soundId: $soundId, ')
+          ..write('tagId: $tagId, ')
+          ..write('hidden: $hidden, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(soundId, tagId, hidden, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SoundAutoTag &&
+          other.soundId == this.soundId &&
+          other.tagId == this.tagId &&
+          other.hidden == this.hidden &&
+          other.updatedAt == this.updatedAt);
+}
+
+class SoundAutoTagsCompanion extends UpdateCompanion<SoundAutoTag> {
+  final Value<int> soundId;
+  final Value<int> tagId;
+  final Value<bool> hidden;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const SoundAutoTagsCompanion({
+    this.soundId = const Value.absent(),
+    this.tagId = const Value.absent(),
+    this.hidden = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SoundAutoTagsCompanion.insert({
+    required int soundId,
+    required int tagId,
+    this.hidden = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : soundId = Value(soundId),
+       tagId = Value(tagId);
+  static Insertable<SoundAutoTag> custom({
+    Expression<int>? soundId,
+    Expression<int>? tagId,
+    Expression<bool>? hidden,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (soundId != null) 'sound_id': soundId,
+      if (tagId != null) 'tag_id': tagId,
+      if (hidden != null) 'hidden': hidden,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SoundAutoTagsCompanion copyWith({
+    Value<int>? soundId,
+    Value<int>? tagId,
+    Value<bool>? hidden,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return SoundAutoTagsCompanion(
+      soundId: soundId ?? this.soundId,
+      tagId: tagId ?? this.tagId,
+      hidden: hidden ?? this.hidden,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (soundId.present) {
+      map['sound_id'] = Variable<int>(soundId.value);
+    }
+    if (tagId.present) {
+      map['tag_id'] = Variable<int>(tagId.value);
+    }
+    if (hidden.present) {
+      map['hidden'] = Variable<bool>(hidden.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SoundAutoTagsCompanion(')
+          ..write('soundId: $soundId, ')
+          ..write('tagId: $tagId, ')
+          ..write('hidden: $hidden, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $TagAliasesTable extends TagAliases
     with TableInfo<$TagAliasesTable, TagAliase> {
   @override
@@ -6362,6 +6682,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TagCategoriesTable tagCategories = $TagCategoriesTable(this);
   late final $TagItemsTable tagItems = $TagItemsTable(this);
   late final $SoundTagsTable soundTags = $SoundTagsTable(this);
+  late final $SoundAutoTagsTable soundAutoTags = $SoundAutoTagsTable(this);
   late final $TagAliasesTable tagAliases = $TagAliasesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -6380,6 +6701,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     tagCategories,
     tagItems,
     soundTags,
+    soundAutoTags,
     tagAliases,
   ];
   @override
@@ -6481,6 +6803,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('sound_tags', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'sounds',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('sound_auto_tags', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'tags',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('sound_auto_tags', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -8383,6 +8719,24 @@ final class $$SoundsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$SoundAutoTagsTable, List<SoundAutoTag>>
+  _soundAutoTagsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.soundAutoTags,
+    aliasName: $_aliasNameGenerator(db.sounds.id, db.soundAutoTags.soundId),
+  );
+
+  $$SoundAutoTagsTableProcessedTableManager get soundAutoTagsRefs {
+    final manager = $$SoundAutoTagsTableTableManager(
+      $_db,
+      $_db.soundAutoTags,
+    ).filter((f) => f.soundId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_soundAutoTagsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$SoundsTableFilterComposer
@@ -8607,6 +8961,31 @@ class $$SoundsTableFilterComposer
           }) => $$SoundTagsTableFilterComposer(
             $db: $db,
             $table: $db.soundTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> soundAutoTagsRefs(
+    Expression<bool> Function($$SoundAutoTagsTableFilterComposer f) f,
+  ) {
+    final $$SoundAutoTagsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.soundAutoTags,
+      getReferencedColumn: (t) => t.soundId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundAutoTagsTableFilterComposer(
+            $db: $db,
+            $table: $db.soundAutoTags,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -8984,6 +9363,31 @@ class $$SoundsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> soundAutoTagsRefs<T extends Object>(
+    Expression<T> Function($$SoundAutoTagsTableAnnotationComposer a) f,
+  ) {
+    final $$SoundAutoTagsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.soundAutoTags,
+      getReferencedColumn: (t) => t.soundId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundAutoTagsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.soundAutoTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$SoundsTableTableManager
@@ -9005,6 +9409,7 @@ class $$SoundsTableTableManager
             bool boardSoundsRefs,
             bool padSoundsRefs,
             bool soundTagsRefs,
+            bool soundAutoTagsRefs,
           })
         > {
   $$SoundsTableTableManager(_$AppDatabase db, $SoundsTable table)
@@ -9127,6 +9532,7 @@ class $$SoundsTableTableManager
                 boardSoundsRefs = false,
                 padSoundsRefs = false,
                 soundTagsRefs = false,
+                soundAutoTagsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -9134,6 +9540,7 @@ class $$SoundsTableTableManager
                     if (boardSoundsRefs) db.boardSounds,
                     if (padSoundsRefs) db.padSounds,
                     if (soundTagsRefs) db.soundTags,
+                    if (soundAutoTagsRefs) db.soundAutoTags,
                   ],
                   addJoins:
                       <
@@ -9245,6 +9652,27 @@ class $$SoundsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (soundAutoTagsRefs)
+                        await $_getPrefetchedData<
+                          Sound,
+                          $SoundsTable,
+                          SoundAutoTag
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SoundsTableReferences
+                              ._soundAutoTagsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SoundsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).soundAutoTagsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.soundId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -9271,6 +9699,7 @@ typedef $$SoundsTableProcessedTableManager =
         bool boardSoundsRefs,
         bool padSoundsRefs,
         bool soundTagsRefs,
+        bool soundAutoTagsRefs,
       })
     >;
 typedef $$SoundBoardsTableCreateCompanionBuilder =
@@ -11655,6 +12084,24 @@ final class $$TagItemsTableReferences
     );
   }
 
+  static MultiTypedResultKey<$SoundAutoTagsTable, List<SoundAutoTag>>
+  _soundAutoTagsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.soundAutoTags,
+    aliasName: $_aliasNameGenerator(db.tagItems.id, db.soundAutoTags.tagId),
+  );
+
+  $$SoundAutoTagsTableProcessedTableManager get soundAutoTagsRefs {
+    final manager = $$SoundAutoTagsTableTableManager(
+      $_db,
+      $_db.soundAutoTags,
+    ).filter((f) => f.tagId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_soundAutoTagsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$TagAliasesTable, List<TagAliase>>
   _tagAliasesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.tagAliases,
@@ -11742,6 +12189,31 @@ class $$TagItemsTableFilterComposer
           }) => $$SoundTagsTableFilterComposer(
             $db: $db,
             $table: $db.soundTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> soundAutoTagsRefs(
+    Expression<bool> Function($$SoundAutoTagsTableFilterComposer f) f,
+  ) {
+    final $$SoundAutoTagsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.soundAutoTags,
+      getReferencedColumn: (t) => t.tagId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundAutoTagsTableFilterComposer(
+            $db: $db,
+            $table: $db.soundAutoTags,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -11903,6 +12375,31 @@ class $$TagItemsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> soundAutoTagsRefs<T extends Object>(
+    Expression<T> Function($$SoundAutoTagsTableAnnotationComposer a) f,
+  ) {
+    final $$SoundAutoTagsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.soundAutoTags,
+      getReferencedColumn: (t) => t.tagId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundAutoTagsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.soundAutoTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> tagAliasesRefs<T extends Object>(
     Expression<T> Function($$TagAliasesTableAnnotationComposer a) f,
   ) {
@@ -11945,6 +12442,7 @@ class $$TagItemsTableTableManager
           PrefetchHooks Function({
             bool categoryId,
             bool soundTagsRefs,
+            bool soundAutoTagsRefs,
             bool tagAliasesRefs,
           })
         > {
@@ -11999,12 +12497,14 @@ class $$TagItemsTableTableManager
               ({
                 categoryId = false,
                 soundTagsRefs = false,
+                soundAutoTagsRefs = false,
                 tagAliasesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (soundTagsRefs) db.soundTags,
+                    if (soundAutoTagsRefs) db.soundAutoTags,
                     if (tagAliasesRefs) db.tagAliases,
                   ],
                   addJoins:
@@ -12062,6 +12562,27 @@ class $$TagItemsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (soundAutoTagsRefs)
+                        await $_getPrefetchedData<
+                          TagItem,
+                          $TagItemsTable,
+                          SoundAutoTag
+                        >(
+                          currentTable: table,
+                          referencedTable: $$TagItemsTableReferences
+                              ._soundAutoTagsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$TagItemsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).soundAutoTagsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.tagId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (tagAliasesRefs)
                         await $_getPrefetchedData<
                           TagItem,
@@ -12106,6 +12627,7 @@ typedef $$TagItemsTableProcessedTableManager =
       PrefetchHooks Function({
         bool categoryId,
         bool soundTagsRefs,
+        bool soundAutoTagsRefs,
         bool tagAliasesRefs,
       })
     >;
@@ -12475,6 +12997,397 @@ typedef $$SoundTagsTableProcessedTableManager =
       SoundTag,
       PrefetchHooks Function({bool soundId, bool tagId})
     >;
+typedef $$SoundAutoTagsTableCreateCompanionBuilder =
+    SoundAutoTagsCompanion Function({
+      required int soundId,
+      required int tagId,
+      Value<bool> hidden,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$SoundAutoTagsTableUpdateCompanionBuilder =
+    SoundAutoTagsCompanion Function({
+      Value<int> soundId,
+      Value<int> tagId,
+      Value<bool> hidden,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+final class $$SoundAutoTagsTableReferences
+    extends BaseReferences<_$AppDatabase, $SoundAutoTagsTable, SoundAutoTag> {
+  $$SoundAutoTagsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $SoundsTable _soundIdTable(_$AppDatabase db) => db.sounds.createAlias(
+    $_aliasNameGenerator(db.soundAutoTags.soundId, db.sounds.id),
+  );
+
+  $$SoundsTableProcessedTableManager get soundId {
+    final $_column = $_itemColumn<int>('sound_id')!;
+
+    final manager = $$SoundsTableTableManager(
+      $_db,
+      $_db.sounds,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_soundIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $TagItemsTable _tagIdTable(_$AppDatabase db) =>
+      db.tagItems.createAlias(
+        $_aliasNameGenerator(db.soundAutoTags.tagId, db.tagItems.id),
+      );
+
+  $$TagItemsTableProcessedTableManager get tagId {
+    final $_column = $_itemColumn<int>('tag_id')!;
+
+    final manager = $$TagItemsTableTableManager(
+      $_db,
+      $_db.tagItems,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tagIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SoundAutoTagsTableFilterComposer
+    extends Composer<_$AppDatabase, $SoundAutoTagsTable> {
+  $$SoundAutoTagsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<bool> get hidden => $composableBuilder(
+    column: $table.hidden,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$SoundsTableFilterComposer get soundId {
+    final $$SoundsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.soundId,
+      referencedTable: $db.sounds,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundsTableFilterComposer(
+            $db: $db,
+            $table: $db.sounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagItemsTableFilterComposer get tagId {
+    final $$TagItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.tagItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SoundAutoTagsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SoundAutoTagsTable> {
+  $$SoundAutoTagsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<bool> get hidden => $composableBuilder(
+    column: $table.hidden,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$SoundsTableOrderingComposer get soundId {
+    final $$SoundsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.soundId,
+      referencedTable: $db.sounds,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundsTableOrderingComposer(
+            $db: $db,
+            $table: $db.sounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagItemsTableOrderingComposer get tagId {
+    final $$TagItemsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagItemsTableOrderingComposer(
+            $db: $db,
+            $table: $db.tagItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SoundAutoTagsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SoundAutoTagsTable> {
+  $$SoundAutoTagsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<bool> get hidden =>
+      $composableBuilder(column: $table.hidden, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$SoundsTableAnnotationComposer get soundId {
+    final $$SoundsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.soundId,
+      referencedTable: $db.sounds,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.sounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagItemsTableAnnotationComposer get tagId {
+    final $$TagItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.tagItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SoundAutoTagsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SoundAutoTagsTable,
+          SoundAutoTag,
+          $$SoundAutoTagsTableFilterComposer,
+          $$SoundAutoTagsTableOrderingComposer,
+          $$SoundAutoTagsTableAnnotationComposer,
+          $$SoundAutoTagsTableCreateCompanionBuilder,
+          $$SoundAutoTagsTableUpdateCompanionBuilder,
+          (SoundAutoTag, $$SoundAutoTagsTableReferences),
+          SoundAutoTag,
+          PrefetchHooks Function({bool soundId, bool tagId})
+        > {
+  $$SoundAutoTagsTableTableManager(_$AppDatabase db, $SoundAutoTagsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SoundAutoTagsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SoundAutoTagsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SoundAutoTagsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> soundId = const Value.absent(),
+                Value<int> tagId = const Value.absent(),
+                Value<bool> hidden = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SoundAutoTagsCompanion(
+                soundId: soundId,
+                tagId: tagId,
+                hidden: hidden,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int soundId,
+                required int tagId,
+                Value<bool> hidden = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SoundAutoTagsCompanion.insert(
+                soundId: soundId,
+                tagId: tagId,
+                hidden: hidden,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SoundAutoTagsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({soundId = false, tagId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (soundId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.soundId,
+                                referencedTable: $$SoundAutoTagsTableReferences
+                                    ._soundIdTable(db),
+                                referencedColumn: $$SoundAutoTagsTableReferences
+                                    ._soundIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+                    if (tagId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.tagId,
+                                referencedTable: $$SoundAutoTagsTableReferences
+                                    ._tagIdTable(db),
+                                referencedColumn: $$SoundAutoTagsTableReferences
+                                    ._tagIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SoundAutoTagsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SoundAutoTagsTable,
+      SoundAutoTag,
+      $$SoundAutoTagsTableFilterComposer,
+      $$SoundAutoTagsTableOrderingComposer,
+      $$SoundAutoTagsTableAnnotationComposer,
+      $$SoundAutoTagsTableCreateCompanionBuilder,
+      $$SoundAutoTagsTableUpdateCompanionBuilder,
+      (SoundAutoTag, $$SoundAutoTagsTableReferences),
+      SoundAutoTag,
+      PrefetchHooks Function({bool soundId, bool tagId})
+    >;
 typedef $$TagAliasesTableCreateCompanionBuilder =
     TagAliasesCompanion Function({
       Value<int> id,
@@ -12796,6 +13709,8 @@ class $AppDatabaseManager {
       $$TagItemsTableTableManager(_db, _db.tagItems);
   $$SoundTagsTableTableManager get soundTags =>
       $$SoundTagsTableTableManager(_db, _db.soundTags);
+  $$SoundAutoTagsTableTableManager get soundAutoTags =>
+      $$SoundAutoTagsTableTableManager(_db, _db.soundAutoTags);
   $$TagAliasesTableTableManager get tagAliases =>
       $$TagAliasesTableTableManager(_db, _db.tagAliases);
 }
