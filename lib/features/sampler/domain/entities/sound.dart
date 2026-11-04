@@ -50,11 +50,6 @@ class Sound {
   /// Enregistré au moins une fois depuis la bibliothèque (son « traité »).
   final bool isProcessed;
 
-  /// Date de la dernière analyse automatique des tags (décision 0029) ; `null`
-  /// = jamais analysé. Sur un son non traité qui porte des tags, sa présence
-  /// signale que ces tags ont été posés par le modèle et attendent validation.
-  final DateTime? autoTaggedAt;
-
   Sound({
     required this.id,
     required this.title,
@@ -74,7 +69,6 @@ class Sound {
     this.waveformProbeGeneration,
     this.startOffsetMs = 0,
     this.isProcessed = false,
-    this.autoTaggedAt,
   }) : displayName = displayName ?? title;
 
   /// Dossier source du son : le dossier de PREMIER niveau de sa bibliothèque
@@ -122,7 +116,6 @@ class Sound {
       waveformProbeGeneration: waveformProbeGeneration,
       startOffsetMs: startOffsetMs ?? this.startOffsetMs,
       isProcessed: isProcessed ?? this.isProcessed,
-      autoTaggedAt: autoTaggedAt,
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/utils/string_utils.dart';
+import '../../domain/entities/sound_auto_tag.dart' as domain;
 import '../../domain/entities/tag_category.dart' as domain;
 import '../../domain/entities/tag_item.dart' as domain;
 import '../../domain/entities/tag_category_with_tags.dart' as domain;
@@ -50,6 +51,61 @@ class LocalTagDataSource {
         .toList();
   }
 
+  /// Tags **visibles** d'un son : ceux de l'utilisateur plus ceux de l'IA non
+  /// masqués (décision 0030), dédoublonnés. Pour l'affichage ; l'édition des
+  /// tags de l'utilisateur passe par [getTagsForSound].
+  Future<List<domain.TagItem>> getVisibleTagsForSound(int soundId) async {
+    final user = await getTagsForSound(soundId);
+    final auto = await getAutoTagsForSound(soundId);
+    final seen = {for (final t in user) t.id};
+    final all = [
+      ...user,
+      for (final a in auto)
+        if (!a.hidden && seen.add(a.tag.id)) a.tag,
+    ]..sort((a, b) => a.name.compareTo(b.name));
+    return all;
+  }
+
+  /// Tags trouvés par l'IA pour un son, masqués compris (décision 0030).
+  Future<List<domain.SoundAutoTag>> getAutoTagsForSound(int soundId) async {
+    final query =
+        _database.select(_database.soundAutoTags).join([
+            innerJoin(
+              _database.tagItems,
+              _database.tagItems.id.equalsExp(_database.soundAutoTags.tagId),
+            ),
+          ])
+          ..where(_database.soundAutoTags.soundId.equals(soundId))
+          ..orderBy([OrderingTerm(expression: _database.tagItems.name)]);
+    final rows = await query.get();
+    return [
+      for (final row in rows)
+        domain.SoundAutoTag(
+          tag: TagItemModel.toEntity(row.readTable(_database.tagItems)),
+          hidden: row.readTable(_database.soundAutoTags).hidden,
+        ),
+    ];
+  }
+
+  /// Masque ou rétablit un tag de l'IA. La ligne n'est jamais supprimée : c'est
+  /// la mémoire qui empêche l'IA de reposer un tag écarté. [when] date le
+  /// changement (arbitre la fusion de synchro).
+  Future<void> setAutoTagHidden(
+    int soundId,
+    int tagId, {
+    required bool hidden,
+    DateTime? when,
+  }) async {
+    await (_database.update(
+      _database.soundAutoTags,
+    )..where((t) => t.soundId.equals(soundId) & t.tagId.equals(tagId))).write(
+      db.SoundAutoTagsCompanion(
+        hidden: Value(hidden),
+        updatedAt: Value(when ?? DateTime.now()),
+      ),
+    );
+  }
+
   /// Tags de TOUS les sons, en une seule requête.
   ///
   /// La recherche affiche les tags de chaque résultat : un aller-retour par son
@@ -70,6 +126,27 @@ class LocalTagDataSource {
       final soundId = row.readTable(_database.soundTags).soundId;
       final tag = TagItemModel.toEntity(row.readTable(_database.tagItems));
       (tagsBySound[soundId] ??= []).add(tag);
+    }
+
+    // Tags de l'IA non masqués (décision 0030), sans doublon avec ceux de
+    // l'utilisateur.
+    final autoRows =
+        await (_database.select(_database.soundAutoTags).join([
+                innerJoin(
+                  _database.tagItems,
+                  _database.tagItems.id.equalsExp(
+                    _database.soundAutoTags.tagId,
+                  ),
+                ),
+              ])
+              ..where(_database.soundAutoTags.hidden.equals(false))
+              ..orderBy([OrderingTerm(expression: _database.tagItems.name)]))
+            .get();
+    for (final row in autoRows) {
+      final soundId = row.readTable(_database.soundAutoTags).soundId;
+      final tag = TagItemModel.toEntity(row.readTable(_database.tagItems));
+      final list = tagsBySound[soundId] ??= [];
+      if (!list.any((t) => t.id == tag.id)) list.add(tag);
     }
     return tagsBySound;
   }
@@ -114,8 +191,14 @@ class LocalTagDataSource {
     final placeholders = List.filled(tagIds.length, '?').join(',');
     final soundRows = await _database
         .customSelect(
-          'SELECT DISTINCT sound_id FROM sound_tags WHERE tag_id IN ($placeholders)',
-          variables: [for (final id in tagIds) Variable<int>(id)],
+          'SELECT sound_id FROM sound_tags WHERE tag_id IN ($placeholders) '
+          'UNION '
+          'SELECT sound_id FROM sound_auto_tags '
+          'WHERE hidden = 0 AND tag_id IN ($placeholders)',
+          variables: [
+            for (final id in tagIds) Variable<int>(id),
+            for (final id in tagIds) Variable<int>(id),
+          ],
         )
         .get();
 

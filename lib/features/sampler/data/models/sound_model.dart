@@ -26,7 +26,6 @@ class SoundModel {
       waveformProbeGeneration: sound.waveformProbeGeneration,
       startOffsetMs: sound.startOffsetMs,
       isProcessed: sound.isProcessed,
-      autoTaggedAt: sound.autoTaggedAt,
     );
   }
 

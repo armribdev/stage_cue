@@ -45,11 +45,12 @@ class AutoTagReport {
   });
 }
 
-/// Analyse automatique des tags (décision 0029) : calcule l'empreinte audio des
-/// musiques éligibles puis pose leurs ambiances.
+/// Analyse automatique des tags (décisions 0029 et 0030) : calcule l'empreinte
+/// audio des musiques éligibles puis enregistre leurs ambiances comme tags de
+/// l'IA — une couche à part, masquable, que l'utilisateur ne détruit jamais.
 ///
-/// Éligible : type musique, non traité, sans tag, jamais analysé, fichier déjà
-/// sur l'appareil. Deux temps, car la décision exige des statistiques sur la
+/// Éligible : type musique, non traité (le passer en « traité » fige ses tags),
+/// jamais analysé, fichier déjà sur l'appareil. Deux temps, car la décision exige des statistiques sur la
 /// bibliothèque :
 /// 1. **analyse** : empreinte de chaque son, conservée en base ;
 /// 2. **décision** : recentrage par ambiance sur tous les sons analysés, puis
@@ -264,7 +265,7 @@ class AutoTagService {
     if (result.soundsNoLongerEligible > 0) {
       AppLog.info(
         'Analyse auto : ${result.soundsNoLongerEligible} son(s) traité(s) ou '
-        'tagué(s) entre-temps, laissé(s) intact(s).',
+        'retypé(s) entre-temps, laissé(s) intact(s).',
       );
     }
     return result;
