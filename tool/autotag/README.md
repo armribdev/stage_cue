@@ -34,3 +34,20 @@ désigne un dossier contenant `muq_audio_int8.onnx`, `ref_pcm.f32`,
 tests qui appellent les bibliothèques natives (SoLoud, ONNX Runtime) ne tournent que
 si l'application a été construite (`flutter build windows --debug`) ; sinon ils sont
 sautés avec la raison — c'est le cas en CI.
+
+## Publier le pack
+
+L'application télécharge `muq_audio_int8.onnx` depuis la release `autotag-pack-1`
+(`AutoTagPackRelease.current`, `lib/core/autotag/auto_tag_pack_installer.dart`), avec
+l'adresse, la taille et le SHA-256 écrits dans le binaire. Pour (re)publier :
+
+```sh
+sha256sum muq_audio_int8.onnx          # doit égaler AutoTagPackRelease.sha256
+gh release create autotag-pack-1 muq_audio_int8.onnx \
+  --title "Pack d'analyse automatique (MuQ-MuLan int8)" \
+  --notes "Modèle MuQ-MuLan (OpenMuQ), CC BY-NC 4.0, quantifié int8 (MatMul). Usage non commercial."
+```
+
+Un nouveau modèle = un nouveau tag de release (`autotag-pack-2`), et la constante de
+l'app mise à jour avec sa taille et son empreinte. Ne pas remplacer l'asset d'une
+release déjà référencée par une version distribuée.
