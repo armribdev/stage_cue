@@ -3,88 +3,77 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../domain/entities/sound_auto_tag.dart';
 
-/// Suggestions de tags de l'IA pour un son (décision 0031), **toujours
-/// affichées** avec leur confiance en pourcentage, de la plus à la moins sûre.
+/// Suggestions de tags de l'IA pour un son (décision 0031), avec leur confiance
+/// en pourcentage, de la plus à la moins sûre.
 ///
 /// Une suggestion n'est pas un tag : toucher une pastille l'**ajoute** aux tags
-/// du son (elle apparaît alors cochée), la retoucher la retire. Rien n'est écrit
-/// ici — l'ajout suit l'enregistrement du formulaire, comme n'importe quel tag.
+/// du son, et elle disparaît d'ici (elle est alors dans l'éditeur de tags ; la
+/// retirer de là la fait revenir). Les suggestions déjà dans les tags du son
+/// sont masquées. Rien n'est écrit ici — l'ajout suit l'enregistrement du
+/// formulaire, comme n'importe quel tag.
 class AutoTagChips extends StatelessWidget {
   final List<SoundAutoTag> suggestions;
 
   /// Couleur de catégorie de chaque tag (id du tag), absente = neutre.
   final Map<int, Color> colors;
 
-  /// Ids des tags déjà dans ceux du son.
+  /// Ids des tags déjà dans ceux du son : leurs suggestions sont masquées.
   final Set<int> acceptedTagIds;
 
-  /// Bascule l'acceptation de la suggestion touchée.
-  final ValueChanged<SoundAutoTag> onToggle;
+  /// Ajoute la suggestion touchée aux tags du son.
+  final ValueChanged<SoundAutoTag> onAdd;
 
   const AutoTagChips({
     super.key,
     required this.suggestions,
     required this.colors,
     required this.acceptedTagIds,
-    required this.onToggle,
+    required this.onAdd,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (suggestions.isEmpty) return const SizedBox.shrink();
+    final pending = [
+      for (final s in suggestions)
+        if (!acceptedTagIds.contains(s.tag.id)) s,
+    ];
+    if (pending.isEmpty) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final muted = textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        Row(
-          children: [
-            Icon(Icons.auto_awesome_outlined, size: 14, color: scheme.primary),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'Suggestions de l’IA d’après le son — touchez pour ajouter. '
-                'Le pourcentage est sa confiance relative, pas une certitude.',
-                style: muted,
-              ),
+        for (final s in pending)
+          ActionChip(
+            key: ValueKey('auto-tag-${s.tag.id}'),
+            avatar: Icon(
+              Icons.auto_awesome_outlined,
+              size: 14,
+              color: scheme.primary,
             ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final s in suggestions)
-              FilterChip(
-                key: ValueKey('auto-tag-${s.tag.id}'),
-                showCheckmark: true,
-                selected: acceptedTagIds.contains(s.tag.id),
-                label: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(s.tag.name),
-                    const SizedBox(width: 6),
-                    Text(
-                      percentLabel(s.score),
-                      style: AppFonts.monoStyle(
-                        (textTheme.bodySmall ?? const TextStyle()).copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
+            label: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(s.tag.name),
+                const SizedBox(width: 6),
+                Text(
+                  percentLabel(s.score),
+                  style: AppFonts.monoStyle(
+                    (textTheme.bodySmall ?? const TextStyle()).copyWith(
+                      color: scheme.onSurfaceVariant,
                     ),
-                  ],
+                  ),
                 ),
-                backgroundColor: colors[s.tag.id]?.withAlpha(24),
-                side: colors[s.tag.id] == null
-                    ? null
-                    : BorderSide(color: colors[s.tag.id]!),
-                onSelected: (_) => onToggle(s),
-              ),
-          ],
-        ),
+              ],
+            ),
+            backgroundColor: colors[s.tag.id]?.withAlpha(24),
+            side: colors[s.tag.id] == null
+                ? null
+                : BorderSide(color: colors[s.tag.id]!),
+            onPressed: () => onAdd(s),
+          ),
       ],
     );
   }

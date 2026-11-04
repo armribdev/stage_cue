@@ -268,18 +268,20 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('42 %'), findsOneWidget);
-        expect(find.textContaining('Suggestions de l’IA'), findsOneWidget);
+        expect(find.textContaining('touchez pour ajouter'), findsNothing);
       });
     }
 
     testWidgets('aucune suggestion : aucune zone', (tester) async {
       await pumpForm(tester, processed: false);
       await loadTags(tester);
-      expect(find.textContaining('Suggestions de l’IA'), findsNothing);
+      expect(find.byType(ActionChip), findsNothing);
     });
 
-    testWidgets('toucher une suggestion l’ajoute aux tags, enregistrée avec le '
-        'formulaire ; la suggestion reste en base', (tester) async {
+    testWidgets('toucher une suggestion l’ajoute aux tags et la masque, '
+        'enregistrée avec le formulaire ; la suggestion reste en base', (
+      tester,
+    ) async {
       await autoTag('Sombre');
       final id = await tagId('Sombre');
       await pumpForm(tester, processed: false);
@@ -287,12 +289,7 @@ void main() {
 
       await tester.tap(find.byKey(ValueKey('auto-tag-$id')));
       await tester.pump();
-      expect(
-        tester
-            .widget<FilterChip>(find.byKey(ValueKey('auto-tag-$id')))
-            .selected,
-        isTrue,
-      );
+      expect(find.byKey(ValueKey('auto-tag-$id')), findsNothing);
       expect(await userRows(tester), isEmpty, reason: 'pas encore enregistré');
 
       await tester.tap(button('Valider'));
@@ -376,8 +373,16 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
+    testWidgets('analysé : rien n’est affiché', (tester) async {
+      await pumpWith(tester, SoundAnalysisStatus.analyzed);
+      expect(find.byKey(const ValueKey('auto-tag-status')), findsNothing);
+      expect(find.byKey(const ValueKey('auto-tag-start')), findsNothing);
+      expect(find.textContaining('Analyse IA'), findsNothing);
+    });
+
     for (final status in SoundAnalysisStatus.values.where(
-      (s) => s != SoundAnalysisStatus.pending,
+      (s) =>
+          s != SoundAnalysisStatus.pending && s != SoundAnalysisStatus.analyzed,
     )) {
       testWidgets('${status.name} : texte, jamais de bouton', (tester) async {
         await pumpWith(tester, status);
@@ -394,7 +399,7 @@ void main() {
       analysis.activity.value = AutoTagActivity.idle;
       await load(tester);
 
-      expect(find.textContaining('analysé.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('auto-tag-status')), findsNothing);
       expect(find.byKey(const ValueKey('auto-tag-start')), findsNothing);
     });
   });
