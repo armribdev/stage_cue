@@ -63,15 +63,26 @@ le binaire.
   l'application impose de retirer le pack ou d'obtenir des licences. Attribution
   à afficher dans l'écran de téléchargement du pack. C'est la contrainte durable
   de cette décision.
-- **Décodage via SoLoud, détourné.** `readSamplesFromMem` n'est pas un
-  décodeur PCM : avec `numSamplesNeeded` égal au nombre exact de trames de la
-  fenêtre (pas = 1) et `average: false`, il renvoie le **canal gauche seul**, à
-  la fréquence native, qu'il faut rééchantillonner soi-même vers 24 kHz (sinc
-  fenêtré, hors isolate principal). `average: true` renvoie un RMS, inutilisable.
-  Ce comportement n'est pas un contrat de flutter_soloud : un **test de
-  non-régression** doit échouer s'il change. La fréquence native n'est pas
-  exposée (à lire dans l'en-tête). Tout décodage passe par la file unique
-  ([0001](0001-chargement-audio-soloud.md)).
+- **Décodage via le moteur natif de SoLoud, détourné.** Le décodeur d'échantillons
+  de flutter_soloud n'est pas un décodeur PCM : avec un nombre d'échantillons égal
+  au nombre exact de trames de la fenêtre (pas de 1) et `average: false`, il
+  renvoie le **canal gauche seul**, à la **fréquence native** du fichier, qu'il
+  faut rééchantillonner soi-même vers 24 kHz (sinc fenêtré polyphasé, en isolate ;
+  `average: true` renvoie un RMS, inutilisable). Ce comportement n'est pas un
+  contrat du paquet : `test/core/autotag/pcm_decoder_test.dart` échoue s'il change
+  (canal, fréquence, décalage, mono, mp3/flac/ogg/wav). La fréquence native et la
+  durée ne sont pas exposées (ni stockées en base) : elles sont lues dans l'en-tête
+  (`audio_stream_info.dart`). Opus et m4a ne sont pas analysables (le décodeur
+  d'échantillons ne lit les Ogg qu'avec libvorbis ; m4a n'est pas un format du
+  moteur) : ils sont sautés avec une raison journalisée.
+  **On appelle le symbole natif `readSamplesFromFile` directement (FFI) et non
+  `SoLoud.readSamplesFromMem/File`** : l'API Dart ne libère jamais ses tampons
+  natifs (mesuré : ≈ 10 Mo perdus par appel sur un mp3 de 3 Mo, vérifié sur
+  flutter_soloud 4.0.12 et 4.1.7 — plusieurs Go sur une bibliothèque entière). Les
+  appels directs gardent la mémoire plate (≈ 0,24 s et aucune croissance par
+  piste). Tout décodage reste sérialisé sur la file unique
+  ([0001](0001-chargement-audio-soloud.md)). Si flutter_soloud corrige un jour la
+  fuite, on pourra revenir à son API.
 - **Entrée du modèle** : 3 clips de 10 s (à 15 / 45 / 75 % de la durée), latents
   moyennés. Les scores bruts sont biaisés par mood : **recentrer chaque mood sur
   la bibliothèque** avant tout seuil, et n'appliquer aucun tag tant qu'un nombre
