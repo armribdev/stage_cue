@@ -124,8 +124,8 @@ class _SoundEditFormState extends State<SoundEditForm> {
   late SoundType? _baseType;
   Set<int> _baseTagIds = <int>{};
 
-  /// Tags trouvés par l’IA (masqués compris). Écrits en base dès le geste, hors
-  /// baseline `dirty` : masquer n’est pas une modification à enregistrer.
+  /// Suggestions de l’IA (décision 0031) : lecture seule. En accepter une
+  /// l’ajoute à [_tagIds], donc à la baseline `dirty` comme tout autre tag.
   List<SoundAutoTag> _autoTags = const [];
 
   bool _tagsLoaded = false;
@@ -742,11 +742,13 @@ class _SoundEditFormState extends State<SoundEditForm> {
         editor,
         const SizedBox(height: 14),
         AutoTagChips(
-          tags: _autoTags,
+          suggestions: _autoTags,
           colors: _categoryColorsByTagId(),
-          awaitingValidation: !_isProcessed,
-          onHide: (t) => _setAutoTagHidden(t, hidden: true),
-          onRestore: (t) => _setAutoTagHidden(t, hidden: false),
+          acceptedTagIds: _tagIds,
+          // Accepter = ajouter aux tags du son, enregistré avec le formulaire.
+          onToggle: (s) => _update(() {
+            if (!_tagIds.remove(s.tag.id)) _tagIds.add(s.tag.id);
+          }),
         ),
       ],
     );
@@ -756,35 +758,6 @@ class _SoundEditFormState extends State<SoundEditForm> {
     for (final cat in widget.tagCatalog)
       for (final tag in cat.tags) tag.id: Color(cat.category.color),
   };
-
-  /// Masque ou rétablit un tag de l’IA, tout de suite : la ligne reste en base
-  /// (mémoire de l’IA), seul son état change.
-  Future<void> _setAutoTagHidden(
-    SoundAutoTag auto, {
-    required bool hidden,
-  }) async {
-    try {
-      await widget.repository.setAutoTagHidden(
-        widget.sound.id,
-        auto.tag.id,
-        hidden: hidden,
-      );
-      widget.notifier?.invalidateSearchIndex();
-      if (!mounted) return;
-      setState(() {
-        _autoTags = [
-          for (final t in _autoTags)
-            if (t.tag.id == auto.tag.id)
-              SoundAutoTag(tag: t.tag, hidden: hidden)
-            else
-              t,
-        ];
-      });
-    } catch (error) {
-      if (!mounted) return;
-      showCopyableSnackBar(context, 'Impossible de modifier ce tag : $error');
-    }
-  }
 
   Widget _colorSwatch({
     Color? color,

@@ -283,7 +283,7 @@ void main() {
       },
     );
 
-    group('tags de l’IA (décision 0030)', () {
+    group('suggestions de l’IA (décisions 0030 et 0031)', () {
       late int lib;
       late int folder;
       late int soundId;
@@ -325,7 +325,7 @@ void main() {
 
       Future<void> setAuto(
         int tag, {
-        bool hidden = false,
+        double score = 0.4,
         required DateTime at,
       }) => database
           .into(database.soundAutoTags)
@@ -333,14 +333,14 @@ void main() {
             db.SoundAutoTagsCompanion.insert(
               soundId: soundId,
               tagId: tag,
-              hidden: Value(hidden),
+              score: score,
               updatedAt: Value(at),
             ),
           );
 
-      Future<Map<int, (bool, DateTime)>> autoTags() async => {
+      Future<Map<int, double>> autoScores() async => {
         for (final r in await database.select(database.soundAutoTags).get())
-          r.tagId: (r.hidden, r.updatedAt),
+          r.tagId: r.score,
       };
 
       /// Exporte l'état courant puis le rejoue sur la base, après que [mutate]
@@ -352,57 +352,96 @@ void main() {
         await store.mergeFolderSnapshot(folder, path);
       }
 
-      test('un tag masqué voyage avec sa mémoire dans le snapshot', () async {
-        final t0 = DateTime.utc(2026, 11, 4, 10);
-        await setAuto(tagA, at: t0);
-        await setAuto(tagB, hidden: true, at: t0);
-        final path = p.join(tempDir.path, 'auto.db');
-        await store.exportFolderSnapshot(folder, path);
+      test(
+        'les suggestions voyagent avec leur score dans le snapshot',
+        () async {
+          final t0 = DateTime.utc(2026, 11, 4, 10);
+          await setAuto(tagA, score: 0.62, at: t0);
+          await setAuto(tagB, score: 0.18, at: t0);
+          final path = p.join(tempDir.path, 'auto.db');
+          await store.exportFolderSnapshot(folder, path);
 
-        // Autre appareil : même son, aucun tag d'IA.
-        await database.delete(database.soundAutoTags).go();
-        await store.mergeFolderSnapshot(folder, path);
+          // Autre appareil : même son, aucune suggestion.
+          await database.delete(database.soundAutoTags).go();
+          await store.mergeFolderSnapshot(folder, path);
 
-        final auto = await autoTags();
-        expect(auto[tagA]?.$1, isFalse);
-        expect(auto[tagB]?.$1, isTrue, reason: 'masqué reste masqué');
-      });
+          final auto = await autoScores();
+          expect(auto[tagA], closeTo(0.62, 1e-9));
+          expect(auto[tagB], closeTo(0.18, 1e-9));
+        },
+      );
 
       test(
-        'un pull ne supprime jamais un tag d’IA présent seulement en local',
+        'un pull ne supprime jamais une suggestion présente seulement en local',
         () async {
           final t0 = DateTime.utc(2026, 11, 4, 10);
           await pullRemoteThen(() => setAuto(tagA, at: t0));
-          expect((await autoTags()).keys, contains(tagA));
+          expect((await autoScores()).keys, contains(tagA));
         },
       );
 
       test(
-        'dernière écriture gagnante : le masquage local récent résiste',
+        'dernière écriture gagnante : la suggestion locale récente résiste',
         () async {
           final old = DateTime.utc(2026, 11, 4, 10);
           final recent = DateTime.utc(2026, 11, 4, 12);
-          await setAuto(tagA, at: old);
-          await pullRemoteThen(() => setAuto(tagA, hidden: true, at: recent));
-          expect((await autoTags())[tagA]?.$1, isTrue);
+          await setAuto(tagA, score: 0.2, at: old);
+          await pullRemoteThen(() => setAuto(tagA, score: 0.7, at: recent));
+          expect((await autoScores())[tagA], closeTo(0.7, 1e-9));
         },
       );
 
       test(
-        'dernière écriture gagnante : un rétablissement distant plus récent passe',
+        'dernière écriture gagnante : un score distant plus récent passe',
         () async {
           final old = DateTime.utc(2026, 11, 4, 10);
           final recent = DateTime.utc(2026, 11, 4, 12);
-          await setAuto(tagA, at: recent);
+          await setAuto(tagA, score: 0.7, at: recent);
           final path = p.join(tempDir.path, 'auto.db');
           await store.exportFolderSnapshot(folder, path);
-          await setAuto(tagA, hidden: true, at: old);
+          await setAuto(tagA, score: 0.2, at: old);
 
           await store.mergeFolderSnapshot(folder, path);
 
-          expect((await autoTags())[tagA]?.$1, isFalse);
+          expect((await autoScores())[tagA], closeTo(0.7, 1e-9));
         },
       );
+
+      test(
+        'le snapshot garde une colonne hidden à 0 pour un appareil en v45',
+        () async {
+          await setAuto(tagA, at: DateTime.utc(2026, 11, 4, 10));
+          final path = p.join(tempDir.path, 'auto.db');
+          await store.exportFolderSnapshot(folder, path);
+
+          final snap = NativeDatabase(File(path));
+          await snap.ensureOpen(_NoopUser());
+          final rows = await snap.runSelect(
+            'SELECT hidden FROM sound_auto_tags',
+            const [],
+          );
+          await snap.close();
+          expect(rows.map((r) => r['hidden']), [0]);
+        },
+      );
+
+      test('un snapshot sans score (appareil en v45) est ignoré', () async {
+        final path = p.join(tempDir.path, 'auto.db');
+        await store.exportFolderSnapshot(folder, path);
+        // Rejoue la forme v45 : `hidden` mais pas de `score`.
+        final snap = NativeDatabase(File(path));
+        await snap.ensureOpen(_NoopUser());
+        await snap.runCustom(
+          'INSERT INTO sound_auto_tags (sound_id, tag_id, hidden, updated_at) '
+          'VALUES ($soundId, $tagA, 0, 0)',
+        );
+        await snap.runCustom('ALTER TABLE sound_auto_tags DROP COLUMN score');
+        await snap.close();
+
+        await store.mergeFolderSnapshot(folder, path);
+
+        expect(await autoScores(), isEmpty);
+      });
 
       test(
         'les tags de l’utilisateur ne sont pas touchés par ceux de l’IA',
@@ -419,7 +458,7 @@ void main() {
 
           final user = await database.select(database.soundTags).get();
           expect(user.map((r) => r.tagId), [tagA]);
-          expect((await autoTags()).keys, [tagB]);
+          expect((await autoScores()).keys, [tagB]);
         },
       );
     });
@@ -984,4 +1023,15 @@ void main() {
       await dbB.close();
     });
   });
+}
+
+class _NoopUser extends QueryExecutorUser {
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  Future<void> beforeOpen(
+    QueryExecutor executor,
+    OpeningDetails details,
+  ) async {}
 }

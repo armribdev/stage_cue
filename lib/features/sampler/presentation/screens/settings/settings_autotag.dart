@@ -31,13 +31,14 @@ extension _SettingsAutoTag on _SettingsScreenState {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Pose des tags d’ambiance (Triste, Tension, Joyeux…) sur vos '
+                'Suggère des tags d’ambiance (Triste, Tension, Joyeux…) pour vos '
                 'musiques, d’après le son, directement sur cet appareil, dès '
-                'qu’elles sont indexées. Ces tags sont à part des vôtres : '
-                'vous pouvez les masquer (ils restent en mémoire et l’IA ne '
-                'les repose pas). Un son que vous passez en « traité » n’est '
-                'plus analysé. L’analyse se fait en arrière-plan, jamais en '
-                'Mode Spectacle.',
+                'qu’elles sont indexées. Ce ne sont que des suggestions, '
+                'affichées avec leur confiance dans la fiche du son : elles '
+                'n’entrent dans ses tags (et la recherche) que si vous les '
+                'ajoutez. Un son que vous passez en « traité » n’est plus '
+                'analysé. L’analyse se fait en arrière-plan, jamais en Mode '
+                'Spectacle.',
                 style: muted,
               ),
               const SizedBox(height: 12),

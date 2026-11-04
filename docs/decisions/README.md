@@ -49,7 +49,8 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0026](0026-verification-sha256-de-l-installeur.md) | Vérification SHA-256 de l'installeur avant lancement de la mise à jour | acceptée |
 | [0027](0027-preecoute-casque-stricte.md) | Pré-écoute au casque stricte : jamais de repli sur la salle | acceptée |
 | [0028](0028-consentement-oauth-desktop-avec-refresh-token.md) | Consentement OAuth desktop maison, pour toujours obtenir un refresh token | acceptée |
-| [0029](0029-analyse-automatique-des-tags-sur-l-appareil.md) | Analyse automatique des tags sur l'appareil, par modèles ONNX en pack optionnel | acceptée (amendée par 0030) |
-| [0030](0030-tags-de-l-ia-en-couche-separee-et-masquables.md) | Tags de l'IA : couche séparée, masquables, jamais supprimés | acceptée |
+| [0029](0029-analyse-automatique-des-tags-sur-l-appareil.md) | Analyse automatique des tags sur l'appareil, par modèles ONNX en pack optionnel | acceptée (amendée par 0030 et 0031) |
+| [0030](0030-tags-de-l-ia-en-couche-separee-et-masquables.md) | Tags de l'IA : couche séparée, masquables, jamais supprimés | acceptée (amendée par 0031) |
+| [0031](0031-tags-de-l-ia-en-suggestions-avec-score.md) | Tags de l'IA : suggestions toujours affichées, avec leur score, acceptées une à une | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

@@ -6070,18 +6070,14 @@ class $SoundAutoTagsTable extends SoundAutoTags
       'REFERENCES tags (id) ON DELETE CASCADE',
     ),
   );
-  static const VerificationMeta _hiddenMeta = const VerificationMeta('hidden');
+  static const VerificationMeta _scoreMeta = const VerificationMeta('score');
   @override
-  late final GeneratedColumn<bool> hidden = GeneratedColumn<bool>(
-    'hidden',
+  late final GeneratedColumn<double> score = GeneratedColumn<double>(
+    'score',
     aliasedName,
     false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("hidden" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
   );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
@@ -6096,7 +6092,7 @@ class $SoundAutoTagsTable extends SoundAutoTags
     defaultValue: currentDateAndTime,
   );
   @override
-  List<GeneratedColumn> get $columns => [soundId, tagId, hidden, updatedAt];
+  List<GeneratedColumn> get $columns => [soundId, tagId, score, updatedAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -6125,11 +6121,13 @@ class $SoundAutoTagsTable extends SoundAutoTags
     } else if (isInserting) {
       context.missing(_tagIdMeta);
     }
-    if (data.containsKey('hidden')) {
+    if (data.containsKey('score')) {
       context.handle(
-        _hiddenMeta,
-        hidden.isAcceptableOrUnknown(data['hidden']!, _hiddenMeta),
+        _scoreMeta,
+        score.isAcceptableOrUnknown(data['score']!, _scoreMeta),
       );
+    } else if (isInserting) {
+      context.missing(_scoreMeta);
     }
     if (data.containsKey('updated_at')) {
       context.handle(
@@ -6154,9 +6152,9 @@ class $SoundAutoTagsTable extends SoundAutoTags
         DriftSqlType.int,
         data['${effectivePrefix}tag_id'],
       )!,
-      hidden: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}hidden'],
+      score: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}score'],
       )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -6175,15 +6173,16 @@ class SoundAutoTag extends DataClass implements Insertable<SoundAutoTag> {
   final int soundId;
   final int tagId;
 
-  /// Masqué par l'utilisateur : ni affiché, ni cherché, mais conservé.
-  final bool hidden;
+  /// Confiance relative du modèle, entre 0 et 1 (`MoodTagRule` : part de
+  /// l'ambiance dans la répartition du son). Pas une probabilité calibrée.
+  final double score;
 
-  /// Dernière modification (pose ou masquage) — arbitre la fusion de synchro.
+  /// Date de la pose — arbitre la fusion de synchro (dernière écriture gagnante).
   final DateTime updatedAt;
   const SoundAutoTag({
     required this.soundId,
     required this.tagId,
-    required this.hidden,
+    required this.score,
     required this.updatedAt,
   });
   @override
@@ -6191,7 +6190,7 @@ class SoundAutoTag extends DataClass implements Insertable<SoundAutoTag> {
     final map = <String, Expression>{};
     map['sound_id'] = Variable<int>(soundId);
     map['tag_id'] = Variable<int>(tagId);
-    map['hidden'] = Variable<bool>(hidden);
+    map['score'] = Variable<double>(score);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -6200,7 +6199,7 @@ class SoundAutoTag extends DataClass implements Insertable<SoundAutoTag> {
     return SoundAutoTagsCompanion(
       soundId: Value(soundId),
       tagId: Value(tagId),
-      hidden: Value(hidden),
+      score: Value(score),
       updatedAt: Value(updatedAt),
     );
   }
@@ -6213,7 +6212,7 @@ class SoundAutoTag extends DataClass implements Insertable<SoundAutoTag> {
     return SoundAutoTag(
       soundId: serializer.fromJson<int>(json['soundId']),
       tagId: serializer.fromJson<int>(json['tagId']),
-      hidden: serializer.fromJson<bool>(json['hidden']),
+      score: serializer.fromJson<double>(json['score']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -6223,7 +6222,7 @@ class SoundAutoTag extends DataClass implements Insertable<SoundAutoTag> {
     return <String, dynamic>{
       'soundId': serializer.toJson<int>(soundId),
       'tagId': serializer.toJson<int>(tagId),
-      'hidden': serializer.toJson<bool>(hidden),
+      'score': serializer.toJson<double>(score),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -6231,19 +6230,19 @@ class SoundAutoTag extends DataClass implements Insertable<SoundAutoTag> {
   SoundAutoTag copyWith({
     int? soundId,
     int? tagId,
-    bool? hidden,
+    double? score,
     DateTime? updatedAt,
   }) => SoundAutoTag(
     soundId: soundId ?? this.soundId,
     tagId: tagId ?? this.tagId,
-    hidden: hidden ?? this.hidden,
+    score: score ?? this.score,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   SoundAutoTag copyWithCompanion(SoundAutoTagsCompanion data) {
     return SoundAutoTag(
       soundId: data.soundId.present ? data.soundId.value : this.soundId,
       tagId: data.tagId.present ? data.tagId.value : this.tagId,
-      hidden: data.hidden.present ? data.hidden.value : this.hidden,
+      score: data.score.present ? data.score.value : this.score,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -6253,56 +6252,57 @@ class SoundAutoTag extends DataClass implements Insertable<SoundAutoTag> {
     return (StringBuffer('SoundAutoTag(')
           ..write('soundId: $soundId, ')
           ..write('tagId: $tagId, ')
-          ..write('hidden: $hidden, ')
+          ..write('score: $score, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(soundId, tagId, hidden, updatedAt);
+  int get hashCode => Object.hash(soundId, tagId, score, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is SoundAutoTag &&
           other.soundId == this.soundId &&
           other.tagId == this.tagId &&
-          other.hidden == this.hidden &&
+          other.score == this.score &&
           other.updatedAt == this.updatedAt);
 }
 
 class SoundAutoTagsCompanion extends UpdateCompanion<SoundAutoTag> {
   final Value<int> soundId;
   final Value<int> tagId;
-  final Value<bool> hidden;
+  final Value<double> score;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const SoundAutoTagsCompanion({
     this.soundId = const Value.absent(),
     this.tagId = const Value.absent(),
-    this.hidden = const Value.absent(),
+    this.score = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SoundAutoTagsCompanion.insert({
     required int soundId,
     required int tagId,
-    this.hidden = const Value.absent(),
+    required double score,
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : soundId = Value(soundId),
-       tagId = Value(tagId);
+       tagId = Value(tagId),
+       score = Value(score);
   static Insertable<SoundAutoTag> custom({
     Expression<int>? soundId,
     Expression<int>? tagId,
-    Expression<bool>? hidden,
+    Expression<double>? score,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (soundId != null) 'sound_id': soundId,
       if (tagId != null) 'tag_id': tagId,
-      if (hidden != null) 'hidden': hidden,
+      if (score != null) 'score': score,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -6311,14 +6311,14 @@ class SoundAutoTagsCompanion extends UpdateCompanion<SoundAutoTag> {
   SoundAutoTagsCompanion copyWith({
     Value<int>? soundId,
     Value<int>? tagId,
-    Value<bool>? hidden,
+    Value<double>? score,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
     return SoundAutoTagsCompanion(
       soundId: soundId ?? this.soundId,
       tagId: tagId ?? this.tagId,
-      hidden: hidden ?? this.hidden,
+      score: score ?? this.score,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -6333,8 +6333,8 @@ class SoundAutoTagsCompanion extends UpdateCompanion<SoundAutoTag> {
     if (tagId.present) {
       map['tag_id'] = Variable<int>(tagId.value);
     }
-    if (hidden.present) {
-      map['hidden'] = Variable<bool>(hidden.value);
+    if (score.present) {
+      map['score'] = Variable<double>(score.value);
     }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
@@ -6350,7 +6350,7 @@ class SoundAutoTagsCompanion extends UpdateCompanion<SoundAutoTag> {
     return (StringBuffer('SoundAutoTagsCompanion(')
           ..write('soundId: $soundId, ')
           ..write('tagId: $tagId, ')
-          ..write('hidden: $hidden, ')
+          ..write('score: $score, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -13001,7 +13001,7 @@ typedef $$SoundAutoTagsTableCreateCompanionBuilder =
     SoundAutoTagsCompanion Function({
       required int soundId,
       required int tagId,
-      Value<bool> hidden,
+      required double score,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -13009,7 +13009,7 @@ typedef $$SoundAutoTagsTableUpdateCompanionBuilder =
     SoundAutoTagsCompanion Function({
       Value<int> soundId,
       Value<int> tagId,
-      Value<bool> hidden,
+      Value<double> score,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -13069,8 +13069,8 @@ class $$SoundAutoTagsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<bool> get hidden => $composableBuilder(
-    column: $table.hidden,
+  ColumnFilters<double> get score => $composableBuilder(
+    column: $table.score,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13135,8 +13135,8 @@ class $$SoundAutoTagsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<bool> get hidden => $composableBuilder(
-    column: $table.hidden,
+  ColumnOrderings<double> get score => $composableBuilder(
+    column: $table.score,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -13201,8 +13201,8 @@ class $$SoundAutoTagsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<bool> get hidden =>
-      $composableBuilder(column: $table.hidden, builder: (column) => column);
+  GeneratedColumn<double> get score =>
+      $composableBuilder(column: $table.score, builder: (column) => column);
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
@@ -13284,13 +13284,13 @@ class $$SoundAutoTagsTableTableManager
               ({
                 Value<int> soundId = const Value.absent(),
                 Value<int> tagId = const Value.absent(),
-                Value<bool> hidden = const Value.absent(),
+                Value<double> score = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SoundAutoTagsCompanion(
                 soundId: soundId,
                 tagId: tagId,
-                hidden: hidden,
+                score: score,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -13298,13 +13298,13 @@ class $$SoundAutoTagsTableTableManager
               ({
                 required int soundId,
                 required int tagId,
-                Value<bool> hidden = const Value.absent(),
+                required double score,
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SoundAutoTagsCompanion.insert(
                 soundId: soundId,
                 tagId: tagId,
-                hidden: hidden,
+                score: score,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

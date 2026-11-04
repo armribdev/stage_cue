@@ -1,6 +1,6 @@
 # 0030 — Tags de l'IA : couche séparée, masquables, jamais supprimés
 
-**Statut :** acceptée (amende [0029](0029-analyse-automatique-des-tags-sur-l-appareil.md))
+**Statut :** acceptée (amende [0029](0029-analyse-automatique-des-tags-sur-l-appareil.md)) — amendée par [0031](0031-tags-de-l-ia-en-suggestions-avec-score.md) : les tags de l'IA deviennent des suggestions avec un score, sans masquage, hors recherche tant qu'ils ne sont pas acceptés
 **Date :** 2026-11-04
 
 ## Contexte

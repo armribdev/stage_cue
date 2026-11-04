@@ -314,23 +314,24 @@ class SoundTags extends Table {
   Set<Column> get primaryKey => {soundId, tagId};
 }
 
-/// Tags trouvés par l'analyse automatique (décision 0030) : une couche à part de
-/// [SoundTags], qui ne contient que les tags posés par l'utilisateur.
+/// Suggestions de tags de l'analyse automatique (décisions 0030 et 0031) : une
+/// couche à part de [SoundTags], qui ne contient que les tags de l'utilisateur.
 ///
-/// Une ligne n'est **jamais supprimée** : la retirer de l'affichage, c'est la
-/// [hidden] (masquée). C'est ce qui garde la mémoire du résultat de l'IA — elle
-/// ne repose pas un tag que l'utilisateur a écarté — et ce qui se synchronise
-/// entre appareils (dernière écriture gagnante, par [updatedAt]).
+/// Une suggestion n'est **pas un tag** : elle s'affiche toujours dans le
+/// formulaire du son, avec son [score], et n'entre dans les tags (`sound_tags`)
+/// que si l'utilisateur l'accepte. Une ligne est écrite une fois par l'analyse et
+/// ne change plus ; elle se synchronise entre appareils (union).
 class SoundAutoTags extends Table {
   IntColumn get soundId =>
       integer().references(Sounds, #id, onDelete: KeyAction.cascade)();
   IntColumn get tagId =>
       integer().references(TagItems, #id, onDelete: KeyAction.cascade)();
 
-  /// Masqué par l'utilisateur : ni affiché, ni cherché, mais conservé.
-  BoolColumn get hidden => boolean().withDefault(const Constant(false))();
+  /// Confiance relative du modèle, entre 0 et 1 (`MoodTagRule` : part de
+  /// l'ambiance dans la répartition du son). Pas une probabilité calibrée.
+  RealColumn get score => real()();
 
-  /// Dernière modification (pose ou masquage) — arbitre la fusion de synchro.
+  /// Date de la pose — arbitre la fusion de synchro (dernière écriture gagnante).
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override

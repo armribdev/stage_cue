@@ -85,29 +85,31 @@ void main() {
   group('MoodTagRule', () {
     final stats = statsAround(flat(0));
 
+    List<String> names(List<double> scores, MoodStats stats) => [
+      for (final s in MoodTagRule.suggestions(scores, stats)) s.tagName,
+    ];
+
     test('aucun tag tant que la bibliothèque est trop petite', () {
       final small = statsAround(flat(0), count: MoodTagRule.minLibrarySize - 1);
       final scores = flat(0)..[0] = 5;
-      expect(MoodTagRule.tagNames(scores, small), isEmpty);
-      expect(MoodTagRule.tagNames(scores, statsAround(flat(0), count: 50)), [
-        'Joyeux',
-      ]);
+      expect(names(scores, small), isEmpty);
+      expect(names(scores, statsAround(flat(0), count: 50)), ['Joyeux']);
     });
 
     test('seuil : en dessous d\'un écart-type, rien', () {
       final scores = flat(0)..[0] = 0.0999; // z ≈ 0,999
-      expect(MoodTagRule.tagNames(scores, stats), isEmpty);
+      expect(names(scores, stats), isEmpty);
       scores[0] = 0.1001;
-      expect(MoodTagRule.tagNames(scores, stats), ['Joyeux']);
+      expect(names(scores, stats), ['Joyeux']);
     });
 
     test('le score est comparé à la moyenne de l\'ambiance, pas au brut', () {
       // Calme sort toujours haut (moyenne 0,5) : 0,55 est banal, 0,75 marqué.
       final biased = statsAround(flat(0)..[8] = 0.5);
       final scores = flat(0)..[8] = 0.55;
-      expect(MoodTagRule.tagNames(scores, biased), isEmpty);
+      expect(names(scores, biased), isEmpty);
       scores[8] = 0.75;
-      expect(MoodTagRule.tagNames(scores, biased), ['Calme']);
+      expect(names(scores, biased), ['Calme']);
     });
 
     test('au plus 3 tags, du plus marqué au moins marqué', () {
@@ -119,11 +121,7 @@ void main() {
         ..[10] =
             0.7 // Sombre
         ..[5] = 0.3; // Tension
-      expect(MoodTagRule.tagNames(scores, stats), [
-        'Angoisse',
-        'Sombre',
-        'Triste',
-      ]);
+      expect(names(scores, stats), ['Angoisse', 'Sombre', 'Triste']);
     });
 
     test('deux ambiances du même tag ne le posent qu\'une fois', () {
@@ -132,18 +130,59 @@ void main() {
         ..[7] = 0.4
         ..[14] = 0.9
         ..[8] = 0.3; // Calme
-      expect(MoodTagRule.tagNames(scores, stats), ['Romantique', 'Calme']);
+      expect(names(scores, stats), ['Romantique', 'Calme']);
     });
 
     test('une ambiance qui ne varie pas ne discrimine rien', () {
       final constant = MoodStats.fromScores([
         for (var i = 0; i < 60; i++) flat(0.3),
       ]);
-      expect(MoodTagRule.tagNames(flat(9), constant), isEmpty);
+      expect(names(flat(9), constant), isEmpty);
+    });
+
+    test(
+      'chaque suggestion porte une confiance entre 0 et 1, décroissante',
+      () {
+        final scores = flat(0)
+          ..[1] =
+              0.5 // Triste
+          ..[4] =
+              0.9 // Angoisse
+          ..[10] = 0.7; // Sombre
+        final suggestions = MoodTagRule.suggestions(scores, stats);
+        expect(suggestions.map((s) => s.tagName), [
+          'Angoisse',
+          'Sombre',
+          'Triste',
+        ]);
+        for (final s in suggestions) {
+          expect(s.score, inExclusiveRange(0, 1));
+        }
+        final sorted = [for (final s in suggestions) s.score];
+        expect(
+          sorted,
+          orderedEquals([...sorted]..sort((a, b) => b.compareTo(a))),
+        );
+        // La plus marquée domine la répartition du son.
+        expect(sorted.first, greaterThan(sorted.last));
+      },
+    );
+
+    test('deux ambiances du même tag additionnent leur confiance', () {
+      final single = MoodTagRule.suggestions(flat(0)..[7] = 0.5, stats);
+      final both = MoodTagRule.suggestions(
+        flat(0)
+          ..[7] = 0.5
+          ..[14] = 0.5,
+        stats,
+      );
+      expect(single.single.tagName, 'Romantique');
+      expect(both.single.tagName, 'Romantique');
+      expect(both.single.score, greaterThan(single.single.score));
     });
 
     test('nombre de scores invalide', () {
-      expect(() => MoodTagRule.tagNames([1], stats), throwsArgumentError);
+      expect(() => MoodTagRule.suggestions([1], stats), throwsArgumentError);
     });
   });
 

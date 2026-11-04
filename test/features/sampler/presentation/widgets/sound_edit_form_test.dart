@@ -2,7 +2,7 @@
 // peut être validé tel quel (sans modification), un son déjà traité exige une
 // modification. En file de traitement, le libellé annonce l'enchaînement.
 
-import 'package:drift/drift.dart' show Value, Variable;
+import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -191,7 +191,7 @@ void main() {
     expect(row?.isProcessed, isTrue);
   });
 
-  group('tags de l’IA (décision 0030)', () {
+  group('suggestions de l’IA (décision 0031)', () {
     /// Laisse la lecture des tags (vraie E/S Drift) se terminer, puis redessine.
     Future<void> loadTags(WidgetTester tester) async {
       await tester.runAsync(
@@ -209,14 +209,14 @@ void main() {
                 .getSingle())
             .read<int>('id');
 
-    Future<void> autoTag(String name, {bool hidden = false}) async {
+    Future<void> autoTag(String name, {double score = 0.42}) async {
       await database
           .into(database.soundAutoTags)
           .insert(
             db.SoundAutoTagsCompanion.insert(
               soundId: soundId,
               tagId: await tagId(name),
-              hidden: Value(hidden),
+              score: score,
             ),
           );
     }
@@ -224,68 +224,63 @@ void main() {
     Future<List<db.SoundAutoTag>> autoRows() =>
         database.select(database.soundAutoTags).get();
 
-    testWidgets('les tags de l’IA s’affichent à part, avec l’invitation à '
-        'vérifier tant que le son n’est pas traité', (tester) async {
-      await autoTag('Sombre');
+    Future<List<db.SoundTag>> userRows(WidgetTester tester) async =>
+        await tester.runAsync(
+          () => database.select(database.soundTags).get(),
+        ) ??
+        [];
+
+    for (final processed in [false, true]) {
+      testWidgets('suggestion toujours affichée avec sa confiance '
+          '(son ${processed ? 'traité' : 'à traiter'})', (tester) async {
+        await autoTag('Sombre', score: 0.42);
+        await pumpForm(tester, processed: processed);
+        await loadTags(tester);
+
+        expect(
+          find.byKey(ValueKey('auto-tag-${await tagId('Sombre')}')),
+          findsOneWidget,
+        );
+        expect(find.text('42 %'), findsOneWidget);
+        expect(find.textContaining('Suggestions de l’IA'), findsOneWidget);
+      });
+    }
+
+    testWidgets('aucune suggestion : aucune zone', (tester) async {
       await pumpForm(tester, processed: false);
       await loadTags(tester);
-
-      expect(
-        find.byKey(ValueKey('auto-tag-${await tagId('Sombre')}')),
-        findsOneWidget,
-      );
-      expect(find.textContaining('vérifiez-les, puis validez'), findsOneWidget);
+      expect(find.textContaining('Suggestions de l’IA'), findsNothing);
     });
 
-    testWidgets('son traité : mêmes tags, sans invitation à valider', (
-      tester,
-    ) async {
-      await autoTag('Sombre');
-      await pumpForm(tester, processed: true);
-      await loadTags(tester);
-
-      expect(find.textContaining('Trouvés par l’IA'), findsOneWidget);
-      expect(find.textContaining('vérifiez-les'), findsNothing);
-    });
-
-    testWidgets('aucun tag d’IA : aucune zone', (tester) async {
-      await pumpForm(tester, processed: false);
-      await loadTags(tester);
-      expect(find.textContaining('Trouvés par l’IA'), findsNothing);
-    });
-
-    testWidgets('masquer : la ligne reste en base, masquée, et peut être '
-        'rétablie', (tester) async {
+    testWidgets('toucher une suggestion l’ajoute aux tags, enregistrée avec le '
+        'formulaire ; la suggestion reste en base', (tester) async {
       await autoTag('Sombre');
       final id = await tagId('Sombre');
       await pumpForm(tester, processed: false);
       await loadTags(tester);
 
-      // Croix de la pastille (identifiée par son infobulle).
-      await tester.tap(find.byTooltip('Masquer ce tag'));
+      await tester.tap(find.byKey(ValueKey('auto-tag-$id')));
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilterChip>(find.byKey(ValueKey('auto-tag-$id')))
+            .selected,
+        isTrue,
+      );
+      expect(await userRows(tester), isEmpty, reason: 'pas encore enregistré');
+
+      await tester.tap(button('Valider'));
       await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
       );
       await tester.pump();
 
-      var rows = await tester.runAsync(autoRows) ?? [];
-      expect(rows, hasLength(1), reason: 'jamais supprimée');
-      expect(rows.single.hidden, isTrue);
-      expect(find.byKey(ValueKey('auto-tag-hidden-$id')), findsOneWidget);
-
-      await tester.tap(find.byKey(ValueKey('auto-tag-hidden-$id')));
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)),
-      );
-      await tester.pump();
-
-      rows = await tester.runAsync(autoRows) ?? [];
-      expect(rows.single.hidden, isFalse);
-      expect(find.byKey(ValueKey('auto-tag-$id')), findsOneWidget);
+      expect((await userRows(tester)).map((r) => r.tagId), [id]);
+      expect(await tester.runAsync(autoRows), hasLength(1));
     });
 
-    testWidgets('valider n’écrit jamais un tag de l’IA parmi ceux de '
-        'l’utilisateur', (tester) async {
+    testWidgets('valider sans toucher la suggestion n’écrit rien parmi les '
+        'tags de l’utilisateur', (tester) async {
       await autoTag('Sombre');
       await pumpForm(tester, processed: false);
       await loadTags(tester);
@@ -296,10 +291,7 @@ void main() {
       );
       await tester.pump();
 
-      final user = await tester.runAsync(
-        () => database.select(database.soundTags).get(),
-      );
-      expect(user, isEmpty);
+      expect(await userRows(tester), isEmpty);
       expect(await tester.runAsync(autoRows), hasLength(1));
     });
   });

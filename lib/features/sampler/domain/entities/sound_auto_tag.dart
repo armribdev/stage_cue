@@ -1,12 +1,13 @@
 import 'tag_item.dart';
 
-/// Tag trouvé par l'analyse automatique pour un son (décision 0030).
+/// Tag suggéré par l'analyse automatique pour un son (décisions 0030 et 0031).
 ///
-/// [hidden] : l'utilisateur l'a masqué. Il reste en base — l'IA ne le repose
-/// pas — mais n'est ni affiché ni cherché.
+/// [score] : confiance relative du modèle, entre 0 et 1 — pas une probabilité
+/// calibrée. Une suggestion n'est pas un tag : elle n'entre dans les tags du son
+/// que si l'utilisateur l'accepte.
 class SoundAutoTag {
   final TagItem tag;
-  final bool hidden;
+  final double score;
 
-  const SoundAutoTag({required this.tag, required this.hidden});
+  const SoundAutoTag({required this.tag, required this.score});
 }

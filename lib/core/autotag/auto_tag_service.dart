@@ -27,7 +27,7 @@ class AutoTagReport {
   /// Sons éligibles dont le fichier n'est pas encore sur l'appareil.
   final int notDownloaded;
 
-  /// Sons qui ont reçu des tags, et nombre de tags posés.
+  /// Sons qui ont reçu des suggestions, et nombre de suggestions.
   final int soundsTagged;
   final int tagsInserted;
 
@@ -45,17 +45,18 @@ class AutoTagReport {
   });
 }
 
-/// Analyse automatique des tags (décisions 0029 et 0030) : calcule l'empreinte
-/// audio des musiques éligibles puis enregistre leurs ambiances comme tags de
-/// l'IA — une couche à part, masquable, que l'utilisateur ne détruit jamais.
+/// Analyse automatique des tags (décisions 0029 à 0031) : calcule l'empreinte
+/// audio des musiques éligibles puis enregistre leurs ambiances comme
+/// **suggestions** avec leur score — une couche à part, jamais mêlée aux tags de
+/// l'utilisateur, qui les accepte ou non.
 ///
-/// Éligible : type musique, non traité (le passer en « traité » fige ses tags),
-/// jamais analysé, fichier déjà sur l'appareil. Deux temps, car la décision exige des statistiques sur la
-/// bibliothèque :
+/// Éligible : type musique, non traité (le passer en « traité » fige ses
+/// suggestions), jamais analysé, fichier déjà sur l'appareil. Deux temps, car la
+/// décision exige des statistiques sur la bibliothèque :
 /// 1. **analyse** : empreinte de chaque son, conservée en base ;
 /// 2. **décision** : recentrage par ambiance sur tous les sons analysés, puis
-///    tags posés (rien tant que [MoodTagRule.minLibrarySize] sons ne sont pas
-///    analysés). Elle revérifie l'éligibilité de chaque son.
+///    suggestions enregistrées (rien tant que [MoodTagRule.minLibrarySize] sons
+///    ne sont pas analysés). Elle revérifie l'éligibilité de chaque son.
 ///
 /// Ne s'orchestre pas elle-même : `AutoSyncCoordinator` décide quand lancer un
 /// passage et quand l'interrompre (Mode Spectacle, arrière-plan, synchro).
@@ -217,7 +218,7 @@ class AutoTagService {
         'Analyse auto : bilan — $analyzed analysé(s)'
         '${notAnalyzable.isEmpty ? '' : ', écarté(s) ($skipped)'}'
         '${failed > 0 ? ', $failed échec(s)' : ''}'
-        ', ${report.tagsInserted} tag(s) posé(s) sur ${report.soundsTagged} son(s)'
+        ', ${report.tagsInserted} suggestion(s) sur ${report.soundsTagged} son(s)'
         '${interruptedBy != null ? ' — interrompue : $interruptedBy' : ''}.',
       );
     }
@@ -243,7 +244,7 @@ class AutoTagService {
     if (stats.sampleCount < MoodTagRule.minLibrarySize) {
       AppLog.info(
         'Analyse auto : ${stats.sampleCount}/${MoodTagRule.minLibrarySize} '
-        'musique(s) analysée(s) — aucun tag posé tant que la bibliothèque '
+        'musique(s) analysée(s) — aucune suggestion tant que la bibliothèque '
         'analysée est trop petite.',
       );
       return null;
@@ -254,7 +255,7 @@ class AutoTagService {
         if (scores[a.soundId] != null)
           AutoTagDecision(
             a.soundId,
-            MoodTagRule.tagNames(scores[a.soundId]!, stats),
+            MoodTagRule.suggestions(scores[a.soundId]!, stats),
           ),
     ];
     final result = await _data.applyDecisions(
