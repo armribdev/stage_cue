@@ -142,7 +142,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
       widget.services.removeSoundFromBoardUseCase,
       widget.services.libraryRepository,
       widget.services.appPreferences,
-    );
+    )..autoTagAnalysis = widget.services.autoSyncCoordinator.autoTagAnalysis;
 
     _notifier.addListener(_onStateChanged);
   }

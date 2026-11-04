@@ -59,6 +59,7 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
           tagCatalog: widget.tagCatalog,
           repository: widget.repository,
           notifier: widget.notifier,
+          autoTag: widget.notifier?.autoTagAnalysis,
           onDirtyChanged: (dirty) => setState(() => _isDirty = dirty),
           onSaved: () => Navigator.of(context).pop(true),
         ),

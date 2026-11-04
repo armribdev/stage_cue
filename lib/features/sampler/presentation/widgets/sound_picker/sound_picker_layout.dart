@@ -74,6 +74,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
       tagCatalog: _tagCatalog,
       repository: mode.repository,
       notifier: widget.notifier,
+      autoTag: widget.notifier.autoTagAnalysis,
       controller: _editController,
       isQueueMode: _unprocessedOnly,
       // Trier à l'oreille : l'éditeur joue lui-même depuis le point d'entrée.

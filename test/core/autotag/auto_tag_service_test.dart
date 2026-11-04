@@ -9,6 +9,7 @@ import 'package:stage_cue/core/autotag/audio_stream_info.dart';
 import 'package:stage_cue/core/autotag/auto_tag_embedder.dart';
 import 'package:stage_cue/core/autotag/auto_tag_pack.dart';
 import 'package:stage_cue/core/autotag/auto_tag_service.dart';
+import 'package:stage_cue/core/autotag/auto_tag_status.dart';
 import 'package:stage_cue/core/autotag/mood_tagging.dart';
 import 'package:stage_cue/core/autotag/muq_analyzer.dart';
 import 'package:stage_cue/core/database/database.dart' as db;
@@ -403,5 +404,69 @@ void main() {
     expect(second.analyzed, 0);
     expect((await first).analyzed, 5);
     expect(s.isRunning, isFalse);
+  });
+
+  group('état d’analyse d’un son (fiche)', () {
+    test('selon les marques en base', () async {
+      final s = service();
+      final music = await addSound('a.mp3');
+      final effect = await addSound(
+        'b.mp3',
+        type: db_types.SoundType.soundEffect,
+      );
+      final processed = await addSound('c.mp3', processed: true);
+
+      expect(await s.statusOf(music), SoundAnalysisStatus.pending);
+      expect(await s.statusOf(effect), SoundAnalysisStatus.notMusic);
+      expect(await s.statusOf(processed), SoundAnalysisStatus.processed);
+      expect(await s.statusOf(9999), isNull);
+
+      await data.storeEmbedding(music, Uint8List.fromList([1]));
+      expect(await s.statusOf(music), SoundAnalysisStatus.awaitingSuggestions);
+      await data.applyDecisions(
+        [AutoTagDecision(music, const [])],
+        categoryName: kMoodTagCategory,
+        when: DateTime.utc(2026),
+      );
+      expect(await s.statusOf(music), SoundAnalysisStatus.analyzed);
+
+      await data.markNotAnalyzable(effect, DateTime.utc(2026));
+      expect(await s.statusOf(effect), SoundAnalysisStatus.skipped);
+    });
+
+    test('pack absent : « pack manquant », pas « à analyser »', () async {
+      packInstalled = false;
+      final id = await addSound('a.mp3');
+      expect(await service().statusOf(id), SoundAnalysisStatus.packMissing);
+    });
+
+    test(
+      'pendant le passage : en attente puis en cours, puis analysé',
+      () async {
+        final ids = await addLibrary(count: 3);
+        final s = service();
+        final seen = <SoundAnalysisStatus?>[];
+        s.activity.addListener(() {
+          seen.add(s.activity.value.liveStatusOf(ids[2]));
+        });
+
+        await s.run(stopReason: never);
+
+        expect(seen, contains(SoundAnalysisStatus.queued));
+        expect(seen, contains(SoundAnalysisStatus.analyzing));
+        expect(s.activity.value.running, isFalse);
+        expect(
+          await s.statusOf(ids[2]),
+          SoundAnalysisStatus.awaitingSuggestions,
+        );
+      },
+    );
+
+    test('le son demandé passe en tête de file', () async {
+      final ids = await addLibrary(count: 5);
+      await service().run(stopReason: never, firstSoundId: ids[3]);
+      expect(embedder.embedded.first, 't3.mp3');
+      expect(embedder.embedded, hasLength(5));
+    });
   });
 }

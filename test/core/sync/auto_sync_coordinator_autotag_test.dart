@@ -71,9 +71,12 @@ void main() {
       events.add('push');
     });
     when(() => syncController.isAutoSyncPaused).thenAnswer((_) => paused);
-    when(() => autoTag.run(stopReason: any(named: 'stopReason'))).thenAnswer((
-      invocation,
-    ) async {
+    when(
+      () => autoTag.run(
+        stopReason: any(named: 'stopReason'),
+        firstSoundId: any(named: 'firstSoundId'),
+      ),
+    ).thenAnswer((invocation) async {
       lastStopReason =
           invocation.namedArguments[#stopReason] as String? Function();
       events.add('autotag');
@@ -176,9 +179,12 @@ void main() {
     'un passage long ne retient pas « Actualiser » et ne se double pas',
     () async {
       final gate = Completer<AutoTagReport>();
-      when(() => autoTag.run(stopReason: any(named: 'stopReason'))).thenAnswer((
-        _,
-      ) {
+      when(
+        () => autoTag.run(
+          stopReason: any(named: 'stopReason'),
+          firstSoundId: any(named: 'firstSoundId'),
+        ),
+      ).thenAnswer((_) {
         events.add('autotag');
         return gate.future;
       });
@@ -205,9 +211,12 @@ void main() {
       () => repository.applyDriveChanges(library: any(named: 'library')),
     ).thenAnswer((_) async => const DriveSyncApplied(upserted: 0, removed: 0));
     when(() => syncController.pullForLaunch(any())).thenAnswer((_) async {});
-    when(() => autoTag.run(stopReason: any(named: 'stopReason'))).thenAnswer((
-      _,
-    ) async {
+    when(
+      () => autoTag.run(
+        stopReason: any(named: 'stopReason'),
+        firstSoundId: any(named: 'firstSoundId'),
+      ),
+    ).thenAnswer((_) async {
       events.add('autotag');
       return const AutoTagReport(
         analyzed: 60,
@@ -240,6 +249,58 @@ void main() {
 
     expect(uiNotified, 0);
     expect(events, ['autotag']);
+  });
+
+  group('demande depuis la fiche d’un son', () {
+    test('lance un passage avec le son en tête de file', () async {
+      int? first;
+      when(
+        () => autoTag.run(
+          stopReason: any(named: 'stopReason'),
+          firstSoundId: any(named: 'firstSoundId'),
+        ),
+      ).thenAnswer((invocation) async {
+        first = invocation.namedArguments[#firstSoundId] as int?;
+        return const AutoTagReport();
+      });
+
+      expect(coordinator.autoTagAnalysis!.start(42), isNull);
+      await pump();
+
+      expect(first, 42);
+    });
+
+    test('refus expliqué : Mode Spectacle, passage déjà en cours', () async {
+      paused = true;
+      expect(coordinator.autoTagAnalysis!.start(1), 'Mode Spectacle');
+      paused = false;
+
+      final gate = Completer<AutoTagReport>();
+      when(
+        () => autoTag.run(
+          stopReason: any(named: 'stopReason'),
+          firstSoundId: any(named: 'firstSoundId'),
+        ),
+      ).thenAnswer((_) => gate.future);
+      expect(coordinator.autoTagAnalysis!.start(1), isNull);
+      expect(
+        coordinator.autoTagAnalysis!.start(2),
+        'une analyse est déjà en cours',
+      );
+      gate.complete(const AutoTagReport());
+      await pump();
+    });
+
+    test('sans service : pas de vue d’analyse', () {
+      final plain = AutoSyncCoordinator(
+        database,
+        repository,
+        syncController,
+        preferences,
+      );
+      addTearDown(plain.dispose);
+      expect(plain.autoTagAnalysis, isNull);
+    });
   });
 
   test('sans service (tests, mobile) : rien ne change', () async {
