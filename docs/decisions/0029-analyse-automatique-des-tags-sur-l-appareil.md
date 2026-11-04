@@ -1,6 +1,6 @@
 # 0029 — Analyse automatique des tags, sur l'appareil, par modèles ONNX en pack optionnel
 
-**Statut :** acceptée
+**Statut :** acceptée — amendée par [0030](0030-tags-de-l-ia-en-couche-separee-et-masquables.md) : les tags de l'IA vivent dans une couche séparée et masquable (`sound_auto_tags`), pas dans `sound_tags` ; les passages sur « jamais sur un son qui porte déjà des tags », le bandeau d'origine et la réouverture après pull sont remplacés.
 **Date :** 2026-11-04
 
 ## Contexte
