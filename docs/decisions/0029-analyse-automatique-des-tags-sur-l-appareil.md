@@ -25,7 +25,10 @@ le binaire.
   (« Triste », « Angoisse »…) sont comparés à des vecteurs texte précalculés
   (15 × 512 flottants, ~31 Ko) : aucun encodeur texte à l'exécution.
 - **Voix et tempo** (tags `MUSIQUE`) : têtes Essentia/MTG converties en ONNX
-  (~24 Mo).
+  (~24 Mo). La voix (Chant / Instrumental) vient de la tête
+  `voice_instrumental` ; le tempo (Lent / Rythmé) se dériverait des thèmes MTG
+  `slow` / `fast` / `upbeat`, **sans qualité mesurée à ce jour** : à valider
+  avant de poser ces tags automatiquement.
 - **Les tags sont appliqués directement**, pas proposés. Le son **reste « non
   traité »** (`isProcessed = false`) jusqu'à ce que l'utilisateur valide ou
   retire les tags. L'analyse ne touche **jamais** un son déjà traité ni un
