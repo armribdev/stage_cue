@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart' hide isNotNull;
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -282,6 +282,79 @@ void main() {
         await dbB.close();
       },
     );
+
+    test('un pull qui efface des tags rouvre la décision d’analyse', () async {
+      final lib = await database
+          .into(database.libraries)
+          .insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/cache'),
+          );
+      final folder = await database
+          .into(database.libraryFolders)
+          .insert(
+            db.LibraryFoldersCompanion.insert(
+              libraryId: lib,
+              driveFolderId: 'F',
+              relativePath: const Value(''),
+            ),
+          );
+      final decidedAt = DateTime.utc(2026, 11, 4);
+      Future<int> addSound(
+        String name, {
+        bool embedding = true,
+        bool processed = false,
+      }) => database
+          .into(database.sounds)
+          .insert(
+            db.SoundsCompanion.insert(
+              title: name,
+              displayName: name,
+              filePath: '/cache/$name.mp3',
+              libraryId: Value(lib),
+              relativePath: Value('$name.mp3'),
+              driveFileId: Value('id-$name'),
+              folderId: Value(folder),
+              isProcessed: Value(processed),
+              autoTaggedAt: Value(decidedAt),
+              autoEmbedding: Value(embedding ? Uint8List(2048) : null),
+            ),
+          );
+      final tagId =
+          (await database
+                  .customSelect("SELECT id FROM tags WHERE name = 'Sombre'")
+                  .getSingle())
+              .read<int>('id');
+      Future<void> tag(int soundId) => database
+          .into(database.soundTags)
+          .insert(db.SoundTagsCompanion.insert(soundId: soundId, tagId: tagId));
+
+      final erased = await addSound('erased');
+      final untouched = await addSound('untouched'); // décidé sans tag
+      final processed = await addSound('processed', processed: true);
+      final noEmbedding = await addSound('noembedding', embedding: false);
+
+      // Le distant (snapshot sans aucun tag) est exporté AVANT que le local ne
+      // reçoive ses tags automatiques, non publiés.
+      final snapshotPath = p.join(tempDir.path, 'folder.db');
+      await store.exportFolderSnapshot(folder, snapshotPath);
+      for (final id in [erased, processed, noEmbedding]) {
+        await tag(id);
+      }
+
+      await store.mergeFolderSnapshot(folder, snapshotPath);
+
+      Future<DateTime?> mark(int id) async => (await (database.select(
+        database.sounds,
+      )..where((s) => s.id.equals(id))).getSingle()).autoTaggedAt;
+      expect(await mark(erased), isNull, reason: 'tags perdus : à re-décider');
+      expect(await mark(untouched), isNotNull, reason: 'n’avait pas de tags');
+      expect(await mark(processed), isNotNull, reason: 'traité : hors champ');
+      expect(await mark(noEmbedding), isNotNull, reason: 'rien à re-décider');
+      final erasedRow = await (database.select(
+        database.sounds,
+      )..where((s) => s.id.equals(erased))).getSingle();
+      expect(erasedRow.autoEmbedding, isNotNull, reason: 'empreinte conservée');
+    });
 
     test('upsert préserve l\'id du son (liens pad intacts)', () async {
       final lib = await database

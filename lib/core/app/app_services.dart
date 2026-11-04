@@ -1,13 +1,19 @@
 import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/services.dart' show rootBundle;
 
+import '../../features/sampler/data/datasources/local_autotag_datasource.dart';
 import '../../features/sampler/data/repositories/library_repository.dart';
 import '../../features/sampler/data/repositories/sound_repository.dart';
 import '../../features/sampler/domain/usecases/load_sounds_usecase.dart';
 import '../../features/sampler/domain/usecases/remove_sound_from_board_usecase.dart';
 import '../../features/sampler/presentation/providers/sync_controller.dart';
+import '../autotag/auto_tag_pack.dart';
+import '../autotag/auto_tag_service.dart';
+import '../autotag/mood_tagging.dart';
 import '../database/database.dart' as db;
 import '../settings/app_preferences.dart';
 import '../sync/auto_sync_coordinator.dart';
+import '../utils/layout_utils.dart';
 
 /// Composition root des services partagés de l'application.
 class AppServices {
@@ -42,6 +48,11 @@ class AppServices {
       libraryRepository,
       syncController,
       appPreferences,
+      // Poste de bureau seulement : le modèle (≈ 480 Mo en mémoire) exclut le
+      // mobile (décision 0029).
+      autoTag: isNativeDesktopPlatform()
+          ? _createAutoTagService(database, libraryRepository)
+          : null,
     );
     // Démarre l'écoute des modifications + le pull initial au lancement.
     autoSyncCoordinator.start();
@@ -54,6 +65,25 @@ class AppServices {
       loadSoundsUseCase: LoadSoundsUseCase(repository),
       removeSoundFromBoardUseCase: RemoveSoundFromBoardUseCase(repository),
       appPreferences: appPreferences,
+    );
+  }
+
+  static AutoTagService _createAutoTagService(
+    db.AppDatabase database,
+    LibraryRepository libraryRepository,
+  ) {
+    MoodScorer? scorer;
+    return AutoTagService(
+      data: LocalAutoTagDataSource(database),
+      pack: AutoTagPack.inSupportDirectory(),
+      libraryRoots: () async => {
+        for (final library in await libraryRepository.getLibraries())
+          library.id: library.localRootPath,
+      },
+      probeAvailable: libraryRepository.probeLocallyAvailableSoundIds,
+      loadScorer: () async => scorer ??= MoodScorer.fromBytes(
+        await rootBundle.load('assets/autotag/text_latents.f32'),
+      ),
     );
   }
 
