@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_tokens.dart';
 import '../../domain/entities/sound_auto_tag.dart';
+import 'tag_pill.dart';
 
 /// Suggestions de tags de l'IA pour un son (décision 0031), avec leur confiance
 /// en pourcentage, de la plus à la moins sûre.
@@ -38,41 +38,18 @@ class AutoTagChips extends StatelessWidget {
         if (!acceptedTagIds.contains(s.tag.id)) s,
     ];
     if (pending.isEmpty) return const SizedBox.shrink();
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
         for (final s in pending)
-          ActionChip(
+          TagPill(
             key: ValueKey('auto-tag-${s.tag.id}'),
-            avatar: Icon(
-              Icons.auto_awesome_outlined,
-              size: 14,
-              color: scheme.primary,
-            ),
-            label: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(s.tag.name),
-                const SizedBox(width: 6),
-                Text(
-                  percentLabel(s.score),
-                  style: AppFonts.monoStyle(
-                    (textTheme.bodySmall ?? const TextStyle()).copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: colors[s.tag.id]?.withAlpha(24),
-            side: colors[s.tag.id] == null
-                ? null
-                : BorderSide(color: colors[s.tag.id]!),
-            onPressed: () => onAdd(s),
+            label: s.tag.name,
+            color: colors[s.tag.id],
+            suggestion: true,
+            meta: percentLabel(s.score),
+            onTap: () => onAdd(s),
           ),
       ],
     );

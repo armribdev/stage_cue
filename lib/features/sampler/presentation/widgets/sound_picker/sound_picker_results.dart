@@ -222,7 +222,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                       ),
                       if (tags.isNotEmpty) ...[
                         const SizedBox(height: 3),
-                        _buildTagRow(scheme, tags),
+                        _buildTagRow(tags),
                       ],
                     ],
                   ),

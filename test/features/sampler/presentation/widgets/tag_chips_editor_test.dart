@@ -3,11 +3,13 @@
 // et le panneau se referme seul quand il ne reste rien à ajouter.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stage_cue/features/sampler/domain/entities/tag_category.dart';
 import 'package:stage_cue/features/sampler/domain/entities/tag_category_with_tags.dart';
 import 'package:stage_cue/features/sampler/domain/entities/tag_item.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/tag_chips_editor.dart';
+import 'package:stage_cue/features/sampler/presentation/widgets/tag_pill.dart';
 
 TagItem _tag(int id, int categoryId, String name) => TagItem(
   id: id,
@@ -133,14 +135,92 @@ void main() {
     expect(find.text('Aucun résultat'), findsOneWidget);
   });
 
+  testWidgets('flèches : parcourent la liste, Entrée ajoute la ligne active', (
+    tester,
+  ) async {
+    final selected = await pump(tester);
+    await openPicker(tester);
+
+    // Ordre alphabétique : Épique, Porte, Voiture, Zen.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(selected, {3}, reason: 'Porte = 2e ligne');
+  });
+
+  testWidgets('un clic à côté du panneau le ferme', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              TagChipsEditor(
+                tagCatalog: catalog,
+                selectedTagIds: const {},
+                onTagAdded: (_) {},
+                onTagRemoved: (_) {},
+              ),
+              const Spacer(),
+              const Text('ailleurs'),
+            ],
+          ),
+        ),
+      ),
+    );
+    await openPicker(tester);
+    expect(find.byType(TextField), findsOneWidget);
+
+    await tester.tap(find.text('ailleurs'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('le panneau flotte : il ne change pas la hauteur de l’éditeur', (
+    tester,
+  ) async {
+    await pump(tester);
+    final closed = tester.getSize(find.byType(TagChipsEditor));
+
+    await openPicker(tester);
+
+    expect(tester.getSize(find.byType(TagChipsEditor)), closed);
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('Échap ferme le panneau', (tester) async {
+    await pump(tester);
+    await openPicker(tester);
+    expect(find.byType(TextField), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('le bouton + est verbeux tant qu’aucun tag n’est posé', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.text('Ajouter un tag'), findsOneWidget);
+
+    await pump(tester, initial: {1});
+    expect(find.text('Ajouter un tag'), findsNothing);
+    expect(find.text('Tag'), findsOneWidget);
+  });
+
   testWidgets('puces triées sans tenir compte des accents ni de la casse', (
     tester,
   ) async {
     await pump(tester, initial: {1, 2, 3});
 
     final labels = tester
-        .widgetList<InputChip>(find.byType(InputChip))
-        .map((c) => (c.label as Text).data)
+        .widgetList<TagPill>(find.byType(TagPill))
+        .map((c) => (c.label as TextSpan).text)
         .toList();
     expect(labels, ['Épique', 'Porte', 'Zen']);
   });

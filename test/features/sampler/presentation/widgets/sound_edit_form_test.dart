@@ -12,6 +12,7 @@ import 'package:stage_cue/core/database/database.dart' as db;
 import 'package:stage_cue/features/sampler/data/repositories/sound_repository.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/sound_edit_form.dart';
+import 'package:stage_cue/features/sampler/presentation/widgets/tag_pill.dart';
 
 /// Vue d'analyse factice : l'état est piloté par le test.
 class FakeAutoTagAnalysis implements AutoTagAnalysis {
@@ -275,7 +276,7 @@ void main() {
     testWidgets('aucune suggestion : aucune zone', (tester) async {
       await pumpForm(tester, processed: false);
       await loadTags(tester);
-      expect(find.byType(ActionChip), findsNothing);
+      expect(find.byType(TagPill), findsNothing);
     });
 
     testWidgets('toucher une suggestion l’ajoute aux tags et la masque, '
