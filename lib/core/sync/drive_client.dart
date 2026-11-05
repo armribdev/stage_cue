@@ -162,6 +162,15 @@ class DriveRequestException implements Exception {
           'seront synchronisées au retour du réseau.',
       transient = true;
 
+  /// Le client HTTP a été fermé pendant l'appel : la session Drive a été
+  /// renouvelée sous les pieds de l'opération. Ce n'est pas une panne réseau
+  /// (la prochaine passe repart sur le client frais).
+  const DriveRequestException.sessionReplaced()
+    : message =
+          'Session Drive renouvelée pendant l’opération — elle sera '
+          'reprise au prochain passage.',
+      transient = true;
+
   const DriveRequestException.quota()
     : message =
           'Quota Google Drive atteint — la synchronisation reprendra '
