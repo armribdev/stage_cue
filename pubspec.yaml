@@ -31,9 +31,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
   file_picker: ^10.3.8
   flutter_soloud: ^4.0.0
   path_provider: ^2.1.5
@@ -42,7 +39,6 @@ dependencies:
   path: ^1.9.1
   sqlite3_flutter_libs: ^0.5.41
   permission_handler: ^12.0.1
-  reorderable_grid_view: ^2.2.8
   # Synchronisation Google Drive (bibliothèque portable)
   google_sign_in: ^6.2.2
   googleapis: ^13.2.0
@@ -52,7 +48,6 @@ dependencies:
   google_sign_in_all_platforms: ^1.2.1
   shared_preferences: ^2.5.3
   unorm_dart: ^0.3.2
-  custom_mouse_cursor: ^1.1.3
   media_kit: ^1.2.6
   media_kit_libs_windows_audio: ^1.0.9
   window_manager: ^0.5.2
