@@ -3,7 +3,6 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  custom_mouse_cursor
   flutter_onnxruntime
   flutter_secure_storage_linux
   screen_retriever_linux
