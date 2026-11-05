@@ -141,8 +141,10 @@ class _FakeDriveClient implements DriveClient {
     }
   }
 
+  bool disposed = false;
+
   @override
-  void dispose() {}
+  void dispose() => disposed = true;
 
   @override
   noSuchMethod(Invocation invocation) => throw UnimplementedError(
@@ -1045,6 +1047,39 @@ void main() {
         );
       },
     );
+
+    test('ensureDriveConnected ne ferme pas un client encore frais, '
+        'mais le renouvelle passé 30 min', () async {
+      var clock = DateTime(2026, 11, 5, 12);
+      final first = _FakeDriveClient({});
+      authenticator = _FakeAuthenticator(first);
+      final repository = LibraryRepository(
+        libraryDataSource,
+        authenticator,
+        LibrarySyncService(DriftSnapshotStore(database)),
+        AudioCacheManager(
+          availableDiskBytes: (_) async => 100 * 1024 * 1024 * 1024,
+        ),
+        soundDataSource,
+        now: () => clock,
+      );
+      expect(await repository.reconnectSilently(), isTrue);
+
+      // Un pad qui déclenche un téléchargement pendant qu'une synchro tient
+      // `first` : le client ne doit pas être fermé sous ses pieds.
+      final second = _FakeDriveClient({});
+      authenticator.client = second;
+      clock = clock.add(const Duration(minutes: 10));
+      expect(await repository.ensureDriveConnected(), isTrue);
+      expect(first.disposed, isFalse);
+      expect(identical(repository.activeClient, first), isTrue);
+
+      // Passé la fenêtre, le jeton approche de son terme : on renouvelle.
+      clock = clock.add(const Duration(minutes: 21));
+      expect(await repository.ensureDriveConnected(), isTrue);
+      expect(first.disposed, isTrue);
+      expect(identical(repository.activeClient, second), isTrue);
+    });
 
     test(
       'session définitivement perdue : arrêt net, pas une rafale d\'échecs',
