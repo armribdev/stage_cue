@@ -185,7 +185,8 @@ class LibrarySnapshotStore {
             updatedAt: Value(snapUpdatedAt),
           ),
         );
-        // Ses pads seront réimportés : on efface les anciens (cascade pad_sounds).
+        // Ses pads seront réimportés : on efface les anciens (leurs pad_sounds suivent, cf.
+        // `_createCascadeTriggers`).
         await (_database.delete(
           _database.pads,
         )..where((p) => p.boardId.equals(local.id))).go();

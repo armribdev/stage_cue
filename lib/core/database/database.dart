@@ -54,7 +54,6 @@ const List<String> _withdrawnInstrumentTags = [
     Sounds,
     SoundBoards,
     WatchedPaths,
-    BoardSounds,
     Pads,
     PadSounds,
     TagCategories,
@@ -70,7 +69,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 46;
+  int get schemaVersion => 47;
 
   @override
   MigrationStrategy get migration {
@@ -84,15 +83,12 @@ class AppDatabase extends _$AppDatabase {
       },
       onUpgrade: _withUpgradeLogging((m, from, to) async {
         if (from < 2) {
-          // 1. Créer la nouvelle table WatchedPaths
           await m.createTable(watchedPaths);
 
-          // 2. Pour la table Sounds
           await m.deleteTable(sounds.actualTableName);
           await m.createTable(sounds);
         }
         if (from < 4) {
-          // Créer la table des soundboards
           await m.createTable(soundBoards);
           final defaultBoardId = await into(soundBoards).insert(
             SoundBoardsCompanion.insert(
@@ -106,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'ALTER TABLE board_sounds RENAME TO board_sounds_old',
             );
-            await m.createTable(boardSounds);
+            await _createLegacyBoardSounds();
             await customStatement('''
               INSERT INTO board_sounds (board_id, sound_id, added_at)
               SELECT $defaultBoardId, sound_id, added_at
@@ -114,7 +110,7 @@ class AppDatabase extends _$AppDatabase {
             ''');
             await customStatement('DROP TABLE board_sounds_old');
           } else {
-            await m.createTable(boardSounds);
+            await _createLegacyBoardSounds();
           }
         }
         if (from < 5) {
@@ -139,9 +135,9 @@ class AppDatabase extends _$AppDatabase {
           await _seedDefaultTagsIfEmpty();
         }
         if (from < 8) {
-          await m.addColumn(
-            boardSounds,
-            boardSounds.sortOrder as GeneratedColumn<Object>,
+          await customStatement(
+            'ALTER TABLE board_sounds '
+            'ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
           );
           // Attribuer sort_order aux lignes existantes (ordre par added_at)
           await customStatement('''
@@ -497,10 +493,20 @@ class AppDatabase extends _$AppDatabase {
             'WHERE auto_embedding IS NOT NULL',
           );
         }
+        if (from < 47) {
+          // `board_sounds` n'est plus déclarée : les installations neuves la
+          // créaient vide alors que la v10 la supprime des bases migrées.
+          await customStatement('DROP TABLE IF EXISTS board_sounds');
+          // Les suppressions ne cascadaient pas (clés étrangères désactivées) :
+          // on retire les orphelins accumulés. Les déclencheurs de
+          // `_createCascadeTriggers` empêchent qu'il s'en recrée.
+          await _purgeOrphans();
+        }
       }),
       beforeOpen: (details) async {
         await _applyJournalPragmas();
         _logSlowOpen();
+        await _createCascadeTriggers();
 
         // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
         // encore migré — sans effet sur les bases v10+ (table inexistante).
@@ -509,6 +515,71 @@ class AppDatabase extends _$AppDatabase {
         }
       },
     );
+  }
+
+  /// Émule les `onDelete: cascade` des tables dépendantes, que SQLite n'exécute
+  /// pas sans `PRAGMA foreign_keys` (volontairement désactivé : un import de
+  /// snapshot pose transitoirement des lignes qui référencent des absents).
+  ///
+  /// Un déclencheur couvre tous les chemins de suppression, y compris le SQL
+  /// brut et la fusion de snapshots. Idempotent et rejoué à chaque ouverture :
+  /// un `alterTable` futur qui recréerait une de ces tables emporterait ses
+  /// déclencheurs, qui reviendraient ainsi à l'ouverture suivante.
+  ///
+  /// Retirer une bibliothèque rend ses scènes locales (`library_id` à null) au
+  /// lieu de les supprimer.
+  Future<void> _createCascadeTriggers() async {
+    const cascades = <(String parent, String child, String column)>[
+      ('sound_boards', 'pads', 'board_id'),
+      ('pads', 'pad_sounds', 'pad_id'),
+      ('sounds', 'pad_sounds', 'sound_id'),
+      ('sounds', 'sound_tags', 'sound_id'),
+      ('sounds', 'sound_auto_tags', 'sound_id'),
+      ('tags', 'sound_tags', 'tag_id'),
+      ('tags', 'sound_auto_tags', 'tag_id'),
+      ('tags', 'tag_aliases', 'tag_id'),
+      ('libraries', 'library_folders', 'library_id'),
+      ('libraries', 'folder_memberships', 'library_id'),
+      ('library_folders', 'folder_memberships', 'folder_id'),
+    ];
+    for (final (parent, child, column) in cascades) {
+      await customStatement(
+        'CREATE TRIGGER IF NOT EXISTS trg_${parent}_delete_$child '
+        'AFTER DELETE ON $parent BEGIN '
+        'DELETE FROM $child WHERE $column = OLD.id; END',
+      );
+    }
+    await customStatement(
+      'CREATE TRIGGER IF NOT EXISTS trg_libraries_detach_sound_boards '
+      'AFTER DELETE ON libraries BEGIN '
+      'UPDATE sound_boards SET library_id = NULL WHERE library_id = OLD.id; END',
+    );
+  }
+
+  /// Supprime les lignes dont le parent n'existe plus (et détache les scènes
+  /// d'une bibliothèque disparue), du haut vers le bas.
+  Future<void> _purgeOrphans() async {
+    const orphans = [
+      'UPDATE sound_boards SET library_id = NULL '
+          'WHERE library_id NOT IN (SELECT id FROM libraries)',
+      'DELETE FROM library_folders '
+          'WHERE library_id NOT IN (SELECT id FROM libraries)',
+      'DELETE FROM folder_memberships '
+          'WHERE library_id NOT IN (SELECT id FROM libraries) '
+          'OR folder_id NOT IN (SELECT id FROM library_folders)',
+      'DELETE FROM pads WHERE board_id NOT IN (SELECT id FROM sound_boards)',
+      'DELETE FROM pad_sounds WHERE pad_id NOT IN (SELECT id FROM pads) '
+          'OR sound_id NOT IN (SELECT id FROM sounds)',
+      'DELETE FROM sound_tags WHERE sound_id NOT IN (SELECT id FROM sounds) '
+          'OR tag_id NOT IN (SELECT id FROM tags)',
+      'DELETE FROM sound_auto_tags '
+          'WHERE sound_id NOT IN (SELECT id FROM sounds) '
+          'OR tag_id NOT IN (SELECT id FROM tags)',
+      'DELETE FROM tag_aliases WHERE tag_id NOT IN (SELECT id FROM tags)',
+    ];
+    for (final sql in orphans) {
+      await customStatement(sql);
+    }
   }
 
   /// Réglages de journalisation, appliqués à chaque ouverture.
@@ -569,6 +640,21 @@ class AppDatabase extends _$AppDatabase {
   Future<bool> _columnExists(String table, String column) async {
     final rows = await customSelect('PRAGMA table_info($table)').get();
     return rows.any((r) => r.read<String>('name') == column);
+  }
+
+  /// Table `board_sounds` telle que la v4 la déclarait (sans `sort_order`, ajouté
+  /// en v8). Elle n'existe que le temps des migrations antérieures à v10, qui la
+  /// convertissent en pads puis la suppriment.
+  Future<void> _createLegacyBoardSounds() async {
+    await customStatement('''
+      CREATE TABLE board_sounds (
+        board_id INTEGER NOT NULL,
+        sound_id INTEGER NOT NULL,
+        added_at INTEGER NOT NULL
+          DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)),
+        PRIMARY KEY (board_id, sound_id)
+      )
+    ''');
   }
 
   Future<void> _ensureBoardSoundSettingsTableExists() async {
@@ -1150,7 +1236,6 @@ class AppDatabase extends _$AppDatabase {
   }
 }
 
-/// Nom du fichier de base principal.
 const String kDbFileName = 'db.sqlite';
 
 /// Résout le fichier de la base principale.

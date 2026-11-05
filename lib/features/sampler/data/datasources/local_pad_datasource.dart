@@ -4,7 +4,6 @@ import '../../../../core/database/sounds.dart' as db_sounds;
 import '../../domain/entities/sound.dart' as domain;
 import '../../domain/entities/pad.dart' as domain_pad;
 
-/// Source de données locale pour les pads
 class LocalPadDataSource {
   final db.AppDatabase _database;
 
@@ -50,7 +49,6 @@ class LocalPadDataSource {
     );
   }
 
-  /// Récupère tous les pads d'une board avec leurs sons.
   Future<List<domain_pad.Pad>> getBoardPads(int boardId) async {
     final padRows = await _database
         .customSelect(
@@ -186,7 +184,6 @@ class LocalPadDataSource {
     return padId;
   }
 
-  /// Supprime un pad (cascade sur pad_sounds).
   Future<void> deletePad(int padId) async {
     await _touchBoardOfPad(padId); // avant suppression : le pad existe encore
     await (_database.delete(
@@ -194,7 +191,6 @@ class LocalPadDataSource {
     )..where((p) => p.id.equals(padId))).go();
   }
 
-  /// Ajoute un son à un pad existant.
   Future<void> addSoundToPad(int padId, int soundId) async {
     final existing = await _database
         .customSelect(
@@ -224,7 +220,6 @@ class LocalPadDataSource {
     await _touchBoardOfPad(padId);
   }
 
-  /// Retire un son d'un pad.
   Future<void> removeSoundFromPad(int padId, int soundId) async {
     await (_database.delete(
       _database.padSounds,
@@ -232,7 +227,6 @@ class LocalPadDataSource {
     await _touchBoardOfPad(padId);
   }
 
-  /// Réordonne les pads d'une board.
   Future<void> reorderBoardPads(int boardId, List<int> padIdsInOrder) async {
     await _database.transaction(() async {
       for (var i = 0; i < padIdsInOrder.length; i++) {
@@ -266,7 +260,6 @@ class LocalPadDataSource {
     await _touchBoard(boardId);
   }
 
-  /// Met à jour les réglages d'un pad.
   Future<void> updatePadSettings({
     required int padId,
     String? name,
