@@ -253,8 +253,10 @@ class LibraryRepository extends ChangeNotifier {
   /// Reconnexion silencieuse au démarrage (réutilise une session existante).
   /// Retourne true si une session a pu être rétablie.
   ///
-  /// Tente toujours [connectSilently] pour renouveler un access token expiré :
-  /// un [_activeClient] en cache ne garantit pas un token encore valide.
+  /// Renouvelle l'access token d'un client plus vieux que
+  /// [_driveClientReuseWindow] : un [_activeClient] en cache ne garantit pas un
+  /// token encore valide. Un client plus frais est gardé tel quel — le remplacer
+  /// fermerait celui qu'une passe de synchro est en train d'utiliser.
   Future<bool> reconnectSilently() async {
     if (_requiresInteractiveReconnect) {
       if (_activeClient != null) {
@@ -264,6 +266,10 @@ class LibraryRepository extends ChangeNotifier {
       await _authenticator.restoreAccountProfile();
       _notifyDriveSessionChanged();
       return false;
+    }
+
+    if (_hasFreshDriveClient) {
+      return true;
     }
 
     final previous = _activeClient;

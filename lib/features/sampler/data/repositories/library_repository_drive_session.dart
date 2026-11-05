@@ -152,14 +152,27 @@ extension LibraryRepositoryDriveSession on LibraryRepository {
     return fresh;
   }
 
+  /// Vrai si le client actif a été posé depuis moins de
+  /// [_driveClientReuseWindow] : il est alors réutilisé tel quel.
+  ///
+  /// Le renouveler fermerait sous les pieds d'une synchro ou d'un téléchargement
+  /// en cours le client qu'ils tiennent (« Client is already closed »). Politique
+  /// commune à [ensureDriveConnected] et [reconnectSilently] : en appliquer une
+  /// seule des deux laissait l'autre fermer le client d'une passe en vol (ouvrir
+  /// Paramètres suffisait à faire écarter une bibliothèque du pull).
+  bool get _hasFreshDriveClient {
+    final since = _activeClientSince;
+    return _activeClient != null &&
+        since != null &&
+        _now().difference(since) < _driveClientReuseWindow;
+  }
+
   /// Établit une session Drive (silencieuse puis interactive si besoin).
   /// Retourne false si l'utilisateur annule la connexion.
   ///
-  /// Un client déjà posé depuis moins de [_driveClientReuseWindow] est réutilisé
-  /// tel quel : le renouveler fermerait sous les pieds d'une synchro ou d'un
-  /// téléchargement en cours le client qu'ils tiennent. Au-delà, le refresh
-  /// silencieux est tenté : les tokens Google expirent après ~1 h et l'API
-  /// renverrait un 401 si on réutilisait un token périmé.
+  /// Un client encore frais est réutilisé (voir [_hasFreshDriveClient]). Au-delà,
+  /// le refresh silencieux est tenté : les tokens Google expirent après ~1 h et
+  /// l'API renverrait un 401 si on réutilisait un token périmé.
   Future<bool> ensureDriveConnected() async {
     if (_requiresInteractiveReconnect) {
       SyncLog.driveInteractiveStarted('session rejetée précédemment');
@@ -179,10 +192,7 @@ extension LibraryRepositoryDriveSession on LibraryRepository {
       return true;
     }
 
-    final since = _activeClientSince;
-    if (_activeClient != null &&
-        since != null &&
-        _now().difference(since) < _driveClientReuseWindow) {
+    if (_hasFreshDriveClient) {
       return true;
     }
 

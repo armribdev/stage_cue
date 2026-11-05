@@ -198,6 +198,10 @@ void main() {
   /// remplacer ou de retirer la session en cours de passe.
   late _FakeAuthenticator authenticator;
 
+  /// Horloge du repository, avançable : sans elle, un client posé à l'instant
+  /// est « frais » et `reconnectSilently` ne le remplace jamais.
+  var clock = DateTime(2026, 11, 5, 12);
+
   /// Construit le repository autour d'un client fake déjà « connecté ».
   Future<LibraryRepository> repositoryFor(_FakeDriveClient client) async {
     authenticator = _FakeAuthenticator(client);
@@ -212,6 +216,7 @@ void main() {
         availableDiskBytes: (_) async => 100 * 1024 * 1024 * 1024,
       ),
       soundDataSource,
+      now: () => clock,
     );
     // Passe par le chemin de production pour poser `_activeClient` : pas de
     // porte dérobée ajoutée à la classe pour les besoins du test.
@@ -221,6 +226,7 @@ void main() {
   }
 
   setUp(() async {
+    clock = DateTime(2026, 11, 5, 12);
     database = db.AppDatabase.forTesting(NativeDatabase.memory());
     soundDataSource = LocalSoundDataSource(database);
     libraryDataSource = LocalLibraryDataSource(database);
@@ -1032,6 +1038,8 @@ void main() {
         // connexion », soit des centaines de lignes annonçant une panne réseau
         // qui n'existait pas.
         authenticator.client = second;
+        // Passé la fenêtre de réutilisation : le jeton approche de son terme.
+        clock = clock.add(const Duration(minutes: 31));
         await repository.reconnectSilently();
         await pass;
 
@@ -1048,22 +1056,33 @@ void main() {
       },
     );
 
+    test(
+      'reconnectSilently ne ferme pas un client encore frais (ouvrir '
+      'Paramètres pendant une passe), mais le renouvelle passé 30 min',
+      () async {
+        final first = _FakeDriveClient({});
+        final repository = await repositoryFor(first);
+
+        // Paramètres s'ouvre pendant qu'une passe tient `first` : sans garde, le
+        // client était fermé sous ses pieds et la bibliothèque écartée du pull.
+        final second = _FakeDriveClient({});
+        authenticator.client = second;
+        clock = clock.add(const Duration(minutes: 10));
+        expect(await repository.reconnectSilently(), isTrue);
+        expect(first.disposed, isFalse);
+        expect(identical(repository.activeClient, first), isTrue);
+
+        clock = clock.add(const Duration(minutes: 21));
+        expect(await repository.reconnectSilently(), isTrue);
+        expect(first.disposed, isTrue);
+        expect(identical(repository.activeClient, second), isTrue);
+      },
+    );
+
     test('ensureDriveConnected ne ferme pas un client encore frais, '
         'mais le renouvelle passé 30 min', () async {
-      var clock = DateTime(2026, 11, 5, 12);
       final first = _FakeDriveClient({});
-      authenticator = _FakeAuthenticator(first);
-      final repository = LibraryRepository(
-        libraryDataSource,
-        authenticator,
-        LibrarySyncService(DriftSnapshotStore(database)),
-        AudioCacheManager(
-          availableDiskBytes: (_) async => 100 * 1024 * 1024 * 1024,
-        ),
-        soundDataSource,
-        now: () => clock,
-      );
-      expect(await repository.reconnectSilently(), isTrue);
+      final repository = await repositoryFor(first);
 
       // Un pad qui déclenche un téléchargement pendant qu'une synchro tient
       // `first` : le client ne doit pas être fermé sous ses pieds.
