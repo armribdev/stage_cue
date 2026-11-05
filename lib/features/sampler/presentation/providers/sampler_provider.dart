@@ -46,7 +46,6 @@ part 'sampler_pad_downloads.dart';
 part 'sampler_pad_editing.dart';
 part 'sampler_library_queries.dart';
 
-/// Provider/Notifier pour la gestion de l'état du sampler
 class SamplerNotifier extends ChangeNotifier {
   final SoundRepository _repository;
   final LoadSoundsUseCase _loadPadsUseCase;
@@ -178,9 +177,6 @@ class SamplerNotifier extends ChangeNotifier {
 
   double get musicVolume => _music.musicVolume;
   double get ambianceVolume => _ambiance.ambianceVolume;
-
-  bool get canUndoLastRemoval =>
-      _lastRemovedPad != null && _lastRemovedPad!.boardId == _activeBoardId;
 
   SamplerNotifier(
     this._repository,
@@ -382,10 +378,6 @@ class SamplerNotifier extends ChangeNotifier {
 
   void setActiveBoard(int? boardId) {
     _activeBoardId = boardId;
-  }
-
-  void clearActiveBoard() {
-    _activeBoardId = null;
   }
 
   // ── Boards ────────────────────────────────────────────────────────────────
@@ -847,25 +839,6 @@ class SamplerNotifier extends ChangeNotifier {
     );
     _markPlayedAt(resolved, soundIndex);
     _notifyPad(resolved);
-    notifyListeners();
-  }
-
-  /// Arrête toutes les voix en cours d'un pad (toutes variantes confondues).
-  Future<void> stopPadSounds(PadItem padItem) async {
-    final resolved = _resolveBoardPadItem(padItem);
-    if (resolved.pad.isAmbiancePad) {
-      await _ambiance._stopPadPlayers(resolved);
-      notifyListeners();
-      return;
-    }
-    if (resolved.pad.isMusicPad) {
-      await resolved.currentPlayer?.stop();
-      resolved.isPlaying = false;
-      resolved._currentPlayerIndex = null;
-      notifyListeners();
-      return;
-    }
-    await _stopAllSlotPlayers(resolved);
     notifyListeners();
   }
 

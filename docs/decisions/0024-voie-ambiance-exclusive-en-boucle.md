@@ -31,8 +31,7 @@ passe par `AmbianceController` :
 - elle survit au changement de plateau (réserve hors-scène, comme la
   musique) ;
 - elle n'est **pas** coupée par le bouton panique
-  (`stopAllNonMusicSounds`), mais l'est par « Tout arrêter »
-  (`stopAllSounds`).
+  (`stopAllNonMusicSounds`).
 
 Côté UI, la voie ambiance est une pastille glissée dans la rangée existante
 du bandeau réduit : une icône seule sur écran étroit, avec les réglages dans

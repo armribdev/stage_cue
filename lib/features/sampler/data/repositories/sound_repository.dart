@@ -13,7 +13,6 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/sound_auto_tag.dart';
 import '../../domain/entities/tag_item.dart';
 
-/// Repository pour la gestion des sons et des pads
 class SoundRepository {
   final LocalSoundDataSource _soundDataSource;
   final LocalWatchedPathDataSource _watchedPathDataSource;
@@ -93,7 +92,6 @@ class SoundRepository {
     await _soundDataSource.persistWaveformProbe(id, probe);
   }
 
-  /// Marque ou démarque un son comme favori.
   Future<void> setSoundFavorite(int id, bool isFavorite) async {
     await _soundDataSource.setFavorite(id, isFavorite);
   }
@@ -231,7 +229,6 @@ class SoundRepository {
     return await _padDataSource.getBoardPads(boardId);
   }
 
-  /// Crée un nouveau pad avec un son initial.
   Future<int> createPad(int boardId, int soundId) async {
     return await _padDataSource.createPad(boardId, soundId);
   }

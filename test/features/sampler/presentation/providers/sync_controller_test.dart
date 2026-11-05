@@ -37,7 +37,6 @@ void main() {
   setUp(() {
     repo = MockLibraryRepository();
     library = _library();
-    when(() => repo.isConnected).thenReturn(true);
     when(() => repo.requiresInteractiveReconnect).thenReturn(false);
     when(() => repo.reconnectSilently()).thenAnswer((_) async => true);
     when(() => repo.releaseDriveSession()).thenAnswer((_) async {});
@@ -146,7 +145,6 @@ void main() {
     );
 
     test('non connecté et reconnexion impossible -> offline', () async {
-      when(() => repo.isConnected).thenReturn(false);
       when(() => repo.requiresInteractiveReconnect).thenReturn(false);
       when(() => repo.reconnectSilently()).thenAnswer((_) async => false);
       final controller = SyncController(repo);

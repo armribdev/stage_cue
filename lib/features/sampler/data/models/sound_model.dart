@@ -5,7 +5,6 @@ import '../../../../core/database/database.dart' as db;
 
 /// Modèle de données pour Sound (mapping entre Drift et entité domain)
 class SoundModel {
-  /// Convertit un Sound de Drift vers une entité domain
   static domain.Sound toEntity(db.Sound sound) {
     return domain.Sound(
       id: sound.id,

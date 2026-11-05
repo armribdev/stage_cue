@@ -36,7 +36,6 @@ class SoundEditForm extends StatefulWidget {
   final SoundRepository repository;
   final SamplerNotifier? notifier;
 
-  /// Appelé après une sauvegarde réussie.
   final VoidCallback? onSaved;
 
   /// Notifié à chaque bascule « modifications non enregistrées ».
@@ -114,7 +113,6 @@ class _SoundEditFormState extends State<SoundEditForm> {
     Colors.grey,
   ];
 
-  // Valeurs courantes.
   late String _displayName;
   late final TextEditingController _nameController;
   late int? _colorValue;

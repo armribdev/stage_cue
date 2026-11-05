@@ -1,7 +1,6 @@
 import '../entities/pad.dart';
 import '../../data/repositories/sound_repository.dart';
 
-/// Use case pour charger les pads d'une board
 class LoadSoundsUseCase {
   final SoundRepository _repository;
 

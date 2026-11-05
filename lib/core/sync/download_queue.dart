@@ -50,10 +50,6 @@ class DownloadQueue {
   int _seq = 0;
   bool _disposed = false;
 
-  /// Tâches en attente (pas encore démarrées).
-  int get pendingCount => _pending.length;
-
-  /// Tâches en cours d'exécution.
   int get runningCount => _running;
 
   /// Met une tâche en file. Si une tâche de même [key] est déjà en file ou en

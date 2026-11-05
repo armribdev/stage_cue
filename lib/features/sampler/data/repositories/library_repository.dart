@@ -229,11 +229,8 @@ class LibraryRepository extends ChangeNotifier {
   AudioCacheManager get cacheManager => _cacheManager;
 
   DriveClient? get activeClient => _activeClient;
-  String? get connectedAccountEmail => _authenticator.accountEmail;
   DriveAccountProfile? get connectedAccountProfile =>
       _authenticator.accountProfile;
-  bool get isDriveSignedIn => _authenticator.accountProfile != null;
-  bool get isConnected => _activeClient != null;
 
   /// Session utilisable pour les appels API (pas seulement un client en cache).
   bool get hasUsableDriveSession =>

@@ -158,7 +158,6 @@ class MusicController {
       return;
     }
 
-    // Ce pad n'est pas jouable → rien
     if (!padItem.isPlayable) return;
 
     // Ce pad n'est pas joué → jouer immédiatement (arrête l'éventuelle
@@ -787,13 +786,6 @@ class MusicController {
       return;
     }
     unawaited(_playMusicPad(next));
-  }
-
-  void _clearMusicState() {
-    _o._state = _o._state.copyWith(
-      clearCurrentMusicPad: true,
-      clearMusicQueue: true,
-    );
   }
 
   Future<PadItem?> _findOrCreateMusicPadForSound(int soundId) async {

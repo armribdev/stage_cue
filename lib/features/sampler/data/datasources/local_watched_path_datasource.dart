@@ -8,26 +8,22 @@ import '../models/watched_path_model.dart';
 import '../../domain/entities/watched_path.dart' as domain;
 import 'local_sound_datasource.dart';
 
-/// Source de données locale pour les chemins surveillés
 class LocalWatchedPathDataSource {
   final db.AppDatabase _database;
 
   LocalWatchedPathDataSource(this._database);
 
-  /// Récupère tous les chemins surveillés
   Future<List<domain.WatchedPath>> getAllWatchedPaths() async {
     final paths = await _database.select(_database.watchedPaths).get();
     return paths.map((p) => WatchedPathModel.toEntity(p)).toList();
   }
 
-  /// Ajoute un chemin surveillé
   Future<int> insertWatchedPath(domain.WatchedPath watchedPath) async {
     return await _database
         .into(_database.watchedPaths)
         .insert(WatchedPathModel.toCompanion(watchedPath));
   }
 
-  /// Supprime un chemin surveillé
   Future<void> deleteWatchedPath(int id) async {
     await (_database.delete(
       _database.watchedPaths,

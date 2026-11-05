@@ -35,8 +35,6 @@ enum DeviceClass {
     return DeviceClass.phone;
   }
 
-  bool get isPhone => this == DeviceClass.phone;
-  bool get isTablet => this == DeviceClass.tablet;
   bool get isDesktop => this == DeviceClass.desktop;
 
   /// Tablette ou desktop — utile pour les décisions binaires "large vs compact".

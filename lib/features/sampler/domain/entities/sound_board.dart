@@ -1,4 +1,3 @@
-/// Entité métier représentant une soundboard
 class SoundBoard {
   final int id;
   final String name;

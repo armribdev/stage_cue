@@ -229,7 +229,6 @@ class AudioPlayerService implements PreviewPlayback {
       ? 'moteur audio non initialisé'
       : 'erreur de lecture — $e';
 
-  /// Met en pause la voix courante (mono-voix).
   @override
   Future<void> pause() async {
     if (!_hasActiveHandle || _paused) return;
@@ -238,7 +237,6 @@ class AudioPlayerService implements PreviewPlayback {
     _stateController.add(false);
   }
 
-  /// Reprend la voix courante après [pause].
   @override
   Future<void> resume() async {
     if (!_hasActiveHandle || !_paused) return;
@@ -247,7 +245,6 @@ class AudioPlayerService implements PreviewPlayback {
     _stateController.add(true);
   }
 
-  /// Arrête toutes les voix en cours.
   @override
   Future<void> stop() async {
     await _stopAllHandles();
@@ -365,21 +362,10 @@ class AudioPlayerService implements PreviewPlayback {
     }
   }
 
-  /// Fondu sortant puis arrêt du lecteur.
-  Future<void> fadeOutAndStop(Duration duration) async {
-    if (!_hasActiveHandle) return;
-    SoLoud.instance.fadeVolume(_currentHandle!, 0, duration);
-    await Future<void>.delayed(duration);
-    if (_hasActiveHandle) {
-      await stop();
-    }
-  }
-
   /// Écoute les changements d'état du lecteur (true = en cours, false = arrêté)
   @override
   Stream<bool> get onPlayerStateChanged => _stateController.stream;
 
-  /// Obtient la durée du fichier audio
   @override
   Duration get duration {
     try {
@@ -401,15 +387,12 @@ class AudioPlayerService implements PreviewPlayback {
     return SoLoud.instance.getPosition(_currentHandle!);
   }
 
-  /// Indique si au moins une voix est audible (hors pause).
   @override
   bool get isPlaying => _handles.isNotEmpty && !_paused;
 
-  /// Indique si la voix courante est en pause.
   @override
   bool get isPaused => _paused && _hasActiveHandle;
 
-  /// Dispose les ressources
   @override
   void dispose() {
     _soundEventsSubscription?.cancel();

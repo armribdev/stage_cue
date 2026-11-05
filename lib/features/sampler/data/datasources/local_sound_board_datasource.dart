@@ -4,13 +4,11 @@ import '../../../../core/database/database.dart' as db;
 import '../models/sound_board_model.dart';
 import '../../domain/entities/sound_board.dart' as domain;
 
-/// Source de données locale pour les soundboards
 class LocalSoundBoardDataSource {
   final db.AppDatabase _database;
 
   LocalSoundBoardDataSource(this._database);
 
-  /// Récupère toutes les soundboards
   Future<List<domain.SoundBoard>> getAllBoards() async {
     final boards = await (_database.select(
       _database.soundBoards,
@@ -48,7 +46,6 @@ class LocalSoundBoardDataSource {
     );
   }
 
-  /// Supprime une soundboard
   Future<void> deleteBoard(int boardId) async {
     await (_database.delete(
       _database.soundBoards,

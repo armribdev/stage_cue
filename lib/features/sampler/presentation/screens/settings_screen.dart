@@ -55,7 +55,6 @@ part 'settings/settings_library_actions.dart';
 part 'settings/settings_labels.dart';
 part 'settings/settings_sections.dart';
 
-/// Écran des paramètres
 class SettingsScreen extends StatefulWidget {
   final db.AppDatabase database;
   final LibraryRepository libraryRepository;

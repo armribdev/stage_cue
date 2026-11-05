@@ -15,7 +15,6 @@ enum PadUnavailabilityReason {
   unsupportedFormat,
 }
 
-/// État du sampler
 class SamplerState {
   static const Object _unset = Object();
 
@@ -56,12 +55,6 @@ class SamplerState {
     this.boardPrepareDone = 0,
     this.boardPrepareTotal = 0,
   });
-
-  /// Prochaine musique en file d'attente.
-  PadItem? queuedMusicPad(PadItem? Function(int padId) resolve) {
-    if (musicQueuePadIds.isEmpty) return null;
-    return resolve(musicQueuePadIds.first);
-  }
 
   /// File d'attente résolue.
   List<PadItem> musicQueue(PadItem? Function(int padId) resolve) {
@@ -291,12 +284,6 @@ class PadItem {
       if (slot.player != null) return slot.player;
     }
     return null;
-  }
-
-  PadSoundAvailability availabilityForSound(int soundId) {
-    final idx = pad.sounds.indexWhere((s) => s.id == soundId);
-    if (idx < 0) return PadSoundAvailability.missingFile;
-    return slots[idx].availability;
   }
 
   void disposeAllSlots() {

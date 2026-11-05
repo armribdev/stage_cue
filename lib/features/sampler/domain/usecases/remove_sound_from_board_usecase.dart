@@ -1,6 +1,5 @@
 import '../../data/repositories/sound_repository.dart';
 
-/// Use case pour supprimer un pad
 class RemoveSoundFromBoardUseCase {
   final SoundRepository _repository;
 

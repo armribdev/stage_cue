@@ -27,8 +27,6 @@ class SoundSearchSnapshot {
     required this.probedAt,
   });
 
-  List<TagItem> tagsFor(int soundId) => tagsBySound[soundId] ?? const [];
-
   SoundSearchSnapshot withSounds(List<Sound> next) => SoundSearchSnapshot(
     sounds: next,
     tagsBySound: tagsBySound,

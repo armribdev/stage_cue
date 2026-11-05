@@ -265,38 +265,6 @@ void main() {
     });
   });
 
-  // ── stopAllSounds ─────────────────────────────────────────────────────────
-
-  group('stopAllSounds', () {
-    test('efface l\'état musique', () async {
-      final repo = MockSoundRepository();
-      final useCase = MockLoadSoundsUseCase();
-      when(() => useCase.call(any())).thenAnswer((_) async => []);
-
-      final n = SamplerNotifier(repo, useCase);
-      // Enqueue quelque chose pour tester l'effacement
-      n.enqueueMusicPad(PadItem(pad: _pad(1)));
-      expect(n.state.musicQueuePadIds, [1]);
-
-      await n.stopAllSounds();
-
-      expect(n.state.musicQueuePadIds, isEmpty);
-      expect(n.state.currentMusicPad, isNull);
-    });
-  });
-
-  // ── canUndoLastRemoval ────────────────────────────────────────────────────
-
-  group('canUndoLastRemoval', () {
-    test('false initialement', () {
-      final repo = MockSoundRepository();
-      final useCase = MockLoadSoundsUseCase();
-      final n = SamplerNotifier(repo, useCase);
-
-      expect(n.canUndoLastRemoval, isFalse);
-    });
-  });
-
   // ── live session ──────────────────────────────────────────────────────────
 
   group('live session — startLiveSession / endLiveSession / compteurs', () {
