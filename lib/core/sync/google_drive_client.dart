@@ -115,10 +115,19 @@ class GoogleDriveClient implements DriveClient {
       if (status == 403) return _isRateLimited(error);
       return false;
     }
+    // Un client fermé le reste : rejouer l'appel sur lui échouerait 4 fois de
+    // suite (backoff compris) avant d'abandonner.
+    if (_isClientClosed(error)) return false;
     return error is SocketException ||
         error is http.ClientException ||
         error is TimeoutException;
   }
+
+  /// `package:http` ne type pas ce cas : seul le message le distingue d'une
+  /// vraie coupure réseau.
+  static bool _isClientClosed(Object error) =>
+      error is http.ClientException &&
+      error.message.contains('Client is already closed');
 
   static bool _isRateLimited(drive.DetailedApiRequestError error) {
     final reasons = [
@@ -140,6 +149,10 @@ class GoogleDriveClient implements DriveClient {
         return const DriveRequestException.unavailable();
       }
       return error;
+    }
+    if (_isClientClosed(error)) {
+      SyncLog.driveClientClosed(error);
+      return const DriveRequestException.sessionReplaced();
     }
     if (error is SocketException ||
         error is http.ClientException ||

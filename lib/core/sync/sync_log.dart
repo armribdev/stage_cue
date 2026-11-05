@@ -340,6 +340,12 @@ class SyncLog {
     required Object error,
   }) => warn('Drive : abandon après $attempts essai(s) — $error');
 
+  /// Appel Drive interrompu parce que le client HTTP a été fermé (session
+  /// renouvelée pendant l'opération) : pas de réessai, ce n'est pas le réseau.
+  static void driveClientClosed(Object error) => warn(
+    'Drive : client fermé pendant l’appel (session renouvelée) — $error',
+  );
+
   /// Le navigateur de dossiers Drive n'a pas pu lister.
   static void driveFolderListFailed({
     required String where,
