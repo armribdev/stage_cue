@@ -155,9 +155,11 @@ extension LibraryRepositoryDriveSession on LibraryRepository {
   /// Établit une session Drive (silencieuse puis interactive si besoin).
   /// Retourne false si l'utilisateur annule la connexion.
   ///
-  /// Le refresh silencieux est toujours tenté, même si [_activeClient] est
-  /// déjà défini : les tokens Google expirent après ~1 h et l'API renverrait
-  /// un 401 si on réutilisait un token périmé sans le renouveler.
+  /// Un client déjà posé depuis moins de [_driveClientReuseWindow] est réutilisé
+  /// tel quel : le renouveler fermerait sous les pieds d'une synchro ou d'un
+  /// téléchargement en cours le client qu'ils tiennent. Au-delà, le refresh
+  /// silencieux est tenté : les tokens Google expirent après ~1 h et l'API
+  /// renverrait un 401 si on réutilisait un token périmé.
   Future<bool> ensureDriveConnected() async {
     if (_requiresInteractiveReconnect) {
       SyncLog.driveInteractiveStarted('session rejetée précédemment');
@@ -174,6 +176,13 @@ extension LibraryRepositoryDriveSession on LibraryRepository {
       _requiresInteractiveReconnect = false;
       await _authenticator.refreshAccountProfile();
       _notifyDriveSessionChanged();
+      return true;
+    }
+
+    final since = _activeClientSince;
+    if (_activeClient != null &&
+        since != null &&
+        _now().difference(since) < _driveClientReuseWindow) {
       return true;
     }
 

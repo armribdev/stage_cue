@@ -74,6 +74,16 @@ const int _bulkDownloadConcurrency = 4;
 /// borne la dérive accumulée — c'est le filet, pas l'exception.
 const Duration _fullScanInterval = Duration(days: 7);
 
+/// Âge en dessous duquel un client Drive est réutilisé tel quel plutôt que
+/// renouvelé par [LibraryRepository.ensureDriveConnected].
+///
+/// Renouveler FERME l'ancien client : une synchro ou un téléchargement qui le
+/// tenait échouait sur « Client is already closed » (journal : « Pas de
+/// connexion » alors que le réseau allait bien), et chaque pad à télécharger
+/// payait un aller-retour vers Google. Un jeton vit ~59 min : à 30 min il reste
+/// de la marge, et au-delà on renouvelle comme avant.
+const Duration _driveClientReuseWindow = Duration(minutes: 30);
+
 /// Orchestration des bibliothèques portables : relie l'authentification Drive
 /// (infra `core/sync`) à la persistance locale (table Libraries).
 ///
@@ -86,7 +96,22 @@ class LibraryRepository extends ChangeNotifier {
   final AudioCacheManager _cacheManager;
   final LocalSoundDataSource _soundDataSource;
 
-  DriveClient? _activeClient;
+  DriveClient? _activeClientRef;
+
+  /// Instant où [_activeClientRef] a été posé (donc où son jeton a été émis).
+  DateTime? _activeClientSince;
+
+  final DateTime Function() _now;
+
+  DriveClient? get _activeClient => _activeClientRef;
+
+  /// Horodate chaque nouveau client : [ensureDriveConnected] s'en sert pour ne
+  /// pas renouveler un client encore frais (voir [_driveClientReuseWindow]).
+  set _activeClient(DriveClient? client) {
+    if (identical(client, _activeClientRef)) return;
+    _activeClientRef = client;
+    _activeClientSince = client == null ? null : _now();
+  }
 
   /// Vrai après un 401 : bloque la reconnexion silencieuse jusqu'à un OAuth
   /// interactif réussi (sinon [connectSilently] recrée un client périmé).
@@ -141,8 +166,9 @@ class LibraryRepository extends ChangeNotifier {
     this._authenticator,
     this._syncService,
     this._cacheManager,
-    this._soundDataSource,
-  );
+    this._soundDataSource, {
+    DateTime Function() now = DateTime.now,
+  }) : _now = now;
 
   /// Assemble le repository avec ses dépendances Drive par défaut.
   ///
