@@ -204,10 +204,11 @@ class SoundBoards extends Table {
   IntColumn get icon =>
       integer().nullable()(); // IconData.codePoint ; null = carré
   /// Bibliothèque Drive propriétaire ; null = scène locale non synchronisée.
+  /// Retirer la bibliothèque rend la scène locale (elle n'est pas supprimée).
   IntColumn get libraryId => integer().nullable().references(
     Libraries,
     #id,
-    onDelete: KeyAction.cascade,
+    onDelete: KeyAction.setNull,
   )();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
@@ -235,18 +236,6 @@ class WatchedPaths extends Table {
   /// Identifiant fichier Drive extrait de l'URI SAF, pour résolution API.
   TextColumn get driveFileId => text().nullable()();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
-}
-
-class BoardSounds extends Table {
-  IntColumn get boardId =>
-      integer().references(SoundBoards, #id, onDelete: KeyAction.cascade)();
-  IntColumn get soundId =>
-      integer().references(Sounds, #id, onDelete: KeyAction.cascade)();
-  DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
-  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
-
-  @override
-  Set<Column> get primaryKey => {boardId, soundId};
 }
 
 class Pads extends Table {

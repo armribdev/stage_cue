@@ -590,6 +590,73 @@ void main() {
     },
   );
 
+  test('une base v46 perd board_sounds et ses lignes orphelines', () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    await database.customStatement(
+      "INSERT INTO sounds (title, file_path, display_name) "
+      "VALUES ('a', '/a.wav', 'a')",
+    );
+    await database.customStatement(
+      "INSERT INTO sound_boards (name) VALUES ('Scène')",
+    );
+    await database.customStatement('INSERT INTO pads (board_id) VALUES (1)');
+    await database.customStatement(
+      'INSERT INTO pad_sounds (pad_id, sound_id) VALUES (1, 1), (99, 1), (1, 98)',
+    );
+    // Pad dont la scène a disparu, avec son pad_sounds.
+    await database.customStatement('INSERT INTO pads (board_id) VALUES (97)');
+    await database.customStatement(
+      'INSERT INTO pad_sounds (pad_id, sound_id) VALUES (2, 1)',
+    );
+    await database.customStatement(
+      'INSERT INTO sound_tags (sound_id, tag_id) '
+      'VALUES (1, (SELECT id FROM tags LIMIT 1)), (96, 1)',
+    );
+    // Scène et dossiers d'une bibliothèque déjà retirée.
+    await database.customStatement(
+      "INSERT INTO libraries (name, local_root_path) VALUES ('L', '/l')",
+    );
+    await database.customStatement(
+      "UPDATE sound_boards SET library_id = 95 WHERE id = 1",
+    );
+    await database.customStatement(
+      "INSERT INTO library_folders (library_id, drive_folder_id) "
+      "VALUES (1, 'ok'), (95, 'mort')",
+    );
+    await database.customStatement(
+      'INSERT INTO folder_memberships (library_id, folder_id) '
+      'VALUES (1, 1), (95, 1), (1, 2)',
+    );
+    await database.customStatement(
+      'CREATE TABLE board_sounds (board_id INTEGER, sound_id INTEGER)',
+    );
+    await database.customStatement('PRAGMA user_version = 46');
+    await database.close();
+
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    final tables = await database
+        .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .get();
+    expect(
+      tables.map((r) => r.read<String>('name')),
+      isNot(contains('board_sounds')),
+    );
+    final pads = await database.select(database.pads).get();
+    expect(pads.map((r) => r.id), [1]);
+    final padSounds = await database.select(database.padSounds).get();
+    expect(padSounds.map((r) => (r.padId, r.soundId)), [(1, 1)]);
+    final soundTags = await database.select(database.soundTags).get();
+    expect(soundTags.map((r) => r.soundId), [1]);
+    final boards = await database.select(database.soundBoards).get();
+    expect(boards.single.libraryId, isNull, reason: 'scène détachée, gardée');
+    final folders = await database.select(database.libraryFolders).get();
+    expect(folders.map((r) => r.driveFolderId), ['ok']);
+    final memberships = await database.select(database.folderMemberships).get();
+    expect(memberships.map((r) => (r.libraryId, r.folderId)), [(1, 1)]);
+
+    await database.close();
+  });
+
   test('la migration est idempotente : une base à jour rembobinée en v35 '
       'passe sans erreur', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));

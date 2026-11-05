@@ -218,6 +218,9 @@ extension _SettingsLibraryActions on _SettingsScreenState {
     try {
       await widget.libraryRepository.removeLibrary(library);
       _indexingProgress.remove(_driveProgressKey(library.id));
+      // Ses sons disparaissent et ses scènes deviennent locales : l'index de
+      // recherche et les scènes en mémoire doivent être relus.
+      widget.syncController.onLibraryMerged?.call();
 
       await _loadDatabaseInfo();
     } catch (e) {
