@@ -170,16 +170,6 @@ extension LibraryRepositoryLibraries on LibraryRepository {
     return _authenticator.accountEmail;
   }
 
-  /// Liste le contenu distant d'une bibliothèque connectée à Drive.
-  Future<List<DriveFile>> listLibraryContents(Library library) async {
-    final client = _activeClient;
-    final folderId = library.driveFolderId;
-    if (client == null || folderId == null) {
-      throw StateError('Bibliothèque non connectée à Drive');
-    }
-    return client.listFolder(folderId, sharedDriveId: library.sharedDriveId);
-  }
-
   /// Indique si le dossier Drive possède déjà un snapshot `.stagecue/library.db`.
   Future<bool> hasRemoteSnapshot(Library library) {
     final folderId = library.driveFolderId;

@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-/// Entité métier représentant un son
 class Sound {
   final int id;
   final String title;
@@ -120,5 +119,4 @@ class Sound {
   }
 }
 
-/// Type de son
 enum SoundType { soundEffect, music, ambiance }

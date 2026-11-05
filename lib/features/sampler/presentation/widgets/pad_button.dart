@@ -19,7 +19,6 @@ import 'dashed_slot_frame.dart';
 /// cognitive centrale de l'ancienne carte grisée uniforme.
 enum _PadVisual { ready, enRoute, blocked, draft }
 
-/// Widget représentant un pad de son.
 class PadButton extends StatelessWidget {
   final PadItem padItem;
   final VoidCallback? onTap;

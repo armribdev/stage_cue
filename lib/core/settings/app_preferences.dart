@@ -115,8 +115,6 @@ class AppPreferences extends ChangeNotifier {
   bool get allowsSoundDownload =>
       _connectivityMode == ConnectivityMode.connected;
 
-  bool get isLoaded => _loaded;
-
   Future<void> load() async {
     if (_loaded) return;
     final file = await _preferencesFile();

@@ -3,7 +3,6 @@ part of 'local_sound_datasource.dart';
 /// Indexation des fichiers audio (local, SAF, Drive) vers la base.
 /// Méthodes de [LocalSoundDataSource] extraites via extension dans le même `part`.
 extension LocalSoundIndexing on LocalSoundDataSource {
-  /// Indexe un fichier audio
   Future<void> indexAudioFile(File file) async {
     try {
       // Vérifier si le fichier existe déjà dans la base de données
@@ -20,7 +19,6 @@ extension LocalSoundIndexing on LocalSoundDataSource {
       final title = p.basenameWithoutExtension(file.path);
       final metadata = await _resolveMetadataForFile(file);
 
-      // Ajouter le fichier à la base de données
       await _database
           .into(_database.sounds)
           .insert(
@@ -410,13 +408,11 @@ extension LocalSoundIndexing on LocalSoundDataSource {
     );
   }
 
-  /// Indexe tous les fichiers audio d'un dossier
   Future<int> indexDirectory(
     Directory directory, {
     void Function(IndexingProgress)? onProgress,
   }) async {
     try {
-      // Vérifier que le dossier existe
       if (!await directory.exists()) {
         onProgress?.call(
           IndexingProgress(
@@ -430,7 +426,6 @@ extension LocalSoundIndexing on LocalSoundDataSource {
         return 0;
       }
 
-      // Notifier le début du scan
       onProgress?.call(
         IndexingProgress(
           path: directory.path,
@@ -442,7 +437,6 @@ extension LocalSoundIndexing on LocalSoundDataSource {
 
       final audioFiles = await scanDirectoryForAudioFiles(directory);
 
-      // Notifier le nombre total de fichiers trouvés
       onProgress?.call(
         IndexingProgress(
           path: directory.path,
@@ -480,7 +474,6 @@ extension LocalSoundIndexing on LocalSoundDataSource {
           final title = p.basenameWithoutExtension(file.path);
           final metadata = await _resolveMetadataForFile(file);
 
-          // Ajouter le fichier à la base de données
           await _database
               .into(_database.sounds)
               .insert(
@@ -499,7 +492,6 @@ extension LocalSoundIndexing on LocalSoundDataSource {
               );
           indexedCount++;
 
-          // Notifier la progression
           onProgress?.call(
             IndexingProgress(
               path: directory.path,
@@ -521,7 +513,6 @@ extension LocalSoundIndexing on LocalSoundDataSource {
         }
       }
 
-      // Notifier la fin de l'indexation
       onProgress?.call(
         IndexingProgress(
           path: directory.path,
@@ -536,7 +527,6 @@ extension LocalSoundIndexing on LocalSoundDataSource {
       debugPrint(
         'Erreur lors de l\'indexation du dossier ${directory.path}: $e',
       );
-      // Notifier l'erreur
       onProgress?.call(
         IndexingProgress(
           path: directory.path,

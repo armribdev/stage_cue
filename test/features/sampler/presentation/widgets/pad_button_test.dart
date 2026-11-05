@@ -79,9 +79,6 @@ class FakeAudioPlayerService implements AudioPlayerService {
     required bool fadeIn,
     FadeCurve curve = FadeCurve.cubic,
   }) async {}
-
-  @override
-  Future<void> fadeOutAndStop(Duration duration) async {}
 }
 
 PadItem buildPadItem({String? padName, required String soundTitle}) {

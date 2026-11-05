@@ -8,7 +8,6 @@ import '../../domain/entities/tag_category_with_tags.dart' as domain;
 import '../models/tag_category_model.dart';
 import '../models/tag_item_model.dart';
 
-/// Source de données locale pour les tags
 class LocalTagDataSource {
   final db.AppDatabase _database;
 

@@ -18,11 +18,6 @@ extension SamplerLibraryQueries on SamplerNotifier {
     return _repository.getSoundIdsVisibleToLibrary(libraryId);
   }
 
-  Future<Set<int>> getLocallyAvailableSoundIds() async {
-    final snapshot = await _searchIndex.ensureLoaded();
-    return snapshot.locallyAvailableSoundIds;
-  }
-
   // ── Index de recherche ────────────────────────────────────────────────────
 
   /// Instantané de la bibliothèque disponible SANS attente — `null` avant le
@@ -65,12 +60,5 @@ extension SamplerLibraryQueries on SamplerNotifier {
 
   Future<List<TagItem>> getTagsForSound(int soundId) async {
     return await _repository.getTagsForSound(soundId);
-  }
-
-  Future<void> updateSoundTags(int soundId, Set<int> tagIds) async {
-    await _repository.setTagsForSound(soundId, tagIds.toList());
-    // Les tags sont indexés en bloc : pas de patch ponctuel possible, on
-    // reconstruit (rare, jamais sur le chemin live).
-    unawaited(refreshSearchIndex());
   }
 }

@@ -38,7 +38,6 @@ part 'sampler_screen/sampler_screen_grid.dart';
 part 'sampler_screen/sampler_screen_pad_actions.dart';
 part 'sampler_screen/sampler_screen_content.dart';
 
-/// Écran principal du sampler
 class SamplerScreen extends StatefulWidget {
   final AppServices services;
 

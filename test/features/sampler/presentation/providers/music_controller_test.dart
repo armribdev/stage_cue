@@ -374,7 +374,6 @@ void main() {
       when(() => useCase.call(any())).thenAnswer((_) async => []);
       final n = SamplerNotifier(repo, useCase);
 
-      // selectBoard appelle cleanupOffStagePads et stopAllSounds
       // Aucune exception attendue
       expect(() async {
         await n.loadBoards();

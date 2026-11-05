@@ -222,12 +222,6 @@ class LocalLibraryDataSource {
     return {for (final row in rows) row.folderId};
   }
 
-  Future<db.LibraryFolder?> getFolderById(int id) {
-    return (_database.select(
-      _database.libraryFolders,
-    )..where((f) => f.id.equals(id))).getSingleOrNull();
-  }
-
   /// Met à jour la révision de snapshot connue pour un nœud dossier.
   Future<void> updateFolderSyncState({
     required int id,

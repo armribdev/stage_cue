@@ -132,7 +132,6 @@ extension _SettingsData on _SettingsScreenState {
           .get();
       final libraries = await widget.libraryRepository.getLibraries();
 
-      // Charger tous les sons de la base de données
       final sounds = await widget.database.select(widget.database.sounds).get();
 
       // Obtenir le chemin de la base de données (source de vérité unique)

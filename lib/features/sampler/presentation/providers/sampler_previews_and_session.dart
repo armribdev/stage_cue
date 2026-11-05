@@ -118,7 +118,6 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     _libraryPreviewPlayer?.setVolume(volume);
   }
 
-  /// Arrête et libère l'aperçu bibliothèque.
   void stopLibraryPreview({bool notify = true}) {
     _libraryPreviewSub?.cancel();
     _libraryPreviewSub = null;
@@ -223,7 +222,6 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     }
   }
 
-  /// Arrête et libère toutes les pré-écoutes en cours.
   void stopAllPreviews() {
     stopLibraryPreview(notify: false);
     if (_previewPlayers.isEmpty) return;

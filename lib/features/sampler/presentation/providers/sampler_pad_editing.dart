@@ -162,38 +162,6 @@ extension SamplerPadEditing on SamplerNotifier {
     }
   }
 
-  Future<void> stopAllSounds() async {
-    _music._musicAdvanceLockCount++;
-    try {
-      for (final padItem in _state.pads) {
-        if (padItem.isPlaying) {
-          await _stopAllSlotPlayers(padItem);
-        }
-      }
-    } finally {
-      if (_music._musicAdvanceLockCount > 0) _music._musicAdvanceLockCount--;
-    }
-    _music._clearMusicState();
-    await _ambiance._stopImmediately();
-    _notify();
-  }
-
-  Future<void> reorderSoundsFromList(List<PadItem> newOrder) async {
-    if (_activeBoardId == null) return;
-    _syncMultipadNumbers(newOrder);
-    _state = _state.copyWith(pads: newOrder);
-    _notify();
-    try {
-      await _repository.reorderBoardPads(
-        _activeBoardId!,
-        newOrder.map((p) => p.pad.id).toList(),
-      );
-    } catch (e) {
-      AppLog.warn('Réordonnancement des pads échoué (plateau rechargé) : $e');
-      await loadSounds();
-    }
-  }
-
   Future<bool> removeSound(PadItem padItem) async {
     if (padItem.isDraft) {
       cancelDraftPad(padItem.pad.id);

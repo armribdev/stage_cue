@@ -125,14 +125,6 @@ void main() {
     });
   });
 
-  group('stopAllSounds', () {
-    test('sans rien à l\'antenne : laisse la voie ambiance vide', () async {
-      final n = _notifier();
-      await n.stopAllSounds();
-      expect(n.state.currentAmbiancePad, isNull);
-    });
-  });
-
   // ── État ──────────────────────────────────────────────────────────────────
 
   group('SamplerState.copyWith — currentAmbiancePad', () {

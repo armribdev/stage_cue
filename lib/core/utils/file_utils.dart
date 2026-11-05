@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 
-/// Extensions audio supportées
 final List<String> audioExtensions = [
   'mp3',
   'wav',
@@ -15,7 +14,6 @@ final List<String> audioExtensions = [
   'opus',
 ];
 
-/// Vérifie si un fichier est un fichier audio
 bool isAudioFile(String filePath) {
   final extension = p.extension(filePath).toLowerCase().replaceFirst('.', '');
   return audioExtensions.contains(extension);
@@ -96,13 +94,11 @@ Future<List<File>> scanDirectoryForAudioFiles(Directory directory) async {
 
     // Utiliser listSync() qui fonctionne mieux sur Android
     try {
-      // Récupérer toutes les entités récursivement
       List<FileSystemEntity> entities = directory.listSync(
         recursive: true,
         followLinks: false,
       );
 
-      // Filtrer pour ne garder que les fichiers
       List<File> allFiles = entities.whereType<File>().toList();
 
       // Parcourir les fichiers et trouver les fichiers audio
@@ -149,7 +145,6 @@ Future<void> _scanDirectoryRecursive(
             audioFiles.add(entity);
           }
         } else if (entity is Directory) {
-          // Scanner récursivement les sous-dossiers
           await _scanDirectoryRecursive(
             entity,
             audioFiles,

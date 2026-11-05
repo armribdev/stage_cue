@@ -235,7 +235,6 @@ class _TagPickerPanelState extends State<TagPickerPanel> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Recherche sans cadre + fermer
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 2, 4, 2),
                 child: Row(
@@ -280,7 +279,6 @@ class _TagPickerPanelState extends State<TagPickerPanel> {
                   ],
                 ),
               ),
-              // Onglets de catégorie
               if (categories.length > 1)
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -312,7 +310,6 @@ class _TagPickerPanelState extends State<TagPickerPanel> {
                   ),
                 ),
               const Divider(height: 1),
-              // Liste des tags
               if (filtered.isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(16),

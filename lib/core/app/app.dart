@@ -27,7 +27,6 @@ import '../../features/sampler/presentation/screens/sampler_screen.dart';
 import 'app_services.dart';
 import 'audio_engine_unavailable_screen.dart';
 
-/// Widget racine de l'application
 class SoundboardApp extends StatefulWidget {
   final AppServices services;
 

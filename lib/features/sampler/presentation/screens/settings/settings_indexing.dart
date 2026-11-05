@@ -36,7 +36,6 @@ extension _SettingsIndexing on _SettingsScreenState {
           return;
         }
 
-        // Ajouter le chemin surveillé
         final watchedPath = domain.WatchedPath(
           id: 0, // Sera généré par la base de données
           path: selectedDirectory,
@@ -67,7 +66,6 @@ extension _SettingsIndexing on _SettingsScreenState {
           );
         });
 
-        // Ajouter le dossier avec suivi de progression
         final result = await _repository.addWatchedPath(
           watchedPath,
           onInserted: () {
