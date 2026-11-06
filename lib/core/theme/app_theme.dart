@@ -244,21 +244,6 @@ class AppTheme {
         thickness: 1,
         space: 1,
       ),
-      snackBarTheme: SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: AppColors.surface2,
-        elevation: 0,
-        contentTextStyle: const TextStyle(
-          fontFamily: AppFonts.ui,
-          color: AppColors.text,
-          fontSize: 14,
-        ),
-        actionTextColor: AppColors.accent,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.radiusMd,
-          side: AppElevation.border(scheme),
-        ),
-      ),
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: SegmentedButton.styleFrom(
           backgroundColor: Colors.transparent,

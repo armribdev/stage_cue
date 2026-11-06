@@ -5,6 +5,7 @@ import 'package:stage_cue/core/theme/app_theme.dart';
 import 'package:stage_cue/core/update/app_update_info.dart';
 import 'package:stage_cue/core/update/app_update_installer.dart';
 import 'package:stage_cue/core/update/update_flow.dart';
+import 'package:stage_cue/core/utils/app_toast_host.dart';
 
 class _MockInstaller extends Mock implements AppUpdateInstaller {}
 
@@ -34,6 +35,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.darkTheme,
+        builder: (context, child) => AppToastHost(child: child!),
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
@@ -74,6 +76,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.darkTheme,
+        builder: (context, child) => AppToastHost(child: child!),
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
@@ -102,7 +105,7 @@ void main() {
     ).called(1);
     expect(find.textContaining('Installation en cours'), findsOneWidget);
 
-    // SnackBar de confirmation (6 s) — consommer le timer avant la fin du test.
+    // Toast de confirmation (6 s) — consommer le timer avant la fin du test.
     await tester.pump(const Duration(seconds: 6));
   });
 }

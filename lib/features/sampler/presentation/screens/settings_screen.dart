@@ -139,7 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDiagnosticBusy = false;
 
   /// Action dont le bouton affiche brièvement une coche de confirmation (voir
-  /// [_flashConfirmation]) — remplace une snackbar pour un simple « c'est fait ».
+  /// [_flashConfirmation]) — remplace un toast pour un simple « c'est fait ».
   String? _confirmedAction;
   Timer? _confirmationTimer;
 

@@ -89,7 +89,7 @@ class _SamplerScreenState extends State<SamplerScreen> {
   Offset? _lastDragGlobalOffset;
 
   /// Reconnexion Drive inline en cours — évite qu'un double-tap sur l'action
-  /// « Reconnecter » d'un snackbar lance deux flux OAuth concurrents.
+  /// « Reconnecter » d'un toast lance deux flux OAuth concurrents.
   bool _driveReconnectInFlight = false;
 
   /// true après la 1re frame de drag — évite de reconstruire l'arbre pendant
@@ -170,16 +170,16 @@ class _SamplerScreenState extends State<SamplerScreen> {
         _notifier.hasPendingPreviewError) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        // Un overlay/dialog au-dessus (route non courante) possède le message et
-        // l'affiche sur son propre messenger — le nôtre le dessinerait derrière
-        // la barrière modale, sans se fermer. On le lui laisse (pas de consume).
+        // Un overlay/dialog au-dessus (route non courante) possède le message
+        // et l'affiche lui-même : on le lui laisse (pas de consume), sinon le
+        // même message serait consommé ici et perdu pour lui.
         if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
         final musicError = _notifier.consumeLastMusicPlaybackError();
         if (musicError != null) {
           AppSnackBar.show(
             context,
             musicError,
-            action: _reconnectSnackBarAction(),
+            action: _reconnectToastAction(),
           );
         }
         // Refus de pré-écoute au casque (écoute d'un pad) : jamais muet, sinon

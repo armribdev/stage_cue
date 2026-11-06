@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stage_cue/core/autotag/auto_tag_analysis.dart';
 import 'package:stage_cue/core/autotag/auto_tag_status.dart';
 import 'package:stage_cue/core/database/database.dart' as db;
+import 'package:stage_cue/core/utils/app_toast_host.dart';
 import 'package:stage_cue/features/sampler/data/repositories/sound_repository.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/sound_edit_form.dart';
@@ -79,6 +80,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        builder: (context, child) => AppToastHost(child: child!),
         home: Scaffold(
           body: SoundEditForm(
             sound: soundOf(processed: processed),
@@ -370,7 +372,7 @@ void main() {
 
       expect(find.textContaining('Mode Spectacle'), findsOneWidget);
       expect(find.byKey(const ValueKey('auto-tag-start')), findsOneWidget);
-      // Laisse la snackbar expirer (son minuteur ne doit pas rester en suspens).
+      // Laisse le toast expirer (son minuteur ne doit pas rester en suspens).
       await tester.pump(const Duration(seconds: 5));
     });
 

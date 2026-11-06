@@ -124,7 +124,7 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
     // Sinon : le pad est maintenant PRÊT (GO), sans déclenchement automatique.
   }
 
-  /// SnackBar non-bloquante expliquant pourquoi un pad ne joue pas, avec une
+  /// Toast non-bloquant expliquant pourquoi un pad ne joue pas, avec une
   /// action « Détails » pour la vue de téléchargement (sans la pousser de force).
   void _showBlockedPadFeedback(
     PadItem padItem,
@@ -145,8 +145,8 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
     // Session expirée : proposer la reconnexion plutôt que le détail du pad,
     // qui ne dirait rien de la vraie cause.
     final action =
-        _reconnectSnackBarAction() ??
-        SnackBarAction(
+        _reconnectToastAction() ??
+        AppToastAction(
           label: 'Détails',
           onPressed: () => _showPadUnavailableSheet(context, padItem),
         );

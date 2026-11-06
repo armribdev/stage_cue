@@ -50,6 +50,11 @@ jamais d'une valeur codée en dur qui existe déjà comme token.
 
 ## Composants Material qui nécessitent une attention particulière
 
+- **Notifications** : toujours `AppSnackBar.show` / `showCopyableSnackBar`
+  (toast rendu par `AppToastHost`, voir [0033](../../docs/decisions/0033-toast-global-au-dessus-du-navigator.md)),
+  **jamais** `ScaffoldMessenger.showSnackBar` direct ni de `ScaffoldMessenger`
+  local. Une action se passe en `AppToastAction`, la gravité (`severity`) est
+  choisie par l'appelant, jamais déduite du texte.
 - **`SegmentedButton`** est thémé globalement (`segmentedButtonTheme`) mais
   sa coche de sélection (`showSelectedIcon`) est un paramètre du *widget*,
   pas du thème — toujours passer `showSelectedIcon: false` explicitement à

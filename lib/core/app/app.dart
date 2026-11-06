@@ -22,6 +22,7 @@ import '../update/app_update_info.dart';
 import '../update/update_flow.dart';
 import '../update/update_log.dart';
 import '../utils/app_snackbar.dart';
+import '../utils/app_toast_host.dart';
 import '../utils/layout_utils.dart';
 import '../../features/sampler/presentation/screens/sampler_screen.dart';
 import 'app_services.dart';
@@ -43,11 +44,6 @@ class SoundboardApp extends StatefulWidget {
   @override
   State<SoundboardApp> createState() => _SoundboardAppState();
 }
-
-/// Largeur max des snackbars — au-delà, elles paraissent démesurées sur un
-/// écran de bureau large ; en dessous, on laisse la largeur s'adapter pour
-/// ne pas déborder sur un écran de téléphone étroit.
-const double _maxSnackBarWidth = 420;
 
 class _SoundboardAppState extends State<SoundboardApp>
     with WindowListener, WidgetsBindingObserver {
@@ -124,8 +120,8 @@ class _SoundboardAppState extends State<SoundboardApp>
 
   /// Limite le check automatique à une fois toutes les 6h (le bouton manuel
   /// de Réglages l'ignore). Ne fait jamais qu'informer — jamais de
-  /// téléchargement ni d'installation sans clic explicite sur l'action de la
-  /// snackbar (voir [runUpdateFlow]).
+  /// téléchargement ni d'installation sans clic explicite sur l'action du
+  /// toast (voir [runUpdateFlow]).
   static const _updateCheckThrottle = Duration(hours: 6);
 
   Future<void> _maybeCheckForUpdateOnLaunch() async {
@@ -153,7 +149,7 @@ class _SoundboardAppState extends State<SoundboardApp>
     AppSnackBar.show(
       context,
       'Version ${info.version} disponible',
-      action: SnackBarAction(
+      action: AppToastAction(
         label: 'Mettre à jour',
         onPressed: () => unawaited(runUpdateFlow(context, info)),
       ),
@@ -417,10 +413,6 @@ class _SoundboardAppState extends State<SoundboardApp>
       theme: AppTheme.darkTheme,
       builder: (context, child) {
         final theme = Theme.of(context);
-        final availableWidth = MediaQuery.sizeOf(context).width - 48;
-        final snackBarWidth = availableWidth
-            .clamp(0, _maxSnackBarWidth)
-            .toDouble();
         // Échelle typographique réduite sur poste desktop (souris/clavier,
         // distance de lecture normale) — les tailles pensées tactile/mobile
         // paraissent surdimensionnées. Un seul point d'ajustement pour tout
@@ -431,11 +423,10 @@ class _SoundboardAppState extends State<SoundboardApp>
               )
             : theme.textTheme;
         return Theme(
-          data: theme.copyWith(
-            textTheme: textTheme,
-            snackBarTheme: theme.snackBarTheme.copyWith(width: snackBarWidth),
-          ),
-          child: child!,
+          data: theme.copyWith(textTheme: textTheme),
+          // Hôte des toasts au-dessus du Navigator : visibles sur toutes les
+          // routes, modales comprises (voir [AppToastHost]).
+          child: AppToastHost(child: child!),
         );
       },
       home: _audioEngineError != null

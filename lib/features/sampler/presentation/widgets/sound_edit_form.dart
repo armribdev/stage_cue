@@ -478,7 +478,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
       if (!mounted) return;
       switch (status) {
         case WaveformProbeStatus.success:
-          // Confirmation sur le bouton lui-même (coche) plutôt qu'en snackbar.
+          // Confirmation sur le bouton lui-même (coche) plutôt qu'en toast.
           setState(() {
             _waveform = updated?.waveform ?? _waveform;
             _waveformRegenerated = true;

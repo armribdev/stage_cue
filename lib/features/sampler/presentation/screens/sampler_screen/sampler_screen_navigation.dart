@@ -36,19 +36,19 @@ extension _SamplerScreenNavigation on _SamplerScreenState {
     await _notifier.loadSounds();
   }
 
-  /// Action « Reconnecter » pour les snackbars d'échec dus à une session Google
+  /// Action « Reconnecter » pour les toasts d'échec dus à une session Google
   /// expirée — relance l'OAuth interactif **en place** (sans ouvrir les
   /// réglages). Renvoie `null` si la session est valide (l'échec a une autre
   /// cause).
-  SnackBarAction? _reconnectSnackBarAction() {
+  AppToastAction? _reconnectToastAction() {
     if (!_notifier.driveSessionExpired) return null;
-    return SnackBarAction(
+    return AppToastAction(
       label: 'Reconnecter',
       onPressed: () => unawaited(_reconnectDriveInline()),
     );
   }
 
-  /// Reconnexion Drive déclenchée depuis un snackbar, sans quitter l'écran.
+  /// Reconnexion Drive déclenchée depuis un toast, sans quitter l'écran.
   ///
   /// Le refresh silencieux du token a déjà été tenté (et a échoué) avant que
   /// « Session Google expirée » ne s'affiche — inutile de le rejouer ici :
@@ -84,7 +84,7 @@ extension _SamplerScreenNavigation on _SamplerScreenState {
         AppSnackBar.show(
           context,
           'Reconnexion impossible — réessayez depuis les réglages.',
-          action: SnackBarAction(
+          action: AppToastAction(
             label: 'Réglages',
             onPressed: () =>
                 unawaited(_openSettings(scrollToDriveSection: true)),

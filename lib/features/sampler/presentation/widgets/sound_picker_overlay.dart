@@ -229,11 +229,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   late final FocusNode _focusNode;
   final _scrollController = ScrollController();
 
-  // Messenger local : en mode dialog l'overlay n'est pas sous le Scaffold de
-  // l'écran, donc un snackbar affiché sur le messenger racine serait rendu
-  // derrière la barrière modale et ne se fermerait pas proprement. Ce messenger
-  // dédié affiche les snackbars au-dessus de l'overlay et les auto-dismisse.
-  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   // Clé par INDICE de liste (jamais par sound.id) : un multipad peut référencer
   // le même son dans plusieurs variantes, et deux items partageant la même clé
   // déclencheraient « Duplicate GlobalKey ». L'indice est unique dans la liste.
@@ -600,99 +595,92 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
         ),
       );
       final split = _isSplitLayout;
-      return ScaffoldMessenger(
-        key: _messengerKey,
-        child: PopScope(
-          canPop: !(split && _editDirty),
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) unawaited(_confirmDiscardAndClose());
-          },
-          child: CallbackShortcuts(
-            bindings: shortcuts,
-            child: Scaffold(
-              body: SafeArea(
-                child: split ? _buildSplit(scheme, listPane, shown) : listPane,
-              ),
+      return PopScope(
+        canPop: !(split && _editDirty),
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) unawaited(_confirmDiscardAndClose());
+        },
+        child: CallbackShortcuts(
+          bindings: shortcuts,
+          child: Scaffold(
+            body: SafeArea(
+              child: split ? _buildSplit(scheme, listPane, shown) : listPane,
             ),
           ),
         ),
       );
     }
 
-    // Scaffold transparent : support de rendu pour les snackbars du messenger
-    // local, sans masquer la barrière modale (fond transparent, zone autour de
-    // la carte non hit-testable).
-    return ScaffoldMessenger(
-      key: _messengerKey,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: CallbackShortcuts(
-          bindings: shortcuts,
-          child: Stack(
-            children: [
-              // Le Scaffold transparent (support du messenger local) recouvre la
-              // barrière modale de showGeneralDialog, qui ne reçoit donc plus les
-              // taps : on rétablit ici « tap en dehors de la carte = fermer ».
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => Navigator.of(context).pop(),
-                ),
+    // Material transparent : ancêtre `Material` des descendants, sans masquer
+    // la barrière modale. Les toasts, eux, sont rendus par l'`AppToastHost`
+    // au-dessus de toutes les routes — aucun messenger local nécessaire.
+    return Material(
+      type: MaterialType.transparency,
+      child: CallbackShortcuts(
+        bindings: shortcuts,
+        child: Stack(
+          children: [
+            // Tap en dehors de la carte = fermer. Couvre aussi la zone de la
+            // barrière modale de showGeneralDialog.
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).pop(),
               ),
-              Align(
-                alignment: Alignment.center,
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    12,
-                    mq.padding.top + 12,
-                    12,
-                    mq.padding.bottom + 12,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: (mq.size.width - 24).clamp(
-                        320.0,
-                        _overlayMaxWidth,
-                      ),
-                      maxHeight: mq.size.height * 0.7,
+            ),
+            Align(
+              alignment: Alignment.center,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  mq.padding.top + 12,
+                  12,
+                  mq.padding.bottom + 12,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: (mq.size.width - 24).clamp(
+                      320.0,
+                      _overlayMaxWidth,
                     ),
-                    // Absorbe les taps sur la carte pour qu'ils n'atteignent pas
-                    // le détecteur de fermeture en dessous. Les enfants
-                    // interactifs (champ, boutons) gagnent leur tap normalement
-                    // (recognizers ajoutés depuis les feuilles → prioritaires) ;
-                    // seuls les taps sur zone vide de la carte sont absorbés.
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {},
-                      child: Material(
-                        color: scheme.surface,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: AppRadius.radiusLg,
-                          side: AppElevation.border(scheme),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: TextFieldTapRegion(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (!_isPadVariant) ...[
-                                _buildSearchField(scheme),
-                                _buildTypeFilters(scheme),
-                                _buildFilterDivider(scheme),
-                              ],
-                              Flexible(child: results),
-                              _buildHints(scheme, shown.isNotEmpty),
+                    maxHeight: mq.size.height * 0.7,
+                  ),
+                  // Absorbe les taps sur la carte pour qu'ils n'atteignent pas
+                  // le détecteur de fermeture en dessous. Les enfants
+                  // interactifs (champ, boutons) gagnent leur tap normalement
+                  // (recognizers ajoutés depuis les feuilles → prioritaires) ;
+                  // seuls les taps sur zone vide de la carte sont absorbés.
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {},
+                    child: Material(
+                      color: scheme.surface,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: AppRadius.radiusLg,
+                        side: AppElevation.border(scheme),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: TextFieldTapRegion(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (!_isPadVariant) ...[
+                              _buildSearchField(scheme),
+                              _buildTypeFilters(scheme),
+                              _buildFilterDivider(scheme),
                             ],
-                          ),
+                            Flexible(child: results),
+                            _buildHints(scheme, shown.isNotEmpty),
+                          ],
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

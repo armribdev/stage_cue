@@ -64,7 +64,7 @@ Thème sombre unique, défini dans `AppTheme.darkTheme` :
   clavier/souris, sans pour autant gêner le tactile.
 
 Tous les composants thémés (`cardTheme`, `dialogTheme`, `inputDecorationTheme`,
-boutons, snackbars, drawer…) utilisent les tokens `AppRadius`/`AppElevation`
+boutons, drawer…) utilisent les tokens `AppRadius`/`AppElevation`
 ci-dessus — ne pas redéfinir de rayons localement dans un widget si le thème
 peut s'en charger.
 
@@ -110,6 +110,26 @@ garantir un rendu et un comportement uniformes.
   les modales pleines (paramètres, bibliothèque…).
 - **`AppNavigationCard`** / **`AppChoiceOption`** : cartes cliquables
   icône + libellé pour la navigation interne ou les choix exclusifs.
+
+### Notifications (toasts) — `lib/core/utils/app_snackbar.dart`, `app_toast_host.dart`
+
+- **`AppSnackBar.show(context, message, {action, copyable, severity, duration})`**
+  et **`showCopyableSnackBar`** (messages d'erreur, gravité `error`) sont le
+  **seul** moyen de notifier l'utilisateur. Ne jamais appeler
+  `ScaffoldMessenger.showSnackBar` : l'app n'a plus de `SnackBar` natif
+  ([0033](decisions/0033-toast-global-au-dessus-du-navigator.md)).
+- Rendu par **`AppToastHost`**, posé dans `MaterialApp.builder` au-dessus du
+  `Navigator` : visible au-dessus de toutes les routes, modales comprises, sans
+  `ScaffoldMessenger` local. Un seul toast à la fois (le nouveau remplace
+  l'ancien), fermeture garantie après `duration` par un `Timer` Dart, survol =
+  pause du compte à rebours.
+- Gravité (`AppToastSeverity`: `info` par défaut, `success`, `error`) : passée
+  explicitement par l'appelant, elle ne pilote que l'icône d'état.
+- Action : `AppToastAction(label:, onPressed:)` (remplace `SnackBarAction`) ;
+  elle ferme le toast avant d'exécuter son callback.
+- Look : fond `surface2`, hairline `AppElevation.border`, rayon `AppRadius.md`,
+  sans ombre ni ripple ; bas à droite sur desktop, bas centré sur mobile,
+  largeur max 420.
 
 ## Quand introduire un nouveau pattern
 

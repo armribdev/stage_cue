@@ -21,7 +21,7 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
         // Échec : on reste ouvert pour que le message (casque indisponible…)
         // soit lu, au lieu de fermer l'overlay sur un « rien ne s'est passé ».
         if (!ok) {
-          _showPreviewFailureSnackBar();
+          _showPreviewFailureToast();
           return;
         }
         _keepPreviewOnClose = true;
@@ -47,13 +47,13 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
   Future<void> _previewSound(Sound sound) async {
     final ok = await widget.notifier.previewSound(sound.id);
     if (!mounted || ok) return;
-    _showPreviewFailureSnackBar();
+    _showPreviewFailureToast();
   }
 
   Future<void> _toggleLibraryPreview(Sound sound) async {
     final ok = await widget.notifier.toggleLibraryPreview(sound.id);
     if (!mounted || ok) return;
-    _showPreviewFailureSnackBar();
+    _showPreviewFailureToast();
   }
 
   /// Échec de pré-écoute/mise en file. Consomme d'abord l'erreur musique
@@ -61,7 +61,7 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
   /// active, donc [SamplerScreen] la laisse pour lui plutôt que de l'afficher
   /// derrière la barrière modale. À défaut, message générique distinguant token
   /// expiré et simple indisponibilité réseau.
-  void _showPreviewFailureSnackBar() {
+  void _showPreviewFailureToast() {
     final expired = widget.notifier.driveSessionExpired;
     final specific =
         widget.notifier.consumeLastMusicPlaybackError() ??
@@ -71,22 +71,18 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
         (expired
             ? 'Session Google expirée — touchez « Reconnecter »'
             : 'Son indisponible — vérifiez la connexion');
-    _showLocalSnackBar(message, withReconnect: expired);
+    _showLocalToast(message, withReconnect: expired);
   }
 
-  /// Affiche sur le messenger **local** (au-dessus du dialog) plutôt que via
-  /// `.of(context)`, qui remonterait au messenger racine rendu derrière la
-  /// barrière modale — d'où un snackbar qui « reste » sans se fermer. Remplace
-  /// le courant plutôt que d'empiler.
-  void _showLocalSnackBar(String message, {bool withReconnect = false}) {
+  /// Affiche le toast global — rendu au-dessus de la barrière modale par
+  /// l'`AppToastHost`. Remplace le courant plutôt que d'empiler.
+  void _showLocalToast(String message, {bool withReconnect = false}) {
     final onReconnect = widget.onReconnect;
-    final messenger =
-        _messengerKey.currentState ?? ScaffoldMessenger.of(context);
-    AppSnackBar.showOn(
-      messenger,
+    AppSnackBar.show(
+      context,
       message,
       action: (withReconnect && onReconnect != null)
-          ? SnackBarAction(label: 'Reconnecter', onPressed: onReconnect)
+          ? AppToastAction(label: 'Reconnecter', onPressed: onReconnect)
           : null,
     );
   }
@@ -108,14 +104,14 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
     if (!mounted || padItem != null) return;
     // Échec : surfacer le message ici (route active) plutôt que de le laisser à
     // [SamplerScreen], qui le dessinerait derrière l'overlay sans le fermer.
-    _showPreviewFailureSnackBar();
+    _showPreviewFailureToast();
   }
 
   Future<void> _playAmbianceNow(Sound sound) async {
     final padItem = await widget.notifier.playAmbianceBySoundId(sound.id);
     if (!mounted) return;
     if (padItem == null) {
-      _showPreviewFailureSnackBar();
+      _showPreviewFailureToast();
       return;
     }
     Navigator.of(context).pop();
@@ -132,7 +128,7 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
     final padItem = await widget.notifier.playMusicBySoundId(sound.id);
     if (!mounted) return;
     if (padItem == null) {
-      _showPreviewFailureSnackBar();
+      _showPreviewFailureToast();
       return;
     }
     Navigator.of(context).pop();

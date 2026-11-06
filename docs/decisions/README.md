@@ -53,5 +53,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0030](0030-tags-de-l-ia-en-couche-separee-et-masquables.md) | Tags de l'IA : couche séparée, masquables, jamais supprimés | acceptée (amendée par 0031) |
 | [0031](0031-tags-de-l-ia-en-suggestions-avec-score.md) | Tags de l'IA : suggestions toujours affichées, avec leur score, acceptées une à une | acceptée |
 | [0032](0032-cascades-emulees-par-declencheurs.md) | Cascades de suppression émulées par des déclencheurs SQLite, pas par `foreign_keys` | acceptée |
+| [0033](0033-toast-global-au-dessus-du-navigator.md) | Notifications en toast global au-dessus du Navigator, plus de `SnackBar` | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.
