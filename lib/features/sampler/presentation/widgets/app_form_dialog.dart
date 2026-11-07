@@ -3,6 +3,7 @@ import 'dart:math' show min;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/theme/app_dialog.dart';
 
 typedef BoardCreationResult = ({String name, int? color, int? libraryId});
 
@@ -105,7 +106,7 @@ class AppTextInputDialog extends StatefulWidget {
     String? hint,
     IconData? icon,
   }) {
-    return showDialog<String>(
+    return showAppDialog<String>(
       context: context,
       builder: (_) => AppTextInputDialog(
         title: title,
@@ -233,7 +234,7 @@ class AppConfirmDialog extends StatelessWidget {
     String confirmLabel = 'Confirmer',
     bool isDestructive = false,
   }) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (_) => AppConfirmDialog(
         title: title,
@@ -311,7 +312,7 @@ class AppBoardCreationDialog extends StatefulWidget {
     List<BoardLibraryOption> libraries = const [],
     int? initialLibraryId,
   }) {
-    return showDialog<BoardCreationResult>(
+    return showAppDialog<BoardCreationResult>(
       context: context,
       builder: (_) => AppBoardCreationDialog(
         suggestedName: suggestedName,

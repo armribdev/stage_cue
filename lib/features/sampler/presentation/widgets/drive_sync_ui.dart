@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../domain/entities/library.dart';
 import '../providers/sync_controller.dart';
+import '../../../../core/theme/app_dialog.dart';
 
 /// Indique une session Google expirée signalée par [SyncController].
 bool isDriveAuthExpired(SyncState state) => state.authExpired;
@@ -150,7 +151,7 @@ Future<void> showSyncConflictDialog({
   required Library library,
   Future<void> Function()? onResolved,
 }) async {
-  final choice = await showDialog<String>(
+  final choice = await showAppDialog<String>(
     context: context,
     builder: (dialogContext) {
       return AlertDialog(
@@ -228,7 +229,7 @@ Future<void> resolveSyncConflictFromPill({
     return;
   }
 
-  final picked = await showDialog<Library>(
+  final picked = await showAppDialog<Library>(
     context: context,
     builder: (dialogContext) {
       return SimpleDialog(

@@ -81,7 +81,7 @@ extension _SettingsDriveAccount on _SettingsScreenState {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(

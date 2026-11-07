@@ -171,7 +171,7 @@ extension _SettingsAddFolder on _SettingsScreenState {
 
   Future<String?> _pickAddFolderSource() async {
     if (widget.isModal || preferModalPresentation(context)) {
-      return showDialog<String>(
+      return showAppDialog<String>(
         context: context,
         builder: (dialogContext) {
           return AppFormDialog(

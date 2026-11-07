@@ -134,7 +134,7 @@ extension _SettingsIndexing on _SettingsScreenState {
     if (boards.length == 1) {
       targetBoardId = boards.first.id;
     } else {
-      targetBoardId = await showDialog<int>(
+      targetBoardId = await showAppDialog<int>(
         context: context,
         builder: (ctx) => SimpleDialog(
           title: const Text('Ajouter au plateau'),

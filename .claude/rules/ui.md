@@ -55,6 +55,10 @@ jamais d'une valeur codée en dur qui existe déjà comme token.
   **jamais** `ScaffoldMessenger.showSnackBar` direct ni de `ScaffoldMessenger`
   local. Une action se passe en `AppToastAction`, la gravité (`severity`) est
   choisie par l'appelant, jamais déduite du texte.
+- **Dialogues** : toujours `showAppDialog` (`core/theme/app_dialog.dart`),
+  jamais `showDialog` direct — c'est lui qui porte la transition d'entrée
+  (fondu + remontée de 8 px, sans `scale`) commune à tous les dialogues et au
+  sélecteur de sons (`appDialogTransition`).
 - **`SegmentedButton`** est thémé globalement (`segmentedButtonTheme`) mais
   sa coche de sélection (`showSelectedIcon`) est un paramètre du *widget*,
   pas du thème — toujours passer `showSelectedIcon: false` explicitement à

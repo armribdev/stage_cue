@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
+import '../../../../core/theme/app_dialog.dart';
 
 /// Constantes partagées pour modales et petits dialogues.
 abstract final class AppModalStyle {
@@ -35,7 +36,7 @@ Future<T?> showAppModal<T>({
   bool barrierDismissible = true,
 }) {
   final size = MediaQuery.sizeOf(context);
-  return showDialog<T>(
+  return showAppDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
     builder: (dialogContext) {

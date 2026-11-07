@@ -39,7 +39,7 @@ extension _SettingsLibraryActions on _SettingsScreenState {
         ? 'dossier cloud'
         : 'dossier local';
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
@@ -187,7 +187,7 @@ extension _SettingsLibraryActions on _SettingsScreenState {
   }
 
   Future<void> _confirmRemoveDriveLibrary(domain.Library library) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
@@ -260,7 +260,7 @@ extension _SettingsLibraryActions on _SettingsScreenState {
   /// Détail complet de l'état de la base, dont le chemin copiable — ouvert au
   /// tap sur l'icône « i » des éléments indexés.
   Future<void> _showDatabaseStateDialog() async {
-    await showDialog<void>(
+    await showAppDialog<void>(
       context: context,
       builder: (dialogContext) {
         return AppFormDialog(

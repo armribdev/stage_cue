@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../utils/app_snackbar.dart';
 import 'app_update_info.dart';
 import 'app_update_installer.dart';
+import '../theme/app_dialog.dart';
 
 /// Flux partagé confirmation → téléchargement → lancement silencieux d'une
 /// mise à jour, utilisé aussi bien par la notification de lancement
@@ -20,7 +21,7 @@ Future<void> runUpdateFlow(
   AppUpdateInfo info, {
   AppUpdateInstaller? installer,
 }) async {
-  final confirmed = await showDialog<bool>(
+  final confirmed = await showAppDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: const Text('Mise à jour disponible'),
@@ -47,7 +48,7 @@ Future<void> runUpdateFlow(
   final progress = ValueNotifier<double?>(0);
 
   unawaited(
-    showDialog<void>(
+    showAppDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(

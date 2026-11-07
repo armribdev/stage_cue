@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_tokens.dart';
 import 'google_oauth_config.dart';
+import '../theme/app_dialog.dart';
 
 /// Vérifie la config OAuth desktop et propose la saisie des credentials si besoin.
 /// Retourne `true` si la connexion Drive peut être tentée.
@@ -16,7 +17,7 @@ Future<bool> ensureGoogleOAuthConfigured(BuildContext context) async {
     return true;
   }
 
-  final saved = await showDialog<bool>(
+  final saved = await showAppDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (dialogContext) => const _GoogleOAuthCredentialsDialog(),

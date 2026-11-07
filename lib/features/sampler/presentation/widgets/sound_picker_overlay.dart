@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/theme/app_dialog.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/app_snackbar.dart';
@@ -196,21 +197,10 @@ class SoundPickerOverlay extends StatefulWidget {
     barrierDismissible: true,
     barrierLabel: 'Fermer',
     barrierColor: Colors.black.withValues(alpha: 0.4),
-    transitionDuration: const Duration(milliseconds: 120),
+    transitionDuration: const Duration(milliseconds: 160),
     pageBuilder: (ctx, _, _) => child,
-    transitionBuilder: (ctx, anim, _, child) {
-      final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-      return FadeTransition(
-        opacity: curved,
-        child: SlideTransition(
-          position: Tween(
-            begin: const Offset(0, 0.03),
-            end: Offset.zero,
-          ).animate(curved),
-          child: child,
-        ),
-      );
-    },
+    transitionBuilder: (ctx, anim, _, child) =>
+        appDialogTransition(ctx, anim, child),
   );
 
   @override

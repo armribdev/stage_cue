@@ -108,7 +108,7 @@ extension _SettingsAutoTag on _SettingsScreenState {
   Future<void> _confirmRemoveAutoTagPack(
     AutoTagPackController controller,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Supprimer le pack ?'),

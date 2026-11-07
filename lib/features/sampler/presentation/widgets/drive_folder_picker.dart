@@ -6,6 +6,7 @@ import '../../../../core/sync/drive_models.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../data/repositories/library_repository.dart';
 import 'app_form_dialog.dart';
+import '../../../../core/theme/app_dialog.dart';
 
 /// Dossier Drive choisi par l'utilisateur dans le navigateur.
 class DriveFolderSelection {
@@ -91,7 +92,7 @@ class DriveFolderPicker extends StatefulWidget {
     BuildContext context, {
     required LibraryRepository repository,
   }) {
-    return showDialog<DriveFolderSelection>(
+    return showAppDialog<DriveFolderSelection>(
       context: context,
       builder: (dialogContext) {
         return DriveFolderPicker(repository: repository);
