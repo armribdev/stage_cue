@@ -686,48 +686,94 @@ class _PadSurfaceState extends State<_PadSurface> {
         : widget.border;
     final glow = widget.glow;
 
-    return AnimatedContainer(
-      duration: _fade,
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        borderRadius: AppRadius.radiusPad,
-        boxShadow: glow == null
-            ? const []
-            : [BoxShadow(color: glow.withValues(alpha: 0.22), blurRadius: 14)],
-      ),
-      child: TweenAnimationBuilder<Color?>(
-        tween: ColorTween(end: widget.fill),
-        duration: _fade,
-        builder: (context, fill, child) => TweenAnimationBuilder<Color?>(
-          tween: ColorTween(end: border),
-          duration: _fade,
-          builder: (context, border, child) => Card(
-            elevation: 0,
-            // Le clip épouse les coins arrondis : la progression collée au
-            // bord bas ne déborde pas.
-            clipBehavior: Clip.antiAlias,
-            color: fill,
-            shape: RoundedRectangleBorder(
-              borderRadius: AppRadius.radiusPad,
-              side: BorderSide(color: border ?? widget.border),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Halo derrière la carte, rogné à l'extérieur de son contour : un
+        // `BoxShadow` Flutter n'est pas rogné sous la boîte (contrairement au
+        // CSS), il traverserait le fond translucide et teinterait l'intérieur.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: ClipPath(
+              clipper: const _OutsidePadClipper(),
+              child: AnimatedContainer(
+                duration: _fade,
+                curve: Curves.easeOut,
+                decoration: BoxDecoration(
+                  borderRadius: AppRadius.radiusPad,
+                  boxShadow: glow == null
+                      ? const []
+                      : [
+                          BoxShadow(
+                            color: glow.withValues(alpha: 0.3),
+                            blurRadius: 16,
+                          ),
+                        ],
+                ),
+              ),
             ),
-            child: child,
+          ),
+        ),
+        _buildCard(interactive: interactive, border: border),
+      ],
+    );
+  }
+
+  Widget _buildCard({required bool interactive, required Color border}) {
+    return TweenAnimationBuilder<Color?>(
+      tween: ColorTween(end: widget.fill),
+      duration: _fade,
+      builder: (context, fill, child) => TweenAnimationBuilder<Color?>(
+        tween: ColorTween(end: border),
+        duration: _fade,
+        builder: (context, border, child) => Card(
+          elevation: 0,
+          // Le clip épouse les coins arrondis : la progression collée au
+          // bord bas ne déborde pas.
+          clipBehavior: Clip.antiAlias,
+          color: fill,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppRadius.radiusPad,
+            side: BorderSide(color: border ?? widget.border),
           ),
           child: child,
         ),
-        child: interactive
-            ? InkWell(
-                onTap: widget.onTap,
-                onLongPress: widget.onLongPress,
-                borderRadius: AppRadius.radiusPad,
-                highlightColor: Colors.black.withValues(alpha: 0.16),
-                onHover: (value) => setState(() => _hovered = value),
-                child: widget.child,
-              )
-            : widget.child,
+        child: child,
       ),
+      child: interactive
+          ? InkWell(
+              onTap: widget.onTap,
+              onLongPress: widget.onLongPress,
+              borderRadius: AppRadius.radiusPad,
+              highlightColor: Colors.black.withValues(alpha: 0.16),
+              onHover: (value) => setState(() => _hovered = value),
+              child: widget.child,
+            )
+          : widget.child,
     );
   }
+}
+
+/// Découpe tout sauf le contour du pad : ne laisse passer que la partie
+/// extérieure du halo de lecture.
+class _OutsidePadClipper extends CustomClipper<Path> {
+  const _OutsidePadClipper();
+
+  @override
+  Path getClip(Size size) {
+    final pad = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      const Radius.circular(AppRadius.pad),
+    );
+    return Path.combine(
+      PathOperation.difference,
+      Path()..addRect((Offset.zero & size).inflate(64)),
+      Path()..addRRect(pad),
+    );
+  }
+
+  @override
+  bool shouldReclip(_OutsidePadClipper oldClipper) => false;
 }
 
 /// Barre de progression de lecture d'un pad musique, synchronisée sur la
