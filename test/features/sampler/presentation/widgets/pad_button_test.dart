@@ -141,56 +141,104 @@ void main() {
     expect(find.text('Titre fallback'), findsOneWidget);
   });
 
-  testWidgets(
-    'seule la 1re ligne du titre cède la place aux icônes d édition',
-    (tester) async {
-      final padItem = buildPadItem(
-        padName: 'Aa Bb Cc Dd Ee Ff Gg',
-        soundTitle: 'Titre',
-      );
+  testWidgets('les icônes d édition sont en bas à droite, sous le titre', (
+    tester,
+  ) async {
+    final padItem = buildPadItem(
+      padName: 'Aa Bb Cc Dd Ee Ff Gg',
+      soundTitle: 'Titre',
+    );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Align(
-              alignment: Alignment.topLeft,
-              child: SizedBox(
-                width: 180,
-                height: 130,
-                child: PadButton(
-                  padItem: padItem,
-                  onTap: () {},
-                  isEditable: true,
-                  onEdit: () {},
-                  onRemove: () {},
-                ),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 180,
+              height: 130,
+              child: PadButton(
+                padItem: padItem,
+                onTap: () {},
+                isEditable: true,
+                onEdit: () {},
+                onRemove: () {},
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
 
-      // Police de test Ahem : 15px par glyphe. Contenu 156px, moins 50px
-      // d'icônes et d'espacement → 106px pour la 1re ligne.
-      final firstLine = find.text('Aa Bb');
-      final rest = find.text('Cc Dd Ee Ff Gg');
-      expect(firstLine, findsOneWidget);
-      expect(rest, findsOneWidget);
+    // Le titre garde toute la largeur : plus de coupure autour des icônes.
+    final title = tester.getRect(find.textContaining('Aa Bb'));
+    final edit = tester.getRect(find.byIcon(Icons.edit_outlined));
+    final close = tester.getRect(find.byIcon(Icons.close));
+    final pad = tester.getRect(find.byType(PadButton));
 
-      expect(
-        tester.getSize(rest).width,
-        greaterThan(tester.getSize(firstLine).width),
-      );
-      expect(tester.getTopLeft(rest).dx, tester.getTopLeft(firstLine).dx);
-      // Interligne constant : les icônes, plus hautes qu'une ligne, ne
-      // doivent pas repousser la 2e ligne.
-      expect(tester.getTopLeft(rest).dy, tester.getBottomLeft(firstLine).dy);
-      expect(
-        tester.getTopRight(firstLine).dx,
-        lessThanOrEqualTo(
-          tester.getTopLeft(find.byIcon(Icons.edit_outlined)).dx,
+    expect(title.bottom, lessThanOrEqualTo(edit.top));
+    expect(edit.right, lessThan(close.left));
+    expect(close.right, greaterThan(pad.right - 20));
+    expect(close.bottom, greaterThan(pad.bottom - 20));
+  });
+
+  testWidgets('toucher « N sons » ouvre le choix du son, sans icône dédiée '
+      'et sans déclencher le pad', (tester) async {
+    Sound sound(int id) => Sound(
+      id: id,
+      title: 'Son $id',
+      displayName: null,
+      filePath: '/tmp/test$id.wav',
+      type: SoundType.soundEffect,
+      createdAt: DateTime(2026, 1, 1),
+    );
+    final padItem = PadItem(
+      pad: Pad(
+        id: 1,
+        boardId: 1,
+        name: 'Multi',
+        sortOrder: 0,
+        createdAt: DateTime(2026, 1, 1),
+        sounds: [sound(1), sound(2)],
+      ),
+      slots: [
+        for (var i = 0; i < 2; i++)
+          PadSoundSlot(
+            availability: PadSoundAvailability.ready,
+            player: FakeAudioPlayerService(),
+          ),
+      ],
+    );
+    var taps = 0;
+    var showSounds = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 180,
+              height: 130,
+              child: PadButton(
+                padItem: padItem,
+                onTap: () => taps++,
+                onShowSounds: () => showSounds++,
+              ),
+            ),
+          ),
         ),
-      );
-    },
-  );
+      ),
+    );
+
+    expect(find.byIcon(Icons.queue_music_rounded), findsNothing);
+
+    await tester.tap(find.text('2 sons'));
+    expect(showSounds, 1);
+    expect(taps, 0);
+
+    await tester.tap(find.text('Multi'));
+    expect(taps, 1);
+    expect(showSounds, 1);
+  });
 }

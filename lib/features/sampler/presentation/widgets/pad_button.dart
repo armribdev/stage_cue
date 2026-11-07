@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../domain/entities/pad.dart';
@@ -152,64 +150,80 @@ class PadButton extends StatelessWidget {
           : scheme.onSurface,
     );
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.radiusPad,
-        side: BorderSide(
-          color: padItem.isPlaying
-              ? scheme.primary.withValues(alpha: 0.5)
-              : padItem.isPaused
-              ? scheme.primary.withValues(alpha: 0.3)
-              : padItem.isPartiallyReady
-              ? scheme.tertiary.withValues(alpha: 0.45)
-              : scheme.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
-      color: padItem.isPlaying
-          ? playingColor
-          : padItem.isPaused
-          ? (hasCustomColor
-                ? customColor.withValues(alpha: 0.35)
-                : scheme.surfaceContainerHigh.withValues(alpha: 0.6))
-          : baseColor,
+    final fill = padItem.isPlaying
+        ? playingColor
+        : padItem.isPaused
+        ? (hasCustomColor
+              ? customColor.withValues(alpha: 0.35)
+              : scheme.surfaceContainerHigh.withValues(alpha: 0.6))
+        : baseColor;
+    final border = padItem.isPlaying
+        ? scheme.primary.withValues(alpha: 0.85)
+        : padItem.isPaused
+        ? scheme.primary.withValues(alpha: 0.3)
+        : padItem.isPartiallyReady
+        ? scheme.tertiary.withValues(alpha: 0.45)
+        : scheme.outlineVariant.withValues(alpha: 0.45);
+
+    return _PadSurface(
+      fill: fill,
+      border: border,
+      // Halo de la couleur du pad (ou de l'accent) : un pad "à l'antenne" se
+      // repère à distance, sans dépendre uniquement de son fond.
+      glow: padItem.isPlaying ? (customColor ?? scheme.primary) : null,
+      onTap: onTap,
+      onLongPress: onLongPress,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          _interactive(
-            // Titre ancré en haut, durée/progression ancrée en bas — jamais
-            // centré : c'est ce qui distingue un pad "Console Linear" d'une
-            // tuile Material générique (voir maquette de direction). Seule la
-            // 1re ligne du titre cède la place aux icônes : les suivantes
-            // reprennent toute la largeur du pad.
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) => _buildTitle(
-                        context,
-                        style: titleStyle,
-                        maxWidth: constraints.maxWidth,
-                        iconCluster: iconCluster,
-                      ),
+          // Titre ancré en haut, durée / variantes et actions ancrées en bas —
+          // jamais centré : c'est ce qui distingue un pad "Console Linear"
+          // d'une tuile Material générique. Les icônes d'action ne partagent
+          // plus la rangée du titre, qui garde toute la largeur.
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Padding(
+                    // Réserve la pastille de téléchargement (coin haut droit).
+                    padding: EdgeInsets.only(
+                      right: padItem.isDownloading ? _downloadCornerSize : 0,
+                    ),
+                    child: Text(
+                      padItem.displayName,
+                      maxLines: _titleMaxLines,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  if (isMulti)
-                    _buildVariantChip(scheme)
-                  else
-                    _buildBottomMeta(scheme, hasCustomColor: hasCustomColor),
-                ],
-              ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: isMulti
+                          ? Align(
+                              alignment: Alignment.centerLeft,
+                              child: _buildVariantChip(scheme),
+                            )
+                          : _buildBottomMeta(
+                              scheme,
+                              hasCustomColor: hasCustomColor,
+                            ),
+                    ),
+                    ?iconCluster,
+                  ],
+                ),
+              ],
             ),
           ),
           // Badges informatifs : le corps du pad porte l'action. La pause
           // musique est signalée uniquement dans la régie, pas sur le pad.
           if (padItem.isDownloading) _buildDownloadCorner(scheme.tertiary),
+          ?_buildProgress(scheme, hasCustomColor: hasCustomColor),
         ],
       ),
     );
@@ -217,152 +231,63 @@ class PadButton extends StatelessWidget {
 
   static const int _titleMaxLines = 3;
   static const double _iconSegmentSize = 22;
-  static const double _iconClusterGap = 6;
+  static const double _downloadCornerSize = 26;
 
-  /// Titre sur [_titleMaxLines] lignes dont seule la 1re partage sa rangée
-  /// avec les icônes. Flutter n'a pas d'habillage autour d'un flottant : on
-  /// mesure ce qui tient sur la 1re ligne à largeur réduite, puis le reste
-  /// repart à pleine largeur dans un second `Text`.
-  Widget _buildTitle(
-    BuildContext context, {
-    required TextStyle style,
-    required double maxWidth,
-    required Widget? iconCluster,
-  }) {
-    final label = padItem.displayName;
-    final reserved = iconCluster == null
-        ? 0.0
-        : _iconClusterEntryCount * _iconSegmentSize + _iconClusterGap;
-    // Plancher : sur un pad très étroit, la 1re ligne garde de quoi afficher
-    // au moins un mot plutôt que de se réduire à rien.
-    final firstLineWidth = math.max(maxWidth - reserved, maxWidth * 0.3);
+  /// Progression de lecture : filet de 3 px collé au bord bas du pad (le
+  /// clip arrondi de la carte en épouse les coins), uniquement pendant la
+  /// lecture ou la pause. `null` quand il n'y a rien à montrer.
+  Widget? _buildProgress(ColorScheme scheme, {required bool hasCustomColor}) {
+    final isMusic = padItem.pad.isMusicPad;
+    final showProgress = isMusic
+        ? padItem.isPlaying || padItem.isPaused
+        : padItem.playbackTickets.isNotEmpty;
+    if (!showProgress) return null;
 
-    // Même style effectif que les `Text` ci-dessous (fusion avec
-    // DefaultTextStyle → police Manrope du thème) : mesurer avec le style
-    // brut retombe sur la police par défaut, plus étroite, et la coupure
-    // calculée ne tient plus au rendu réel.
-    final effectiveStyle = DefaultTextStyle.of(context).style.merge(style);
-    final painter = TextPainter(
-      text: TextSpan(text: label, style: effectiveStyle),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-    )..layout(maxWidth: firstLineWidth);
-    var firstLineEnd = painter
-        .getLineBoundary(const TextPosition(offset: 0))
-        .end;
-    final lineHeight = painter.preferredLineHeight;
-    painter.dispose();
-
-    // Un mot plus large que la ligne est coupé au caractère, et son début
-    // resterait collé en fin de 1re ligne (« ambience So » / « undEffects… »).
-    // On recule au dernier espace pour qu'il démarre sur sa propre ligne.
-    if (firstLineEnd > 0 &&
-        firstLineEnd < label.length &&
-        label[firstLineEnd].trim().isNotEmpty &&
-        label[firstLineEnd - 1].trim().isNotEmpty) {
-      final lastSpace = label.lastIndexOf(' ', firstLineEnd - 1);
-      if (lastSpace > 0) firstLineEnd = lastSpace;
-    }
-
-    final rest = firstLineEnd < label.length
-        ? label.substring(firstLineEnd).trimLeft()
-        : '';
-
-    final lines = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: EdgeInsets.only(right: maxWidth - firstLineWidth),
-          child: Text(
-            rest.isEmpty ? label : label.substring(0, firstLineEnd).trimRight(),
-            maxLines: 1,
-            // Le point de rupture est déjà mesuré pour tenir dans
-            // `firstLineWidth` : si du texte continue en dessous, une
-            // ellipse ici tronquerait un mot avant la vraie fin du titre.
-            // `clip` absorbe juste l'écart d'arrondi entre ce `TextPainter`
-            // et le layout réel du `Text`.
-            overflow: rest.isEmpty ? TextOverflow.ellipsis : TextOverflow.clip,
-            style: style,
-          ),
-        ),
-        if (rest.isNotEmpty)
-          Flexible(
-            child: Text(
-              rest,
-              maxLines: _titleMaxLines - 1,
-              overflow: TextOverflow.ellipsis,
-              style: style,
-            ),
-          ),
-      ],
-    );
-    if (iconCluster == null) return lines;
-
-    // Icônes hors flux, centrées sur la 1re ligne : plus hautes qu'une ligne
-    // de texte, elles creuseraient sinon l'interligne entre lignes 1 et 2.
-    return SizedBox(
-      width: maxWidth,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          lines,
-          Positioned(
-            top: (lineHeight - _iconSegmentSize) / 2,
-            right: 0,
-            child: iconCluster,
-          ),
-        ],
+    // Couleur d'icône contrastée avec le fond réel du pad si celui-ci a une
+    // couleur perso ; l'accent sinon.
+    final color = hasCustomColor ? _iconStyle(scheme).icon : scheme.primary;
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: 3,
+      child: IgnorePointer(
+        child: isMusic
+            ? _MusicProgressBar(padItem: padItem, color: color)
+            : Stack(
+                children: [
+                  for (final ticket in padItem.playbackTickets)
+                    _PolyphonicProgressBar(
+                      key: ValueKey<int>(ticket.id),
+                      ticket: ticket,
+                      color: color.withValues(alpha: 0.8),
+                    ),
+                ],
+              ),
       ),
     );
   }
 
-  /// Bloc bas d'un pad mono-son : barre de progression fine (uniquement
-  /// pendant la lecture) suivie de la durée en police technique — remplace
-  /// l'ancien glacis plein-carte par une barre discrète, comme sur la
-  /// maquette. Les pads multi-sons affichent [_buildVariantChip] à la place.
+  /// Durée d'un pad mono-son, en police technique. Les pads multi-sons
+  /// affichent [_buildVariantChip] à la place.
   Widget _buildBottomMeta(ColorScheme scheme, {required bool hasCustomColor}) {
-    final barColor = hasCustomColor ? scheme.primary : scheme.onSurfaceVariant;
-    final showProgress = padItem.pad.isMusicPad
-        ? padItem.isPlaying || padItem.isPaused
-        : padItem.playbackTickets.isNotEmpty;
     final duration = padItem.progressPlayer?.duration;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (showProgress) ...[
-          padItem.pad.isMusicPad
-              ? _MusicProgressBar(padItem: padItem, color: barColor)
-              : SizedBox(
-                  height: 3,
-                  child: Stack(
-                    children: [
-                      for (final ticket in padItem.playbackTickets)
-                        _PolyphonicProgressBar(
-                          key: ValueKey<int>(ticket.id),
-                          ticket: ticket,
-                          color: barColor.withValues(alpha: 0.7),
-                        ),
-                    ],
-                  ),
-                ),
-          const SizedBox(height: 5),
-        ],
-        if (duration != null && duration > Duration.zero)
-          Text(
-            _formatPadDuration(duration),
-            style: AppFonts.monoStyle(
-              TextStyle(
-                fontSize: 11,
-                color: scheme.onSurfaceVariant.withValues(
-                  alpha: hasCustomColor ? 0.85 : 0.7,
-                ),
-              ),
+    if (duration == null || duration <= Duration.zero) {
+      return const SizedBox.shrink();
+    }
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        _formatPadDuration(duration),
+        style: AppFonts.monoStyle(
+          TextStyle(
+            fontSize: 11,
+            color: scheme.onSurfaceVariant.withValues(
+              alpha: hasCustomColor ? 0.85 : 0.7,
             ),
           ),
-      ],
+        ),
+      ),
     );
   }
 
@@ -379,7 +304,8 @@ class PadButton extends StatelessWidget {
     final ready = padItem.readySoundCount;
     final label = padItem.isPartiallyReady ? '$ready/$total' : '$total';
 
-    return Row(
+    final dim = scheme.onSurfaceVariant.withValues(alpha: 0.65);
+    final content = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
@@ -388,19 +314,31 @@ class PadButton extends StatelessWidget {
             PadPlayMode.sequential => Icons.repeat_one_rounded,
           },
           size: 11,
-          color: scheme.onSurfaceVariant.withValues(alpha: 0.65),
+          color: dim,
         ),
         const SizedBox(width: 3),
         Text(
           padItem.isPartiallyReady ? '$label variantes' : '$label sons',
           style: TextStyle(
             fontSize: 11,
-            color: padItem.isPartiallyReady
-                ? scheme.tertiary
-                : scheme.onSurfaceVariant.withValues(alpha: 0.65),
+            color: padItem.isPartiallyReady ? scheme.tertiary : dim,
           ),
         ),
+        if (onShowSounds != null)
+          Icon(Icons.chevron_right_rounded, size: 12, color: dim),
       ],
+    );
+    // Le libellé lui-même ouvre le choix du son (pas d'icône dédiée) : le
+    // chevron signale qu'il est cliquable, l'`InkWell` imbriqué capte le tap
+    // avant celui du pad.
+    if (onShowSounds == null) return content;
+    return InkWell(
+      onTap: onShowSounds,
+      borderRadius: AppRadius.radiusSm,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: content,
+      ),
     );
   }
 
@@ -454,18 +392,22 @@ class PadButton extends StatelessWidget {
   /// [BoxedIconButton], adapté en contraste dynamique puisque le fond du pad
   /// est arbitraire (voir maquette : icônes éditer/fermer sur la même ligne
   /// que le titre, jamais flottantes dessus).
-  List<(IconData, double, VoidCallback?)> get _iconClusterEntries => [
+  ///
+  /// [includeSounds] : icône « sons du pad ». Un pad prêt ouvre ce choix en
+  /// touchant son libellé « N sons » ; les états en route / bloqué n'ont pas
+  /// ce libellé, l'icône reste donc leur seule porte d'entrée.
+  List<(IconData, double, VoidCallback?)> _iconClusterEntries({
+    required bool includeSounds,
+  }) => [
     if (onCue != null) (Icons.headphones_rounded, 14.0, onCue),
-    if (padItem.totalSoundCount > 1 && onShowSounds != null)
+    if (includeSounds && padItem.totalSoundCount > 1 && onShowSounds != null)
       (Icons.queue_music_rounded, 14.0, onShowSounds),
     if (isEditable && onEdit != null) (Icons.edit_outlined, 14.0, onEdit),
     if (isEditable && onRemove != null) (Icons.close, 16.0, onRemove),
   ];
 
-  int get _iconClusterEntryCount => _iconClusterEntries.length;
-
-  Widget? _buildIconCluster(ColorScheme scheme) {
-    final entries = _iconClusterEntries;
+  Widget? _buildIconCluster(ColorScheme scheme, {bool includeSounds = false}) {
+    final entries = _iconClusterEntries(includeSounds: includeSounds);
     if (entries.isEmpty) return null;
 
     final style = _iconStyle(scheme);
@@ -542,68 +484,64 @@ class PadButton extends StatelessWidget {
     final label = padItem.displayName;
     final downloading = padItem.isDownloading;
     final onColor = scheme.onTertiaryContainer;
-    final iconCluster = _buildIconCluster(scheme);
+    final iconCluster = _buildIconCluster(scheme, includeSounds: true);
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.radiusPad,
-        side: BorderSide(color: scheme.tertiary.withValues(alpha: 0.6)),
-      ),
-      color: scheme.tertiaryContainer,
-      child: _interactive(
-        child: Stack(
-          children: [
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: onColor,
+    return _PadSurface(
+      fill: scheme.tertiaryContainer,
+      border: scheme.tertiary.withValues(alpha: 0.6),
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Stack(
+        children: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: onColor,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        downloading
+                            ? Icons.downloading_rounded
+                            : Icons.cloud_download_outlined,
+                        size: 12,
+                        color: onColor.withValues(alpha: 0.75),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          downloading
-                              ? Icons.downloading_rounded
-                              : Icons.cloud_download_outlined,
-                          size: 12,
-                          color: onColor.withValues(alpha: 0.75),
+                      const SizedBox(width: 4),
+                      Text(
+                        downloading ? 'téléchargement…' : 'Télécharger',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: onColor.withValues(alpha: 0.85),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          downloading ? 'téléchargement…' : 'Télécharger',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: onColor.withValues(alpha: 0.85),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            if (downloading) _buildDownloadCorner(onColor),
-            if (iconCluster != null)
-              Positioned(top: 4, right: 4, child: iconCluster),
-          ],
-        ),
+          ),
+          if (downloading) _buildDownloadCorner(onColor),
+          if (iconCluster != null)
+            Positioned(top: 4, right: 4, child: iconCluster),
+        ],
       ),
     );
   }
@@ -624,61 +562,52 @@ class PadButton extends StatelessWidget {
         : isUnsupportedFormat
         ? (Icons.block_outlined, 'format non supporté')
         : (Icons.cloud_off_outlined, 'hors-ligne');
-    final iconCluster = _buildIconCluster(scheme);
+    final iconCluster = _buildIconCluster(scheme, includeSounds: true);
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.radiusPad,
-        side: BorderSide(
-          color: isMissing
-              ? scheme.error.withValues(alpha: 0.55)
-              : scheme.outlineVariant.withValues(alpha: 0.5),
-        ),
-      ),
-      color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-      child: _interactive(
-        child: Stack(
-          children: [
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: scheme.onSurface.withValues(alpha: 0.45),
-                      ),
+    return _PadSurface(
+      fill: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+      border: isMissing
+          ? scheme.error.withValues(alpha: 0.55)
+          : scheme.outlineVariant.withValues(alpha: 0.5),
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Stack(
+        children: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: scheme.onSurface.withValues(alpha: 0.45),
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, size: 12, color: accent),
-                        const SizedBox(width: 4),
-                        Text(
-                          hint,
-                          style: TextStyle(fontSize: 11, color: accent),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 12, color: accent),
+                      const SizedBox(width: 4),
+                      Text(hint, style: TextStyle(fontSize: 11, color: accent)),
+                    ],
+                  ),
+                ],
               ),
             ),
-            if (iconCluster != null)
-              Positioned(top: 4, right: 4, child: iconCluster),
-          ],
-        ),
+          ),
+          if (iconCluster != null)
+            Positioned(top: 4, right: 4, child: iconCluster),
+        ],
       ),
     );
   }
@@ -713,16 +642,90 @@ class PadButton extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _interactive({required Widget child}) {
-    if (onTap == null && onLongPress == null) {
-      return child;
-    }
-    return InkWell(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      borderRadius: AppRadius.radiusPad,
-      child: child,
+/// Surface d'un pad : carte à hairline qui réagit au survol (bordure
+/// éclaircie), au clic (voile sombre) et à la lecture (halo [glow]). Les
+/// changements de fond et de bordure sont fondus plutôt que commutés.
+///
+/// Pas de `Transform.scale` à l'enfoncement : le texte du pad serait rééchantillonné
+/// (flou), cf. `pad_item.dart`.
+class _PadSurface extends StatefulWidget {
+  final Color fill;
+  final Color border;
+
+  /// Couleur du halo de lecture ; `null` = pas de halo.
+  final Color? glow;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final Widget child;
+
+  const _PadSurface({
+    required this.fill,
+    required this.border,
+    required this.child,
+    this.glow,
+    this.onTap,
+    this.onLongPress,
+  });
+
+  @override
+  State<_PadSurface> createState() => _PadSurfaceState();
+}
+
+class _PadSurfaceState extends State<_PadSurface> {
+  static const Duration _fade = Duration(milliseconds: 140);
+
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final interactive = widget.onTap != null || widget.onLongPress != null;
+    final border = interactive && _hovered
+        ? Color.alphaBlend(Colors.white.withValues(alpha: 0.2), widget.border)
+        : widget.border;
+    final glow = widget.glow;
+
+    return AnimatedContainer(
+      duration: _fade,
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.radiusPad,
+        boxShadow: glow == null
+            ? const []
+            : [BoxShadow(color: glow.withValues(alpha: 0.22), blurRadius: 14)],
+      ),
+      child: TweenAnimationBuilder<Color?>(
+        tween: ColorTween(end: widget.fill),
+        duration: _fade,
+        builder: (context, fill, child) => TweenAnimationBuilder<Color?>(
+          tween: ColorTween(end: border),
+          duration: _fade,
+          builder: (context, border, child) => Card(
+            elevation: 0,
+            // Le clip épouse les coins arrondis : la progression collée au
+            // bord bas ne déborde pas.
+            clipBehavior: Clip.antiAlias,
+            color: fill,
+            shape: RoundedRectangleBorder(
+              borderRadius: AppRadius.radiusPad,
+              side: BorderSide(color: border ?? widget.border),
+            ),
+            child: child,
+          ),
+          child: child,
+        ),
+        child: interactive
+            ? InkWell(
+                onTap: widget.onTap,
+                onLongPress: widget.onLongPress,
+                borderRadius: AppRadius.radiusPad,
+                highlightColor: Colors.black.withValues(alpha: 0.16),
+                onHover: (value) => setState(() => _hovered = value),
+                child: widget.child,
+              )
+            : widget.child,
+      ),
     );
   }
 }
@@ -815,14 +818,11 @@ class _MusicProgressBarState extends State<_MusicProgressBar>
         if (!widget.padItem.isPlaying && value <= 0.0) {
           return const SizedBox.shrink();
         }
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(_barHeight),
-          child: LinearProgressIndicator(
-            value: value,
-            backgroundColor: widget.color.withValues(alpha: 0.16),
-            valueColor: AlwaysStoppedAnimation<Color>(widget.color),
-            minHeight: _barHeight,
-          ),
+        return LinearProgressIndicator(
+          value: value,
+          backgroundColor: widget.color.withValues(alpha: 0.16),
+          valueColor: AlwaysStoppedAnimation<Color>(widget.color),
+          minHeight: _barHeight,
         );
       },
     );
@@ -880,14 +880,11 @@ class _PolyphonicProgressBarState extends State<_PolyphonicProgressBar>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) => Positioned.fill(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(_barHeight),
-          child: LinearProgressIndicator(
-            value: _controller.value,
-            backgroundColor: Colors.transparent,
-            valueColor: AlwaysStoppedAnimation<Color>(widget.color),
-            minHeight: _barHeight,
-          ),
+        child: LinearProgressIndicator(
+          value: _controller.value,
+          backgroundColor: Colors.transparent,
+          valueColor: AlwaysStoppedAnimation<Color>(widget.color),
+          minHeight: _barHeight,
         ),
       ),
     );
