@@ -67,7 +67,11 @@ class BoardsList extends StatelessWidget {
               const SizedBox(width: 8),
               const Text(
                 'Scènes',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: AppTypography.titleLetterSpacing,
+                ),
               ),
             ],
           ),

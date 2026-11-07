@@ -61,6 +61,11 @@ abstract final class AppColors {
 /// selon `context.prefersDesktopUi` — jamais codé en dur par écran.
 abstract final class AppTypography {
   static const double desktopFontScale = 0.88;
+
+  /// Approche des lettres (px) des titres de 15 à 18 px (modales, dialogues,
+  /// barres) : un titre gras en Manrope à approche neutre paraît lâche.
+  /// Ne s'applique pas au corps de texte ni aux libellés de section.
+  static const double titleLetterSpacing = -0.2;
 }
 
 /// Styles de texte partagés de la direction "Console Linear".

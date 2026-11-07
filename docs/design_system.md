@@ -54,6 +54,8 @@ lequel `AppElevation` applique l'alpha du hairline.
   isolés (durées, compteurs, chemins) — jamais une phrase entière.
 - `AppTextStyles.sectionLabel(context)` : libellé de section en petites
   capitales (texte passé en majuscules par l'appelant).
+- `AppTypography.titleLetterSpacing` (−0,2 px) : approche des titres de 15 à 18 px
+  (modales, dialogues, barres) ; pas du corps de texte ni des libellés de section.
 - `AppTypography.desktopFontScale` (0,88) : appliqué une seule fois dans
   `MaterialApp.builder` quand `context.prefersDesktopUi`.
 

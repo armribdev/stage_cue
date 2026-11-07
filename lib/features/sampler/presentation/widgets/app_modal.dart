@@ -3,6 +3,7 @@ import 'dart:math' show min;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_icons.dart';
+import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../../../../core/theme/app_dialog.dart';
 
@@ -106,6 +107,7 @@ class AppModalShell extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
+                        letterSpacing: AppTypography.titleLetterSpacing,
                       ),
                     ),
                   ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 /// Constantes partagées pour les tiroirs du bas (sélection de sons, régie…).
 abstract final class AppBottomSheetStyle {
@@ -82,7 +83,11 @@ class _AppBottomSheetTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const style = TextStyle(fontSize: 17, fontWeight: FontWeight.w700);
+    const style = TextStyle(
+      fontSize: 17,
+      fontWeight: FontWeight.w700,
+      letterSpacing: AppTypography.titleLetterSpacing,
+    );
 
     if (leadingIcon == null) {
       return Padding(

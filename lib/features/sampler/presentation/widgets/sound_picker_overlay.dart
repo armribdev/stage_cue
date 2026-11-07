@@ -383,20 +383,46 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     return 'Aucun son';
   }
 
-  String get _hintsText => switch (widget.mode) {
-    QuickSearchMode() =>
-      '↑↓ sélectionner    ↵ jouer    ⌘/Ctrl+↵ préparer    tap audition',
-    MusicPickerMode(playNow: true) => '↑↓ sélectionner    ↵/tap jouer',
-    MusicPickerMode() => '↑↓ sélectionner    ↵/tap ajouter à la file',
-    AmbiancePickerMode() => '↑↓ sélectionner    ↵/tap lancer',
-    PadPickerMode() => '↑↓ sélectionner    ↵ ajouter/retirer',
-    LibraryMode() => '↑↓ sélectionner    ↵/tap éditer',
-    ManageMode() =>
-      _unprocessedOnly && _isSplitLayout
-          ? '↑↓ sélectionner    ↵/tap éditer    ⌘/Ctrl+↵ valider et suivant    '
-                '▶ aperçu depuis le point d\'entrée'
-          : '↑↓ sélectionner    ↵/tap éditer    ▶ aperçu depuis le point d\'entrée',
-    PadVariantMode() => '↑↓ sélectionner    ↵/tap jouer',
+  /// Raccourcis affichés au pied du sélecteur : (touche, action). Une touche
+  /// vide = simple mention sans touche (ex. « tap »).
+  List<(String, String)> get _hints => switch (widget.mode) {
+    QuickSearchMode() => const [
+      ('↑↓', 'sélectionner'),
+      ('Entrée', 'jouer'),
+      ('⌘/Ctrl+Entrée', 'préparer'),
+      ('', 'tap : audition'),
+    ],
+    MusicPickerMode(playNow: true) => const [
+      ('↑↓', 'sélectionner'),
+      ('Entrée', 'jouer (ou tap)'),
+    ],
+    MusicPickerMode() => const [
+      ('↑↓', 'sélectionner'),
+      ('Entrée', 'ajouter à la file (ou tap)'),
+    ],
+    AmbiancePickerMode() => const [
+      ('↑↓', 'sélectionner'),
+      ('Entrée', 'lancer (ou tap)'),
+    ],
+    PadPickerMode() => const [
+      ('↑↓', 'sélectionner'),
+      ('Entrée', 'ajouter/retirer'),
+    ],
+    LibraryMode() => const [
+      ('↑↓', 'sélectionner'),
+      ('Entrée', 'éditer (ou tap)'),
+    ],
+    ManageMode() => [
+      ('↑↓', 'sélectionner'),
+      ('Entrée', 'éditer'),
+      if (_unprocessedOnly && _isSplitLayout)
+        ('⌘/Ctrl+Entrée', 'valider et suivant'),
+      ('▶', "aperçu depuis le point d'entrée"),
+    ],
+    PadVariantMode() => const [
+      ('↑↓', 'sélectionner'),
+      ('Entrée', 'jouer (ou tap)'),
+    ],
   };
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────

@@ -636,7 +636,11 @@ class _SoundEditFormState extends State<SoundEditForm> {
               widget.sound.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                letterSpacing: AppTypography.titleLetterSpacing,
+              ),
             ),
           ),
         ),

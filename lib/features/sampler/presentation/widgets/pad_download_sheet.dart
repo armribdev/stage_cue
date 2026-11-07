@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_icons.dart';
+import '../../../../core/theme/app_tokens.dart';
 import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
 import 'pad_button.dart' show padSoundAvailabilityIcon;
@@ -66,7 +67,11 @@ class _PadDownloadSheetState extends State<PadDownloadSheet> {
         children: [
           Text(
             isMulti ? 'Variantes du pad' : 'Son non téléchargé',
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              letterSpacing: AppTypography.titleLetterSpacing,
+            ),
           ),
           const SizedBox(height: 8),
           Text(

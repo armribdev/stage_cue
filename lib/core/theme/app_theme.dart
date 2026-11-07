@@ -90,6 +90,7 @@ class AppTheme {
           fontFamily: AppFonts.ui,
           fontSize: 15,
           fontWeight: FontWeight.w700,
+          letterSpacing: AppTypography.titleLetterSpacing,
           color: AppColors.text,
         ),
       ),
@@ -109,6 +110,7 @@ class AppTheme {
           fontFamily: AppFonts.ui,
           fontSize: 16,
           fontWeight: FontWeight.w700,
+          letterSpacing: AppTypography.titleLetterSpacing,
           color: AppColors.text,
         ),
         contentTextStyle: const TextStyle(
@@ -313,9 +315,13 @@ class AppTheme {
         inactiveTrackColor: AppColors.surface2,
         thumbColor: AppColors.accent,
         overlayColor: AppColors.accentSoft,
-        trackHeight: 3,
-        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+        trackHeight: 2,
+        thumbShape: const RoundSliderThumbShape(
+          enabledThumbRadius: 5,
+          elevation: 0,
+          pressedElevation: 0,
+        ),
+        overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith(
@@ -329,6 +335,8 @@ class AppTheme {
               : AppColors.surface2,
         ),
         trackOutlineColor: WidgetStateProperty.all(AppColors.border),
+        // 1 px au lieu des 2 px M3 : le contour du rail doit rester un hairline.
+        trackOutlineWidth: WidgetStateProperty.all(1),
       ),
     );
   }

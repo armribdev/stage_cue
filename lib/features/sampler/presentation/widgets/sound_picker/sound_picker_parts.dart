@@ -9,13 +9,30 @@ part of '../sound_picker_overlay.dart';
 extension _SoundPickerParts on _SoundPickerOverlayState {
   Widget _buildHints(ColorScheme scheme, bool hasResults) {
     if (!hasResults) return const SizedBox.shrink();
+    final labelStyle = TextStyle(fontSize: 11, color: scheme.onSurfaceVariant);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
-      child: Text(
-        _hintsText,
-        style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+      decoration: BoxDecoration(
+        border: Border(top: AppElevation.border(scheme)),
+      ),
+      child: Wrap(
+        spacing: AppSpacing.lg,
+        runSpacing: AppSpacing.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final (keys, label) in _hints)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (keys.isNotEmpty) ...[
+                  _KeyCap(keys),
+                  const SizedBox(width: AppSpacing.xs + 2),
+                ],
+                Text(label, style: labelStyle),
+              ],
+            ),
+        ],
       ),
     );
   }
@@ -94,4 +111,31 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
   }
 
   String _typeLabel(SoundType? type) => type?.label ?? 'Non classé';
+}
+
+/// Touche de clavier d'un pied d'aide : hairline, mono, discrète — une touche
+/// se lit comme une touche, pas comme du texte courant.
+class _KeyCap extends StatelessWidget {
+  const _KeyCap(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: AppRadius.radiusXs,
+        border: Border.fromBorderSide(AppElevation.borderStrong(scheme)),
+      ),
+      child: Text(
+        label,
+        style: AppFonts.monoStyle(
+          TextStyle(fontSize: 12, color: scheme.onSurface),
+        ),
+      ),
+    );
+  }
 }
