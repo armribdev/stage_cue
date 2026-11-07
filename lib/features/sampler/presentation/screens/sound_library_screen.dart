@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/database/database.dart' as db;
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/layout_utils.dart';
@@ -450,11 +451,11 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
         autofocus: true,
         decoration: InputDecoration(
           hintText: 'Rechercher un son...',
-          prefixIcon: const Icon(Icons.search),
+          prefixIcon: const Icon(AppIcons.search),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
                   onPressed: _clearSearch,
-                  icon: const Icon(Icons.close_rounded),
+                  icon: const Icon(AppIcons.close),
                 )
               : null,
         ),
@@ -594,8 +595,8 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                           secondaryEnabled: !isInBoard,
                           onSecondary: () => _handleAddAsPad(sound),
                           secondaryIcon: isInBoard
-                              ? Icons.check_rounded
-                              : Icons.view_comfy_alt_rounded,
+                              ? AppIcons.check
+                              : AppIcons.allSounds,
                         ),
                       ),
                     ),

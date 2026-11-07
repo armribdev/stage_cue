@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 
 /// Écran bloquant quand SoLoud n'a pas pu démarrer.
@@ -36,7 +37,7 @@ class AudioEngineUnavailableScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Icon(
-                    Icons.volume_off_outlined,
+                    AppIcons.volumeOff,
                     size: 48,
                     color: theme.colorScheme.error,
                   ),

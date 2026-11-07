@@ -18,7 +18,7 @@ extension _SettingsAutoTag on _SettingsScreenState {
 
     return _buildSettingsSectionCard(
       title: _buildSectionTitleRow(
-        icon: Icons.auto_awesome_outlined,
+        icon: AppIcons.sparkles,
         title: 'Analyse automatique',
       ),
       child: ListenableBuilder(
@@ -56,7 +56,7 @@ extension _SettingsAutoTag on _SettingsScreenState {
                 OutlinedButton.icon(
                   style: buttonStyle,
                   onPressed: controller.cancel,
-                  icon: const Icon(Icons.close, size: 18),
+                  icon: const Icon(AppIcons.close, size: 18),
                   label: const Text('Annuler'),
                 ),
               ] else if (status == AutoTagPackStatus.installed) ...[
@@ -66,7 +66,7 @@ extension _SettingsAutoTag on _SettingsScreenState {
                   style: buttonStyle,
                   onPressed: () =>
                       unawaited(_confirmRemoveAutoTagPack(controller)),
-                  icon: const Icon(Icons.delete_outline, size: 18),
+                  icon: const Icon(AppIcons.delete, size: 18),
                   label: const Text('Supprimer le pack'),
                 ),
               ] else ...[
@@ -88,7 +88,7 @@ extension _SettingsAutoTag on _SettingsScreenState {
                   onPressed: status == AutoTagPackStatus.unknown
                       ? null
                       : () => unawaited(controller.install()),
-                  icon: const Icon(Icons.download_outlined, size: 18),
+                  icon: const Icon(AppIcons.download, size: 18),
                   label: Text('Télécharger le pack (${_formatBytes(total)})'),
                 ),
               ],

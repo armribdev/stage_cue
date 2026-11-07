@@ -8,6 +8,7 @@ import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/autotag/auto_tag_analysis.dart';
 import '../../../../core/autotag/auto_tag_status.dart';
 import '../../../../core/logging/app_log.dart';
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/app_snackbar.dart';
 import '../../data/repositories/sound_repository.dart';
@@ -647,7 +648,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                 : 'Ajouter aux favoris',
             onPressed: _isTogglingFavorite ? null : _toggleFavorite,
             icon: Icon(
-              _isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
+              _isFavorite ? AppIcons.favorite : AppIcons.favorite,
               size: 24,
             ),
             color: _isFavorite ? scheme.primary : scheme.onSurfaceVariant,
@@ -668,7 +669,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
         suffixIcon: _nameController.text.isEmpty
             ? null
             : IconButton(
-                icon: const Icon(Icons.close, size: 18),
+                icon: const Icon(AppIcons.close, size: 18),
                 tooltip: 'Effacer le nom',
                 onPressed: () {
                   _nameController.clear();
@@ -774,7 +775,9 @@ class _SoundEditFormState extends State<SoundEditForm> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Icon(
-                        _waveformRegenerated ? Icons.check : Icons.refresh,
+                        _waveformRegenerated
+                            ? AppIcons.check
+                            : AppIcons.refresh,
                         size: 18,
                       ),
                 label: Text(
@@ -891,7 +894,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
         ),
         child: isSelected
             ? Icon(
-                Icons.check,
+                AppIcons.check,
                 size: 18,
                 color: color == null
                     ? scheme.onSurfaceVariant

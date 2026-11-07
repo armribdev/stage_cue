@@ -11,6 +11,7 @@ import 'package:flutter/services.dart'
         KeyUpEvent,
         LogicalKeyboardKey;
 import '../../../../core/audio/waveform_extractor.dart';
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/sound_color_utils.dart';
 import '../../domain/entities/sound.dart';

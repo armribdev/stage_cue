@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../domain/entities/pad.dart';
 import '../models/pad_sound_slot.dart';
@@ -114,7 +115,7 @@ class PadButton extends StatelessWidget {
         children: [
           Center(
             child: Icon(
-              Icons.library_music_outlined,
+              AppIcons.queue,
               size: 24,
               color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
@@ -310,8 +311,8 @@ class PadButton extends StatelessWidget {
       children: [
         Icon(
           switch (padItem.pad.playMode) {
-            PadPlayMode.random => Icons.shuffle_rounded,
-            PadPlayMode.sequential => Icons.repeat_one_rounded,
+            PadPlayMode.random => AppIcons.shuffle,
+            PadPlayMode.sequential => AppIcons.repeatOne,
           },
           size: 11,
           color: dim,
@@ -325,7 +326,7 @@ class PadButton extends StatelessWidget {
           ),
         ),
         if (onShowSounds != null)
-          Icon(Icons.chevron_right_rounded, size: 12, color: dim),
+          Icon(AppIcons.chevronRight, size: 12, color: dim),
       ],
     );
     // Le libellé lui-même ouvre le choix du son (pas d'icône dédiée) : le
@@ -399,11 +400,11 @@ class PadButton extends StatelessWidget {
   List<(IconData, double, VoidCallback?)> _iconClusterEntries({
     required bool includeSounds,
   }) => [
-    if (onCue != null) (Icons.headphones_rounded, 14.0, onCue),
+    if (onCue != null) (AppIcons.headphones, 14.0, onCue),
     if (includeSounds && padItem.totalSoundCount > 1 && onShowSounds != null)
-      (Icons.queue_music_rounded, 14.0, onShowSounds),
-    if (isEditable && onEdit != null) (Icons.edit_outlined, 14.0, onEdit),
-    if (isEditable && onRemove != null) (Icons.close, 16.0, onRemove),
+      (AppIcons.queue, 14.0, onShowSounds),
+    if (isEditable && onEdit != null) (AppIcons.edit, 14.0, onEdit),
+    if (isEditable && onRemove != null) (AppIcons.close, 16.0, onRemove),
   ];
 
   Widget? _buildIconCluster(ColorScheme scheme, {bool includeSounds = false}) {
@@ -518,8 +519,8 @@ class PadButton extends StatelessWidget {
                     children: [
                       Icon(
                         downloading
-                            ? Icons.downloading_rounded
-                            : Icons.cloud_download_outlined,
+                            ? AppIcons.downloading
+                            : AppIcons.cloudDownload,
                         size: 12,
                         color: onColor.withValues(alpha: 0.75),
                       ),
@@ -558,10 +559,10 @@ class PadButton extends StatelessWidget {
         ? scheme.error
         : scheme.onSurfaceVariant.withValues(alpha: 0.7);
     final (icon, hint) = isMissing
-        ? (Icons.warning_amber_rounded, 'fichier introuvable')
+        ? (AppIcons.warning, 'fichier introuvable')
         : isUnsupportedFormat
-        ? (Icons.block_outlined, 'format non supporté')
-        : (Icons.cloud_off_outlined, 'hors-ligne');
+        ? (AppIcons.blocked, 'format non supporté')
+        : (AppIcons.cloudOff, 'hors-ligne');
     final iconCluster = _buildIconCluster(scheme, includeSounds: true);
 
     return _PadSurface(
@@ -636,7 +637,7 @@ class PadButton extends StatelessWidget {
                 color: color,
               ),
             ),
-            Icon(Icons.cloud_download_outlined, size: 14, color: color),
+            Icon(AppIcons.cloudDownload, size: 14, color: color),
           ],
         ),
       ),
@@ -945,20 +946,17 @@ Widget padSoundAvailabilityIcon(
 }) {
   final (icon, color) = switch (availability) {
     PadSoundAvailability.ready ||
-    PadSoundAvailability.cached => (Icons.check_circle_outline, scheme.primary),
+    PadSoundAvailability.cached => (AppIcons.checkCircle, scheme.primary),
     PadSoundAvailability.needsDownload => (
-      Icons.cloud_download_outlined,
+      AppIcons.cloudDownload,
       scheme.onSurfaceVariant,
     ),
     PadSoundAvailability.offline => (
-      Icons.cloud_off_outlined,
+      AppIcons.cloudOff,
       scheme.onSurfaceVariant.withValues(alpha: 0.7),
     ),
-    PadSoundAvailability.missingFile => (Icons.error_outline, scheme.error),
-    PadSoundAvailability.unsupportedFormat => (
-      Icons.block_outlined,
-      scheme.error,
-    ),
+    PadSoundAvailability.missingFile => (AppIcons.error, scheme.error),
+    PadSoundAvailability.unsupportedFormat => (AppIcons.blocked, scheme.error),
   };
   return Icon(icon, size: size, color: color);
 }

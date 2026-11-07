@@ -3,6 +3,7 @@ import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'google_oauth_config.dart';
 import '../theme/app_dialog.dart';
@@ -144,9 +145,7 @@ class _GoogleOAuthCredentialsDialogState
                               () => _obscureSecret = !_obscureSecret,
                             ),
                       icon: Icon(
-                        _obscureSecret
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
+                        _obscureSecret ? AppIcons.visible : AppIcons.hidden,
                       ),
                     ),
                   ),

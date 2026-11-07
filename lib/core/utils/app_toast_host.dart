@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'app_snackbar.dart';
 import 'layout_utils.dart';
@@ -188,15 +189,9 @@ class _ToastCard extends StatelessWidget {
   }
 
   (IconData, Color) _icon(ColorScheme scheme) => switch (toast.severity) {
-    AppToastSeverity.info => (
-      Icons.info_outline_rounded,
-      scheme.onSurfaceVariant,
-    ),
-    AppToastSeverity.success => (
-      Icons.check_circle_outline_rounded,
-      AppColors.success,
-    ),
-    AppToastSeverity.error => (Icons.error_outline_rounded, scheme.error),
+    AppToastSeverity.info => (AppIcons.info, scheme.onSurfaceVariant),
+    AppToastSeverity.success => (AppIcons.checkCircle, AppColors.success),
+    AppToastSeverity.error => (AppIcons.error, scheme.error),
   };
 
   @override
@@ -227,7 +222,7 @@ class _ToastCard extends StatelessWidget {
               Flexible(child: message),
               const SizedBox(width: AppSpacing.sm),
               Icon(
-                Icons.copy_rounded,
+                AppIcons.copy,
                 size: 14,
                 color: scheme.onSurfaceVariant,
                 semanticLabel: 'Copier le message',
@@ -276,7 +271,7 @@ class _ToastCard extends StatelessWidget {
               IconButton(
                 onPressed: () => controller.dismiss(toast.id),
                 icon: const Icon(
-                  Icons.close,
+                  AppIcons.close,
                   size: 14,
                   semanticLabel: 'Fermer',
                 ),

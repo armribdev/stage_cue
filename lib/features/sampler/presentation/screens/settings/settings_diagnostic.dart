@@ -29,7 +29,7 @@ extension _SettingsDiagnostic on _SettingsScreenState {
 
     return _buildSettingsSectionCard(
       title: _buildSectionTitleRow(
-        icon: Icons.receipt_long_outlined,
+        icon: AppIcons.diagnostic,
         title: 'Diagnostic',
       ),
       child: Column(
@@ -72,7 +72,7 @@ extension _SettingsDiagnostic on _SettingsScreenState {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Icon(
-                        exported ? Icons.check : Icons.download_outlined,
+                        exported ? AppIcons.check : AppIcons.download,
                         size: 18,
                       ),
                 label: Text(exported ? 'Logs exportés' : 'Exporter les logs'),
@@ -80,17 +80,14 @@ extension _SettingsDiagnostic on _SettingsScreenState {
               OutlinedButton.icon(
                 style: buttonStyle,
                 onPressed: _isDiagnosticBusy ? null : _copyLogsToClipboard,
-                icon: Icon(
-                  copied ? Icons.check : Icons.copy_outlined,
-                  size: 18,
-                ),
+                icon: Icon(copied ? AppIcons.check : AppIcons.copy, size: 18),
                 label: Text(copied ? 'Copié' : 'Copier dans le presse-papiers'),
               ),
               if (_isDesktopPlatform)
                 OutlinedButton.icon(
                   style: buttonStyle,
                   onPressed: folder == null ? null : _openLogsFolder,
-                  icon: const Icon(Icons.folder_open_outlined, size: 18),
+                  icon: const Icon(AppIcons.folderOpen, size: 18),
                   label: const Text('Ouvrir le dossier des logs'),
                 ),
             ],

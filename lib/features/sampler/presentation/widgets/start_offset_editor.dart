@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/audio/cue_audio_service.dart';
 import '../../../../core/audio/preview_playback.dart';
 import '../../../../core/audio/waveform_extractor.dart';
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/layout_utils.dart';
@@ -324,11 +325,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
         ),
         child: Row(
           children: [
-            Icon(
-              Icons.info_outline_rounded,
-              size: 18,
-              color: scheme.onSurfaceVariant,
-            ),
+            Icon(AppIcons.info, size: 18, color: scheme.onSurfaceVariant),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -446,21 +443,19 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       children: [
         IconButton.filledTonal(
           onPressed: ready ? _togglePreview : null,
-          icon: Icon(
-            _isPreviewing ? Icons.stop_rounded : Icons.play_arrow_rounded,
-          ),
+          icon: Icon(_isPreviewing ? AppIcons.stop : AppIcons.play),
           tooltip: _isPreviewing ? 'Arrêter' : 'Aperçu depuis le point',
         ),
         const SizedBox(width: 4),
         _NudgeButton(
-          icon: Icons.fast_rewind_rounded,
+          icon: AppIcons.rewind,
           onPressed: ready && _offsetMs > 0
               ? () => _nudge(-_nudgeStep.inMilliseconds)
               : null,
           tooltip: '-0,1 s',
         ),
         _NudgeButton(
-          icon: Icons.fast_forward_rounded,
+          icon: AppIcons.fastForward,
           onPressed: ready && _offsetMs < _duration.inMilliseconds
               ? () => _nudge(_nudgeStep.inMilliseconds)
               : null,

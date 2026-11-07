@@ -3,6 +3,7 @@ import 'dart:math' show max;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../../core/theme/app_icons.dart';
 import '../providers/sampler_provider.dart';
 import '../../data/repositories/library_repository.dart'
     show LibraryRepositoryDriveSession;

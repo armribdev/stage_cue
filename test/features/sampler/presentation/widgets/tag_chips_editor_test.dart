@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stage_cue/core/theme/app_icons.dart';
 import 'package:stage_cue/features/sampler/domain/entities/tag_category.dart';
 import 'package:stage_cue/features/sampler/domain/entities/tag_category_with_tags.dart';
 import 'package:stage_cue/features/sampler/domain/entities/tag_item.dart';
@@ -57,7 +58,7 @@ void main() {
   }
 
   Future<void> openPicker(WidgetTester tester) async {
-    await tester.tap(find.byIcon(Icons.add));
+    await tester.tap(find.byIcon(AppIcons.add));
     await tester.pumpAndSettle();
   }
 
@@ -72,7 +73,7 @@ void main() {
     await pump(tester, tagCatalog: const []);
 
     expect(find.text('Aucun tag disponible'), findsOneWidget);
-    expect(find.byIcon(Icons.add), findsNothing);
+    expect(find.byIcon(AppIcons.add), findsNothing);
   });
 
   testWidgets('le panneau reste ouvert après un ajout, recherche vidée', (
@@ -236,7 +237,7 @@ void main() {
 
     expect(selected, {1, 2, 3, 4});
     expect(find.byType(TextField), findsNothing);
-    expect(find.byIcon(Icons.add), findsNothing);
+    expect(find.byIcon(AppIcons.add), findsNothing);
   });
 
   testWidgets(

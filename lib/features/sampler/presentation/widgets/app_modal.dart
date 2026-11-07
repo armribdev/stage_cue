@@ -2,6 +2,7 @@ import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../../../../core/theme/app_dialog.dart';
 
@@ -122,7 +123,7 @@ class AppModalShell extends StatelessWidget {
                     width: 34,
                     height: 34,
                   ),
-                  icon: const Icon(Icons.close, size: 18),
+                  icon: const Icon(AppIcons.close, size: 18),
                 ),
               ],
             ),
@@ -188,7 +189,7 @@ class AppNavigationCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+              Icon(AppIcons.chevronRight, color: scheme.onSurfaceVariant),
             ],
           ),
         ),

@@ -227,7 +227,7 @@ extension _SettingsDriveAccount on _SettingsScreenState {
             CircleAvatar(
               radius: 24,
               backgroundColor: scheme.primaryContainer,
-              child: Icon(Icons.account_circle_outlined, color: scheme.primary),
+              child: Icon(AppIcons.account, color: scheme.primary),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -268,10 +268,10 @@ extension _SettingsDriveAccount on _SettingsScreenState {
         ? scheme.primary
         : scheme.tertiary;
     final statusIcon = authExpired
-        ? Icons.cloud_off_outlined
+        ? AppIcons.cloudOff
         : sessionActive
-        ? Icons.cloud_done_outlined
-        : Icons.cloud_queue;
+        ? AppIcons.cloudDone
+        : AppIcons.cloud;
 
     return _driveHeaderFrame(
       Row(
@@ -327,7 +327,7 @@ extension _SettingsDriveAccount on _SettingsScreenState {
                 TextButton.icon(
                   onPressed: _disconnectDriveAccount,
                   icon: Icon(
-                    Icons.logout_outlined,
+                    AppIcons.logout,
                     size: 18,
                     color: scheme.onSurfaceVariant,
                   ),

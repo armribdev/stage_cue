@@ -22,7 +22,7 @@ extension _SamplerScreenGrid on _SamplerScreenState {
       onTap: () => _openAddPadFlow(board, rowIndex: rowIndex),
       child: Center(
         child: Icon(
-          Icons.add_rounded,
+          AppIcons.add,
           size: 24,
           color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
         ),

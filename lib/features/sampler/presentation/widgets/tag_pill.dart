@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 
 /// Cotes d'une étiquette selon sa densité (normale ou compacte).
@@ -175,7 +176,7 @@ class _TagPillState extends State<TagPill> {
                   child: Padding(
                     padding: const EdgeInsets.all(2),
                     child: Icon(
-                      Icons.close,
+                      AppIcons.close,
                       size: m.fontSize,
                       color: scheme.onSurfaceVariant,
                     ),

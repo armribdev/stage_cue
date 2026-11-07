@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_icons.dart';
 import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
 import 'pad_button.dart' show padSoundAvailabilityIcon;
@@ -144,7 +145,7 @@ class _PadDownloadSheetState extends State<PadDownloadSheet> {
                         color: scheme.onPrimary,
                       ),
                     )
-                  : const Icon(Icons.cloud_download_outlined, size: 18),
+                  : const Icon(AppIcons.cloudDownload, size: 18),
               label: Text(
                 padItem.isFullyReady
                     ? 'Tout est prêt'

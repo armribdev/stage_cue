@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_icons.dart';
 import '../../domain/entities/sound.dart';
 
 /// Libellés, icônes et couleurs d'avatar pour les types de sons.
@@ -11,9 +12,9 @@ extension SoundTypeUi on SoundType {
   };
 
   IconData get icon => switch (this) {
-    SoundType.soundEffect => Icons.graphic_eq_rounded,
-    SoundType.music => Icons.music_note_rounded,
-    SoundType.ambiance => Icons.waves_rounded,
+    SoundType.soundEffect => AppIcons.soundEffect,
+    SoundType.music => AppIcons.music,
+    SoundType.ambiance => AppIcons.ambiance,
   };
 
   ({Color background, Color foreground}) avatarColors(ColorScheme scheme) =>
@@ -63,7 +64,7 @@ class SoundTypeAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final icon = type?.icon ?? Icons.help_outline_rounded;
+    final icon = type?.icon ?? AppIcons.help;
 
     if (colorValue != null) {
       final background = Color(colorValue!);
@@ -82,7 +83,7 @@ class SoundTypeAvatar extends StatelessWidget {
         radius: radius,
         backgroundColor: scheme.surfaceContainerHighest,
         child: Icon(
-          Icons.help_outline_rounded,
+          AppIcons.help,
           size: iconSize,
           color: scheme.onSurfaceVariant,
         ),

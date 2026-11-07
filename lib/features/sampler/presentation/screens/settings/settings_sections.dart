@@ -100,7 +100,7 @@ extension _SettingsSections on _SettingsScreenState {
     final scheme = Theme.of(context).colorScheme;
     return _buildSettingsSectionCard(
       title: _buildSectionTitleRow(
-        icon: Icons.headphones_outlined,
+        icon: AppIcons.headphones,
         title: 'Audio',
         trailing: [
           IconButton(
@@ -114,7 +114,7 @@ extension _SettingsSections on _SettingsScreenState {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.refresh),
+                : const Icon(AppIcons.refresh),
             onPressed: _isLoadingCueDevices ? null : () => _loadCueDevices(),
           ),
         ],
@@ -155,7 +155,7 @@ extension _SettingsSections on _SettingsScreenState {
                 Row(
                   children: [
                     Icon(
-                      Icons.headset_off_outlined,
+                      AppIcons.headphonesOff,
                       size: 18,
                       color: scheme.onSurfaceVariant,
                     ),
@@ -178,6 +178,7 @@ extension _SettingsSections on _SettingsScreenState {
                     key: ValueKey(dropdownValue),
                     initialValue: dropdownValue,
                     isExpanded: true,
+                    icon: const Icon(AppIcons.chevronDown, size: 18),
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(
@@ -261,10 +262,7 @@ extension _SettingsSections on _SettingsScreenState {
           final syncState = widget.syncController.state;
           final authExpired = isDriveAuthExpired(syncState);
           return _buildSettingsSectionCard(
-            title: _buildSectionTitleRow(
-              icon: Icons.cloud_outlined,
-              title: 'Drive',
-            ),
+            title: _buildSectionTitleRow(icon: AppIcons.cloud, title: 'Drive'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -395,7 +393,7 @@ extension _SettingsSections on _SettingsScreenState {
     final upToDate = _confirmedAction == _kUpdateAction;
     return _buildSettingsSectionCard(
       title: _buildSectionTitleRow(
-        icon: Icons.system_update_outlined,
+        icon: AppIcons.appUpdate,
         title: 'Mise à jour',
       ),
       child: Row(
@@ -421,7 +419,7 @@ extension _SettingsSections on _SettingsScreenState {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Icon(upToDate ? Icons.check : Icons.refresh, size: 18),
+                : Icon(upToDate ? AppIcons.check : AppIcons.refresh, size: 18),
             label: Text(upToDate ? 'Déjà à jour' : 'Vérifier les mises à jour'),
           ),
         ],

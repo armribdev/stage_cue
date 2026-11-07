@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/layout_utils.dart';
@@ -50,7 +51,7 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
         child: isPerformanceMode
             ? LiveExitButton(onExit: onTogglePerformanceMode)
             : BoxedIconButton(
-                icon: Icons.menu_rounded,
+                icon: AppIcons.menu,
                 tooltip: 'Menu',
                 circular: true,
                 onPressed: onOpenMenu,
@@ -67,7 +68,7 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
           const Center(child: AudioVuMeter()),
         stopAllButton,
         BoxedIconButton(
-          icon: Icons.search_rounded,
+          icon: AppIcons.search,
           tooltip: 'Recherche rapide',
           framed: false,
           onPressed: onQuickSearch,
@@ -127,7 +128,7 @@ class StopAllButton extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.stop_rounded, size: 14, color: scheme.error),
+                    Icon(AppIcons.stop, size: 14, color: scheme.error),
                     const SizedBox(width: 4),
                     Text(
                       'Stop',
@@ -155,8 +156,7 @@ class StopAllButton extends StatelessWidget {
 class LiveModeActiveIcon extends StatefulWidget {
   final IconData baseIcon;
 
-  const LiveModeActiveIcon({super.key})
-    : baseIcon = Icons.theater_comedy_rounded;
+  const LiveModeActiveIcon({super.key}) : baseIcon = AppIcons.theater;
 
   @override
   State<LiveModeActiveIcon> createState() => _LiveModeActiveIconState();
@@ -313,7 +313,7 @@ class SamplerDesktopAppBar extends StatelessWidget
       actions: [
         stopAllButton,
         BoxedIconButton(
-          icon: Icons.search_rounded,
+          icon: AppIcons.search,
           tooltip: 'Recherche rapide (Ctrl+F)',
           framed: false,
           onPressed: onQuickSearch,
@@ -390,11 +390,7 @@ class SamplerDesktopMenuButton extends StatelessWidget {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(
-                Icons.theater_comedy_rounded,
-                size: 18,
-                color: scheme.onSurface,
-              ),
+              Icon(AppIcons.theater, size: 18, color: scheme.onSurface),
               const SizedBox(width: AppSpacing.sm),
               const Text('Démarrer une session live'),
             ],
@@ -406,11 +402,7 @@ class SamplerDesktopMenuButton extends StatelessWidget {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(
-                Icons.library_books_rounded,
-                size: 18,
-                color: scheme.onSurface,
-              ),
+              Icon(AppIcons.library, size: 18, color: scheme.onSurface),
               const SizedBox(width: AppSpacing.sm),
               const Text('Gérer la bibliothèque'),
             ],
@@ -423,7 +415,7 @@ class SamplerDesktopMenuButton extends StatelessWidget {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(Icons.settings, size: 18, color: scheme.onSurface),
+              Icon(AppIcons.settings, size: 18, color: scheme.onSurface),
               const SizedBox(width: AppSpacing.sm),
               const Text('Paramètres'),
             ],
@@ -438,8 +430,8 @@ class SamplerDesktopMenuButton extends StatelessWidget {
               children: [
                 Icon(
                   fullScreen == true
-                      ? Icons.fullscreen_exit_rounded
-                      : Icons.fullscreen_rounded,
+                      ? AppIcons.fullscreenExit
+                      : AppIcons.fullscreen,
                   size: 18,
                   color: scheme.onSurface,
                 ),
@@ -459,11 +451,7 @@ class SamplerDesktopMenuButton extends StatelessWidget {
             padding: AppMenu.itemPadding,
             child: Row(
               children: [
-                Icon(
-                  Icons.exit_to_app_rounded,
-                  size: 18,
-                  color: scheme.onSurface,
-                ),
+                Icon(AppIcons.logout, size: 18, color: scheme.onSurface),
                 const SizedBox(width: AppSpacing.sm),
                 const Text('Quitter'),
               ],

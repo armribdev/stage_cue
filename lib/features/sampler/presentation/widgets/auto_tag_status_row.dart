@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/autotag/auto_tag_status.dart';
 import '../../../../core/autotag/mood_tagging.dart';
+import '../../../../core/theme/app_icons.dart';
 
 /// Où en est l'analyse IA d'un son (décisions 0029 à 0031) : analysé, pas
 /// analysé, en cours… et, tant qu'elle n'a pas commencé, le bouton qui la lance.
@@ -36,7 +37,7 @@ class AutoTagStatusRow extends StatelessWidget {
           )
         else
           Icon(
-            Icons.auto_awesome_outlined,
+            AppIcons.sparkles,
             size: 14,
             color: status == SoundAnalysisStatus.analyzed
                 ? scheme.primary

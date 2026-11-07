@@ -36,7 +36,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.tune_rounded,
+              AppIcons.tune,
               size: 32,
               color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
             ),
@@ -110,7 +110,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
           if (widget._isFullPage) ...[
             ExcludeFocus(
               child: IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
+                icon: const Icon(AppIcons.back),
                 onPressed: () => unawaited(Navigator.of(context).maybePop()),
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
@@ -142,7 +142,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
                       ? const SizedBox.shrink()
                       : ExcludeFocus(
                           child: IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 18),
+                            icon: const Icon(AppIcons.close, size: 18),
                             onPressed: _clearQuery,
                             padding: EdgeInsets.zero,
                             visualDensity: VisualDensity.compact,
@@ -170,7 +170,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
     // "Tous" uniquement pour QuickSearch, Library et Manage
     final segments = <(String, SoundType?, IconData)>[
       if (_isQuickSearch || _isLibrary || _isManage)
-        ('Tous', null, Icons.apps_rounded),
+        ('Tous', null, AppIcons.allSounds),
       (
         SoundType.soundEffect.label,
         SoundType.soundEffect,
@@ -269,7 +269,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
         ),
         _roundIconButton(
           scheme: scheme,
-          icon: _favoritesOnly ? Icons.star_rounded : Icons.star_border_rounded,
+          icon: _favoritesOnly ? AppIcons.favorite : AppIcons.favorite,
           iconColor: _favoritesOnly ? scheme.primary : scheme.onSurfaceVariant,
           active: _favoritesOnly,
           flat: true,
@@ -282,7 +282,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
         ),
         _roundIconButton(
           scheme: scheme,
-          icon: Icons.offline_bolt_rounded,
+          icon: AppIcons.offline,
           iconColor: _effectiveLocalOnly
               ? scheme.primary
               : scheme.onSurfaceVariant,
@@ -336,7 +336,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
             if (widget._isFullPage)
               ExcludeFocus(
                 child: IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded),
+                  icon: const Icon(AppIcons.back),
                   onPressed: () => unawaited(Navigator.of(context).maybePop()),
                   padding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
@@ -431,7 +431,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
             mainAxisSize: MainAxisSize.max,
             children: [
               Icon(
-                Icons.folder_outlined,
+                AppIcons.folder,
                 size: 16,
                 color: selected == null
                     ? scheme.onSurfaceVariant
@@ -453,7 +453,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
               ),
               const SizedBox(width: 2),
               Icon(
-                Icons.arrow_drop_down_rounded,
+                AppIcons.chevronDown,
                 size: 18,
                 color: scheme.onSurfaceVariant,
               ),

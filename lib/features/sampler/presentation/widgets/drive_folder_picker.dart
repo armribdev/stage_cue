@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/sync/sync_log.dart';
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/sync/drive_models.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
@@ -285,7 +286,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
             children: [
               IconButton(
                 onPressed: canGoUp ? _goUp : null,
-                icon: const Icon(Icons.arrow_upward),
+                icon: const Icon(AppIcons.arrowUp),
               ),
               Expanded(
                 child: Text(
@@ -308,7 +309,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
         ),
         FilledButton.icon(
           onPressed: canSelect ? _selectCurrentFolder : null,
-          icon: const Icon(Icons.check),
+          icon: const Icon(AppIcons.check),
           label: const Text('Sélectionner ce dossier'),
         ),
       ],
@@ -364,9 +365,9 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
       itemBuilder: (context, index) {
         final folder = _folders[index];
         return ListTile(
-          leading: const Icon(Icons.folder_outlined),
+          leading: const Icon(AppIcons.folder),
           title: Text(folder.name),
-          trailing: const Icon(Icons.chevron_right),
+          trailing: const Icon(AppIcons.chevronRight),
           onTap: () => _openFolder(folder),
         );
       },
@@ -404,7 +405,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
         ListTile(
           leading: Icon(_iconForEntry(entry)),
           title: Text(entry.name),
-          trailing: const Icon(Icons.chevron_right),
+          trailing: const Icon(AppIcons.chevronRight),
           onTap: () => _openEntry(entry),
         ),
       );
@@ -433,9 +434,9 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
 
   IconData _iconForEntry(_PickerEntry entry) {
     return switch (entry.kind) {
-      _PickerEntryKind.myDrive => Icons.person_outline,
-      _PickerEntryKind.sharedDrive => Icons.groups_outlined,
-      _PickerEntryKind.folder => Icons.folder_shared_outlined,
+      _PickerEntryKind.myDrive => AppIcons.person,
+      _PickerEntryKind.sharedDrive => AppIcons.groups,
+      _PickerEntryKind.folder => AppIcons.folderShared,
     };
   }
 }

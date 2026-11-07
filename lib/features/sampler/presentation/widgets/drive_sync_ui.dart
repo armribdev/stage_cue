@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_icons.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../domain/entities/library.dart';
 import '../providers/sync_controller.dart';
@@ -48,7 +49,7 @@ class SyncStatusPill extends StatelessWidget {
         final (color, label, icon, spinning) = isRefreshing
             ? _visuals(SyncStatus.syncing, scheme)
             : refreshed && status != SyncStatus.conflict
-            ? (scheme.primary, 'Actualisé', Icons.check, false)
+            ? (scheme.primary, 'Actualisé', AppIcons.check, false)
             : _visuals(status, scheme);
         final canTap = !isRefreshing && !refreshed;
 
@@ -104,40 +105,30 @@ class SyncStatusPill extends StatelessWidget {
       SyncStatus.syncing => (
         scheme.primary,
         'Synchro…',
-        Icons.sync_rounded,
+        AppIcons.refresh,
         true,
       ),
       SyncStatus.synced => (
         scheme.primary,
         'À jour',
-        Icons.cloud_done_outlined,
+        AppIcons.cloudDone,
         false,
       ),
       // Hors-ligne : neutre, jamais alarmiste — le travail local est normal.
       SyncStatus.offline => (
         scheme.onSurfaceVariant,
         'Hors-ligne',
-        Icons.cloud_off_outlined,
+        AppIcons.cloudOff,
         false,
       ),
-      SyncStatus.conflict => (
-        scheme.error,
-        'Conflit',
-        Icons.merge_type_rounded,
-        false,
-      ),
-      SyncStatus.error => (
-        scheme.error,
-        'Erreur sync',
-        Icons.error_outline_rounded,
-        false,
-      ),
+      SyncStatus.conflict => (scheme.error, 'Conflit', AppIcons.merge, false),
+      SyncStatus.error => (scheme.error, 'Erreur sync', AppIcons.error, false),
       // Bibliothèque Drive liée mais rien synchronisé depuis le lancement :
       // la pastille reste l'invitation à actualiser.
       SyncStatus.idle => (
         scheme.onSurfaceVariant,
         'Actualiser',
-        Icons.refresh,
+        AppIcons.refresh,
         false,
       ),
     };

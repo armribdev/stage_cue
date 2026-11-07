@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/platform/saf_directory_bridge.dart';
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../data/models/indexing_progress.dart';
@@ -73,7 +74,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(Icons.folder_copy, size: 16, color: scheme.onSurfaceVariant),
+            Icon(AppIcons.folders, size: 16, color: scheme.onSurfaceVariant),
             const SizedBox(width: 8),
             Text(
               'Éléments indexés'.toUpperCase(),
@@ -85,7 +86,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
               constraints: const BoxConstraints.tightFor(width: 32, height: 32),
               visualDensity: VisualDensity.compact,
               tooltip: 'Ajouter un dossier',
-              icon: const Icon(Icons.add),
+              icon: const Icon(AppIcons.add),
               onPressed: onAddFolder,
             ),
           ],
@@ -118,7 +119,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(Icons.folder_off, size: 48, color: muted),
+          Icon(AppIcons.folderOff, size: 48, color: muted),
           const SizedBox(height: 8),
           Text(
             'Aucun dossier indexé',
@@ -153,10 +154,10 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
           child: Icon(
             item.isLocal &&
                     SafDirectoryBridge.isSafTreeUri(item.watchedPath!.path)
-                ? Icons.cloud
+                ? AppIcons.cloud
                 : item.isLocal
-                ? Icons.folder
-                : Icons.cloud,
+                ? AppIcons.folder
+                : AppIcons.cloud,
             color: Theme.of(context).colorScheme.primary,
           ),
         ),
@@ -228,7 +229,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.cloud_off_outlined, size: 13, color: muted),
+          Icon(AppIcons.cloudOff, size: 13, color: muted),
           const SizedBox(width: 4),
           Text(
             'Pas encore synchronisé',
@@ -242,7 +243,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
-          Icons.cloud_done_outlined,
+          AppIcons.cloudDone,
           size: 13,
           color: scheme.primary.withValues(alpha: 0.85),
         ),
@@ -280,10 +281,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       );
     }
 
-    final fileCount = chip(
-      Icons.audiotrack_outlined,
-      _fileCountLabel(indexing),
-    );
+    final fileCount = chip(AppIcons.audioFile, _fileCountLabel(indexing));
 
     if (item.isLocal) {
       return fileCount;
@@ -300,7 +298,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
     } else {
       final complete = offline.available >= offline.total;
       availability = chip(
-        complete ? Icons.download_done_outlined : Icons.download_outlined,
+        complete ? AppIcons.downloadDone : AppIcons.download,
         '${offline.available}/${offline.total} téléchargés',
         color: complete ? scheme.primary.withValues(alpha: 0.85) : null,
       );
@@ -422,7 +420,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
                 onTap: onCancel,
                 behavior: HitTestBehavior.opaque,
                 child: Icon(
-                  Icons.close,
+                  AppIcons.close,
                   size: 16,
                   color: scheme.onSurfaceVariant,
                 ),
@@ -446,7 +444,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       // entrée, pour homogénéiser l'action « Retirer » entre les deux types.
       return PopupMenuButton<_LibraryAction>(
         tooltip: 'Options',
-        icon: Icon(Icons.more_vert, color: muted),
+        icon: Icon(AppIcons.more, color: muted),
         popUpAnimationStyle: AnimationStyle.noAnimation,
         onSelected: (action) {
           if (action == _LibraryAction.remove) {
@@ -459,7 +457,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
             height: AppMenu.itemHeight,
             padding: AppMenu.itemPadding,
             child: _menuRow(
-              Icons.delete_outline,
+              AppIcons.delete,
               'Retirer',
               iconColor: scheme.error,
               textColor: scheme.error,
@@ -492,7 +490,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
 
     return PopupMenuButton<_LibraryAction>(
       tooltip: 'Options',
-      icon: Icon(Icons.more_vert, color: muted),
+      icon: Icon(AppIcons.more, color: muted),
       popUpAnimationStyle: AnimationStyle.noAnimation,
       onSelected: (action) {
         switch (action) {
@@ -511,9 +509,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
           height: AppMenu.itemHeight,
           padding: AppMenu.itemPadding,
           child: _menuRow(
-            fullyOffline
-                ? Icons.download_done_outlined
-                : Icons.download_outlined,
+            fullyOffline ? AppIcons.downloadDone : AppIcons.download,
             downloadLabel,
           ),
         ),
@@ -522,9 +518,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
           height: AppMenu.itemHeight,
           padding: AppMenu.itemPadding,
           child: _menuRow(
-            library.autoDownload
-                ? Icons.check_box_outlined
-                : Icons.check_box_outline_blank,
+            library.autoDownload ? AppIcons.checkboxOn : AppIcons.checkboxOff,
             'Téléchargement auto',
             iconColor: library.autoDownload ? scheme.primary : null,
           ),
@@ -535,7 +529,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
           height: AppMenu.itemHeight,
           padding: AppMenu.itemPadding,
           child: _menuRow(
-            Icons.delete_outline,
+            AppIcons.delete,
             'Retirer',
             iconColor: scheme.error,
             textColor: scheme.error,
@@ -577,7 +571,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
             child: Row(
               children: [
-                Icon(Icons.storage_outlined, size: 16, color: muted),
+                Icon(AppIcons.storage, size: 16, color: muted),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -585,7 +579,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
                     style: TextStyle(fontSize: 12, color: muted),
                   ),
                 ),
-                Icon(Icons.info_outline, size: 16, color: muted),
+                Icon(AppIcons.info, size: 16, color: muted),
               ],
             ),
           ),

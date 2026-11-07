@@ -2,6 +2,7 @@ import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/app_dialog.dart';
 
@@ -65,7 +66,7 @@ class AppFormDialog extends StatelessWidget {
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints.tightFor(width: 34, height: 34),
-            icon: const Icon(Icons.close),
+            icon: const Icon(AppIcons.close),
           ),
         ],
       ),
@@ -402,7 +403,7 @@ class _AppBoardCreationDialogState extends State<AppBoardCreationDialog> {
               decoration: InputDecoration(
                 hintText: widget.suggestedName,
                 prefixIcon: Icon(
-                  Icons.auto_awesome_rounded,
+                  AppIcons.sparkles,
                   color: scheme.primary.withValues(alpha: 0.9),
                 ),
               ),
@@ -469,7 +470,7 @@ class _DestinationSelector extends StatelessWidget {
       children: [
         ChoiceChip(
           label: const Text('Local'),
-          avatar: const Icon(Icons.smartphone_rounded, size: 18),
+          avatar: const Icon(AppIcons.smartphone, size: 18),
           selected: selectedLibraryId == null,
           showCheckmark: false,
           onSelected: (_) => onSelect(null),
@@ -477,7 +478,7 @@ class _DestinationSelector extends StatelessWidget {
         for (final library in libraries)
           ChoiceChip(
             label: Text(library.name),
-            avatar: const Icon(Icons.folder_shared_rounded, size: 18),
+            avatar: const Icon(AppIcons.folderShared, size: 18),
             selected: selectedLibraryId == library.id,
             showCheckmark: false,
             onSelected: (_) => onSelect(library.id),
@@ -562,13 +563,13 @@ class _ColorSwatch extends StatelessWidget {
           ),
           child: color == null
               ? Icon(
-                  Icons.block_rounded,
+                  AppIcons.blocked,
                   size: 14,
                   color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
                 )
               : isSelected
               ? Icon(
-                  Icons.check_rounded,
+                  AppIcons.check,
                   size: 14,
                   color: color!.computeLuminance() > 0.4
                       ? Colors.black87

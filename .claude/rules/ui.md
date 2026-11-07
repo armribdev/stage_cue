@@ -48,6 +48,15 @@ jamais d'une valeur codée en dur qui existe déjà comme token.
   contraint en largeur (`SizedBox(width: ~56)` autour du `Slider` thémé,
   qui est déjà fin/discret globalement).
 
+- **Ne jamais utiliser `Icons.*` (Material)** : toute icône passe par `AppIcons`
+  (`lib/core/theme/app_icons.dart`, jeu Lucide à trait fin, graisse 300), nommée
+  par concept ([décision 0034](../../docs/decisions/0034-icones-lucide-via-appicons.md)).
+  Une nouvelle icône = un nouveau concept dans `AppIcons`, jamais un import de
+  Lucide dans un écran. Pas de variante pleine : un état actif se marque par la
+  couleur ou un autre glyphe, pas par le remplissage. Un widget Material qui
+  dessine son icône tout seul (flèche de `DropdownButtonFormField`, retour d'`AppBar`)
+  se règle avec son paramètre `icon:`.
+
 ## Composants Material qui nécessitent une attention particulière
 
 - **Notifications** : toujours `AppSnackBar.show` / `showCopyableSnackBar`

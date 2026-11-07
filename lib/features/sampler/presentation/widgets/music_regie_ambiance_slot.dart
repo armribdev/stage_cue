@@ -71,7 +71,7 @@ class _AmbianceSlot extends StatelessWidget {
     iconSize: 16,
     color: scheme.onSurfaceVariant,
     onPressed: onStop,
-    icon: const Icon(Icons.close),
+    icon: const Icon(AppIcons.close),
   );
 
   Widget _name(ColorScheme scheme, String text, {required bool active}) {
@@ -138,12 +138,12 @@ class _AmbianceSlot extends StatelessWidget {
           ),
         ),
         MenuItemButton(
-          leadingIcon: const Icon(Icons.swap_horiz_rounded, size: 18),
+          leadingIcon: const Icon(AppIcons.swap, size: 18),
           onPressed: onChoose,
           child: const Text('Changer d\'ambiance'),
         ),
         MenuItemButton(
-          leadingIcon: const Icon(Icons.close, size: 18),
+          leadingIcon: const Icon(AppIcons.close, size: 18),
           onPressed: onStop,
           child: const Text('Arrêter'),
         ),
@@ -191,9 +191,7 @@ class _AmbianceSlot extends StatelessWidget {
         ),
         if (onAir != null) _volumeSlider(width: 96),
         BoxedIconButton(
-          icon: onAir != null
-              ? Icons.swap_horiz_rounded
-              : SoundType.ambiance.icon,
+          icon: onAir != null ? AppIcons.swap : SoundType.ambiance.icon,
           tooltip: onAir != null
               ? 'Changer d\'ambiance'
               : 'Lancer une ambiance',

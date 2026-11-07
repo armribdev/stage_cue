@@ -16,6 +16,7 @@ import '../../../../core/logging/app_log.dart';
 import '../../../../core/logging/log_export.dart';
 import '../../../../core/logging/log_sink.dart';
 import '../../../../core/settings/app_preferences.dart';
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/platform/saf_directory_bridge.dart';

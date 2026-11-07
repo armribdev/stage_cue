@@ -19,9 +19,7 @@ class _DrawerChevronButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 18),
       icon: Icon(
-        expanded
-            ? Icons.keyboard_arrow_down_rounded
-            : Icons.keyboard_arrow_up_rounded,
+        expanded ? AppIcons.chevronDown : AppIcons.chevronUp,
         size: 16,
         color: scheme.onSurfaceVariant.withValues(alpha: 0.75),
       ),
@@ -52,7 +50,7 @@ class _EjectMusicButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 24, minHeight: 20),
       icon: Icon(
-        Icons.eject_rounded,
+        AppIcons.eject,
         size: 16,
         color: enabled
             ? scheme.onSurfaceVariant.withValues(alpha: 0.75)
@@ -407,8 +405,8 @@ class _GroupedPlaybackControls extends StatelessWidget {
                 ? null
                 : (canControl ? onTogglePlayPause : onChooseMusic),
             icon: canControl
-                ? (isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded)
-                : Icons.play_arrow_rounded,
+                ? (isPlaying ? AppIcons.pause : AppIcons.play)
+                : AppIcons.play,
             showTransitionFeedback: playFeedback,
             filled: true,
           ),
@@ -416,7 +414,7 @@ class _GroupedPlaybackControls extends StatelessWidget {
           _actionButton(
             context: context,
             onPressed: hasQueue && !transitionInProgress ? onSkipNext : null,
-            icon: Icons.skip_next_rounded,
+            icon: AppIcons.skipNext,
             showTransitionFeedback: skipFeedback,
           ),
           const SizedBox(width: 6),
@@ -454,11 +452,7 @@ class _CompactNextUpLabel extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          Icons.skip_next_rounded,
-          size: 14,
-          color: color.withValues(alpha: 0.6),
-        ),
+        Icon(AppIcons.skipNext, size: 14, color: color.withValues(alpha: 0.6)),
         const SizedBox(width: 4),
         Flexible(
           child: Text(

@@ -285,7 +285,7 @@ class _CompactTransitionPicker extends StatelessWidget {
         if (showCut) ...[
           _TransitionCell(
             size: cellSize,
-            icon: Icons.content_cut_rounded,
+            icon: AppIcons.cut,
             isSelected: selected == null,
             onTap: () => onOptionTapped(cutSentinel),
             labelStyle: labelStyle,
@@ -364,7 +364,7 @@ class _TransitionCell extends StatelessWidget {
               Transform.translate(
                 offset: const Offset(0, -2),
                 child: Icon(
-                  Icons.lock_rounded,
+                  AppIcons.lock,
                   size: size * 0.7,
                   color: foreground.withValues(alpha: 0.22),
                 ),

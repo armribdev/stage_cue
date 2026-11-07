@@ -185,7 +185,7 @@ extension _SettingsAddFolder on _SettingsScreenState {
                   Expanded(
                     child: AppChoiceOption(
                       vertical: true,
-                      icon: Icons.folder_outlined,
+                      icon: AppIcons.folder,
                       label: 'Dossier local',
                       onTap: () => Navigator.of(dialogContext).pop('local'),
                     ),
@@ -194,7 +194,7 @@ extension _SettingsAddFolder on _SettingsScreenState {
                   Expanded(
                     child: AppChoiceOption(
                       vertical: true,
-                      icon: Icons.cloud_outlined,
+                      icon: AppIcons.cloud,
                       label: 'Dossier Drive',
                       onTap: () => Navigator.of(dialogContext).pop('drive'),
                     ),
@@ -222,7 +222,7 @@ extension _SettingsAddFolder on _SettingsScreenState {
                   Expanded(
                     child: AppChoiceOption(
                       vertical: true,
-                      icon: Icons.folder_outlined,
+                      icon: AppIcons.folder,
                       label: 'Dossier local',
                       onTap: () => Navigator.of(sheetContext).pop('local'),
                     ),
@@ -231,7 +231,7 @@ extension _SettingsAddFolder on _SettingsScreenState {
                   Expanded(
                     child: AppChoiceOption(
                       vertical: true,
-                      icon: Icons.cloud_outlined,
+                      icon: AppIcons.cloud,
                       label: 'Dossier Drive',
                       onTap: () => Navigator.of(sheetContext).pop('drive'),
                     ),

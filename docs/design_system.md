@@ -59,6 +59,13 @@ lequel `AppElevation` applique l'alpha du hairline.
 
 Polices bundlées en local (`assets/fonts/`, OFL), jamais via `google_fonts`.
 
+### Icônes — `AppIcons`
+
+Jeu Lucide à trait fin (graisse 300), police bundlée en local, nommé par
+concept dans `lib/core/theme/app_icons.dart` ([0034](decisions/0034-icones-lucide-via-appicons.md)).
+Jamais `Icons.*` : ajouter un concept à `AppIcons`. Pas de variante pleine — un
+état actif se marque par la couleur ou un autre glyphe.
+
 ### Espacements — `AppSpacing`
 
 | Token | Valeur |
@@ -130,7 +137,7 @@ rayons ou de couleurs localement dans un widget si le thème peut s'en charger.
     title: 'Renommer la scène',
     confirmLabel: 'Renommer',
     initialValue: board.name,
-    icon: Icons.text_fields_rounded,
+    icon: AppIcons.text,
   );
   ```
 - **`AppConfirmDialog`** : confirmation d'action (suppression, action

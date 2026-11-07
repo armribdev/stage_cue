@@ -485,7 +485,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.graphic_eq_rounded,
+                  AppIcons.soundEffect,
                   size: 12,
                   color: isPlaying
                       ? scheme.primary

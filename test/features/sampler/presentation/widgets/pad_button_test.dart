@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stage_cue/core/audio/audio_player_service.dart';
+import 'package:stage_cue/core/theme/app_icons.dart';
 import 'package:stage_cue/features/sampler/domain/entities/pad.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
 import 'package:stage_cue/features/sampler/presentation/models/pad_sound_slot.dart';
@@ -172,8 +173,8 @@ void main() {
 
     // Le titre garde toute la largeur : plus de coupure autour des icônes.
     final title = tester.getRect(find.textContaining('Aa Bb'));
-    final edit = tester.getRect(find.byIcon(Icons.edit_outlined));
-    final close = tester.getRect(find.byIcon(Icons.close));
+    final edit = tester.getRect(find.byIcon(AppIcons.edit));
+    final close = tester.getRect(find.byIcon(AppIcons.close));
     final pad = tester.getRect(find.byType(PadButton));
 
     expect(title.bottom, lessThanOrEqualTo(edit.top));
@@ -231,7 +232,7 @@ void main() {
       ),
     );
 
-    expect(find.byIcon(Icons.queue_music_rounded), findsNothing);
+    expect(find.byIcon(AppIcons.queue), findsNothing);
 
     await tester.tap(find.text('2 sons'));
     expect(showSounds, 1);

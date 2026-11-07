@@ -106,7 +106,7 @@ class _PassageQueueSection extends StatelessWidget {
               const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: onChooseMusic,
-                icon: const Icon(Icons.add_rounded, size: 18),
+                icon: const Icon(AppIcons.add, size: 18),
                 label: const Text('Ajouter à la file'),
               ),
             ],
@@ -162,7 +162,7 @@ class _QueueRow extends StatelessWidget {
               if (onRemove != null && !enableSwipeToRemove)
                 IconButton(
                   onPressed: onRemove,
-                  icon: const Icon(Icons.close_rounded, size: 18),
+                  icon: const Icon(AppIcons.close, size: 18),
                   visualDensity: VisualDensity.compact,
                 ),
             ],
@@ -199,10 +199,7 @@ class _QueueRow extends StatelessWidget {
           color: scheme.errorContainer,
           borderRadius: BorderRadius.circular(_queueDragBorderRadius),
         ),
-        child: Icon(
-          Icons.delete_outline_rounded,
-          color: scheme.onErrorContainer,
-        ),
+        child: Icon(AppIcons.delete, color: scheme.onErrorContainer),
       ),
       onDismissed: (_) => onRemove!(),
       child: content,

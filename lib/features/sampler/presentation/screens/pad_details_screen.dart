@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/settings/app_preferences.dart';
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../widgets/app_modal.dart';
@@ -284,7 +285,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
         border: Border.fromBorderSide(border),
       ),
       child: _isCapturingHotkey
-          ? Icon(Icons.keyboard_alt_outlined, size: 18, color: scheme.primary)
+          ? Icon(AppIcons.keyboard, size: 18, color: scheme.primary)
           : (label != null
                 ? Padding(
                     padding: const EdgeInsets.all(4),
@@ -346,7 +347,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
             color: scheme.surface,
             border: Border.fromBorderSide(AppElevation.border(scheme)),
           ),
-          child: Icon(Icons.close, size: 10, color: scheme.onSurfaceVariant),
+          child: Icon(AppIcons.close, size: 10, color: scheme.onSurfaceVariant),
         ),
       ),
     );
@@ -457,7 +458,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
               hintText: widget.padItem.displayName,
               suffixIcon: _displayNameController.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear),
+                      icon: const Icon(AppIcons.close),
                       onPressed: () {
                         setState(() => _displayNameController.clear());
                         _updateDisplayName();
@@ -533,8 +534,8 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                   child: IconButton(
                     icon: Icon(
                       _volumeControlsVisible
-                          ? Icons.volume_up_rounded
-                          : Icons.volume_off_rounded,
+                          ? AppIcons.volumeOn
+                          : AppIcons.volumeOff,
                       size: 20,
                     ),
                     onPressed: () {
@@ -551,7 +552,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                 ),
               TextButton.icon(
                 onPressed: () => _addSound(context),
-                icon: const Icon(Icons.add, size: 18),
+                icon: const Icon(AppIcons.add, size: 18),
                 label: const Text('Ajouter'),
               ),
             ],
@@ -682,7 +683,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
           ],
         ),
         child: isSelected
-            ? Icon(Icons.check, color: onSurface, size: 20)
+            ? Icon(AppIcons.check, color: onSurface, size: 20)
             : Text(
                 'D',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -719,7 +720,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
           ],
         ),
         child: isSelected
-            ? Icon(Icons.check, color: _checkColor(color), size: 20)
+            ? Icon(AppIcons.check, color: _checkColor(color), size: 20)
             : null,
       ),
     );
@@ -744,12 +745,12 @@ class _PlayModeSelector extends StatelessWidget {
       segments: const [
         ButtonSegment(
           value: PadPlayMode.random,
-          icon: Icon(Icons.shuffle_rounded, size: 16),
+          icon: Icon(AppIcons.shuffle, size: 16),
           label: Text('Aléatoire'),
         ),
         ButtonSegment(
           value: PadPlayMode.sequential,
-          icon: Icon(Icons.repeat_one_rounded, size: 16),
+          icon: Icon(AppIcons.repeatOne, size: 16),
           label: Text('Séquentiel'),
         ),
       ],
@@ -901,7 +902,7 @@ class _SoundRowState extends State<_SoundRow> {
         if (!isLocal) ...[
           const SizedBox(width: 6),
           Icon(
-            Icons.cloud_outlined,
+            AppIcons.cloud,
             size: 13,
             color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
           ),
@@ -980,7 +981,7 @@ class _SoundRowState extends State<_SoundRow> {
             if (widget.canRemove) ...[
               const SizedBox(width: 2),
               IconButton(
-                icon: const Icon(Icons.close, size: 16),
+                icon: const Icon(AppIcons.close, size: 16),
                 onPressed: widget.onRemove,
                 color: scheme.onSurfaceVariant,
                 visualDensity: VisualDensity.compact,

@@ -145,9 +145,7 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
                   : "Lecture auto à l'ouverture : désactivée",
               child: _roundIconButton(
                 scheme: scheme,
-                icon: _autoPreview
-                    ? Icons.volume_up_rounded
-                    : Icons.volume_off_rounded,
+                icon: _autoPreview ? AppIcons.volumeOn : AppIcons.volumeOff,
                 iconColor: _autoPreview ? accent : scheme.onSurfaceVariant,
                 active: _autoPreview,
                 flat: true,

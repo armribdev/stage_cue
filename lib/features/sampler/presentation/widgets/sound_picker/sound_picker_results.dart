@@ -220,7 +220,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                           if (_isQuickSearch && sound.isFavorite) ...[
                             const SizedBox(width: 6),
                             Icon(
-                              Icons.star_rounded,
+                              AppIcons.favorite,
                               size: 16,
                               color: scheme.primary,
                             ),
@@ -332,7 +332,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         ],
         if (_isQuickSearch && _localIds != null && !_isLocal(sound)) ...[
           Icon(
-            Icons.cloud_outlined,
+            AppIcons.cloud,
             size: 13,
             color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
           ),
@@ -349,7 +349,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
       message: isPlaying ? 'Pause' : 'Aperçu depuis le point d\'entrée',
       child: _roundIconButton(
         scheme: scheme,
-        icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+        icon: isPlaying ? AppIcons.pause : AppIcons.play,
         iconColor: scheme.primary,
         onPressed: () => unawaited(_toggleLibraryPreview(sound)),
       ),
@@ -420,7 +420,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                   width: _actionButtonSize,
                   height: _actionButtonSize,
                   child: Icon(
-                    Icons.check_circle_rounded,
+                    AppIcons.checkCircle,
                     size: 16,
                     color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
                   ),
@@ -431,8 +431,8 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
             _roundIconButton(
               scheme: scheme,
               icon: sound.type == SoundType.music
-                  ? Icons.playlist_add_rounded
-                  : Icons.layers_rounded,
+                  ? AppIcons.playlistAdd
+                  : AppIcons.layers,
               iconColor: scheme.primary,
               onPressed: () => unawaited(_prepareAndClose(sound)),
             ),
@@ -444,7 +444,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         return SizedBox(
           width: _actionButtonSize,
           height: _actionButtonSize,
-          child: Icon(Icons.sensors_rounded, size: 18, color: scheme.primary),
+          child: Icon(AppIcons.onAir, size: 18, color: scheme.primary),
         );
 
       case MusicPickerMode():
@@ -453,7 +453,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
             width: _actionButtonSize,
             height: _actionButtonSize,
             child: Icon(
-              onAir ? Icons.sensors_rounded : Icons.check_rounded,
+              onAir ? AppIcons.onAir : AppIcons.check,
               size: 18,
               color: scheme.primary,
             ),
@@ -478,7 +478,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
           width: _actionButtonSize,
           height: _actionButtonSize,
           child: Icon(
-            onPad ? Icons.check_rounded : Icons.add_rounded,
+            onPad ? AppIcons.check : AppIcons.add,
             color: onPad ? scheme.primary : scheme.onSurfaceVariant,
           ),
         );
@@ -487,8 +487,8 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         return _roundIconButton(
           scheme: scheme,
           icon: sound.type == SoundType.music
-              ? Icons.playlist_add_rounded
-              : Icons.layers_rounded,
+              ? AppIcons.playlistAdd
+              : AppIcons.layers,
           iconColor: inBoard ? scheme.primary : scheme.onSurfaceVariant,
           onPressed: () => unawaited(_prepareAndClose(sound)),
         );
@@ -501,7 +501,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
           return SizedBox(
             width: _actionButtonSize,
             height: _actionButtonSize,
-            child: Icon(Icons.graphic_eq_rounded, color: scheme.primary),
+            child: Icon(AppIcons.soundEffect, color: scheme.primary),
           );
         }
         if (widget.notifier.hasPlayedInSession(sound.id)) {
@@ -511,7 +511,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
               width: _actionButtonSize,
               height: _actionButtonSize,
               child: Icon(
-                Icons.check_circle_rounded,
+                AppIcons.checkCircle,
                 size: 16,
                 color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
               ),

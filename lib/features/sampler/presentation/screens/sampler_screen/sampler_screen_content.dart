@@ -57,7 +57,7 @@ extension _SamplerScreenContent on _SamplerScreenState {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      Icons.error_outline_rounded,
+                      AppIcons.error,
                       size: 40,
                       color: Theme.of(context).colorScheme.error,
                     ),
@@ -95,7 +95,7 @@ extension _SamplerScreenContent on _SamplerScreenState {
                     child: Row(
                       children: [
                         Icon(
-                          Icons.error_outline_rounded,
+                          AppIcons.error,
                           size: 18,
                           color: Theme.of(context).colorScheme.onErrorContainer,
                         ),
@@ -181,7 +181,7 @@ extension _SamplerScreenContent on _SamplerScreenState {
           child: Row(
             children: [
               Icon(
-                Icons.cloud_download_outlined,
+                AppIcons.cloudDownload,
                 size: 16,
                 color: scheme.onSurfaceVariant,
               ),

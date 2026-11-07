@@ -36,7 +36,7 @@ class BoardsList extends StatelessWidget {
 
     final liveTile = ListTile(
       leading: Icon(
-        Icons.theater_comedy_rounded,
+        AppIcons.theater,
         color: isPerformanceMode ? scheme.error : null,
       ),
       title: Text(
@@ -63,7 +63,7 @@ class BoardsList extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
             children: [
-              Icon(Icons.theater_comedy_rounded, color: scheme.primary),
+              Icon(AppIcons.theater, color: scheme.primary),
               const SizedBox(width: 8),
               const Text(
                 'Scènes',
@@ -102,7 +102,7 @@ class BoardsList extends StatelessWidget {
                   ),
                 ),
               ListTile(
-                leading: const Icon(Icons.add),
+                leading: const Icon(AppIcons.add),
                 title: const Text('Nouvelle scène'),
                 onTap: () => onCreateBoard(),
               ),
@@ -113,12 +113,12 @@ class BoardsList extends StatelessWidget {
         // Ordre demandé : mode live, puis bibliothèque, puis paramètres.
         liveTile,
         ListTile(
-          leading: const Icon(Icons.library_books_rounded),
+          leading: const Icon(AppIcons.library),
           title: const Text('Gérer la bibliothèque'),
           onTap: onOpenLibrary == null ? null : () => onOpenLibrary!(),
         ),
         ListTile(
-          leading: const Icon(Icons.settings),
+          leading: const Icon(AppIcons.settings),
           title: const Text('Paramètres'),
           onTap: () => onOpenSettings(),
         ),
@@ -286,11 +286,7 @@ class _BoardSceneSelectorState extends State<BoardSceneSelector> {
                     child: Row(
                       children: [
                         if (board.id == selectedId)
-                          Icon(
-                            Icons.check_rounded,
-                            size: 18,
-                            color: scheme.primary,
-                          )
+                          Icon(AppIcons.check, size: 18, color: scheme.primary)
                         else
                           const SizedBox(width: 18),
                         const SizedBox(width: AppSpacing.sm),
@@ -313,7 +309,7 @@ class _BoardSceneSelectorState extends State<BoardSceneSelector> {
           padding: AppMenu.itemPadding,
           child: const Row(
             children: [
-              Icon(Icons.add, size: 18),
+              Icon(AppIcons.add, size: 18),
               SizedBox(width: AppSpacing.sm),
               Text('Nouvelle scène'),
             ],
@@ -352,11 +348,7 @@ class _BoardSceneSelectorState extends State<BoardSceneSelector> {
               board: board,
               framed: false,
               color: color,
-              trailing: Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 18,
-                color: color,
-              ),
+              trailing: Icon(AppIcons.chevronDown, size: 18, color: color),
             ),
           ),
         ),

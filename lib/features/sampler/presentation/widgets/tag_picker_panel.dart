@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../../../../core/utils/string_utils.dart';
@@ -75,7 +76,7 @@ class _TagAddButtonState extends State<TagAddButton> {
                   AnimatedRotation(
                     turns: open ? 0.125 : 0,
                     duration: const Duration(milliseconds: 150),
-                    child: Icon(Icons.add, size: 16, color: color),
+                    child: Icon(AppIcons.add, size: 16, color: color),
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -240,7 +241,7 @@ class _TagPickerPanelState extends State<TagPickerPanel> {
                 child: Row(
                   children: [
                     Icon(
-                      Icons.search,
+                      AppIcons.search,
                       size: 16,
                       color: scheme.onSurfaceVariant,
                     ),
@@ -271,7 +272,7 @@ class _TagPickerPanelState extends State<TagPickerPanel> {
                       const SizedBox(width: 4),
                     ],
                     BoxedIconButton(
-                      icon: Icons.close,
+                      icon: AppIcons.close,
                       tooltip: 'Fermer',
                       framed: false,
                       onPressed: widget.onClose,

@@ -19,6 +19,7 @@ import 'package:stage_cue/core/database/sounds.dart' show SoundType;
 import 'package:stage_cue/core/database/sounds.dart' as dbe show PadPlayMode;
 import 'package:stage_cue/core/settings/app_preferences.dart'
     show ConnectivityMode;
+import 'package:stage_cue/core/theme/app_icons.dart';
 import 'package:stage_cue/core/theme/app_theme.dart';
 import 'package:stage_cue/features/sampler/domain/entities/pad.dart'
     show PadPlayMode;
@@ -177,7 +178,7 @@ void main() {
   /// Croix de suppression du pad portant [padName].
   Finder removeCrossOf(String padName) => find.descendant(
     of: padNamed(padName),
-    matching: find.byIcon(Icons.close),
+    matching: find.byIcon(AppIcons.close),
   );
 
   /// Glisse le pad [from] sur la position du pad [to].
@@ -214,7 +215,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(BoardSceneSelector),
-        matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
+        matching: find.byIcon(AppIcons.chevronDown),
       ),
     );
     await flushIo(tester);
