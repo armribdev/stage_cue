@@ -98,19 +98,13 @@ class AppTheme {
         color: AppColors.surface2,
         surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.radiusLg,
-          side: AppElevation.border(scheme),
-        ),
+        shape: AppPanelBorder.standard(scheme, AppRadius.radiusLg),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surface2,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.radiusLg,
-          side: AppElevation.border(scheme),
-        ),
+        shape: AppPanelBorder.standard(scheme, AppRadius.radiusLg),
         titleTextStyle: const TextStyle(
           fontFamily: AppFonts.ui,
           fontSize: 16,
@@ -153,7 +147,9 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface2,
+        // Champ en retrait (fond `bg`) : posé sur un dialogue en `surface2`, il
+        // se creuse au lieu de se confondre avec lui.
+        fillColor: AppColors.bg,
         hintStyle: const TextStyle(color: AppColors.textFaint, fontSize: 13),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(
@@ -270,10 +266,7 @@ class AppTheme {
           color: AppColors.text,
           fontSize: 13,
         ),
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.radiusMd,
-          side: AppElevation.border(scheme),
-        ),
+        shape: AppPanelBorder.standard(scheme, AppRadius.radiusMd),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.surface2,

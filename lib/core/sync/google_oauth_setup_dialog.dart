@@ -83,7 +83,6 @@ class _GoogleOAuthCredentialsDialogState
     final dialogWidth = min(560.0, MediaQuery.sizeOf(context).width - 48);
 
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
       insetPadding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.xl,
         vertical: AppSpacing.xl,

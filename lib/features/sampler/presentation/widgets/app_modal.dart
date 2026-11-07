@@ -2,13 +2,11 @@ import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../../../../core/theme/app_dialog.dart';
 
 /// Constantes partagées pour modales et petits dialogues.
 abstract final class AppModalStyle {
-  static const double radius = AppRadius.lg;
   static const double inset = 24;
   static const double padding = 16;
   static const double maxWidth = 520;
@@ -44,9 +42,6 @@ Future<T?> showAppModal<T>({
         alignment: Alignment.center,
         insetPadding: const EdgeInsets.all(AppModalStyle.inset),
         clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppModalStyle.radius),
-        ),
         child: ConstrainedBox(
           constraints: BoxConstraints(
             maxWidth: min(AppModalStyle.maxWidth, size.width - 48),

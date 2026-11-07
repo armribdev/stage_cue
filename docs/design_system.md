@@ -96,6 +96,16 @@ DecoratedBox(
 )
 ```
 
+**`AppPanelBorder`** (`app_tokens.dart`) : contour des panneaux surélevés
+(dialogue, menu, carte d'item, sélecteur de sons) = hairline + liseré lumineux
+d'1 px sur l'arête haute (`AppElevation.topHighlightOpacity`), qui s'estompe vers
+les coins. Il est posé dans `dialogTheme` / `cardTheme` / `popupMenuTheme` :
+**ne pas redéfinir `shape:` sur un `Dialog`/`AlertDialog`** — une forme locale
+sans `side` supprime la bordure du thème. Pour un panneau hors thème : `AppPanelBorder.standard(scheme, radius)`.
+
+Les champs de saisie sont en **retrait** (`fillColor: AppColors.bg`) : posés sur
+un dialogue en `surface2`, ils se creusent au lieu de se confondre avec lui.
+
 Un `Card` ne sert qu'à un **item répété** d'une liste (ligne de son, pad,
 bibliothèque), jamais à encadrer une section d'écran ou de formulaire.
 

@@ -133,6 +133,10 @@ abstract final class AppElevation {
   /// des emplacements vides, séparateurs sur survol.
   static const double borderOpacityStrong = 0.18;
 
+  /// Opacité du liseré lumineux d'1 px en haut d'un panneau (voir
+  /// [AppPanelBorder]), au centre de l'arête.
+  static const double topHighlightOpacity = 0.14;
+
   /// Bordure standard — à utiliser sur cartes, panneaux, champs en repos.
   static BorderSide border(ColorScheme scheme) => BorderSide(
     color: scheme.outlineVariant.withValues(alpha: borderOpacity),
@@ -148,4 +152,55 @@ abstract final class AppElevation {
   /// Bordure mise en avant — focus, sélection, survol actif.
   static BorderSide emphasizedBorder(ColorScheme scheme) =>
       BorderSide(color: scheme.primary, width: 1.4);
+}
+
+/// Contour d'un panneau surélevé (dialogue, menu, carte d'item) : le hairline
+/// standard [AppElevation.border] plus un liseré lumineux d'1 px sur l'arête
+/// haute, qui s'estompe vers les coins. C'est lui — pas une ombre — qui
+/// détache le panneau du fond, dont `surface2` reste proche.
+///
+/// Se pose comme `shape` d'un composant thémé (`dialogTheme`, `cardTheme`,
+/// `popupMenuTheme`) : le liseré suit alors tous les usages sans code local.
+class AppPanelBorder extends RoundedRectangleBorder {
+  const AppPanelBorder({super.borderRadius, super.side});
+
+  /// Panneau standard : hairline + liseré, au rayon donné.
+  factory AppPanelBorder.standard(ColorScheme scheme, BorderRadius radius) =>
+      AppPanelBorder(borderRadius: radius, side: AppElevation.border(scheme));
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    super.paint(canvas, rect, textDirection: textDirection);
+    if (side.style == BorderStyle.none) return;
+
+    final radius = borderRadius.resolve(textDirection).topLeft.x;
+    final y = rect.top + side.width / 2;
+    final line = Rect.fromLTRB(rect.left + radius, y, rect.right - radius, y);
+    if (line.width <= 0) return;
+    final lit = Colors.white.withValues(
+      alpha: AppElevation.topHighlightOpacity,
+    );
+    canvas.drawLine(
+      line.topLeft,
+      line.topRight,
+      Paint()
+        ..strokeWidth = side.width
+        ..shader = LinearGradient(
+          colors: [lit.withValues(alpha: 0), lit, lit.withValues(alpha: 0)],
+        ).createShader(line),
+    );
+  }
+
+  @override
+  AppPanelBorder copyWith({
+    BorderSide? side,
+    BorderRadiusGeometry? borderRadius,
+  }) => AppPanelBorder(
+    side: side ?? this.side,
+    borderRadius: borderRadius ?? this.borderRadius,
+  );
+
+  @override
+  AppPanelBorder scale(double t) =>
+      AppPanelBorder(side: side.scale(t), borderRadius: borderRadius * t);
 }

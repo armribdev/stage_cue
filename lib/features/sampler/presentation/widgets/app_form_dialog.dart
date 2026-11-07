@@ -34,7 +34,6 @@ class AppFormDialog extends StatelessWidget {
     const dialogPadding = 16.0;
 
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
       insetPadding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.xl,
         vertical: AppSpacing.xl * 0.8,
@@ -153,7 +152,6 @@ class _AppTextInputDialogState extends State<AppTextInputDialog> {
     final dialogWidth = min(560.0, MediaQuery.sizeOf(context).width - 48);
 
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
       insetPadding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.xl,
         vertical: AppSpacing.xl,
@@ -251,7 +249,6 @@ class AppConfirmDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
       title: Text(title),
       content: Text(message),
       actions: [
@@ -366,7 +363,6 @@ class _AppBoardCreationDialogState extends State<AppBoardCreationDialog> {
     final dialogWidth = min(480.0, MediaQuery.sizeOf(context).width - 48);
 
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
       insetPadding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.xl,
         vertical: AppSpacing.xl,

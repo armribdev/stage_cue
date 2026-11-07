@@ -646,9 +646,9 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                     child: Material(
                       color: scheme.surface,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: AppRadius.radiusLg,
-                        side: AppElevation.border(scheme),
+                      shape: AppPanelBorder.standard(
+                        scheme,
+                        AppRadius.radiusLg,
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: TextFieldTapRegion(
