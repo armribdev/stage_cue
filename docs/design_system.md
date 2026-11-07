@@ -5,25 +5,59 @@ Référence des tokens et composants partagés pour une UI cohérente, dense et
 
 ## Tokens
 
+Direction visuelle "Console Linear" ([0023](decisions/0023-direction-visuelle-console-linear.md)) ;
+le détail actionnable (à faire / à ne pas faire) vit dans `.claude/rules/ui.md`.
 Toujours piocher dans `lib/core/theme/app_tokens.dart` plutôt que d'écrire des
-valeurs magiques (`BorderRadius.circular(14)`, `EdgeInsets.all(18)`…).
+valeurs magiques (`BorderRadius.circular(14)`, `EdgeInsets.all(18)`, `Color(0x…)`…).
 
 ### Rayons — `AppRadius`
 
-Échelle sobre à 4 paliers (remplace les 4/6/8/12/14/16/18/20 historiques) :
+Échelle sobre à 4 paliers :
 
 | Token | Valeur | Usage |
 |---|---|---|
-| `AppRadius.xs` | 4 | chips, badges, barres de progression |
-| `AppRadius.sm` | 8 | champs de saisie, boutons, petites cartes |
-| `AppRadius.md` | 10 | cartes standard, pads, tuiles de liste |
-| `AppRadius.lg` | 12 | dialogues, modales, panneaux majeurs |
+| `AppRadius.xs` | 2 | chips, badges, barres de progression |
+| `AppRadius.sm` | 4 | boutons texte, tuiles de liste, segments, tooltips |
+| `AppRadius.md` | 6 | champs de saisie, boutons pleins, menus, toasts |
+| `AppRadius.lg` | 8 | dialogues, modales, panneaux, cartes |
+| `AppRadius.pad` | 8 (= `lg`) | pads du sampler (`radiusPad`) |
 
-Variantes prêtes à l'emploi pour `BorderRadius` : `radiusXs/Sm/Md/Lg`.
+Variantes prêtes à l'emploi pour `BorderRadius` : `radiusXs/Sm/Md/Lg/Pad`.
 
-Pas de "pill shapes" : aucun composant ne doit dépasser `AppRadius.lg` — un
-bouton ou un champ reste rectangulaire à coins légèrement adoucis, jamais en
-capsule.
+Pas de "pill shapes" : un bouton ou un champ reste rectangulaire à coins
+légèrement adoucis, jamais en capsule. Les seules formes rondes sont des
+pastilles de couleur / points d'état (`BoxShape.circle`), et — exception
+actuelle — les `Chip` du thème (`StadiumBorder` dans `chipTheme`).
+
+### Couleurs — `AppColors`
+
+Valeurs exactes (pas dérivées d'un seed), thème sombre unique :
+
+| Token | Valeur | Usage |
+|---|---|---|
+| `bg` | `#0B0B0E` | fond d'écran |
+| `surface` | `#14151B` | panneaux, barre basse, drawer |
+| `surface2` | `#1B1C24` | cartes, dialogues, champs, menus, toasts |
+| `border` / `borderStrong` | blanc 9 % / 18 % | hairlines / séparateurs marqués |
+| `text` / `textDim` / `textFaint` | `#EDEDF1` / `#8B8D98` / `#54565F` | texte principal / secondaire / désactivé |
+| `accent` | `#6E56CF` | **seul** accent (violet) ; `accentSoft` = 16 %, `accentLine` = 50 % |
+| `success` / `danger` / `warn` | `#4CC38A` / `#E5484D` / `#E8A23B` | états uniquement |
+
+`ColorScheme` (voir `AppTheme`) est construit à partir de ces valeurs :
+`outline` / `outlineVariant` sont un gris neutre clair opaque (`#A8AAB5`) sur
+lequel `AppElevation` applique l'alpha du hairline.
+
+### Typographie — `AppFonts`, `AppTextStyles`, `AppTypography`
+
+- **Manrope** (`AppFonts.ui`) : police par défaut de tout le thème.
+- **JetBrains Mono** (`AppFonts.monoStyle(base)`) : affichages techniques
+  isolés (durées, compteurs, chemins) — jamais une phrase entière.
+- `AppTextStyles.sectionLabel(context)` : libellé de section en petites
+  capitales (texte passé en majuscules par l'appelant).
+- `AppTypography.desktopFontScale` (0,88) : appliqué une seule fois dans
+  `MaterialApp.builder` quand `context.prefersDesktopUi`.
+
+Polices bundlées en local (`assets/fonts/`, OFL), jamais via `google_fonts`.
 
 ### Espacements — `AppSpacing`
 
@@ -34,39 +68,43 @@ capsule.
 | `AppSpacing.md` | 12 |
 | `AppSpacing.lg` | 16 |
 | `AppSpacing.xl` | 24 |
-| `AppSpacing.xxl` | 32 |
+
+### Menus — `AppMenu`
+
+`itemHeight` (32) et `itemPadding` pour les `PopupMenuItem` — à passer
+explicitement sur chaque item, ainsi que
+`popUpAnimationStyle: AnimationStyle.noAnimation` sur chaque menu.
 
 ### Élévation / contours — `AppElevation`
 
-L'app privilégie des **bordures fines** (`outlineVariant`) à des ombres
-Material marquées — rendu plus plat, plus net, plus dense :
+Aucune élévation Material (`elevation: 0` partout, pas de ripple) : les
+surfaces se distinguent par des **bordures fines** et non par des ombres.
+
+| Helper | Usage |
+|---|---|
+| `AppElevation.border(scheme)` | hairline standard (blanc 9 %) : cartes, panneaux, champs au repos |
+| `AppElevation.borderStrong(scheme)` | pointillés, séparateurs marqués, survol (18 %) |
+| `AppElevation.emphasizedBorder(scheme)` | focus, sélection (accent, 1,4 px) |
 
 ```dart
-Card(
-  shape: RoundedRectangleBorder(
+DecoratedBox(
+  decoration: BoxDecoration(
+    color: scheme.surfaceContainer,
     borderRadius: AppRadius.radiusMd,
-    side: AppElevation.border(Theme.of(context).colorScheme),
+    border: Border.fromBorderSide(AppElevation.border(scheme)),
   ),
 )
 ```
 
-`AppElevation.emphasizedBorder(scheme)` pour les états focus/sélection/survol.
+Un `Card` ne sert qu'à un **item répété** d'une liste (ligne de son, pad,
+bibliothèque), jamais à encadrer une section d'écran ou de formulaire.
 
-## Palette
+## Thème
 
-Thème sombre unique, défini dans `AppTheme.darkTheme` :
-- **Accent** : indigo désaturé `#5B6EF5` (remplace le violet saturé `#7C4DFF`
-  d'origine, jugé trop "app créative mobile").
-- **Surfaces** : ardoise neutre (`#15171D` / `#1C1F27`) plutôt que bleu nuit
-  saturé — rendu plus proche d'un outil SaaS (Linear, Vercel…) que d'une app
-  Android.
-- `visualDensity: VisualDensity.compact` pour une interface dense, pensée
-  clavier/souris, sans pour autant gêner le tactile.
-
+`visualDensity: VisualDensity.compact`, `NoSplash`, `useMaterial3: true`.
 Tous les composants thémés (`cardTheme`, `dialogTheme`, `inputDecorationTheme`,
-boutons, drawer…) utilisent les tokens `AppRadius`/`AppElevation`
-ci-dessus — ne pas redéfinir de rayons localement dans un widget si le thème
-peut s'en charger.
+boutons, menus, drawer…) utilisent les tokens ci-dessus — ne pas redéfinir de
+rayons ou de couleurs localement dans un widget si le thème peut s'en charger.
 
 ## Composants partagés
 
@@ -101,6 +139,11 @@ peut s'en charger.
 Ne jamais reconstruire un `showDialog`/`AlertDialog` ad-hoc pour ces deux
 patterns (saisie de nom court / confirmation) — utiliser ces widgets pour
 garantir un rendu et un comportement uniformes.
+
+Tout dialogue s'ouvre via **`showAppDialog`** (`lib/core/theme/app_dialog.dart`),
+jamais `showDialog` direct : il porte la transition d'entrée commune (fondu +
+remontée de 8 px, sans `scale`, `appDialogTransition`), partagée avec le
+sélecteur de sons.
 
 ### Modales adaptatives — `lib/features/sampler/presentation/widgets/app_modal.dart`
 
