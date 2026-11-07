@@ -294,7 +294,7 @@ class AppTheme {
           fontWeight: FontWeight.w600,
         ),
         deleteIconColor: AppColors.textFaint,
-        shape: const StadiumBorder(),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusMd),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       ),
       tooltipTheme: TooltipThemeData(

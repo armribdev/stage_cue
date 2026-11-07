@@ -26,8 +26,8 @@ Variantes prêtes à l'emploi pour `BorderRadius` : `radiusXs/Sm/Md/Lg/Pad`.
 
 Pas de "pill shapes" : un bouton ou un champ reste rectangulaire à coins
 légèrement adoucis, jamais en capsule. Les seules formes rondes sont des
-pastilles de couleur / points d'état (`BoxShape.circle`), et — exception
-actuelle — les `Chip` du thème (`StadiumBorder` dans `chipTheme`).
+pastilles de couleur / points d'état (`BoxShape.circle`) ; les `Chip` du
+thème suivent `AppRadius.md`.
 
 ### Couleurs — `AppColors`
 
