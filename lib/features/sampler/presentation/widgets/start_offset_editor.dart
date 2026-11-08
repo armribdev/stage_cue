@@ -8,6 +8,7 @@ import '../../../../core/audio/cue_audio_service.dart';
 import '../../../../core/audio/preview_playback.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/theme/app_icons.dart';
+import '../../../../core/theme/transport_icon.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/layout_utils.dart';
@@ -443,7 +444,9 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       children: [
         IconButton.filledTonal(
           onPressed: ready ? _togglePreview : null,
-          icon: Icon(_isPreviewing ? AppIcons.stop : AppIcons.play),
+          icon: TransportIcon(
+            _isPreviewing ? TransportGlyph.stop : TransportGlyph.play,
+          ),
           tooltip: _isPreviewing ? 'Arrêter' : 'Aperçu depuis le point',
         ),
         const SizedBox(width: 4),

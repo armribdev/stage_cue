@@ -49,8 +49,8 @@ class _EjectMusicButton extends StatelessWidget {
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 24, minHeight: 20),
-      icon: Icon(
-        AppIcons.eject,
+      icon: TransportIcon(
+        TransportGlyph.eject,
         size: 16,
         color: enabled
             ? scheme.onSurfaceVariant.withValues(alpha: 0.75)
@@ -307,7 +307,7 @@ class _GroupedPlaybackControls extends StatelessWidget {
   Widget _actionButton({
     required BuildContext context,
     required VoidCallback? onPressed,
-    required IconData icon,
+    required TransportGlyph glyph,
     required bool showTransitionFeedback,
     bool filled = false,
   }) {
@@ -338,7 +338,7 @@ class _GroupedPlaybackControls extends StatelessWidget {
           minHeight: _actionButtonSize,
           maxHeight: _actionButtonSize,
         ),
-        icon: Icon(icon),
+        icon: TransportIcon(glyph),
       ),
     );
 
@@ -404,9 +404,9 @@ class _GroupedPlaybackControls extends StatelessWidget {
             onPressed: transitionInProgress
                 ? null
                 : (canControl ? onTogglePlayPause : onChooseMusic),
-            icon: canControl
-                ? (isPlaying ? AppIcons.pause : AppIcons.play)
-                : AppIcons.play,
+            glyph: canControl && isPlaying
+                ? TransportGlyph.pause
+                : TransportGlyph.play,
             showTransitionFeedback: playFeedback,
             filled: true,
           ),
@@ -414,7 +414,7 @@ class _GroupedPlaybackControls extends StatelessWidget {
           _actionButton(
             context: context,
             onPressed: hasQueue && !transitionInProgress ? onSkipNext : null,
-            icon: AppIcons.skipNext,
+            glyph: TransportGlyph.next,
             showTransitionFeedback: skipFeedback,
           ),
           const SizedBox(width: 6),
@@ -452,7 +452,11 @@ class _CompactNextUpLabel extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(AppIcons.skipNext, size: 14, color: color.withValues(alpha: 0.6)),
+        TransportIcon(
+          TransportGlyph.next,
+          size: 14,
+          color: color.withValues(alpha: 0.6),
+        ),
         const SizedBox(width: 4),
         Flexible(
           child: Text(

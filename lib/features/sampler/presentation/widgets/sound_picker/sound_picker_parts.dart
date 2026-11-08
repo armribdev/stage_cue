@@ -69,7 +69,9 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
 
   Widget _roundIconButton({
     required ColorScheme scheme,
-    required IconData icon,
+    IconData? icon,
+    // Glyphe de transport plein (lecture/pause) à la place d'une icône Lucide.
+    TransportGlyph? transport,
     required VoidCallback? onPressed,
     required Color iconColor,
     bool active = false,
@@ -77,6 +79,7 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
     // porte l'état. Pour les toggles serrés type favoris/hors-ligne.
     bool flat = false,
   }) {
+    assert((icon == null) != (transport == null));
     // ExcludeFocus : empêche ce bouton de voler le focus au champ de
     // recherche (sinon Flutter le regagnerait en sélectionnant tout le
     // texte, comme un Tab desktop).
@@ -86,11 +89,13 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
         height: _actionButtonSize,
         child: IconButton(
           onPressed: onPressed,
-          icon: Icon(icon, size: 18),
+          icon: transport != null
+              ? TransportIcon(transport, size: 18)
+              : Icon(icon, size: 18),
           padding: EdgeInsets.zero,
           visualDensity: VisualDensity.compact,
           style: IconButton.styleFrom(
-            shape: const CircleBorder(),
+            shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusMd),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             backgroundColor: !flat && active
                 ? scheme.primary.withValues(alpha: 0.12)

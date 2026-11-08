@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_icons.dart';
+import '../../../../core/theme/transport_icon.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/layout_utils.dart';
@@ -11,7 +12,7 @@ import '../../domain/entities/sound_board.dart';
 import '../providers/sampler_provider.dart';
 import 'audio_vu_meter.dart';
 import 'boxed_icon_button.dart';
-import 'circle_hover_button.dart';
+import 'hover_icon_button.dart';
 import 'waveform_mark_button.dart';
 
 part 'sampler_boards_chrome.dart';
@@ -128,7 +129,11 @@ class StopAllButton extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(AppIcons.stop, size: 14, color: scheme.error),
+                    TransportIcon(
+                      TransportGlyph.stop,
+                      size: 14,
+                      color: scheme.error,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'Stop',
@@ -504,7 +509,7 @@ class LiveExitButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CircleHoverButton(
+    return HoverIconButton(
       tooltip: 'Quitter la session live',
       onPressed: onExit,
       builder: (_, _) => const LiveModeActiveIcon(),

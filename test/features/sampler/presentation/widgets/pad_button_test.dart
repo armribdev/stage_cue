@@ -173,12 +173,13 @@ void main() {
 
     // Le titre garde toute la largeur : plus de coupure autour des icônes.
     final title = tester.getRect(find.textContaining('Aa Bb'));
-    final edit = tester.getRect(find.byIcon(AppIcons.edit));
-    final close = tester.getRect(find.byIcon(AppIcons.close));
+    final edit = tester.getRect(find.byIcon(AppIcons.padEdit));
+    final close = tester.getRect(find.byIcon(AppIcons.padRemove));
     final pad = tester.getRect(find.byType(PadButton));
 
     expect(title.bottom, lessThanOrEqualTo(edit.top));
     expect(edit.right, lessThan(close.left));
+    // Le glyphe est centré dans sa zone de clic (20 px), sans fond visible.
     expect(close.right, greaterThan(pad.right - 20));
     expect(close.bottom, greaterThan(pad.bottom - 20));
   });
@@ -232,7 +233,7 @@ void main() {
       ),
     );
 
-    expect(find.byIcon(AppIcons.queue), findsNothing);
+    expect(find.byIcon(AppIcons.padSounds), findsNothing);
 
     await tester.tap(find.text('2 sons'));
     expect(showSounds, 1);

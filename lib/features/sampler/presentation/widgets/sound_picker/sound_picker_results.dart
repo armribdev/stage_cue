@@ -349,7 +349,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
       message: isPlaying ? 'Pause' : 'Aperçu depuis le point d\'entrée',
       child: _roundIconButton(
         scheme: scheme,
-        icon: isPlaying ? AppIcons.pause : AppIcons.play,
+        transport: isPlaying ? TransportGlyph.pause : TransportGlyph.play,
         iconColor: scheme.primary,
         onPressed: () => unawaited(_toggleLibraryPreview(sound)),
       ),

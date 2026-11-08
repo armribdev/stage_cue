@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_tokens.dart';
+
 /// Boutons d'action GO + secondaire, partagés entre sélecteurs de sons.
 class SoundPickerActionButtons extends StatelessWidget {
   static const double _goButtonHeight = 36;
@@ -45,7 +47,7 @@ class SoundPickerActionButtons extends StatelessWidget {
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             style: IconButton.styleFrom(
-              shape: const CircleBorder(),
+              shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusMd),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               backgroundColor: Colors.transparent,
               disabledBackgroundColor: Colors.transparent,

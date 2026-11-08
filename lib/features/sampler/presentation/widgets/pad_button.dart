@@ -231,7 +231,7 @@ class PadButton extends StatelessWidget {
   }
 
   static const int _titleMaxLines = 3;
-  static const double _iconSegmentSize = 22;
+  static const double _iconTargetSize = 20;
   static const double _downloadCornerSize = 26;
 
   /// Progression de lecture : filet de 3 px collé au bord bas du pad (le
@@ -246,7 +246,7 @@ class PadButton extends StatelessWidget {
 
     // Couleur d'icône contrastée avec le fond réel du pad si celui-ci a une
     // couleur perso ; l'accent sinon.
-    final color = hasCustomColor ? _iconStyle(scheme).icon : scheme.primary;
+    final color = hasCustomColor ? _iconStyle(scheme) : scheme.primary;
     return Positioned(
       left: 0,
       right: 0,
@@ -305,40 +305,43 @@ class PadButton extends StatelessWidget {
     final ready = padItem.readySoundCount;
     final label = padItem.isPartiallyReady ? '$ready/$total' : '$total';
 
-    final dim = scheme.onSurfaceVariant.withValues(alpha: 0.65);
-    final content = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          switch (padItem.pad.playMode) {
-            PadPlayMode.random => AppIcons.shuffle,
-            PadPlayMode.sequential => AppIcons.repeatOne,
-          },
-          size: 11,
-          color: dim,
-        ),
-        const SizedBox(width: 3),
-        Text(
-          padItem.isPartiallyReady ? '$label variantes' : '$label sons',
-          style: TextStyle(
-            fontSize: 11,
-            color: padItem.isPartiallyReady ? scheme.tertiary : dim,
+    final base = _iconStyle(scheme);
+    Widget content(bool hovered) {
+      final tint = _hoverTint(base, hovered);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            switch (padItem.pad.playMode) {
+              PadPlayMode.random => AppIcons.shuffle,
+              PadPlayMode.sequential => AppIcons.repeatOne,
+            },
+            size: 11,
+            color: tint,
           ),
-        ),
-        if (onShowSounds != null)
-          Icon(AppIcons.chevronRight, size: 12, color: dim),
-      ],
-    );
+          const SizedBox(width: 3),
+          Text(
+            padItem.isPartiallyReady ? '$label variantes' : '$label sons',
+            style: TextStyle(
+              fontSize: 11,
+              color: padItem.isPartiallyReady ? scheme.tertiary : tint,
+            ),
+          ),
+          if (onShowSounds != null)
+            Icon(AppIcons.chevronRight, size: 12, color: tint),
+        ],
+      );
+    }
+
+    if (onShowSounds == null) return content(false);
     // Le libellé lui-même ouvre le choix du son (pas d'icône dédiée) : le
-    // chevron signale qu'il est cliquable, l'`InkWell` imbriqué capte le tap
-    // avant celui du pad.
-    if (onShowSounds == null) return content;
-    return InkWell(
+    // chevron signale qu'il est cliquable. Même teinte et même survol que les
+    // icônes du pad, sans fond. Le tap est capté ici avant celui du pad.
+    return _HoverTint(
       onTap: onShowSounds,
-      borderRadius: AppRadius.radiusSm,
-      child: Padding(
+      builder: (context, hovered) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: content,
+        child: content(hovered),
       ),
     );
   }
@@ -349,13 +352,10 @@ class PadButton extends StatelessWidget {
   /// gris fixe devient illisible sur un pad rouge ou clair. On reproduit
   /// l'alpha appliqué au fond selon l'état (lecture, pause) puis on compose
   /// sur la surface pour estimer la couleur perçue.
-  ({Color icon, Color border}) _iconStyle(ColorScheme scheme) {
+  Color _iconStyle(ColorScheme scheme) {
     final colorValue = padItem.pad.colorValue;
     if (colorValue == null) {
-      return (
-        icon: AppColors.textDim,
-        border: AppElevation.border(scheme).color,
-      );
+      return AppColors.textDim;
     }
 
     final customColor = Color(colorValue);
@@ -379,20 +379,13 @@ class PadButton extends StatelessWidget {
         .withSaturation((hsl.saturation * 0.6).clamp(0.0, 1.0))
         .withLightness(isDarkBackground ? 0.88 : 0.16)
         .toColor();
-    final icon = tinted.withValues(alpha: isDarkBackground ? 0.9 : 0.75);
-    final border = (isDarkBackground ? Colors.white : Colors.black).withValues(
-      alpha: 0.18,
-    );
-    return (icon: icon, border: border);
+    return tinted.withValues(alpha: isDarkBackground ? 0.9 : 0.75);
   }
 
-  /// Groupe façon "segmented control" : chaque icône est un carré indépendant
-  /// (son propre fond + sa propre bordure pleine hauteur), collés bord à bord
-  /// sans marge — seuls le coin tout à gauche et le coin tout à droite du
-  /// groupe sont arrondis, les autres restent droits. Même langage visuel que
-  /// [BoxedIconButton], adapté en contraste dynamique puisque le fond du pad
-  /// est arbitraire (voir maquette : icônes éditer/fermer sur la même ligne
-  /// que le titre, jamais flottantes dessus).
+  /// Rangée d'icônes nues (ni fond ni bordure) : au repos elles sont
+  /// atténuées, le survol ne fait que les ramener à pleine intensité
+  /// ([_HoverTint]). Leur couleur vient de [_iconStyle], contrastée avec le
+  /// fond arbitraire du pad.
   ///
   /// [includeSounds] : icône « sons du pad ». Un pad prêt ouvre ce choix en
   /// touchant son libellé « N sons » ; les états en route / bloqué n'ont pas
@@ -400,84 +393,46 @@ class PadButton extends StatelessWidget {
   List<(IconData, double, VoidCallback?)> _iconClusterEntries({
     required bool includeSounds,
   }) => [
-    if (onCue != null) (AppIcons.headphones, 14.0, onCue),
+    if (onCue != null) (AppIcons.padCue, 15.0, onCue),
     if (includeSounds && padItem.totalSoundCount > 1 && onShowSounds != null)
-      (AppIcons.queue, 14.0, onShowSounds),
-    if (isEditable && onEdit != null) (AppIcons.edit, 14.0, onEdit),
-    if (isEditable && onRemove != null) (AppIcons.close, 16.0, onRemove),
+      (AppIcons.padSounds, 15.0, onShowSounds),
+    if (isEditable && onEdit != null) (AppIcons.padEdit, 15.0, onEdit),
+    if (isEditable && onRemove != null) (AppIcons.padRemove, 17.0, onRemove),
   ];
 
   Widget? _buildIconCluster(ColorScheme scheme, {bool includeSounds = false}) {
     final entries = _iconClusterEntries(includeSounds: includeSounds);
     if (entries.isEmpty) return null;
 
-    final style = _iconStyle(scheme);
-
-    Widget segment(int index) {
-      final (icon, size, onPressed) = entries[index];
-      final isFirst = index == 0;
-      final isLast = index == entries.length - 1;
-      final borderRadius = BorderRadius.horizontal(
-        left: isFirst ? const Radius.circular(AppRadius.sm) : Radius.zero,
-        right: isLast ? const Radius.circular(AppRadius.sm) : Radius.zero,
-      );
-      return Container(
-        width: _iconSegmentSize,
-        height: _iconSegmentSize,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.24),
-          borderRadius: borderRadius,
-          border: Border(
-            top: BorderSide(color: style.border),
-            bottom: BorderSide(color: style.border),
-            left: isFirst ? BorderSide(color: style.border) : BorderSide.none,
-            right: BorderSide(color: style.border),
-          ),
-        ),
-        // Le hover/splash Material calque le même `borderRadius` que le
-        // conteneur : sans ça, sa forme reste rectangulaire par défaut et
-        // déborde du coin arrondi du segment (visible surtout sur les coins
-        // extérieurs du groupe).
-        child: IconButton(
-          icon: Icon(icon, size: size),
-          onPressed: onPressed,
-          style:
-              IconButton.styleFrom(
-                foregroundColor: style.icon,
-                backgroundColor: Colors.transparent,
-                shape: RoundedRectangleBorder(borderRadius: borderRadius),
-                padding: EdgeInsets.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ).copyWith(
-                // Overlay neutre (blanc translucide) plutôt que dérivé de
-                // `style.icon` : cette teinte est calée sur la couleur du pad et
-                // devient quasi invisible sur certains pads, alors que le fond du
-                // segment (noir translucide) reste lui toujours neutre.
-                overlayColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.pressed)) {
-                    return Colors.white.withValues(alpha: 0.24);
-                  }
-                  if (states.contains(WidgetState.hovered) ||
-                      states.contains(WidgetState.focused)) {
-                    return Colors.white.withValues(alpha: 0.16);
-                  }
-                  return null;
-                }),
-              ),
-          constraints: const BoxConstraints(
-            minWidth: _iconSegmentSize,
-            minHeight: _iconSegmentSize,
-          ),
-        ),
-      );
-    }
+    final color = _iconStyle(scheme);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: [for (var i = 0; i < entries.length; i++) segment(i)],
+      children: [
+        for (final (icon, size, onPressed) in entries)
+          _HoverTint(
+            onTap: onPressed,
+            builder: (context, hovered) => SizedBox(
+              width: _iconTargetSize,
+              height: _iconTargetSize,
+              child: Center(
+                child: Icon(
+                  icon,
+                  size: size,
+                  color: _hoverTint(color, hovered),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
+
+  /// Teinte des actions d'un pad : franchement estompée au repos, pleine
+  /// intensité au survol — l'écart doit se voir sur n'importe quelle couleur
+  /// de pad. Partagée par les icônes et le libellé « N sons ».
+  static Color _hoverTint(Color base, bool hovered) =>
+      hovered ? base.withValues(alpha: 1) : base.withValues(alpha: 0.5);
 
   // ── EN ROUTE ──────────────────────────────────────────────────────────────
 
@@ -933,6 +888,44 @@ class _PolyphonicProgressBarState extends State<_PolyphonicProgressBar>
           valueColor: AlwaysStoppedAnimation<Color>(widget.color),
           minHeight: _barHeight,
         ),
+      ),
+    );
+  }
+}
+
+/// Zone cliquable sans fond ni ripple : le contenu se teinte lui-même via
+/// l'état de survol fourni à [builder] (direction "Console Linear", cf.
+/// décision 0023). Le `GestureDetector` opaque capte le tap avant celui du pad.
+class _HoverTint extends StatefulWidget {
+  const _HoverTint({required this.onTap, required this.builder});
+
+  final VoidCallback? onTap;
+  final Widget Function(BuildContext context, bool hovered) builder;
+
+  @override
+  State<_HoverTint> createState() => _HoverTintState();
+}
+
+class _HoverTintState extends State<_HoverTint> {
+  bool _hovered = false;
+
+  void _setHovered(bool value) {
+    if (_hovered == value) return;
+    setState(() => _hovered = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: widget.onTap == null
+          ? MouseCursor.defer
+          : SystemMouseCursors.click,
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: widget.builder(context, _hovered),
       ),
     );
   }

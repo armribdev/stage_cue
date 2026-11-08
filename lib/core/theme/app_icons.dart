@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons_300.dart';
+import 'package:lucide_icons_flutter/lucide_icons_400.dart';
 
 /// Icônes de l'application — jeu Lucide à trait fin (graisse 300 ≈ 1,5 px sur
 /// une grille de 24), police bundlée en local : l'app reste utilisable
@@ -13,6 +14,14 @@ import 'package:lucide_icons_flutter/lucide_icons_300.dart';
 /// Lucide n'a pas de variante pleine : un état « actif » (favori, case cochée)
 /// se distingue par la couleur ou un autre glyphe, pas par le remplissage.
 abstract final class AppIcons {
+  // ── Actions flottantes d'un pad (graisse 400) ─────────────────────────────
+  // Posées sans fond ni bordure sur un pad de couleur arbitraire : à trait
+  // 300 elles se lisent trop fines, d'où la graisse au-dessus du reste du jeu.
+  static const IconData padCue = LucideIcons400.headphones;
+  static const IconData padSounds = LucideIcons400.listMusic;
+  static const IconData padEdit = LucideIcons400.pencil;
+  static const IconData padRemove = LucideIcons400.x;
+
   // ── Actions courantes ─────────────────────────────────────────────────────
   static const IconData add = LucideIcons300.plus;
   static const IconData close = LucideIcons300.x;
@@ -61,13 +70,8 @@ abstract final class AppIcons {
   static const IconData offline = LucideIcons300.zap;
 
   // ── Lecture et audio ──────────────────────────────────────────────────────
-  static const IconData play = LucideIcons300.play;
-  static const IconData pause = LucideIcons300.pause;
-  static const IconData stop = LucideIcons300.square;
-  static const IconData skipNext = LucideIcons300.skipForward;
   static const IconData rewind = LucideIcons300.rewind;
   static const IconData fastForward = LucideIcons300.fastForward;
-  static const IconData eject = LucideIcons300.eject;
   static const IconData shuffle = LucideIcons300.shuffle;
   static const IconData repeatOne = LucideIcons300.repeat1;
   static const IconData volumeOn = LucideIcons300.volume2;

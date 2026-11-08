@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import 'circle_hover_button.dart';
+import 'hover_icon_button.dart';
 
 /// Marque Stage Cue : une forme d'onde dessinée en vectoriel (`CustomPainter`,
 /// pas un asset image) — sert de repère de marque provisoire pour le bouton
 /// menu, en attendant l'identité visuelle définitive. Sans cadre au repos ;
-/// au survol, un fond rond ([CircleHoverButton]) et la forme d'onde se teinte
-/// et grossit.
+/// au survol, un fond carré arrondi ([HoverIconButton]) apparaît en fondu et
+/// la forme d'onde vire à l'accent, sans changer de taille.
 class WaveformMarkButton extends StatelessWidget {
   const WaveformMarkButton({
     super.key,
@@ -20,20 +20,20 @@ class WaveformMarkButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return CircleHoverButton(
+    return HoverIconButton(
       tooltip: tooltip,
       onPressed: onPressed,
-      builder: (context, hovered) => AnimatedScale(
-        scale: hovered ? 1.1 : 1.0,
+      builder: (context, hovered) => TweenAnimationBuilder<Color?>(
+        tween: ColorTween(
+          end: hovered ? scheme.primary : scheme.onSurfaceVariant,
+        ),
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
-        child: SizedBox(
+        builder: (context, color, _) => SizedBox(
           width: 16,
           height: 16,
           child: CustomPaint(
-            painter: _WaveformPainter(
-              color: hovered ? scheme.primary : scheme.onSurfaceVariant,
-            ),
+            painter: _WaveformPainter(color: color ?? scheme.onSurfaceVariant),
           ),
         ),
       ),

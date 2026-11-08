@@ -178,7 +178,7 @@ void main() {
   /// Croix de suppression du pad portant [padName].
   Finder removeCrossOf(String padName) => find.descendant(
     of: padNamed(padName),
-    matching: find.byIcon(AppIcons.close),
+    matching: find.byIcon(AppIcons.padRemove),
   );
 
   /// Glisse le pad [from] sur la position du pad [to].
