@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:path/path.dart' as p;
+import 'package:stage_cue/core/logging/log_sink.dart';
 import 'package:stage_cue/core/update/app_update_info.dart';
 import 'package:stage_cue/core/update/app_update_installer.dart';
 
@@ -125,7 +126,9 @@ void main() {
         ),
       );
 
-      final updateDir = Directory(p.join(tempRoot.path, 'stagecue_update'));
+      final updateDir = Directory(
+        p.join(tempRoot.path, AppUpdateInstaller.updateDirName),
+      );
       if (await updateDir.exists()) {
         expect(await updateDir.list().toList(), isEmpty);
       }
@@ -171,7 +174,9 @@ void main() {
         throwsA(isA<Exception>()),
       );
 
-      final updateDir = Directory(p.join(tempRoot.path, 'stagecue_update'));
+      final updateDir = Directory(
+        p.join(tempRoot.path, AppUpdateInstaller.updateDirName),
+      );
       if (await updateDir.exists()) {
         final leftovers = await updateDir.list().toList();
         expect(leftovers.where((e) => e.path.endsWith('.part')), isEmpty);
@@ -179,6 +184,91 @@ void main() {
       }
     },
   );
+
+  group('reportPreviousInstall', () {
+    late Directory logDir;
+    late Directory updateDir;
+    late AppUpdateInstaller installer;
+
+    Future<String> sessionLog() async {
+      await LogSink.flush();
+      return File(
+        p.join(logDir.path, LogSink.currentFileName),
+      ).readAsStringSync();
+    }
+
+    Future<void> writeInstallLog(List<String> lines) => File(
+      p.join(updateDir.path, AppUpdateInstaller.installLogName),
+    ).writeAsString(lines.join('\n'));
+
+    setUp(() async {
+      await LogSink.resetForTest();
+      logDir = await Directory.systemTemp.createTemp('stagecue_update_log_');
+      await LogSink.init(directory: logDir, flushInterval: null);
+      LogSink.writeSessionHeader(const ['test']);
+      updateDir = Directory(
+        p.join(tempRoot.path, AppUpdateInstaller.updateDirName),
+      )..createSync(recursive: true);
+      File(p.join(updateDir.path, 'StageCue-Setup.exe')).writeAsStringSync('x');
+      installer = AppUpdateInstaller(
+        getTemporaryDirectoryFn: () async => tempRoot,
+      );
+    });
+
+    tearDown(() async {
+      await LogSink.resetForTest();
+      if (logDir.existsSync()) await logDir.delete(recursive: true);
+    });
+
+    test('installation réussie → journalisée, dossier effacé', () async {
+      await writeInstallLog(const [
+        '2026-11-11 23:17:55.827   Installation process succeeded.',
+        '2026-11-11 23:17:55.829   Deinitializing Setup.',
+        '2026-11-11 23:17:55.830   Log closed.',
+      ]);
+
+      await installer.reportPreviousInstall();
+
+      expect(await sessionLog(), contains('Installation précédente terminée'));
+      expect(updateDir.existsSync(), isFalse);
+    });
+
+    test('installation abandonnée → cause journalisée en WARN', () async {
+      await writeInstallLog(const [
+        '2026-11-11 23:18:12.071   Defaulting to Cancel for suppressed message box (OK/Cancel):',
+        '2026-11-11 23:18:12.071   Got EAbort exception.',
+        '2026-11-11 23:18:12.072   Log closed.',
+      ]);
+
+      await installer.reportPreviousInstall();
+
+      final out = await sessionLog();
+      expect(out, contains('WARN  Update Installation précédente non aboutie'));
+      expect(out, contains('Got EAbort exception.'));
+      expect(updateDir.existsSync(), isFalse);
+    });
+
+    test(
+      'journal non clos (installeur en cours) → rien, dossier gardé',
+      () async {
+        await writeInstallLog(const [
+          '2026-11-11 23:17:54.358   Starting the installation process.',
+        ]);
+
+        await installer.reportPreviousInstall();
+
+        expect(await sessionLog(), isNot(contains('Installation précédente')));
+        expect(updateDir.existsSync(), isTrue);
+      },
+    );
+
+    test('pas de journal → sans effet', () async {
+      await installer.reportPreviousInstall();
+
+      expect(await sessionLog(), isNot(contains('Installation précédente')));
+      expect(updateDir.existsSync(), isTrue);
+    });
+  });
 }
 
 /// `MockClient` aligne toujours `contentLength` sur le corps ; on force un

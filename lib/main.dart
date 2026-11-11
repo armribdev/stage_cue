@@ -17,7 +17,6 @@ import 'core/logging/app_log.dart';
 import 'core/logging/log_session.dart';
 import 'core/logging/log_sink.dart';
 import 'core/sync/google_oauth_config.dart';
-import 'core/update/app_mutex_windows.dart';
 import 'core/utils/disk_space.dart';
 
 void main() {
@@ -38,9 +37,6 @@ void main() {
 
       if (!kIsWeb && Platform.isWindows) {
         await windowManager.ensureInitialized();
-        // Maintenu ouvert toute la durée du process : signale l'instance en
-        // cours à l'installeur Inno Setup lors d'une mise à jour silencieuse.
-        holdAppMutexForUpdateDetection();
       }
 
       // En cas d'échec : on démarre quand même pour afficher l'écran de retry

@@ -59,53 +59,119 @@ void main() {
     verifyNever(() => installer.launchInstallerSilently(any()));
   });
 
-  testWidgets('Installer télécharge puis lance silencieusement', (
-    tester,
-  ) async {
-    final installer = _MockInstaller();
-    when(
-      () => installer.downloadInstaller(
-        any(),
-        onProgress: any(named: 'onProgress'),
-      ),
-    ).thenAnswer((_) async => r'C:\Temp\StageCue-Setup.exe');
-    when(
-      () => installer.launchInstallerSilently(any()),
-    ).thenAnswer((_) async {});
-
-    await tester.pumpWidget(
+  Widget host(AppUpdateInstaller installer, Future<void> Function() quitApp) =>
       MaterialApp(
         theme: AppTheme.darkTheme,
         builder: (context, child) => AppToastHost(child: child!),
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
-              onPressed: () =>
-                  runUpdateFlow(context, info, installer: installer),
+              onPressed: () => runUpdateFlow(
+                context,
+                info,
+                installer: installer,
+                quitApp: quitApp,
+              ),
               child: const Text('check'),
             ),
           ),
         ),
-      ),
-    );
+      );
 
+  const installerPath = r'C:\Temp\StageCue-Setup.exe';
+
+  testWidgets(
+    'Installer télécharge, lance, affiche l\'installation dans le dialogue puis quitte',
+    (tester) async {
+      final installer = _MockInstaller();
+      var quit = 0;
+      when(
+        () => installer.downloadInstaller(
+          any(),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).thenAnswer((_) async => installerPath);
+      when(
+        () => installer.launchInstallerSilently(any()),
+      ).thenAnswer((_) async {});
+
+      await tester.pumpWidget(host(installer, () async => quit++));
+      await tester.tap(find.text('check'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Installer'));
+      await tester.pump();
+      await tester.pump();
+
+      verify(
+        () => installer.downloadInstaller(
+          info,
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).called(1);
+      verify(() => installer.launchInstallerSilently(installerPath)).called(1);
+      // L'état d'installation vit dans le dialogue, pas dans un toast.
+      expect(find.text('Installation en cours'), findsOneWidget);
+      expect(quit, 0);
+
+      await tester.pump(const Duration(seconds: 2));
+      expect(quit, 1);
+    },
+  );
+
+  testWidgets(
+    'échec du téléchargement → erreur dans le dialogue, sans quitter',
+    (tester) async {
+      final installer = _MockInstaller();
+      var quit = 0;
+      when(
+        () => installer.downloadInstaller(
+          any(),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).thenThrow(Exception('réseau coupé'));
+
+      await tester.pumpWidget(host(installer, () async => quit++));
+      await tester.tap(find.text('check'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Installer'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Échec du téléchargement'), findsOneWidget);
+      expect(find.textContaining('réseau coupé'), findsOneWidget);
+      verifyNever(() => installer.launchInstallerSilently(any()));
+
+      await tester.tap(find.text('Fermer'));
+      await tester.pumpAndSettle();
+      expect(find.text('Échec du téléchargement'), findsNothing);
+      expect(quit, 0);
+    },
+  );
+
+  testWidgets('échec du lancement → erreur dans le dialogue, sans quitter', (
+    tester,
+  ) async {
+    final installer = _MockInstaller();
+    var quit = 0;
+    when(
+      () => installer.downloadInstaller(
+        any(),
+        onProgress: any(named: 'onProgress'),
+      ),
+    ).thenAnswer((_) async => installerPath);
+    when(
+      () => installer.launchInstallerSilently(any()),
+    ).thenThrow(Exception('accès refusé'));
+
+    await tester.pumpWidget(host(installer, () async => quit++));
     await tester.tap(find.text('check'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Installer'));
     await tester.pumpAndSettle();
 
-    verify(
-      () => installer.downloadInstaller(
-        info,
-        onProgress: any(named: 'onProgress'),
-      ),
-    ).called(1);
-    verify(
-      () => installer.launchInstallerSilently(r'C:\Temp\StageCue-Setup.exe'),
-    ).called(1);
-    expect(find.textContaining('Installation en cours'), findsOneWidget);
-
-    // Toast de confirmation (6 s) — consommer le timer avant la fin du test.
-    await tester.pump(const Duration(seconds: 6));
+    expect(find.text('Échec de l\'installation'), findsOneWidget);
+    expect(find.textContaining('accès refusé'), findsOneWidget);
+    await tester.tap(find.text('Fermer'));
+    await tester.pumpAndSettle();
+    expect(quit, 0);
   });
 }

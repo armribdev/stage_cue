@@ -19,6 +19,7 @@ import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import '../update/app_update_checker.dart';
 import '../update/app_update_info.dart';
+import '../update/app_update_installer.dart';
 import '../update/update_flow.dart';
 import '../update/update_log.dart';
 import '../utils/app_snackbar.dart';
@@ -125,6 +126,10 @@ class _SoundboardAppState extends State<SoundboardApp>
   static const _updateCheckThrottle = Duration(hours: 6);
 
   Future<void> _maybeCheckForUpdateOnLaunch() async {
+    // Avant le throttle : l'issue d'une installation doit être journalisée même
+    // si le dernier check date de moins de 6 h.
+    unawaited(AppUpdateInstaller().reportPreviousInstall());
+
     final prefs = widget.services.appPreferences;
     final lastCheck = prefs.lastUpdateCheckAt;
     if (lastCheck != null &&

@@ -42,6 +42,17 @@ class UpdateLog {
   static void installLaunchFailed(Object error) =>
       warn('Lancement de l\'installeur échoué — $error');
 
+  static void quittingForInstall() =>
+      info('Fermeture de l\'app pour laisser l\'installeur la remplacer.');
+
+  static void previousInstallSucceeded() =>
+      info('Installation précédente terminée (journal de l\'installeur).');
+
+  static void previousInstallFailed(String lastLines) => warn(
+    'Installation précédente non aboutie — fin du journal de l\'installeur : '
+    '$lastLines',
+  );
+
   static void _emit(String message, LogLevel sinkLevel, {int level = 800}) {
     developer.log(message, name: _name, level: level);
     LogSink.log(_channel, sinkLevel, message);

@@ -5,17 +5,17 @@
 ; lib/core/update/app_update_installer.dart) ne fasse jamais apparaître de
 ; prompt Windows.
 ;
-; L'AppMutex ci-dessous doit correspondre EXACTEMENT à `kAppMutexName` dans
-; lib/core/update/app_mutex_windows.dart — c'est ce qui permet à Inno Setup de
-; détecter l'instance en cours, la fermer proprement, puis la relancer après
-; installation (CloseApplications / RestartApplications), sans que l'app ait
-; à orchestrer elle-même sa propre fermeture.
+; Pas d'`AppMutex` : en /SUPPRESSMSGBOXES, Inno répond « Annuler » à la boîte
+; « l'application est en cours d'exécution » et abandonne l'installation sans
+; rien afficher (code de sortie 1), avant même `CloseApplications`. L'app se
+; ferme donc elle-même après avoir lancé l'installeur ; si elle tient encore
+; des fichiers, le Restart Manager (`CloseApplications=force`) la ferme. La
+; relance est une entrée [Run] explicite (ADR 0037).
 ;
 ; MyAppVersion est injecté depuis la CI : ISCC.exe /DMyAppVersion=X.Y.Z
 #define MyAppName "Stage Cue"
 #define MyAppPublisher "Armand Ribault"
 #define MyAppExeName "stage_cue.exe"
-#define MyAppMutex "StageCueAppMutex"
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0"
 #endif
@@ -35,9 +35,8 @@ Compression=lzma2
 SolidCompression=yes
 SetupIconFile=..\runner\resources\app_icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
-AppMutex={#MyAppMutex}
 CloseApplications=force
-RestartApplications=yes
+RestartApplications=no
 WizardStyle=modern
 
 [Languages]
@@ -54,7 +53,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Name: "desktopicon"; Description: "Créer un raccourci sur le Bureau"; Flags: unchecked
 
 [Run]
-; `skipifsilent` : en installation silencieuse (mise à jour auto-déclenchée
-; par l'app), c'est RestartApplications qui relance l'instance déjà fermée —
-; cette entrée ne sert qu'à proposer le lancement après une install manuelle.
+; Installation manuelle : proposer le lancement à la fin de l'assistant.
 Filename: "{app}\{#MyAppExeName}"; Description: "Lancer {#MyAppName}"; Flags: nowait postinstall skipifsilent
+; Mise à jour silencieuse (lancée par l'app, qui s'est fermée) : relance explicite.
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait skipifnotsilent
