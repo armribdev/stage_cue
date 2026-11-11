@@ -40,7 +40,7 @@ extension _SettingsSections on _SettingsScreenState {
     );
   }
 
-  /// Sélecteur du mode réseau : boutons segmentés (3 choix) + description du
+  /// Sélecteur du mode réseau : boutons segmentés (2 choix) + description du
   /// mode courant. Plus léger qu'un dropdown pour un réglage à faible cardinalité.
   Widget _buildConnectivityModeSelector() {
     final scheme = Theme.of(context).colorScheme;
@@ -59,21 +59,13 @@ extension _SettingsSections on _SettingsScreenState {
         SizedBox(
           width: double.infinity,
           child: SegmentedButton<ConnectivityMode>(
-            // Ordre d'affichage : « Live » (mode par défaut, cas d'usage
-            // principal en scène) en premier, puis Connecté et Hors ligne.
-            segments:
-                const [
-                      ConnectivityMode.liveOffline,
-                      ConnectivityMode.connected,
-                      ConnectivityMode.offline,
-                    ]
-                    .map(
-                      (mode) => ButtonSegment<ConnectivityMode>(
-                        value: mode,
-                        label: Text(mode.label),
-                      ),
-                    )
-                    .toList(),
+            segments: [
+              for (final mode in ConnectivityMode.values)
+                ButtonSegment<ConnectivityMode>(
+                  value: mode,
+                  label: Text(mode.label),
+                ),
+            ],
             selected: {selected},
             showSelectedIcon: false,
             style: const ButtonStyle(visualDensity: VisualDensity.compact),

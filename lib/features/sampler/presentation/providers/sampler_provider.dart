@@ -165,9 +165,12 @@ class SamplerNotifier extends ChangeNotifier {
 
   SamplerState _state = SamplerState(pads: []);
   SamplerState get state => _state;
-  bool get offlineMode => isLiveOfflineMode;
-  bool get isLiveOfflineMode => _appPreferences?.isLiveOfflineMode ?? false;
-  bool get allowsSoundDownload => _appPreferences?.allowsSoundDownload ?? true;
+
+  /// Téléchargements à la demande permis : réseau autorisé (Paramètres) **et**
+  /// hors Mode Spectacle — en scène, un fichier absent du cache n'est jamais
+  /// tiré de Drive au déclenchement (0037).
+  bool get allowsSoundDownload =>
+      !_isLiveSessionActive && (_appPreferences?.allowsSoundDownload ?? true);
 
   /// Session Google révoquée/expirée : un OAuth interactif est requis. Permet à
   /// l'UI de distinguer un échec « token mort » d'un simple « hors-ligne » quand
@@ -202,45 +205,39 @@ class SamplerNotifier extends ChangeNotifier {
   double _effectiveVolume(PadItem padItem, {int? soundIndex}) =>
       _music._effectiveVolume(padItem, soundIndex: soundIndex);
 
-  /// Pad affiché sur le plateau en mode hors-ligne (au moins un son local).
-  bool isPadVisibleInOfflineMode(PadItem padItem) {
+  /// Pad affiché sur le plateau en Mode Spectacle (au moins un son local).
+  bool isPadVisibleInLiveSession(PadItem padItem) {
     if (padItem.isDraft) return true;
     return padItem.hasLocallyAvailableSound;
-  }
-
-  /// Index des variantes avec fichier local validé.
-  bool isSlotLocallyAvailable(PadItem padItem, int slotIndex) {
-    if (slotIndex < 0 || slotIndex >= padItem.slots.length) return false;
-    return padItem.slots[slotIndex].appearsReady;
   }
 
   Iterable<PadItem> _padsForMultipadNumbering() {
     return _state.pads.where(
       (item) =>
           !item.isDraft &&
-          (!isLiveOfflineMode || item.hasLocallyAvailableSound),
+          (!_isLiveSessionActive || item.hasLocallyAvailableSound),
     );
   }
 
+  /// Le réglage réseau a changé : plus de téléchargement permis, la file
+  /// déjà en attente n'a plus lieu d'être.
   void _onConnectivityModeChanged() {
-    if (isLiveOfflineMode) {
-      _downloadQueue.cancelQueued((_, _) => true);
-      unawaited(_applyLiveOfflineConstraints());
-    }
-    _syncMultipadNumbers(_padsForMultipadNumbering());
+    if (!allowsSoundDownload) _downloadQueue.cancelQueued((_, _) => true);
     notifyListeners();
   }
 
-  Future<void> _applyLiveOfflineConstraints() async {
+  /// Entrée en Mode Spectacle : retire de la scène ce qui n'est plus jouable
+  /// (musique, ambiance et file dont le pad n'a aucun son en cache).
+  Future<void> _applyLiveSessionConstraints() async {
     final current = _state.currentMusicPad;
-    if (current != null && !isPadVisibleInOfflineMode(current)) {
+    if (current != null && !isPadVisibleInLiveSession(current)) {
       await _music._stopMusicPad(current, manual: true);
     }
     final visibleIds = _padsForMultipadNumbering()
         .map((item) => item.pad.id)
         .toSet();
     final ambiance = _state.currentAmbiancePad;
-    if (ambiance != null && !isPadVisibleInOfflineMode(ambiance)) {
+    if (ambiance != null && !isPadVisibleInLiveSession(ambiance)) {
       await _ambiance._stopImmediately();
     }
     final newQueue = _state.musicQueuePadIds
@@ -945,13 +942,11 @@ class SamplerNotifier extends ChangeNotifier {
 
   bool _slotEligibleForPlayback(PadItem padItem, int index) {
     final slot = padItem.slots[index];
-    final ready =
-        slot.isReady ||
+    // Un slot `ready` a forcément son fichier local (`isReady` ⇒ `appearsReady`) :
+    // le Mode Spectacle n'a rien de plus à exiger ici.
+    return slot.isReady ||
         (debugTreatReadyAvailabilityAsEligible &&
             slot.availability == PadSoundAvailability.ready);
-    if (!ready) return false;
-    if (isLiveOfflineMode && !slot.appearsReady) return false;
-    return true;
   }
 
   int _pickSoundIndex(PadItem padItem) {

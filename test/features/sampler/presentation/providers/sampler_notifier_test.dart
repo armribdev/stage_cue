@@ -235,33 +235,47 @@ void main() {
   // ── connectivityMode ──────────────────────────────────────────────────────
 
   group('connectivityMode', () {
-    test('live hors ligne masque les pads sans son local', () async {
+    SamplerNotifier notifierWith(ConnectivityMode mode) {
       final repo = MockSoundRepository();
       final useCase = MockLoadSoundsUseCase();
       when(() => repo.getSoundBoards()).thenAnswer((_) async => [_board(1)]);
       when(() => useCase.call(any())).thenAnswer((_) async => []);
 
-      final prefs = AppPreferences();
-      prefs.debugSetConnectivityMode(ConnectivityMode.liveOffline);
+      final prefs = AppPreferences()..debugSetConnectivityMode(mode);
+      return SamplerNotifier(repo, useCase, null, null, prefs);
+    }
 
-      final n = SamplerNotifier(repo, useCase, null, null, prefs);
-      expect(n.isLiveOfflineMode, isTrue);
-      expect(n.offlineMode, isTrue);
+    test('hors ligne : pas de téléchargement, mais rien n\'est masqué', () {
+      final n = notifierWith(ConnectivityMode.offline);
       expect(n.allowsSoundDownload, isFalse);
+      expect(n.isLiveSessionActive, isFalse);
     });
 
-    test('connecté autorise les téléchargements', () async {
-      final repo = MockSoundRepository();
-      final useCase = MockLoadSoundsUseCase();
-      when(() => repo.getSoundBoards()).thenAnswer((_) async => [_board(1)]);
-      when(() => useCase.call(any())).thenAnswer((_) async => []);
-
-      final prefs = AppPreferences();
-      prefs.debugSetConnectivityMode(ConnectivityMode.connected);
-
-      final n = SamplerNotifier(repo, useCase, null, null, prefs);
-      expect(n.isLiveOfflineMode, isFalse);
+    test('connecté autorise les téléchargements', () {
+      final n = notifierWith(ConnectivityMode.connected);
       expect(n.allowsSoundDownload, isTrue);
+    });
+
+    test('Mode Spectacle coupe les téléchargements même connecté', () {
+      final n = notifierWith(ConnectivityMode.connected);
+
+      n.startLiveSession();
+      expect(n.allowsSoundDownload, isFalse);
+
+      n.endLiveSession();
+      expect(n.allowsSoundDownload, isTrue);
+    });
+
+    test('l\'ancienne valeur live_offline est lue comme hors ligne', () {
+      expect(
+        ConnectivityModeUi.fromStorageKey('live_offline'),
+        ConnectivityMode.offline,
+      );
+      expect(ConnectivityModeUi.fromStorageKey(null), ConnectivityMode.offline);
+      expect(
+        ConnectivityModeUi.fromStorageKey('connected'),
+        ConnectivityMode.connected,
+      );
     });
   });
 

@@ -6,12 +6,13 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 /// Stratégie réseau de l'application (réglage global dans Paramètres).
+///
+/// Ne dit rien de l'affichage : masquer les pads injouables relève du Mode
+/// Spectacle (`SamplerNotifier.isLiveSessionActive`), pas du réseau
+/// ([décision 0037](../../docs/decisions/0037-mode-reseau-binaire-spectacle-masque-les-pads.md)).
 enum ConnectivityMode {
   /// Synchronisation Drive et téléchargements à la demande.
   connected,
-
-  /// Spectacle sans réseau : seuls les sons en cache local sont jouables.
-  liveOffline,
 
   /// Travail local : pas de synchro auto ni téléchargement, catalogue complet.
   offline,
@@ -20,29 +21,28 @@ enum ConnectivityMode {
 extension ConnectivityModeUi on ConnectivityMode {
   String get label => switch (this) {
     ConnectivityMode.connected => 'Connecté',
-    ConnectivityMode.liveOffline => 'Live',
     ConnectivityMode.offline => 'Hors ligne',
   };
 
   String get description => switch (this) {
     ConnectivityMode.connected =>
       'Synchronisation Drive et téléchargements actifs.',
-    ConnectivityMode.liveOffline =>
-      'Mode scène : seuls les pads en cache local sont affichés et jouables.',
     ConnectivityMode.offline =>
-      'Aucune synchro ni téléchargement, mais tous les pads restent visibles.',
+      'Aucune synchro ni téléchargement : seuls les sons déjà en cache local '
+          'sont jouables.',
   };
 
   String get storageKey => switch (this) {
     ConnectivityMode.connected => 'connected',
-    ConnectivityMode.liveOffline => 'live_offline',
     ConnectivityMode.offline => 'offline',
   };
 
+  /// `live_offline` (ancien troisième mode, retiré par la décision 0037) et
+  /// toute valeur inconnue retombent sur [ConnectivityMode.offline] : même
+  /// réseau coupé qu'avant, sans rien tirer sur Drive à l'insu de l'utilisateur.
   static ConnectivityMode fromStorageKey(String? raw) => switch (raw) {
     'connected' => ConnectivityMode.connected,
-    'offline' => ConnectivityMode.offline,
-    _ => ConnectivityMode.liveOffline,
+    _ => ConnectivityMode.offline,
   };
 }
 
@@ -61,7 +61,7 @@ class AppPreferences extends ChangeNotifier {
 
   bool _autoDownloadPadSounds = true;
   bool _autoDownloadDriveByDefault = true;
-  ConnectivityMode _connectivityMode = ConnectivityMode.liveOffline;
+  ConnectivityMode _connectivityMode = ConnectivityMode.offline;
   String? _cueOutputDeviceId;
   bool _isWindowsFullScreen = false;
   DateTime? _lastUpdateCheckAt;
@@ -107,11 +107,8 @@ class AppPreferences extends ChangeNotifier {
   /// Synchro Drive automatique (push débouncé, pull au lancement).
   bool get allowsNetworkSync => _connectivityMode == ConnectivityMode.connected;
 
-  /// Spectacle local : masque les pads sans son en cache.
-  bool get isLiveOfflineMode =>
-      _connectivityMode == ConnectivityMode.liveOffline;
-
   /// Téléchargements à la demande (pads, prefetch, préparation plateau).
+  /// Le Mode Spectacle les coupe en plus, voir `SamplerNotifier`.
   bool get allowsSoundDownload =>
       _connectivityMode == ConnectivityMode.connected;
 

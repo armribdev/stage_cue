@@ -437,7 +437,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     if (_isQuickSearch) {
       _typeFilter = (widget.mode as QuickSearchMode).initialTypeFilter;
     }
-    if (_isQuickSearch && widget.notifier.isLiveOfflineMode) {
+    if (_isQuickSearch && widget.notifier.isLiveSessionActive) {
       _localOnly = true;
     }
     _load();

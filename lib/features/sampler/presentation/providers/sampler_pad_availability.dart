@@ -182,8 +182,8 @@ extension SamplerPadAvailability on SamplerNotifier {
   String triggerFailureReason(PadItem padItem) {
     if (padItem.pad.sounds.isEmpty) return 'pad sans son';
     if (padItem.isDownloading) return 'téléchargement en cours';
-    if (isLiveOfflineMode && !padItem.hasLocallyAvailableSound) {
-      return 'mode hors-ligne : fichier absent du cache local';
+    if (_isLiveSessionActive && !padItem.hasLocallyAvailableSound) {
+      return 'Mode Spectacle : fichier absent du cache local';
     }
     return switch (padItem.unavailabilityReason) {
       PadUnavailabilityReason.needsDownload =>

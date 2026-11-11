@@ -118,7 +118,7 @@ extension SamplerPadDownloads on SamplerNotifier {
     PadItem padItem, {
     int priority = SamplerNotifier._downloadPriorityTap,
   }) async {
-    if (isLiveOfflineMode) return _resolveBoardPadItem(padItem).isPlayable;
+    if (_isLiveSessionActive) return _resolveBoardPadItem(padItem).isPlayable;
     // Une tâche « un seul slot » peut être en vol : l'attendre, sinon la dédup
     // renverrait son résultat et les autres slots ne seraient jamais chargés.
     final pending = _inFlightPadDownload(padItem);

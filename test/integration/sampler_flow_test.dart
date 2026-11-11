@@ -43,12 +43,12 @@ import 'package:stage_cue/features/sampler/presentation/widgets/threshold_dragga
 ///    VM de test : tout préchargement échoue et marque le chemin illisible
 ///    (`markPathUnloadable`). Un scénario « je tape le pad, j'entends le son »
 ///    est hors de portée ici et reste un test manuel sur machine.
-/// 2. **Le mode est forcé sur [ConnectivityMode.offline]** (catalogue complet,
-///    sans réseau). Le défaut applicatif est `liveOffline`, qui masque les pads
-///    dont aucun son n'est disponible localement — or le point 1 rend *tous* les
-///    sons indisponibles sous test. En `liveOffline` la grille serait donc
-///    toujours vide, et une assertion « le pad est masqué » passerait pour la
-///    mauvaise raison.
+/// 2. **Le mode est forcé sur [ConnectivityMode.offline]** (sans réseau, rien
+///    n'est tiré de Drive). Le Mode Spectacle masque les pads dont aucun son
+///    n'est disponible localement — or le point 1 rend *tous* les sons
+///    indisponibles sous test. Un scénario qui entre en Mode Spectacle verrait
+///    donc toujours une grille vide, et une assertion « le pad est masqué »
+///    passerait pour la mauvaise raison.
 /// 3. **`pumpAndSettle` est proscrit** : l'écran porte des animations
 ///    perpétuelles (régie musique) qui ne se stabilisent jamais. On pompe un
 ///    nombre borné de frames, en alternant avec [WidgetTester.runAsync] — sans

@@ -246,12 +246,16 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
   bool hasPlayedInSession(int soundId) => sessionPlayCountFor(soundId) > 0;
 
   /// Démarre une session live : remet à zéro les compteurs de lecture par
-  /// son et active le suivi. `notifyListeners()` rafraîchit un éventuel
-  /// `SoundPickerOverlay` déjà ouvert.
+  /// son et active le suivi. Coupe aussi les téléchargements et retire de la
+  /// scène les pads sans son en cache (0037). `notifyListeners()` rafraîchit
+  /// un éventuel `SoundPickerOverlay` déjà ouvert.
   void startLiveSession() {
     _sessionPlayCounts.clear();
     _isLiveSessionActive = true;
     _liveSessionStartedAt = DateTime.now();
+    _downloadQueue.cancelQueued((_, _) => true);
+    unawaited(_applyLiveSessionConstraints());
+    _syncMultipadNumbers(_padsForMultipadNumbering());
     AppLog.info('Mode Spectacle activé.');
     _notify();
   }
@@ -273,6 +277,8 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     }
     _liveSessionStartedAt = null;
     _isLiveSessionActive = false;
+    // Les pads masqués reviennent : leur numéro de multipad aussi.
+    _syncMultipadNumbers(_padsForMultipadNumbering());
     _notify();
   }
 

@@ -134,7 +134,7 @@ extension SamplerPadAudioEngine on SamplerNotifier {
     padItem.syncSlotCount();
 
     for (var i = 0; i < pad.sounds.length; i++) {
-      if (isLiveOfflineMode && !padItem.slots[i].appearsReady) continue;
+      if (_isLiveSessionActive && !padItem.slots[i].appearsReady) continue;
       if (padItem.slots[i].isReady) continue;
       if (padItem.slots[i].availability == PadSoundAvailability.missingFile) {
         continue;

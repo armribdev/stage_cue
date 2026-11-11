@@ -231,8 +231,8 @@ extension _SamplerScreenPadLayout on _SamplerScreenState {
 
   bool _shouldShowPadOnGrid(PadItem pad) {
     if (pad.isDraft) return true;
-    if (!_notifier.isLiveOfflineMode) return true;
-    return _notifier.isPadVisibleInOfflineMode(pad);
+    if (!_notifier.isLiveSessionActive) return true;
+    return _notifier.isPadVisibleInLiveSession(pad);
   }
 
   /// Entre/sort du Mode Spectacle : verrouille l'édition (croix, ajout) mais

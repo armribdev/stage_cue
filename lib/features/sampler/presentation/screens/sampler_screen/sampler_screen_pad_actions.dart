@@ -18,7 +18,7 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
       'slots=${resolved.slots.length} readySlots=${resolved.slots.where((s) => s.isReady).length}',
     );
 
-    if (_notifier.isLiveOfflineMode && !resolved.hasLocallyAvailableSound) {
+    if (_notifier.isLiveSessionActive && !resolved.hasLocallyAvailableSound) {
       _notifier.reportPadTriggerFailure(resolved);
       return;
     }
@@ -78,7 +78,7 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
     if (!_notifier.allowsSoundDownload) {
       _notifier.reportPadTriggerFailure(
         resolved,
-        reason: 'téléchargement désactivé (mode local ou hors-ligne)',
+        reason: 'téléchargement désactivé (mode hors ligne ou Mode Spectacle)',
       );
       return;
     }
