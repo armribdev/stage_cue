@@ -133,7 +133,7 @@ extension _SettingsLibraryActions on _SettingsScreenState {
     if (report.localMode) {
       AppSnackBar.show(
         context,
-        'Mode local — passez en mode connecté pour actualiser',
+        'Mode hors ligne — passez en mode Connecté pour actualiser',
       );
       return;
     }

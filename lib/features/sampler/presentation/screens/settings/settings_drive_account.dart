@@ -257,18 +257,25 @@ extension _SettingsDriveAccount on _SettingsScreenState {
       );
     }
 
+    // Une erreur de synchro ne vaut que pour une session par ailleurs saine :
+    // session expirée ou à renouveler prime, c'est la cause à traiter d'abord.
+    final syncFailed = sessionActive && syncState.status == SyncStatus.error;
     final statusLabel = authExpired
         ? 'Session expirée'
+        : syncFailed
+        ? 'Erreur de synchronisation'
         : sessionActive
         ? 'Connecté'
         : 'Session à renouveler';
-    final statusColor = authExpired
+    final statusColor = authExpired || syncFailed
         ? scheme.error
         : sessionActive
         ? scheme.primary
         : scheme.tertiary;
     final statusIcon = authExpired
         ? AppIcons.cloudOff
+        : syncFailed
+        ? AppIcons.error
         : sessionActive
         ? AppIcons.cloudDone
         : AppIcons.cloud;

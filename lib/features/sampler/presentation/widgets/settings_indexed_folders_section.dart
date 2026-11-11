@@ -8,6 +8,7 @@ import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../data/models/indexing_progress.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../domain/entities/library.dart' as domain;
+import 'boxed_icon_button.dart';
 
 /// Élément de la liste « Éléments indexés » (dossier local ou bibliothèque Drive).
 class IndexedFolderItem {
@@ -40,6 +41,12 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
     required this.libraryRepository,
     required this.soundCount,
     required this.dbSizeLabel,
+    required this.networkAllowed,
+    required this.isRefreshing,
+    required this.refreshed,
+    required this.conflictLibraryId,
+    required this.onRefresh,
+    required this.onResolveConflict,
     required this.onAddFolder,
     required this.onShowDatabaseState,
     required this.onRemoveLocal,
@@ -55,6 +62,23 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
   final LibraryRepository libraryRepository;
   final int soundCount;
   final String dbSizeLabel;
+
+  /// Le mode réseau autorise la synchro : sinon l'actualisation est grisée,
+  /// avec la raison en infobulle plutôt qu'un refus après coup.
+  final bool networkAllowed;
+
+  /// Une passe manuelle est en cours (spinner) ou vient de se terminer sans
+  /// incident (coche brève).
+  final bool isRefreshing;
+  final bool refreshed;
+
+  /// Bibliothèque dont le dernier push est en conflit (choix utilisateur requis).
+  final int? conflictLibraryId;
+
+  /// Actualise toutes les bibliothèques Drive. Le bouton n'existe que s'il y en
+  /// a au moins une.
+  final VoidCallback onRefresh;
+  final void Function(domain.Library library) onResolveConflict;
   final VoidCallback onAddFolder;
   final VoidCallback onShowDatabaseState;
   final void Function(db.WatchedPath watchedPath) onRemoveLocal;
@@ -81,12 +105,10 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
               style: AppTextStyles.sectionLabel(context),
             ),
             const Spacer(),
-            IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-              visualDensity: VisualDensity.compact,
+            if (items.any((item) => !item.isLocal)) _buildRefreshButton(scheme),
+            BoxedIconButton(
+              icon: AppIcons.add,
               tooltip: 'Ajouter un dossier',
-              icon: const Icon(AppIcons.add),
               onPressed: onAddFolder,
             ),
           ],
@@ -109,6 +131,41 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
           ),
         _buildDatabaseSummaryFooter(context),
       ],
+    );
+  }
+
+  /// Actualisation manuelle des bibliothèques Drive : une action, pas un état.
+  /// L'état de chaque bibliothèque (dernière synchro, indexation, conflit) vit
+  /// sur sa propre ligne ; ce bouton ne fait que relancer la séquence complète
+  /// (utile quand la veille, qui ne fait jamais de scan complet, y renonce).
+  Widget _buildRefreshButton(ColorScheme scheme) {
+    if (isRefreshing) {
+      return BoxedIconButton(
+        tooltip: 'Actualisation en cours…',
+        onPressed: null,
+        child: SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: scheme.primary,
+          ),
+        ),
+      );
+    }
+    if (refreshed) {
+      return BoxedIconButton(
+        tooltip: 'Actualisé',
+        onPressed: null,
+        child: Icon(AppIcons.check, size: 16, color: scheme.primary),
+      );
+    }
+    return BoxedIconButton(
+      icon: AppIcons.refresh,
+      tooltip: networkAllowed
+          ? 'Actualiser depuis Drive'
+          : 'Mode hors ligne — passez en mode Connecté pour actualiser',
+      onPressed: networkAllowed ? onRefresh : null,
     );
   }
 
@@ -140,10 +197,11 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
   Widget _buildIndexedItemRow(BuildContext context, IndexedFolderItem item) {
     final labels = labelsForItem(item);
     final progress = progressForItem(item);
-    // Même emplacement, même hauteur : activité en cours OU ligne méta au
-    // repos, jamais les deux.
+    // Même emplacement, même hauteur : activité en cours, sinon conflit à
+    // résoudre, sinon ligne méta au repos — jamais plusieurs à la fois.
     final statusLine =
         _buildItemActivity(context, item, progress) ??
+        _buildConflictLine(context, item) ??
         _buildItemMetaRow(context, item, progress);
 
     return Row(
@@ -194,6 +252,32 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
         const SizedBox(width: 8),
         _buildItemTrailing(context, item),
       ],
+    );
+  }
+
+  /// Conflit de synchro sur cette bibliothèque : seul état qui exige un geste de
+  /// l'utilisateur, donc seul à être cliquable sur la ligne.
+  Widget? _buildConflictLine(BuildContext context, IndexedFolderItem item) {
+    final library = item.library;
+    if (library == null || library.id != conflictLibraryId) return null;
+    final color = Theme.of(context).colorScheme.error;
+    return InkWell(
+      onTap: () => onResolveConflict(library),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(AppIcons.merge, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(
+            'Conflit de synchronisation · Résoudre',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

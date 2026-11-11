@@ -251,21 +251,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final body = _buildSettingsBody();
-    final syncPill = SyncStatusPill(
-      syncController: widget.syncController,
-      hasDriveLibrary: _libraries.any((library) => library.isConnectedToDrive),
-      isRefreshing: _isSyncBusy,
-      refreshed: _confirmedAction == _kDriveRefreshAction,
-      onTap: _onSyncPillTap,
-    );
-    final actions = <Widget>[syncPill];
 
     if (widget.isModal) {
-      return AppModalShell(title: 'Paramètres', actions: actions, body: body);
+      return AppModalShell(title: 'Paramètres', body: body);
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Paramètres'), actions: actions),
+      appBar: AppBar(title: const Text('Paramètres')),
       body: body,
     );
   }

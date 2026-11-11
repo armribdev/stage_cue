@@ -244,9 +244,10 @@ extension _SettingsSections on _SettingsScreenState {
                   syncState: syncState,
                   authExpired: authExpired,
                 ),
-                // L'activité de synchro (syncing / synced / conflit / erreur)
-                // est désormais portée par la pastille de la barre de cette
-                // page ; inutile de la redoubler ici sous le compte.
+                // Dernière synchro, indexation et conflit vivent sur la ligne de
+                // chaque bibliothèque (« Éléments indexés »), avec le bouton
+                // d'actualisation ; ici, seulement l'état de la session et
+                // une erreur de synchro, qui ne se rattache à aucune ligne.
                 const SizedBox(height: 12),
                 Text(
                   'Téléchargement automatique',
@@ -322,25 +323,45 @@ extension _SettingsSections on _SettingsScreenState {
                       _buildAudioSection(),
                       _sectionDivider(),
                     ],
-                    SettingsIndexedFoldersSection(
-                      items: _indexedFolderItems(),
-                      labelsForItem: _labelsForItem,
-                      progressForItem: _progressForItem,
-                      offlineCounts: _offlineCounts,
-                      libraryRepository: widget.libraryRepository,
-                      soundCount: _sounds.length,
-                      dbSizeLabel: _formatBytes(_dbSize),
-                      onAddFolder: _onAddFolderPressed,
-                      onShowDatabaseState: () =>
-                          unawaited(_showDatabaseStateDialog()),
-                      onRemoveLocal: (path) =>
-                          unawaited(_confirmRemoveWatchedPath(path)),
-                      onRemoveDrive: (library) =>
-                          unawaited(_confirmRemoveDriveLibrary(library)),
-                      onDownloadAll: (library) =>
-                          unawaited(_downloadAllLibraryAudio(library)),
-                      onToggleAutoDownload: (library) =>
-                          unawaited(_toggleAutoDownload(library)),
+                    ListenableBuilder(
+                      listenable: Listenable.merge([
+                        widget.syncController,
+                        widget.appPreferences,
+                      ]),
+                      builder: (context, _) {
+                        final syncState = widget.syncController.state;
+                        return SettingsIndexedFoldersSection(
+                          items: _indexedFolderItems(),
+                          labelsForItem: _labelsForItem,
+                          progressForItem: _progressForItem,
+                          offlineCounts: _offlineCounts,
+                          libraryRepository: widget.libraryRepository,
+                          soundCount: _sounds.length,
+                          dbSizeLabel: _formatBytes(_dbSize),
+                          networkAllowed:
+                              widget.appPreferences.allowsNetworkSync,
+                          isRefreshing: _isSyncBusy,
+                          refreshed: _confirmedAction == _kDriveRefreshAction,
+                          conflictLibraryId:
+                              syncState.status == SyncStatus.conflict
+                              ? syncState.conflictLibraryId
+                              : null,
+                          onRefresh: () => unawaited(_refreshAllFromDrive()),
+                          onResolveConflict: (library) =>
+                              unawaited(_resolveSyncConflict(library)),
+                          onAddFolder: _onAddFolderPressed,
+                          onShowDatabaseState: () =>
+                              unawaited(_showDatabaseStateDialog()),
+                          onRemoveLocal: (path) =>
+                              unawaited(_confirmRemoveWatchedPath(path)),
+                          onRemoveDrive: (library) =>
+                              unawaited(_confirmRemoveDriveLibrary(library)),
+                          onDownloadAll: (library) =>
+                              unawaited(_downloadAllLibraryAudio(library)),
+                          onToggleAutoDownload: (library) =>
+                              unawaited(_toggleAutoDownload(library)),
+                        );
+                      },
                     ),
                     _sectionDivider(),
                     _buildVolumeSection(),

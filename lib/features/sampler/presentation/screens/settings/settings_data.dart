@@ -79,24 +79,6 @@ extension _SettingsData on _SettingsScreenState {
     );
   }
 
-  /// Tap sur la pastille de synchro (barre Paramètres) : résout un conflit s'il
-  /// y en a un, sinon actualise depuis Drive.
-  Future<void> _onSyncPillTap() async {
-    if (widget.syncController.state.status == SyncStatus.conflict) {
-      await resolveSyncConflictFromPill(
-        context: context,
-        syncController: widget.syncController,
-        libraryRepository: widget.libraryRepository,
-        onResolved: () async {
-          if (!mounted) return;
-          await _loadDatabaseInfo();
-        },
-      );
-      return;
-    }
-    await _refreshAllFromDrive();
-  }
-
   Future<void> _reloadWatchedPaths() async {
     final watchedPaths = await widget.database
         .select(widget.database.watchedPaths)
