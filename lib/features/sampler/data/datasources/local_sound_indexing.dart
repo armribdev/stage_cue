@@ -109,8 +109,10 @@ extension LocalSoundIndexing on LocalSoundDataSource {
           // Premier fichier réel d'un son Drive : même gain auto qu'à la
           // création locale. Seulement si le volume est encore au défaut (1.0) —
           // un snapshot (autre appareil) ou l'opérateur a pu le fixer avant.
-          volume: existing.volume == 1.0
-              ? _autoVolume(probe?.autoVolume)
+          volume: existing.volume == 1.0 && probeType != null
+              ? _autoVolume(
+                  await measureAutoVolume(file, _loudnessProfile(probeType)),
+                )
               : const Value.absent(),
         ),
       );

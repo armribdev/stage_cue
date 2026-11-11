@@ -349,17 +349,23 @@ class SamplerNotifier extends ChangeNotifier {
     return probe.status;
   }
 
-  /// Volume « auto » d'un son : mesure sa sonie et renvoie le volume qui la
-  /// ramène à la sonie cible (normalisation). Ne persiste rien — l'appelant
+  /// Volume « auto » d'un son : mesure sa sonie selon son type (sonie intégrée
+  /// pour musique et ambiance, maximum court terme pour un bruitage) et renvoie
+  /// le volume qui la ramène à la cible du type (normalisation). Un son sans
+  /// type connu est traité comme de la musique. Ne persiste rien — l'appelant
   /// applique la valeur au formulaire, enregistrée au « Enregistrer » habituel.
-  /// `null` si le fichier ne peut pas être mesuré (moteur non prêt, format non
-  /// décodable, audio silencieux).
+  /// `null` si le fichier ne peut pas être mesuré (format non décodable, audio
+  /// silencieux).
   ///
   /// Même contrat d'erreur que [regenerateWaveform] (fichier hors ligne).
   Future<double?> computeAutoVolume(Sound sound) async {
     final path = await _resolvePlayablePath(sound, downloadIfNeeded: true);
-    final rms = await measureRms(path);
-    return rms == null ? null : autoVolumeForRms(rms);
+    final profile = switch (sound.type) {
+      SoundType.soundEffect => LoudnessProfile.effect,
+      SoundType.ambiance => LoudnessProfile.ambiance,
+      SoundType.music || null => LoudnessProfile.music,
+    };
+    return measureAutoVolume(File(path), profile);
   }
 
   bool _padSoundsChanged(PadItem existing, Pad updated) {

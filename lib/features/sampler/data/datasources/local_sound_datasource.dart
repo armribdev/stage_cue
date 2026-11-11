@@ -13,6 +13,7 @@ import '../../../../core/utils/file_utils.dart'
 import '../../../../core/audio/soloud_file_loader.dart';
 import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/audio_file_validation.dart';
+import '../../../../core/audio/loudness_analyzer.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../models/sound_model.dart';
 import '../models/indexing_progress.dart';
@@ -59,8 +60,8 @@ class LocalSoundDataSource {
   /// Retourne `type: null` si le fichier est absent ou si le probe de durée échoue.
   /// La waveform est calculée pour tous les types (régie musique, éditeur du
   /// point d'entrée des bruitages et ambiances). Le volume « auto » (gain de
-  /// normalisation) en est un sous-produit : `null` si non mesurable, auquel cas
-  /// le son garde le volume par défaut.
+  /// normalisation, selon le type) est `null` si non mesurable, auquel cas le
+  /// son garde le volume par défaut.
   Future<
     ({
       db_sounds.SoundType? type,
@@ -88,9 +89,17 @@ class LocalSoundDataSource {
       contentHash: contentHash,
       waveform: probe?.waveformValue,
       waveformProbeGeneration: probe?.generationValue,
-      volume: probe?.autoVolume,
+      volume: probeType != null
+          ? await measureAutoVolume(file, _loudnessProfile(probeType))
+          : null,
     );
   }
+
+  LoudnessProfile _loudnessProfile(db_sounds.SoundType type) => switch (type) {
+    db_sounds.SoundType.music => LoudnessProfile.music,
+    db_sounds.SoundType.ambiance => LoudnessProfile.ambiance,
+    db_sounds.SoundType.soundEffect => LoudnessProfile.effect,
+  };
 
   /// Volume « auto » à écrire à la création : absent (donc défaut de la colonne,
   /// 1.0) quand la mesure n'a pas abouti.

@@ -573,8 +573,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
       if (volume == null) {
         showCopyableSnackBar(
           context,
-          'Mesure impossible (audio silencieux, format non pris en charge ou '
-          'moteur audio non prêt).',
+          'Mesure impossible (audio silencieux ou format non pris en charge).',
         );
         return;
       }

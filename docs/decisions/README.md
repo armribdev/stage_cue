@@ -56,5 +56,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0033](0033-toast-global-au-dessus-du-navigator.md) | Notifications en toast global au-dessus du Navigator, plus de `SnackBar` | acceptée |
 | [0034](0034-icones-lucide-via-appicons.md) | Icônes Lucide à trait fin, centralisées dans `AppIcons` | acceptée |
 | [0035](0035-suppression-d-un-son-par-la-corbeille-drive.md) | Supprimer un son = le mettre à la corbeille Drive, avant de toucher à la base | acceptée |
+| [0036](0036-volume-auto-par-sonie-lufs-selon-le-type.md) | Volume « auto » : sonie LUFS pondérée K, cible selon le type de son | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.
