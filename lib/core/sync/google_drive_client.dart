@@ -607,6 +607,26 @@ class GoogleDriveClient implements DriveClient {
     return _guard(() => _api.files.delete(fileId));
   }
 
+  @override
+  Future<void> trashFile(String fileId) {
+    // Idempotent (même résultat si rejoué) : `_guardRetry`, contrairement à un
+    // upload. Le 404 est absorbé ici, car `_guardRetry` laisse les erreurs
+    // définitives à l'appelant.
+    return _guardRetry(() async {
+      try {
+        await _api.files.update(
+          drive.File()..trashed = true,
+          fileId,
+          supportsAllDrives: true,
+          $fields: 'id',
+        );
+      } on drive.DetailedApiRequestError catch (e) {
+        if (e.status != 404) rethrow;
+        SyncLog.trace('corbeille $fileId — déjà absent de Drive');
+      }
+    });
+  }
+
   /// E-mail du propriétaire du dossier (y compris dossier partagé).
   Future<String?> getFolderOwnerEmail(String fileId) async {
     try {

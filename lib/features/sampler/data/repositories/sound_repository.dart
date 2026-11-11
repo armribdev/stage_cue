@@ -264,6 +264,11 @@ class SoundRepository {
     await _padDataSource.addSoundToPad(padId, soundId);
   }
 
+  /// Nombre de pads, toutes scènes confondues, qui jouent [soundId] — pour
+  /// avertir avant de supprimer le son.
+  Future<int> countPadsUsingSound(int soundId) =>
+      _padDataSource.countPadsUsingSound(soundId);
+
   Future<void> removeSoundFromPad(int padId, int soundId) async {
     await _padDataSource.removeSoundFromPad(padId, soundId);
   }

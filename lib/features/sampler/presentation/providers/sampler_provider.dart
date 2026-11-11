@@ -22,6 +22,7 @@ import '../../data/repositories/library_repository.dart'
         LibraryRepositoryDriveSession,
         LibraryRepositoryLibraries,
         LibraryRepositoryPlayback,
+        LibraryRepositorySoundDeletion,
         SoundNotAvailableLocallyException;
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/library.dart';

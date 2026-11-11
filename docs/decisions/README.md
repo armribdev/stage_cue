@@ -55,5 +55,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0032](0032-cascades-emulees-par-declencheurs.md) | Cascades de suppression émulées par des déclencheurs SQLite, pas par `foreign_keys` | acceptée |
 | [0033](0033-toast-global-au-dessus-du-navigator.md) | Notifications en toast global au-dessus du Navigator, plus de `SnackBar` | acceptée |
 | [0034](0034-icones-lucide-via-appicons.md) | Icônes Lucide à trait fin, centralisées dans `AppIcons` | acceptée |
+| [0035](0035-suppression-d-un-son-par-la-corbeille-drive.md) | Supprimer un son = le mettre à la corbeille Drive, avant de toucher à la base | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

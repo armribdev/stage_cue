@@ -62,6 +62,9 @@ class _SoundDetailsScreenState extends State<SoundDetailsScreen> {
           autoTag: widget.notifier?.autoTagAnalysis,
           onDirtyChanged: (dirty) => setState(() => _isDirty = dirty),
           onSaved: () => Navigator.of(context).pop(true),
+          // Le son n'existe plus : rien à confirmer à l'abandon (le formulaire
+          // a déjà remis `onDirtyChanged(false)`), on revient à la liste.
+          onDeleted: () => Navigator.of(context).pop(true),
         ),
       ),
     );

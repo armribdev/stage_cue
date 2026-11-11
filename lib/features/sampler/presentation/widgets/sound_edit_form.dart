@@ -17,6 +17,7 @@ import '../../domain/entities/sound_auto_tag.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
+import 'app_form_dialog.dart';
 import 'auto_tag_chips.dart';
 import 'auto_tag_status_row.dart';
 import 'sound_type_picker.dart';
@@ -51,6 +52,10 @@ class SoundEditForm extends StatefulWidget {
   /// cycle « modifier puis enregistrer ») — l'appelant rafraîchit sa liste.
   final ValueChanged<bool>? onFavoriteChanged;
 
+  /// Notifié quand le son a été supprimé (corbeille Drive, base et cache) : le
+  /// formulaire n'a plus d'objet, l'appelant le ferme et rafraîchit sa liste.
+  final VoidCallback? onDeleted;
+
   /// File de traitement active : « Passer » apparaît en pied de formulaire, et
   /// l'appelant enchaîne sur le son suivant dans [onSaved].
   final bool isQueueMode;
@@ -78,6 +83,7 @@ class SoundEditForm extends StatefulWidget {
     this.onDirtyChanged,
     this.onMarkedUnprocessed,
     this.onFavoriteChanged,
+    this.onDeleted,
     this.isQueueMode = false,
     this.onSkip,
     this.autoPlayEntryPoint = false,
@@ -147,6 +153,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
   bool _tagsLoaded = false;
   bool _tagsFailed = false;
   bool _isSaving = false;
+  bool _isDeleting = false;
   bool _isRegeneratingWaveform = false;
 
   /// Vrai brièvement après une régénération réussie : le bouton affiche une
@@ -432,6 +439,118 @@ class _SoundEditFormState extends State<SoundEditForm> {
     }
   }
 
+  /// Un son de bibliothèque Drive (identité Drive connue) peut être supprimé ;
+  /// un son local ne le peut pas (un rescan le ré-indexerait).
+  bool get _canDelete =>
+      widget.notifier != null && widget.sound.driveFileId != null;
+
+  /// Supprime le son après confirmation. Le notifier met le fichier à la
+  /// corbeille Drive puis nettoie la base et le cache ; sur échec Drive rien n'a
+  /// changé en local et le formulaire reste ouvert.
+  Future<void> _delete() async {
+    final notifier = widget.notifier;
+    if (notifier == null || _isDeleting || _isSaving) return;
+    final id = widget.sound.id;
+
+    final blocked = notifier.soundDeletionBlockedReason(id);
+    if (blocked != null) {
+      showCopyableSnackBar(context, blocked);
+      return;
+    }
+
+    // Le nombre de pads est une information d'aide à la décision : s'il est
+    // illisible, la confirmation reste valable sans lui.
+    var padCount = 0;
+    try {
+      padCount = await widget.repository.countPadsUsingSound(id);
+    } catch (error) {
+      AppLog.warn('Nombre de pads du son $id illisible : $error');
+    }
+    if (!mounted) return;
+
+    final name = _resolvedName;
+    final usage = switch (padCount) {
+      0 => '',
+      1 => ' Il sera aussi retiré de 1 pad.',
+      _ => ' Il sera aussi retiré de $padCount pads.',
+    };
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: 'Supprimer ce son',
+      message:
+          '« $name » sera mis à la corbeille Google Drive (récupérable '
+          'pendant 30 jours) et disparaîtra de tous vos appareils.$usage '
+          'Dans un dossier partagé, il disparaît aussi pour les autres '
+          'utilisateurs.',
+      confirmLabel: 'Supprimer',
+      isDestructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
+    // L'état de lecture a pu changer pendant la confirmation.
+    final blockedNow = notifier.soundDeletionBlockedReason(id);
+    if (blockedNow != null) {
+      showCopyableSnackBar(context, blockedNow);
+      return;
+    }
+
+    setState(() => _isDeleting = true);
+    try {
+      await notifier.deleteLibrarySound(id);
+    } catch (error, stack) {
+      AppLog.warn('Suppression du son $id échouée : $error\n$stack');
+      if (!mounted) return;
+      setState(() => _isDeleting = false);
+      showCopyableSnackBar(context, 'Suppression impossible : $error');
+      return;
+    }
+    // Toast global : il survit au démontage de ce formulaire.
+    if (mounted) {
+      AppSnackBar.show(
+        context,
+        '« $name » supprimé — récupérable 30 jours dans la corbeille Drive.',
+        severity: AppToastSeverity.success,
+      );
+    }
+    if (_wasDirty) {
+      _wasDirty = false;
+      widget.onDirtyChanged?.call(false);
+    }
+    widget.onDeleted?.call();
+  }
+
+  Widget _buildDelete(ColorScheme scheme) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            'Met le fichier à la corbeille Google Drive et le retire de tous '
+            'vos appareils et de vos pads.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ),
+        const SizedBox(width: 12),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(64, 36),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+          ),
+          onPressed: _isDeleting || _isSaving ? null : _delete,
+          icon: _isDeleting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(AppIcons.delete, size: 18),
+          label: const Text('Supprimer…'),
+        ),
+      ],
+    );
+  }
+
   /// Change le volume du formulaire et le répercute en direct sur l'aperçu
   /// bibliothèque en cours (l'éditeur de point d'entrée suit via son `volume`).
   void _setVolume(double value) {
@@ -536,7 +655,13 @@ class _SoundEditFormState extends State<SoundEditForm> {
                     _section('Couleur par défaut', _buildColors()),
                     _section('Volume par défaut', _buildVolume()),
                     _section('Point d\'entrée', _buildStartOffset(scheme)),
-                    _section('Tags', _buildTags(), isLast: true),
+                    _section('Tags', _buildTags(), isLast: !_canDelete),
+                    if (_canDelete)
+                      _section(
+                        'Suppression',
+                        _buildDelete(scheme),
+                        isLast: true,
+                      ),
                   ],
                 ),
               ),

@@ -85,6 +85,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
       // de recharger la seule liste des sons. En file de traitement, on
       // enchaîne ensuite sur le son suivant.
       onSaved: () => unawaited(_afterPaneSave(sound)),
+      onDeleted: () => unawaited(_afterPaneDelete(sound)),
     );
   }
 

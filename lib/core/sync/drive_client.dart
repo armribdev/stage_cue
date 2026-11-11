@@ -90,7 +90,17 @@ abstract class DriveClient {
     required String destinationPath,
   });
 
+  /// Suppression DÉFINITIVE, sans passer par la corbeille. Pour retirer un son
+  /// de la bibliothèque, utiliser [trashFile].
   Future<void> deleteFile(String fileId);
+
+  /// Met un fichier à la corbeille Drive (récupérable ~30 jours).
+  ///
+  /// Idempotent : un fichier déjà à la corbeille ou déjà disparu (404) est un
+  /// succès — le résultat voulu (le fichier n'est plus dans la bibliothèque) est
+  /// atteint. Les autres appareils le voient disparaître par `listChanges`
+  /// (`trashed`) ou par le scan complet, sans rien publier de plus.
+  Future<void> trashFile(String fileId);
 
   /// Libère les ressources (client HTTP authentifié).
   void dispose();

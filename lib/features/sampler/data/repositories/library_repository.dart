@@ -40,6 +40,7 @@ part 'library_repository_push_pull.dart';
 part 'library_repository_playback.dart';
 part 'library_repository_downloads.dart';
 part 'library_repository_drive_changes.dart';
+part 'library_repository_sound_deletion.dart';
 part 'library_repository_drive_index.dart';
 part 'library_repository_path_reconcile.dart';
 

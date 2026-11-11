@@ -72,6 +72,23 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
     _scrollToSelected();
   }
 
+  /// Après la suppression du son ouvert dans le volet : le formulaire n'a plus
+  /// d'objet, on le vide avant de rafraîchir. En file de traitement on enchaîne
+  /// ensuite sur le voisin (comme après un enregistrement) ; sinon on borne la
+  /// sélection à la liste raccourcie.
+  Future<void> _afterPaneDelete(Sound deleted) async {
+    setState(() {
+      _editingSound = null;
+      _editDirty = false;
+    });
+    await _afterPaneSave(deleted);
+    if (!mounted) return;
+    final count = _shownResults(_results).length;
+    if (_selectedIndex >= count) {
+      setState(() => _selectedIndex = count == 0 ? 0 : count - 1);
+    }
+  }
+
   void _scrollToSelected() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _itemKey(_selectedIndex).currentContext;

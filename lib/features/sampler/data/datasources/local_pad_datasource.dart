@@ -49,6 +49,19 @@ class LocalPadDataSource {
     );
   }
 
+  /// Nombre de pads (toutes scènes confondues) qui utilisent le son [soundId].
+  Future<int> countPadsUsingSound(int soundId) async {
+    final row = await _database
+        .customSelect(
+          'SELECT COUNT(DISTINCT pad_id) AS n FROM pad_sounds '
+          'WHERE sound_id = ?',
+          variables: [Variable<int>(soundId)],
+          readsFrom: {_database.padSounds},
+        )
+        .getSingle();
+    return row.read<int>('n');
+  }
+
   Future<List<domain_pad.Pad>> getBoardPads(int boardId) async {
     final padRows = await _database
         .customSelect(

@@ -52,6 +52,51 @@ extension SamplerLibraryQueries on SamplerNotifier {
     }
   }
 
+  // ── Suppression d'un son ──────────────────────────────────────────────────
+
+  /// Raison pour laquelle [soundId] ne peut pas être supprimé maintenant, ou
+  /// `null` s'il le peut. La suppression est définitive côté plateau (le fichier
+  /// n'est récupérable que dans la corbeille Drive) : jamais en pleine
+  /// représentation, ni sous un pad qui joue ce son.
+  String? soundDeletionBlockedReason(int soundId) {
+    if (_libraryRepository == null) {
+      return 'Aucune bibliothèque Drive connectée.';
+    }
+    if (_isLiveSessionActive) {
+      return 'Suppression impossible en Mode Spectacle.';
+    }
+    final onAir = <PadItem>[
+      ..._state.pads,
+      ?_state.currentMusicPad,
+      ?_state.currentAmbiancePad,
+    ];
+    final playing = onAir.any(
+      (item) =>
+          (item.isPlaying || item.playbackTickets.isNotEmpty) &&
+          item.pad.sounds.any((s) => s.id == soundId),
+    );
+    return playing
+        ? 'Ce son est en cours de lecture — arrêtez-le avant de le supprimer.'
+        : null;
+  }
+
+  /// Supprime le son de la bibliothèque (corbeille Drive + base + cache, voir
+  /// [LibraryRepositorySoundDeletion.deleteLibrarySound]) puis recharge le
+  /// plateau, comme après une fusion de synchro qui retire des sons : les pads
+  /// qui l'utilisaient sont reconstruits, leurs lecteurs libérés.
+  ///
+  /// Les échecs Drive remontent tels quels, sans rien avoir changé en local.
+  Future<void> deleteLibrarySound(int soundId) async {
+    final blocked = soundDeletionBlockedReason(soundId);
+    if (blocked != null) throw StateError(blocked);
+    final repository = _libraryRepository;
+    if (repository == null) throw StateError('Aucune bibliothèque connectée');
+    if (_libraryPreviewSoundId == soundId) stopLibraryPreview(notify: false);
+    await repository.deleteLibrarySound(soundId);
+    invalidateSearchIndex();
+    await loadBoards();
+  }
+
   // ── Tags ──────────────────────────────────────────────────────────────────
 
   Future<List<TagCategoryWithTags>> loadTagCatalog() async {
