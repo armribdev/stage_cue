@@ -6,6 +6,7 @@ import '../../../../core/audio/cue_audio_service.dart';
 
 import '../../../../core/theme/app_dialog.dart';
 import '../../../../core/theme/app_icons.dart';
+import '../../../../core/theme/app_select.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../models/board_readiness.dart';
 import '../providers/sampler_provider.dart';
@@ -213,29 +214,15 @@ class _BoardReadinessDialogState extends State<BoardReadinessDialog> {
           ],
         ),
         const SizedBox(height: 4),
-        DropdownButtonFormField<String?>(
-          // Clé sur la valeur : `initialValue` n'est lu qu'à la création du
-          // champ, il faut le recréer quand elle change.
-          key: ValueKey(selectedId),
-          initialValue: selectedId,
-          isExpanded: true,
-          icon: const Icon(AppIcons.chevronDown, size: 18),
-          decoration: const InputDecoration(isDense: true),
-          items: [
-            const DropdownMenuItem<String?>(
-              value: null,
-              child: Text('Désactivé'),
-            ),
+        AppSelect<String?>(
+          value: selectedId,
+          leadingIcon: AppIcons.headphones,
+          options: [
+            const AppSelectOption<String?>(value: null, label: 'Désactivé'),
             for (final device in _devices)
-              DropdownMenuItem<String?>(
-                value: device.id,
-                child: Text(device.label, overflow: TextOverflow.ellipsis),
-              ),
+              AppSelectOption<String?>(value: device.id, label: device.label),
             if (selectedId != null && !known)
-              DropdownMenuItem<String?>(
-                value: selectedId,
-                child: Text(orphanLabel, overflow: TextOverflow.ellipsis),
-              ),
+              AppSelectOption<String?>(value: selectedId, label: orphanLabel),
           ],
           onChanged: (value) => unawaited(_selectDevice(value)),
         ),

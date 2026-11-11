@@ -172,44 +172,26 @@ extension _SettingsSections on _SettingsScreenState {
               else
                 SizedBox(
                   width: double.infinity,
-                  child: DropdownButtonFormField<String?>(
-                    // Clé sur la valeur : `initialValue` n'est lu qu'à la
-                    // création du champ, il faut le recréer quand elle change.
-                    key: ValueKey(dropdownValue),
-                    initialValue: dropdownValue,
-                    isExpanded: true,
-                    icon: const Icon(AppIcons.chevronDown, size: 18),
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      isDense: true,
-                    ),
-                    items: [
+                  child: AppSelect<String?>(
+                    value: dropdownValue,
+                    leadingIcon: AppIcons.headphones,
+                    options: [
                       // « Désactivé » = aucun casque (valeur `null`). Ce n'est
                       // pas la sortie par défaut du système proposée comme
                       // casque : celle-ci est la salle, elle reste exclue.
-                      const DropdownMenuItem<String?>(
+                      const AppSelectOption<String?>(
                         value: null,
-                        child: Text('Désactivé'),
+                        label: 'Désactivé',
                       ),
                       for (final device in _cueDevices)
-                        DropdownMenuItem<String?>(
+                        AppSelectOption<String?>(
                           value: device.id,
-                          child: Text(
-                            device.label,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          label: device.label,
                         ),
                       if (searchingSelected)
-                        DropdownMenuItem<String?>(
+                        AppSelectOption<String?>(
                           value: selectedId,
-                          child: const Text(
-                            'Recherche du périphérique…',
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          label: 'Recherche du périphérique…',
                         ),
                     ],
                     onChanged: (value) => unawaited(_setCueDevice(value)),
