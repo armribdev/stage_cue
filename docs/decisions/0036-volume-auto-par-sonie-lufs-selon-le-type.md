@@ -23,4 +23,4 @@ La sonie se mesure en LUFS (pondération K, blocs de 400 ms, portes absolue −7
 - Fichier de plus de 60 s : 6 morceaux de 10 s répartis de bout en bout, pas le fichier entier.
 - Un son plus doux que sa cible garde 1.0 et reste en dessous. L'égalisation n'est complète que vers le bas.
 - Le canal gauche seul est mesuré (limite du décodeur détourné) : un fichier panoramique dur à droite est sous-estimé.
-- Les valeurs de cible sont des points de départ à régler à l'oreille. Les sons déjà indexés gardent leur volume : seul le bouton « auto » de la fiche d'un son applique la nouvelle mesure.
+- Les valeurs de cible sont des points de départ à régler à l'oreille. Les sons déjà indexés gardent leur volume tant qu'on ne relance pas la mesure : bouton « auto » de la fiche d'un son, ou Paramètres → Volumes → « Recalculer les volumes auto » (`LibraryRepository.recomputeAutoVolumes`). Ce dernier ne mesure que les sons déjà téléchargés, demande confirmation en annonçant combien de volumes réglés il remplace, écrit son par son (annulable sans perte) et est indisponible en Mode Spectacle.

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import '../../features/sampler/domain/entities/sound.dart' show SoundType;
 import '../autotag/audio_stream_info.dart';
 import '../autotag/pcm_decoder.dart' show readLeftChannelWindow;
 import 'audio_load_log.dart';
@@ -38,6 +39,14 @@ enum LoudnessProfile {
   final double targetLufs;
   final bool momentaryMax;
 }
+
+/// Profil de mesure d'un son d'après son type ; un type inconnu est traité
+/// comme de la musique.
+LoudnessProfile loudnessProfileOf(SoundType? type) => switch (type) {
+  SoundType.soundEffect => LoudnessProfile.effect,
+  SoundType.ambiance => LoudnessProfile.ambiance,
+  SoundType.music || null => LoudnessProfile.music,
+};
 
 /// Durée d'un morceau lu en une fois, en secondes.
 const int _chunkSeconds = 10;

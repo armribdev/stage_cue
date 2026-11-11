@@ -56,6 +56,7 @@ part 'settings/settings_indexing.dart';
 part 'settings/settings_library_actions.dart';
 part 'settings/settings_labels.dart';
 part 'settings/settings_sections.dart';
+part 'settings/settings_volumes.dart';
 
 class SettingsScreen extends StatefulWidget {
   final db.AppDatabase database;
@@ -139,6 +140,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _appVersion;
   bool _isCheckingForUpdate = false;
   bool _isDiagnosticBusy = false;
+
+  /// Recalcul en masse du volume « auto » (voir `settings_volumes.dart`).
+  bool _isAutoVolumeBusy = false;
+  bool _autoVolumeCancelRequested = false;
+  ({int done, int total})? _autoVolumeProgress;
 
   /// Action dont le bouton affiche brièvement une coche de confirmation (voir
   /// [_flashConfirmation]) — remplace un toast pour un simple « c'est fait ».

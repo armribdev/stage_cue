@@ -360,12 +360,7 @@ class SamplerNotifier extends ChangeNotifier {
   /// Même contrat d'erreur que [regenerateWaveform] (fichier hors ligne).
   Future<double?> computeAutoVolume(Sound sound) async {
     final path = await _resolvePlayablePath(sound, downloadIfNeeded: true);
-    final profile = switch (sound.type) {
-      SoundType.soundEffect => LoudnessProfile.effect,
-      SoundType.ambiance => LoudnessProfile.ambiance,
-      SoundType.music || null => LoudnessProfile.music,
-    };
-    return measureAutoVolume(File(path), profile);
+    return measureAutoVolume(File(path), loudnessProfileOf(sound.type));
   }
 
   bool _padSoundsChanged(PadItem existing, Pad updated) {
