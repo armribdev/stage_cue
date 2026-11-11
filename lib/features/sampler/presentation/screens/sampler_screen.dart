@@ -14,6 +14,8 @@ import '../widgets/music_preview_panel.dart';
 import '../widgets/music_picker_sheet.dart';
 import '../widgets/quick_search_overlay.dart';
 import '../widgets/app_form_dialog.dart';
+import '../widgets/board_readiness_dialog.dart';
+import '../models/board_readiness.dart';
 import '../widgets/pad_download_sheet.dart';
 import '../widgets/sampler_screen_chrome.dart';
 import '../widgets/section_context_anchor.dart';
@@ -21,6 +23,7 @@ import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
 import '../../../../core/audio/cue_audio_service.dart' show CueAudioService;
+import '../../../../core/logging/app_log.dart';
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
 import '../../../../core/utils/app_snackbar.dart';
@@ -79,6 +82,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
   final ScrollController _normalGridScrollController = ScrollController();
 
   bool _isPerformanceMode = false;
+
+  /// Bilan de préparation en cours (énumération du casque ou dialogue ouvert) :
+  /// un second appui sur « Mode Spectacle » ne doit pas en empiler un autre.
+  bool _isCheckingReadiness = false;
 
   /// Mode classique éditable : croix de suppression, crayon et slots « + ».
   /// Verrouillé en Mode Spectacle pour éviter toute modif accidentelle — le

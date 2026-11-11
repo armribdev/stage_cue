@@ -239,6 +239,75 @@ extension _SamplerScreenPadLayout on _SamplerScreenState {
   /// laisse le déplacement des pads possible, et suspend les push Drive auto
   /// pour éviter tout jank pendant le live.
   void _togglePerformanceMode() {
+    if (_isPerformanceMode) {
+      _applyPerformanceMode();
+    } else {
+      unawaited(_enterPerformanceModeAfterCheck());
+    }
+  }
+
+  /// Entrée en Mode Spectacle : s'il y a quoi que ce soit à signaler (fichier
+  /// perdu, à télécharger, casque absent ou non choisi), un bilan est proposé
+  /// AVANT de verrouiller l'écran. Il ne bloque jamais — « Entrer quand même » passe —
+  /// et il n'existe pas une fois en scène (zéro modale bloquante en live).
+  Future<void> _enterPerformanceModeAfterCheck() async {
+    if (_isCheckingReadiness) return;
+    _isCheckingReadiness = true;
+    try {
+      await _checkReadinessThenEnter();
+    } finally {
+      _isCheckingReadiness = false;
+    }
+  }
+
+  Future<void> _checkReadinessThenEnter() async {
+    final cue = await _readCueReadiness();
+    if (!mounted || _isPerformanceMode) return;
+    final report = BoardReadinessReport.build(
+      pads: _notifier.state.pads,
+      cue: cue,
+    );
+    AppLog.info(
+      'Bilan avant Mode Spectacle : ${report.playablePadCount}/'
+      '${report.padCount} pad(s) prêt(s), ${report.blocking.length} '
+      'bloquant(s), ${report.fixable.length} à télécharger, '
+      '${report.warnings.length} avertissement(s).',
+    );
+    // Avertissements compris (aucun casque choisi, pad vide) : un avertissement
+    // qu'on ne voit jamais n'avertit de rien.
+    if (report.issues.isNotEmpty) {
+      final enter = await BoardReadinessDialog.show(
+        context,
+        notifier: _notifier,
+        onSelectCueDevice: _selectCueDevice,
+      );
+      if (!mounted || !enter || _isPerformanceMode) return;
+    }
+    _applyPerformanceMode();
+  }
+
+  /// État du casque pour le bilan. Un casque choisi est réénuméré : la liste en
+  /// cache date de la dernière ouverture des réglages, et un casque débranché
+  /// depuis doit apparaître ici, pas à la première pré-écoute en scène.
+  Future<CueReadinessInput> _readCueReadiness() async {
+    if (!CueAudioService.isSupported) return CueReadinessInput.unsupported;
+    final cue = CueAudioService.instance;
+    if (cue.selectedDeviceId != null) await cue.refreshDevices();
+    return CueReadinessInput(
+      isSupported: true,
+      selectedDeviceId: cue.selectedDeviceId,
+      visibleDeviceIds: {for (final d in cue.cachedDevices) d.id},
+    );
+  }
+
+  /// Change le casque de pré-écoute : application immédiate au moteur, puis
+  /// persistance (même chemin que les réglages).
+  Future<void> _selectCueDevice(String? deviceId) async {
+    CueAudioService.instance.setSelectedDevice(deviceId);
+    await widget.services.appPreferences.setCueOutputDeviceId(deviceId);
+  }
+
+  void _applyPerformanceMode() {
     setState(() {
       _isPerformanceMode = !_isPerformanceMode;
       // Une bascule pendant un drag laisserait un état de glisser orphelin.
