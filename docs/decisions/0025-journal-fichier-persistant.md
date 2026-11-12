@@ -17,7 +17,7 @@ Un **journal fichier persistant** (`lib/core/logging/log_sink.dart`, classe à m
 - **En-tête de session** posé une fois `AppServices` prêt (version, OS, schéma, locale, cue configuré oui/non, espace libre sur le volume du cache). Il reste la première chose du fichier : le sink n'écrit rien avant, sauf sur un `severe` précoce.
 - **Erreurs non gérées de tout type** (`FlutterError.onError`, `PlatformDispatcher.onError`, zone) → `AppLog.uncaughtError` ; filtrage des faux positifs SoLoud et chaînage vers le handler précédent conservés ; une même exception remontée par deux handlers n'est écrite qu'une fois.
 - **Marqueur d'arrêt propre** (`session.lock`) : posé au démarrage, supprimé par `didRequestAppExit`. Vérifié sous Windows (voir Conséquences). Désactivé en debug (un hot restart relance `main` sans fermeture).
-- **Export** : section « Diagnostic » des réglages (`settings/settings_diagnostic.dart`) — export en `.txt` daté via `file_picker`, copie des ~500 dernières lignes, ouverture du dossier (desktop). Aucune dépendance ajoutée.
+- **Export** : section « Diagnostic » des réglages, dans « Maintenance » repliée par défaut (`settings/settings_diagnostic.dart`) — export en `.txt` daté via `file_picker`, copie des ~500 dernières lignes, ouverture du dossier (desktop). Aucune dépendance ajoutée.
 
 ## Alternatives écartées
 

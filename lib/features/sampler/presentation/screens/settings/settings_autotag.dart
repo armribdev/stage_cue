@@ -4,99 +4,79 @@ part of '../settings_screen.dart';
 /// de poser des tags d'ambiance sur les musiques non traitées (décision 0029).
 /// Méthodes de [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsAutoTag on _SettingsScreenState {
-  // Pas de Card : libellé de section, contenu, puis le séparateur posé par
-  // `_buildSettingsBody` (direction « Console Linear », ADR 0023).
   Widget _buildAutoTagSection(AutoTagPackController controller) {
     final scheme = Theme.of(context).colorScheme;
-    final muted = Theme.of(
-      context,
-    ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
-    // Boutons : `minimumSize` surchargé (le thème donne sinon une largeur infinie).
-    final buttonStyle = OutlinedButton.styleFrom(
-      minimumSize: const Size(64, 42),
-    );
-
-    return _buildSettingsSectionCard(
-      title: _buildSectionTitleRow(
-        icon: AppIcons.sparkles,
-        title: 'Analyse automatique',
-      ),
+    return SettingsSection(
+      icon: AppIcons.sparkles,
+      title: 'Analyse automatique',
       child: ListenableBuilder(
         listenable: controller,
         builder: (context, _) {
           final status = controller.status;
           final total = controller.totalBytes;
           final received = controller.receivedBytes;
+          final failure = controller.lastError;
+          final downloading = status == AutoTagPackStatus.downloading;
+          final installed = status == AutoTagPackStatus.installed;
+
+          final String description;
+          if (downloading) {
+            description =
+                'Téléchargement : ${_formatBytes(received)} / '
+                '${_formatBytes(total)}';
+          } else if (installed) {
+            description = 'Installé.';
+          } else if (failure != null) {
+            description = 'Téléchargement échoué : $failure';
+          } else {
+            description = 'Non installé.';
+          }
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Suggère des tags d’ambiance (Triste, Tension, Joyeux…) pour vos '
-                'musiques, d’après le son, directement sur cet appareil, dès '
-                'qu’elles sont indexées. Ce ne sont que des suggestions, '
-                'affichées avec leur confiance dans la fiche du son : elles '
-                'n’entrent dans ses tags (et la recherche) que si vous les '
-                'ajoutez. Un son que vous passez en « traité » n’est plus '
-                'analysé. L’analyse se fait en arrière-plan, jamais en Mode '
-                'Spectacle.',
-                style: muted,
+              const SettingsNote(
+                'Suggère des tags d’ambiance (Triste, Tension, Joyeux…) pour '
+                'vos musiques, sur cet appareil. À ajouter vous-même depuis la '
+                'fiche du son.',
               ),
-              const SizedBox(height: 12),
-              if (status == AutoTagPackStatus.downloading) ...[
-                LinearProgressIndicator(
-                  value: total > 0 ? received / total : null,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Téléchargement du pack : ${_formatBytes(received)} / '
-                  '${_formatBytes(total)}',
-                  style: muted,
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  style: buttonStyle,
-                  onPressed: controller.cancel,
-                  icon: const Icon(AppIcons.close, size: 18),
-                  label: const Text('Annuler'),
-                ),
-              ] else if (status == AutoTagPackStatus.installed) ...[
-                Text('Pack de modèles installé.', style: muted),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  style: buttonStyle,
-                  onPressed: () =>
-                      unawaited(_confirmRemoveAutoTagPack(controller)),
-                  icon: const Icon(AppIcons.delete, size: 18),
-                  label: const Text('Supprimer le pack'),
-                ),
-              ] else ...[
-                Text(
-                  'Nécessite un pack de modèles d\'environ '
-                  '${_formatBytes(total)}, téléchargé une fois.',
-                  style: muted,
-                ),
-                if (controller.lastError != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    'Téléchargement échoué : ${controller.lastError}',
-                    style: muted?.copyWith(color: scheme.error),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  style: buttonStyle,
-                  onPressed: status == AutoTagPackStatus.unknown
-                      ? null
-                      : () => unawaited(controller.install()),
-                  icon: const Icon(AppIcons.download, size: 18),
-                  label: Text('Télécharger le pack (${_formatBytes(total)})'),
-                ),
-              ],
-              const SizedBox(height: 12),
-              Text(
-                'Modèle MuQ-MuLan (OpenMuQ, Tencent AI Lab), licence '
-                'CC BY-NC 4.0 : usage non commercial uniquement.',
-                style: muted,
+              const SizedBox(height: AppSpacing.sm),
+              SettingsRow(
+                title: 'Pack de modèles',
+                description: description,
+                descriptionColor: !downloading && !installed && failure != null
+                    ? scheme.error
+                    : null,
+                trailing: downloading
+                    ? SettingsButton(
+                        label: 'Annuler',
+                        icon: AppIcons.close,
+                        onPressed: controller.cancel,
+                      )
+                    : installed
+                    ? SettingsButton(
+                        label: 'Supprimer',
+                        icon: AppIcons.delete,
+                        onPressed: () =>
+                            unawaited(_confirmRemoveAutoTagPack(controller)),
+                      )
+                    : SettingsButton(
+                        label: 'Télécharger (${_formatBytes(total)})',
+                        icon: AppIcons.download,
+                        onPressed: status == AutoTagPackStatus.unknown
+                            ? null
+                            : () => unawaited(controller.install()),
+                      ),
+                below: downloading
+                    ? LinearProgressIndicator(
+                        value: total > 0 ? received / total : null,
+                      )
+                    : null,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              const SettingsNote(
+                'Modèle MuQ-MuLan (OpenMuQ, Tencent AI Lab) · CC BY-NC 4.0, '
+                'usage non commercial.',
               ),
             ],
           );

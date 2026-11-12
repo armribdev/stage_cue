@@ -4,80 +4,56 @@
 
 part of '../settings_screen.dart';
 
-/// Section « Volumes » : recalcul en masse du volume « auto » de tous les sons
+/// Ligne « Volumes auto » : recalcul en masse du volume « auto » de tous les sons
 /// disponibles sur l'appareil (décision 0036). Méthodes de
 /// [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsVolumes on _SettingsScreenState {
-  // Pas de Card : un libellé de section, son contenu, puis le séparateur posé
-  // par `_buildSettingsBody` (direction « Console Linear », ADR 0023).
-  Widget _buildVolumeSection() {
-    final scheme = Theme.of(context).colorScheme;
-    final muted = Theme.of(
-      context,
-    ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+  /// Ligne « Volumes auto » de la maintenance : un réglage (description +
+  /// bouton), la progression se range dessous pendant le calcul.
+  Widget _buildVolumeRow() {
     final progress = _autoVolumeProgress;
     final inLiveMode = widget.syncController.isAutoSyncPaused;
-    // Bouton(s) : `minimumSize` surchargé (le thème donne sinon une largeur
-    // infinie).
-    final buttonStyle = OutlinedButton.styleFrom(
-      minimumSize: const Size(64, 42),
-    );
+    final running = progress != null;
 
-    return _buildSettingsSectionCard(
-      title: _buildSectionTitleRow(icon: AppIcons.volumeOn, title: 'Volumes'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Mesure la sonie de chaque son téléchargé sur cet appareil et règle '
-            'son volume selon son type : musique, ambiance (plus en retrait) '
-            'ou bruitage. Les sons non téléchargés sont ignorés. Les volumes '
-            'réglés pad par pad ne changent pas.',
-            style: muted,
-          ),
-          const SizedBox(height: 12),
-          if (progress != null) ...[
-            LinearProgressIndicator(
-              value: progress.total > 0 ? progress.done / progress.total : null,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${progress.done} / ${progress.total} sons mesurés',
-              style: muted,
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              style: buttonStyle,
+    return SettingsRow(
+      title: 'Volumes auto',
+      description: inLiveMode && !running
+          ? 'Indisponible en Mode Spectacle.'
+          : 'Mesure la sonie de chaque son téléchargé et règle son volume selon '
+                'son type (musique, ambiance, bruitage). Les volumes réglés '
+                'pad par pad ne changent pas.',
+      trailing: running
+          ? SettingsButton(
+              label: _autoVolumeCancelRequested ? 'Annulation…' : 'Annuler',
+              icon: AppIcons.close,
               onPressed: _autoVolumeCancelRequested
                   ? null
                   : () => setState(() => _autoVolumeCancelRequested = true),
-              icon: const Icon(AppIcons.close, size: 18),
-              label: Text(
-                _autoVolumeCancelRequested ? 'Annulation…' : 'Annuler',
-              ),
-            ),
-          ] else ...[
-            OutlinedButton.icon(
-              style: buttonStyle,
-              onPressed: _isAutoVolumeBusy || inLiveMode
+            )
+          : SettingsButton(
+              label: 'Recalculer',
+              icon: AppIcons.tune,
+              busy: _isAutoVolumeBusy,
+              onPressed: inLiveMode
                   ? null
                   : () => unawaited(_confirmRecomputeAutoVolumes()),
-              icon: _isAutoVolumeBusy
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(AppIcons.tune, size: 18),
-              label: const Text('Recalculer les volumes auto'),
             ),
-            if (inLiveMode) ...[
-              const SizedBox(height: 6),
-              Text('Indisponible en Mode Spectacle.', style: muted),
-            ],
-          ],
-        ],
-      ),
+      below: running
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LinearProgressIndicator(
+                  value: progress.total > 0
+                      ? progress.done / progress.total
+                      : null,
+                ),
+                const SizedBox(height: AppSpacing.xs + 2),
+                SettingsNote(
+                  '${progress.done} / ${progress.total} sons mesurés',
+                ),
+              ],
+            )
+          : null,
     );
   }
 

@@ -4,7 +4,7 @@
 
 part of '../settings_screen.dart';
 
-/// Section « Diagnostic » : export et copie du journal fichier persistant
+/// Journal (maintenance) : export et copie du journal fichier persistant
 /// (cf. ADR 0025). Méthodes de [_SettingsScreenState] extraites via extension
 /// dans le même `part`.
 extension _SettingsDiagnostic on _SettingsScreenState {
@@ -13,88 +13,96 @@ extension _SettingsDiagnostic on _SettingsScreenState {
   bool get _isDesktopPlatform =>
       Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
-  // Pas de Card : un libellé de section, son contenu, puis le séparateur posé
-  // par `_buildSettingsBody` (direction « Console Linear », ADR 0023).
-  Widget _buildDiagnosticSection() {
-    final scheme = Theme.of(context).colorScheme;
+  /// Diagnostic de la maintenance : explication, état (version, taille, dossier)
+  /// puis les trois actions.
+  Widget _buildDiagnosticRows() {
     final folder = LogSink.directory?.path;
     final lost = LogSink.lostLines;
     final exported = _confirmedAction == _kExportLogsAction;
     final copied = _confirmedAction == _kCopyLogsAction;
-    // Boutons côte à côte : `minimumSize` surchargé, sinon le thème global
-    // (`Size.fromHeight`) leur donne une largeur infinie et ils disparaissent.
-    final buttonStyle = OutlinedButton.styleFrom(
-      minimumSize: const Size(64, 42),
-    );
 
-    return _buildSettingsSectionCard(
-      title: _buildSectionTitleRow(
-        icon: AppIcons.diagnostic,
-        title: 'Diagnostic',
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Journal des événements de l\'application (lecture, synchro, '
-            'erreurs), conservé sur cet appareil. À joindre à un signalement '
-            'de problème.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-          if (folder != null) ...[
-            const SizedBox(height: 10),
-            _buildInfoRow('Dossier des logs', folder, isPath: true),
-          ],
-          if (lost > 0) ...[
-            const SizedBox(height: 6),
-            Text(
-              '$lost ligne(s) de journal n\'ont pas pu être écrites sur disque '
-              'pendant cette session.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                style: buttonStyle,
-                onPressed: _isDiagnosticBusy ? null : _exportLogs,
-                icon: _isDiagnosticBusy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(
-                        exported ? AppIcons.check : AppIcons.download,
-                        size: 18,
-                      ),
-                label: Text(exported ? 'Logs exportés' : 'Exporter les logs'),
-              ),
-              OutlinedButton.icon(
-                style: buttonStyle,
-                onPressed: _isDiagnosticBusy ? null : _copyLogsToClipboard,
-                icon: Icon(copied ? AppIcons.check : AppIcons.copy, size: 18),
-                label: Text(copied ? 'Copié' : 'Copier dans le presse-papiers'),
-              ),
-              if (_isDesktopPlatform)
-                OutlinedButton.icon(
-                  style: buttonStyle,
-                  onPressed: folder == null ? null : _openLogsFolder,
-                  icon: const Icon(AppIcons.folderOpen, size: 18),
-                  label: const Text('Ouvrir le dossier des logs'),
-                ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SettingsRow(
+          title: 'Diagnostic',
+          description:
+              'Événements (lecture, synchro, erreurs), conservés sur cet '
+              'appareil. À joindre à un signalement de problème.',
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        if (_appVersion != null) ...[
+          _buildInfoRow('Version', _appVersion!),
+          const SizedBox(height: AppSpacing.xs + 2),
+        ],
+        _buildInfoRow('Journal', _logStateLabel()),
+        if (folder != null) ...[
+          const SizedBox(height: AppSpacing.xs + 2),
+          _buildInfoRow('Dossier des logs', folder, isPath: true),
+        ],
+        if (lost > 0) ...[
+          const SizedBox(height: AppSpacing.xs + 2),
+          SettingsNote(
+            '$lost ligne(s) de journal n\'ont pas pu être écrites sur disque '
+            'pendant cette session.',
           ),
         ],
-      ),
+        const SizedBox(height: AppSpacing.md),
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: [
+            SettingsButton(
+              label: exported ? 'Logs exportés' : 'Exporter les logs',
+              icon: exported ? AppIcons.check : AppIcons.download,
+              busy: _isDiagnosticBusy,
+              onPressed: _exportLogs,
+            ),
+            SettingsButton(
+              label: copied
+                  ? 'Copié'
+                  : 'Copier les $_kClipboardLineCount dernières lignes',
+              icon: copied ? AppIcons.check : AppIcons.copy,
+              onPressed: _isDiagnosticBusy ? null : _copyLogsToClipboard,
+            ),
+            if (_isDesktopPlatform)
+              SettingsButton(
+                label: 'Ouvrir le dossier des logs',
+                icon: AppIcons.folderOpen,
+                onPressed: folder == null ? null : _openLogsFolder,
+              ),
+          ],
+        ),
+      ],
     );
+  }
+
+  /// « 1.23 MB sur disque · session démarrée à 14:02 » : de quoi juger si le
+  /// journal contient la session qu'on veut joindre à un signalement.
+  String _logStateLabel() {
+    String two(int v) => v.toString().padLeft(2, '0');
+    final start = LogSink.sessionStart;
+    final session =
+        'session démarrée à ${two(start.hour)}:${two(start.minute)}';
+    final bytes = _logDiskBytes;
+    return bytes == null
+        ? session
+        : '${_formatBytes(bytes)} sur disque · $session';
+  }
+
+  /// Taille cumulée du fichier courant et de ses archives. Meilleur effort : un
+  /// fichier illisible n'empêche pas d'afficher les autres, et la taille n'est
+  /// qu'une indication (l'export, lui, signale ses propres erreurs).
+  Future<void> _loadLogDiskSize() async {
+    var total = 0;
+    for (final file in LogSink.logFiles()) {
+      try {
+        if (await file.exists()) total += await file.length();
+      } catch (_) {
+        // Ignoré : voir ci-dessus.
+      }
+    }
+    if (mounted) setState(() => _logDiskBytes = total);
   }
 
   /// Concatène les fichiers de journal en un seul `.txt` daté et le sauvegarde

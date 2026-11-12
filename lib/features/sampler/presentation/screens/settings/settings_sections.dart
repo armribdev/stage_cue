@@ -6,82 +6,24 @@ part of '../settings_screen.dart';
 
 /// Sections de l'écran : audio, Drive, maintenance, mise à jour.
 /// Méthodes de [_SettingsScreenState] extraites via extension dans le même `part`.
+/// Squelette, lignes et boutons communs : `widgets/settings_layout.dart`.
 extension _SettingsSections on _SettingsScreenState {
-  // Pas de Card : la direction "Console Linear" pose les sections à plat
-  // (label + séparateur) plutôt qu'en cartes empilées façon Material.
-  Widget _buildSettingsSectionCard({
-    required Widget title,
-    required Widget child,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [title, const SizedBox(height: 14), child],
-    );
-  }
-
-  Widget _sectionDivider() => const Padding(
-    padding: EdgeInsets.symmetric(vertical: 8),
-    child: Divider(height: 1),
-  );
-
-  Widget _buildSectionTitleRow({
-    required IconData icon,
-    required String title,
-    List<Widget>? trailing,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: scheme.onSurfaceVariant),
-        const SizedBox(width: 8),
-        Text(title.toUpperCase(), style: AppTextStyles.sectionLabel(context)),
-        if (trailing != null) ...[const Spacer(), ...trailing],
-      ],
-    );
-  }
-
-  /// Sélecteur du mode réseau : boutons segmentés (2 choix) + description du
-  /// mode courant. Plus léger qu'un dropdown pour un réglage à faible cardinalité.
-  Widget _buildConnectivityModeSelector() {
-    final scheme = Theme.of(context).colorScheme;
-    final selected = widget.appPreferences.connectivityMode;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Mode réseau',
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: scheme.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-          ),
+  /// Interrupteur de connexion : le mode réseau n'ayant que deux valeurs
+  /// ([décision 0037](../../../../../docs/decisions/0037-mode-reseau-binaire-spectacle-masque-les-pads.md)),
+  /// c'est un interrupteur, au même rang que les réglages de téléchargement de
+  /// la section Drive dont il est le maître. Le sous-titre dit ce que le mode
+  /// courant implique.
+  Widget _buildConnectionSwitch() {
+    final mode = widget.appPreferences.connectivityMode;
+    return SettingsRow.toggle(
+      title: 'Connexion réseau',
+      description: mode.description,
+      value: mode == ConnectivityMode.connected,
+      onChanged: (connected) => unawaited(
+        widget.appPreferences.setConnectivityMode(
+          connected ? ConnectivityMode.connected : ConnectivityMode.offline,
         ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: SegmentedButton<ConnectivityMode>(
-            segments: [
-              for (final mode in ConnectivityMode.values)
-                ButtonSegment<ConnectivityMode>(
-                  value: mode,
-                  label: Text(mode.label),
-                ),
-            ],
-            selected: {selected},
-            showSelectedIcon: false,
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            onSelectionChanged: (selection) => unawaited(
-              widget.appPreferences.setConnectivityMode(selection.first),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          selected.description,
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-        ),
-      ],
+      ),
     );
   }
 
@@ -89,28 +31,25 @@ extension _SettingsSections on _SettingsScreenState {
   /// Windows uniquement — permet d'auditionner un son sur un casque séparé
   /// pendant que la sortie « salle » reste sur le device système.
   Widget _buildAudioSection() {
-    final scheme = Theme.of(context).colorScheme;
-    return _buildSettingsSectionCard(
-      title: _buildSectionTitleRow(
-        icon: AppIcons.headphones,
-        title: 'Audio',
-        trailing: [
-          IconButton(
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Rafraîchir la liste des périphériques',
-            icon: _isLoadingCueDevices
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(AppIcons.refresh),
-            onPressed: _isLoadingCueDevices ? null : () => _loadCueDevices(),
-          ),
-        ],
-      ),
+    return SettingsSection(
+      icon: AppIcons.headphones,
+      title: 'Audio',
+      trailing: [
+        BoxedIconButton(
+          icon: _isLoadingCueDevices ? null : AppIcons.refresh,
+          tooltip: 'Rafraîchir la liste des périphériques',
+          framed: false,
+          compact: true,
+          onPressed: _isLoadingCueDevices ? null : () => _loadCueDevices(),
+          child: _isLoadingCueDevices
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : null,
+        ),
+      ],
       child: ListenableBuilder(
         listenable: widget.appPreferences,
         builder: (context, _) {
@@ -132,84 +71,55 @@ extension _SettingsSections on _SettingsScreenState {
           // Énumération terminée et rien d'autre que la sortie de la salle :
           // un menu vide serait trompeur, on l'annonce à la place.
           final noExtraOutput = _cueDevicesLoaded && _cueDevices.isEmpty;
+          final room = CueAudioService.instance.excludedRoomLabel;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Sortie de pré-écoute (cue)',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (noExtraOutput)
-                Row(
-                  children: [
-                    Icon(
-                      AppIcons.headphonesOff,
-                      size: 18,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Aucune sortie supplémentaire détectée. Branchez un '
-                        'casque puis actualisez la liste.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ),
-                  ],
-                )
-              else
-                SizedBox(
-                  width: double.infinity,
-                  child: AppSelect<String?>(
-                    value: dropdownValue,
-                    leadingIcon: AppIcons.headphones,
-                    options: [
-                      // « Désactivé » = aucun casque (valeur `null`). Ce n'est
-                      // pas la sortie par défaut du système proposée comme
-                      // casque : celle-ci est la salle, elle reste exclue.
-                      const AppSelectOption<String?>(
-                        value: null,
-                        label: 'Désactivé',
-                      ),
-                      for (final device in _cueDevices)
-                        AppSelectOption<String?>(
-                          value: device.id,
-                          label: device.label,
-                        ),
-                      if (searchingSelected)
-                        AppSelectOption<String?>(
-                          value: selectedId,
-                          label: 'Recherche du périphérique…',
-                        ),
-                    ],
-                    onChanged: (value) => unawaited(_setCueDevice(value)),
-                  ),
-                ),
-              if (CueAudioService.instance.excludedRoomLabel
-                  case final room?) ...[
-                const SizedBox(height: 8),
-                Text(
-                  '« $room » est la sortie par défaut de Windows (la salle) : '
-                  'elle n\'est pas proposée comme casque.',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: scheme.onSurface),
-                ),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                noExtraOutput || dropdownValue == null
+              SettingsRow(
+                title: 'Sortie de pré-écoute (cue)',
+                description: noExtraOutput || dropdownValue == null
                     ? 'Sans casque, les pré-écoutes sortent en salle '
                           '(désactivées en Mode Spectacle).'
                     : 'Les pré-écoutes sortent sur ce casque, jamais en salle.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
+              const SizedBox(height: AppSpacing.xs),
+              if (noExtraOutput)
+                const SettingsNote(
+                  'Aucune sortie supplémentaire détectée. Branchez un casque '
+                  'puis actualisez la liste.',
+                )
+              else
+                AppSelect<String?>(
+                  value: dropdownValue,
+                  leadingIcon: AppIcons.headphones,
+                  options: [
+                    // « Désactivé » = aucun casque (valeur `null`). Ce n'est
+                    // pas la sortie par défaut du système proposée comme
+                    // casque : celle-ci est la salle, elle reste exclue.
+                    const AppSelectOption<String?>(
+                      value: null,
+                      label: 'Désactivé',
+                    ),
+                    for (final device in _cueDevices)
+                      AppSelectOption<String?>(
+                        value: device.id,
+                        label: device.label,
+                      ),
+                    if (searchingSelected)
+                      AppSelectOption<String?>(
+                        value: selectedId,
+                        label: 'Recherche du périphérique…',
+                      ),
+                  ],
+                  onChanged: (value) => unawaited(_setCueDevice(value)),
+                ),
+              if (room != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                SettingsNote(
+                  '« $room » est la sortie par défaut de Windows (la salle) : '
+                  'elle n\'est pas proposée comme casque.',
+                ),
+              ],
             ],
           );
         },
@@ -232,11 +142,14 @@ extension _SettingsSections on _SettingsScreenState {
           widget.appPreferences,
         ]),
         builder: (context, _) {
-          final scheme = Theme.of(context).colorScheme;
           final syncState = widget.syncController.state;
           final authExpired = isDriveAuthExpired(syncState);
-          return _buildSettingsSectionCard(
-            title: _buildSectionTitleRow(icon: AppIcons.cloud, title: 'Drive'),
+          return SettingsSection(
+            icon: AppIcons.cloud,
+            title: 'Drive',
+            // Dernière synchro, indexation et conflit vivent sur la ligne de
+            // chaque bibliothèque (« Éléments indexés »), avec le bouton
+            // d'actualisation ; ici, le compte et les réglages réseau.
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -244,50 +157,30 @@ extension _SettingsSections on _SettingsScreenState {
                   syncState: syncState,
                   authExpired: authExpired,
                 ),
-                // Dernière synchro, indexation et conflit vivent sur la ligne de
-                // chaque bibliothèque (« Éléments indexés »), avec le bouton
-                // d'actualisation ; ici, seulement l'état de la session et
-                // une erreur de synchro, qui ne se rattache à aucune ligne.
-                const SizedBox(height: 12),
-                Text(
-                  'Téléchargement automatique',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                CompactSwitchListTile(
-                  title: const Text('Sons ajoutés à un pad'),
-                  subtitle: Text(
-                    'Si connecté à Drive, les variantes sont récupérées dès l\'ajout.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
+                const SizedBox(height: AppSpacing.sm),
+                // Interrupteur maître : sans connexion, ni synchro ni
+                // téléchargement, quels que soient les réglages ci-dessous.
+                _buildConnectionSwitch(),
+                SettingsRow.toggle(
+                  title: 'Télécharger les sons ajoutés à un pad',
+                  description:
+                      'Si connecté à Drive, les variantes sont récupérées dès '
+                      'l\'ajout.',
                   value: widget.appPreferences.autoDownloadPadSounds,
                   onChanged: (value) => unawaited(
                     widget.appPreferences.setAutoDownloadPadSounds(value),
                   ),
                 ),
-                CompactSwitchListTile(
-                  title: const Text(
-                    'Nouveaux dossiers Drive (tout le contenu)',
-                  ),
-                  subtitle: Text(
-                    'À l\'ajout d\'un dossier Drive, télécharge les fichiers pour '
-                    'classer correctement chaque son à l\'indexation.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
+                SettingsRow.toggle(
+                  title: 'Télécharger les nouveaux dossiers Drive',
+                  description:
+                      'À l\'ajout d\'un dossier, récupère tous ses fichiers '
+                      'pour classer correctement chaque son à l\'indexation.',
                   value: widget.appPreferences.autoDownloadDriveByDefault,
                   onChanged: (value) => unawaited(
                     widget.appPreferences.setAutoDownloadDriveByDefault(value),
                   ),
                 ),
-                const Divider(height: 24),
-                _buildConnectivityModeSelector(),
               ],
             ),
           );
@@ -310,19 +203,17 @@ extension _SettingsSections on _SettingsScreenState {
           ? const SettingsLoadingView(key: ValueKey('settings-loading'))
           : RefreshIndicator(
               key: const ValueKey('settings-content'),
-              onRefresh: _loadDatabaseInfo,
+              onRefresh: _onPullToRefresh,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  children: separatedSettingsSections([
                     _buildDriveSection(),
-                    _sectionDivider(),
-                    if (CueAudioService.isSupported) ...[
-                      _buildAudioSection(),
-                      _sectionDivider(),
-                    ],
+                    // « Éléments indexés » suit directement Drive : ses lignes
+                    // sont les bibliothèques de ce compte, et le réglage de
+                    // connexion juste au-dessus décide de leur synchro.
                     ListenableBuilder(
                       listenable: Listenable.merge([
                         widget.syncController,
@@ -340,13 +231,18 @@ extension _SettingsSections on _SettingsScreenState {
                           dbSizeLabel: _formatBytes(_dbSize),
                           networkAllowed:
                               widget.appPreferences.allowsNetworkSync,
-                          isRefreshing: _isSyncBusy,
-                          refreshed: _confirmedAction == _kDriveRefreshAction,
+                          autoSyncPaused:
+                              widget.syncController.isAutoSyncPaused,
+                          refreshingLibraryIds: _refreshingLibraryIds,
+                          passOutcomes: _passOutcomes,
+                          passStages: _passStages,
                           conflictLibraryId:
                               syncState.status == SyncStatus.conflict
                               ? syncState.conflictLibraryId
                               : null,
-                          onRefresh: () => unawaited(_refreshAllFromDrive()),
+                          onRefresh: () => unawaited(_refreshFromDrive()),
+                          onRefreshLibrary: (library) =>
+                              unawaited(_refreshFromDrive(only: library)),
                           onResolveConflict: (library) =>
                               unawaited(_resolveSyncConflict(library)),
                           onAddFolder: _onAddFolderPressed,
@@ -363,72 +259,96 @@ extension _SettingsSections on _SettingsScreenState {
                         );
                       },
                     ),
-                    _sectionDivider(),
-                    _buildVolumeSection(),
-                    _sectionDivider(),
-                    if (widget.autoTagPack != null) ...[
+                    if (CueAudioService.isSupported) _buildAudioSection(),
+                    if (widget.autoTagPack != null)
                       _buildAutoTagSection(widget.autoTagPack!),
-                      _sectionDivider(),
-                    ],
-                    _buildDiagnosticSection(),
-                    if (Platform.isWindows) ...[
-                      _sectionDivider(),
-                      _buildUpdateCard(),
-                    ],
-                  ],
+                    _buildMaintenanceSection(),
+                  ]),
                 ),
               ),
             ),
     );
   }
 
-  /// Carte « Mise à jour » : version courante + vérification manuelle.
-  /// Windows uniquement — seule plateforme avec un installeur auto-updatable
-  /// (voir `windows/installer/stage_cue.iss`).
-  Widget _buildUpdateCard() {
+  /// Section « Maintenance », repliée par défaut : les outils qu'on ouvre
+  /// rarement (recalcul des volumes auto, journal) ne chargent pas l'écran.
+  Widget _buildMaintenanceSection() {
     final scheme = Theme.of(context).colorScheme;
-    final upToDate = _confirmedAction == _kUpdateAction;
-    return _buildSettingsSectionCard(
-      title: _buildSectionTitleRow(
-        icon: AppIcons.appUpdate,
-        title: 'Mise à jour',
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              _appVersion == null
-                  ? 'Version…'
-                  : 'Version installée : $_appVersion',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+    final expanded = _maintenanceExpanded;
+    // Replié, un travail long en cours (recalcul, export) reste signalé.
+    final busy = _isAutoVolumeBusy || _isDiagnosticBusy;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          button: true,
+          expanded: expanded,
+          child: InkWell(
+            borderRadius: AppRadius.radiusSm,
+            onTap: _toggleMaintenance,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+              child: SettingsSectionHeader(
+                icon: AppIcons.tune,
+                title: 'Maintenance',
+                trailing: [
+                  if (busy && !expanded) ...[
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 1.5),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
+                  Icon(
+                    expanded ? AppIcons.chevronUp : AppIcons.chevronDown,
+                    size: AppIconSize.sm,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          OutlinedButton.icon(
-            onPressed: _isCheckingForUpdate || upToDate
-                ? null
-                : _checkForUpdatesManually,
-            icon: _isCheckingForUpdate
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(upToDate ? AppIcons.check : AppIcons.refresh, size: 18),
-            label: Text(upToDate ? 'Déjà à jour' : 'Vérifier les mises à jour'),
-          ),
-        ],
-      ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          alignment: Alignment.topCenter,
+          child: expanded
+              ? Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildVolumeRow(),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                        child: Divider(height: 1),
+                      ),
+                      _buildDiagnosticRows(),
+                    ],
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
     );
   }
 
+  void _toggleMaintenance() {
+    setState(() => _maintenanceExpanded = !_maintenanceExpanded);
+    // La taille du journal grossit pendant la session : relue à chaque
+    // ouverture, pas à chaque redessin.
+    if (_maintenanceExpanded) unawaited(_loadLogDiskSize());
+  }
+
+  /// Libellé muet + valeur : état de l'appareil, dialogue de la base,
+  /// journal. Un chemin est copiable d'un clic et en police technique.
   Widget _buildInfoRow(String label, String value, {bool isPath = false}) {
-    final valueStyle = TextStyle(
-      color: isPath ? Theme.of(context).colorScheme.onSurfaceVariant : null,
-      fontSize: isPath ? 12 : null,
-    );
+    final scheme = Theme.of(context).colorScheme;
+    final base = Theme.of(context).textTheme.bodySmall ?? const TextStyle();
+    final valueStyle = isPath
+        ? AppFonts.monoStyle(base.copyWith(color: scheme.onSurfaceVariant))
+        : base.copyWith(color: scheme.onSurface);
 
     Widget valueWidget = Text(value, style: valueStyle);
     if (isPath && value.isNotEmpty) {
@@ -453,7 +373,7 @@ extension _SettingsSections on _SettingsScreenState {
           width: 180,
           child: Text(
             label,
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: base.copyWith(color: scheme.onSurfaceVariant),
           ),
         ),
         Expanded(child: valueWidget),

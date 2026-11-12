@@ -26,6 +26,11 @@ class BoxedIconButton extends StatefulWidget {
   /// Le survol n'ajoute alors aucun fond : seule l'icône s'éclaircit.
   final bool framed;
 
+  /// Retire la marge horizontale de 4 px autour du bouton — pour des boutons
+  /// sans cadre côte à côte, où elle s'ajoute à la zone de clic de 32 px et
+  /// écarte trop les icônes.
+  final bool compact;
+
   static const double _size = 32;
 
   const BoxedIconButton({
@@ -36,6 +41,7 @@ class BoxedIconButton extends StatefulWidget {
     required this.onPressed,
     this.circular = false,
     this.framed = true,
+    this.compact = false,
   }) : assert(
          (icon == null) != (child == null),
          'Fournir soit icon, soit child — jamais les deux, jamais aucun.',
@@ -55,11 +61,11 @@ class _BoxedIconButtonState extends State<BoxedIconButton> {
     final radius = widget.circular
         ? BorderRadius.circular(BoxedIconButton._size / 2)
         : AppRadius.radiusSm;
-    final iconColor = !framed && _hovered
+    final iconColor = !framed && _hovered && widget.onPressed != null
         ? scheme.onSurface
         : scheme.onSurfaceVariant;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: EdgeInsets.symmetric(horizontal: widget.compact ? 0 : 4),
       child: Tooltip(
         message: widget.tooltip,
         child: InkWell(

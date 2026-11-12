@@ -30,31 +30,3 @@ class CompactSwitch extends StatelessWidget {
     );
   }
 }
-
-/// Tuile de paramètre avec un [CompactSwitch] à droite.
-class CompactSwitchListTile extends StatelessWidget {
-  const CompactSwitchListTile({
-    super.key,
-    required this.title,
-    this.subtitle,
-    required this.value,
-    required this.onChanged,
-    this.contentPadding = EdgeInsets.zero,
-  });
-
-  final Widget title;
-  final Widget? subtitle;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-  final EdgeInsetsGeometry contentPadding;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: contentPadding,
-      title: title,
-      subtitle: subtitle,
-      trailing: CompactSwitch(value: value, onChanged: onChanged),
-    );
-  }
-}

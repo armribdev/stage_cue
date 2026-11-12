@@ -26,9 +26,6 @@ import '../../../../core/sync/drive_account_profile.dart';
 import '../../../../core/sync/drive_profile_cache.dart';
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
-import '../../../../core/update/app_update_checker.dart';
-import '../../../../core/update/update_flow.dart';
-import '../../../../core/update/update_log.dart';
 import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../../../core/utils/layout_utils.dart';
@@ -41,10 +38,11 @@ import '../../data/models/indexing_progress.dart';
 import '../../domain/entities/library.dart' as domain;
 import '../../domain/entities/watched_path.dart' as domain;
 import '../providers/sync_controller.dart';
-import '../widgets/compact_switch.dart';
+import '../widgets/boxed_icon_button.dart';
 import '../widgets/drive_sync_ui.dart';
 import '../widgets/section_context_anchor.dart';
 import '../widgets/settings_indexed_folders_section.dart';
+import '../widgets/settings_layout.dart';
 import '../widgets/settings_loading_view.dart';
 import 'sound_library_screen.dart';
 
@@ -115,8 +113,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 /// Clés des contrôles qui affichent une confirmation inline (`_confirmedAction`).
-const _kUpdateAction = 'update';
-const _kDriveRefreshAction = 'drive-refresh';
 const _kExportLogsAction = 'export-logs';
 const _kCopyLogsAction = 'copy-logs';
 
@@ -136,11 +132,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final Map<int, ({int available, int total})> _offlineCounts = {};
   final Map<String, SafTreeInfo> _safFolderInfo = {};
   bool _isInitialLoad = true;
-  bool _isSyncBusy = false;
+
+  /// Bibliothèques visées par la passe manuelle en cours (toutes, ou celle dont
+  /// on a cliqué la ligne). Vide : aucune passe manuelle.
+  Set<int> _refreshingLibraryIds = const {};
+
+  /// Bilan par bibliothèque de la dernière passe manuelle (voir
+  /// [_refreshFromDrive]) : les changements s'effacent d'eux-mêmes, un échec
+  /// reste affiché jusqu'à la passe suivante.
+  Map<int, LibraryPassOutcome> _passOutcomes = const {};
+  Timer? _passOutcomesTimer;
+
+  /// Étape en cours de la passe manuelle, par bibliothèque (clé : `Library.id`).
+  final Map<int, SyncPassStage> _passStages = {};
   bool _isDriveAuthBusy = false;
   String? _appVersion;
-  bool _isCheckingForUpdate = false;
   bool _isDiagnosticBusy = false;
+
+  /// Section « Maintenance » (volumes auto, journal) ouverte ; repliée par
+  /// défaut, non mémorisée d'une ouverture de l'écran à l'autre.
+  bool _maintenanceExpanded = false;
+
+  /// Taille du journal sur disque (fichier courant + archives), lue à
+  /// l'ouverture de la maintenance ; `null` tant qu'elle n'est pas connue.
+  int? _logDiskBytes;
 
   /// Recalcul en masse du volume « auto » (voir `settings_volumes.dart`).
   bool _isAutoVolumeBusy = false;
@@ -238,6 +253,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     widget.libraryRepository.removeListener(_onLibraryRepositoryChanged);
     _avatarCache.dispose();
     _confirmationTimer?.cancel();
+    _passOutcomesTimer?.cancel();
     super.dispose();
   }
 

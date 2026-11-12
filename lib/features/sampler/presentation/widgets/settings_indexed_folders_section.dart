@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/database/database.dart' as db;
@@ -5,10 +7,14 @@ import '../../../../core/platform/saf_directory_bridge.dart';
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/indexed_folder_labels.dart';
+import '../../../../core/utils/sync_time_label.dart';
 import '../../data/models/indexing_progress.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../domain/entities/library.dart' as domain;
+import '../../../../core/sync/auto_sync_coordinator.dart'
+    show LibraryPassOutcome, SyncPassStage;
 import 'boxed_icon_button.dart';
+import 'settings_layout.dart';
 
 /// Élément de la liste « Éléments indexés » (dossier local ou bibliothèque Drive).
 class IndexedFolderItem {
@@ -27,6 +33,66 @@ class IndexedFolderItem {
 /// Actions du menu ⋮ d'une bibliothèque Drive indexée.
 enum _LibraryAction { downloadAll, toggleAutoDownload, remove }
 
+/// « Synchronisé il y a 3 min » : se redessine à chaque changement de minute
+/// tant que la date est dans la fenêtre relative, puis s'arrête — au-delà, le
+/// format absolu ne bouge plus. Le minuteur est un tir unique replanifié, pas
+/// un `Timer.periodic`, pour tomber pile sur le passage à la minute suivante.
+class _SyncAgeText extends StatefulWidget {
+  const _SyncAgeText({required this.syncedAt, required this.style});
+
+  final DateTime syncedAt;
+  final TextStyle style;
+
+  @override
+  State<_SyncAgeText> createState() => _SyncAgeTextState();
+}
+
+class _SyncAgeTextState extends State<_SyncAgeText> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _schedule();
+  }
+
+  @override
+  void didUpdateWidget(_SyncAgeText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.syncedAt != widget.syncedAt) _schedule();
+  }
+
+  void _schedule() {
+    _timer?.cancel();
+    final age = syncAge(widget.syncedAt);
+    if (age >= kRelativeSyncWindow) {
+      _timer = null;
+      return;
+    }
+    // Prochain changement de libellé : la minute entière suivante.
+    _timer = Timer(Duration(seconds: 60 - age.inSeconds % 60), () {
+      if (!mounted) return;
+      setState(() {});
+      _schedule();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Synchronisé ${formatDriveSyncTimestamp(widget.syncedAt)}',
+      style: widget.style,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+}
+
 /// Section « Éléments indexés » : liste des dossiers locaux/Drive + pied base.
 ///
 /// L'orchestration OAuth / synchro / confirmations reste dans [SettingsScreen] ;
@@ -42,10 +108,13 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
     required this.soundCount,
     required this.dbSizeLabel,
     required this.networkAllowed,
-    required this.isRefreshing,
-    required this.refreshed,
+    required this.autoSyncPaused,
+    required this.refreshingLibraryIds,
+    required this.passOutcomes,
+    required this.passStages,
     required this.conflictLibraryId,
     required this.onRefresh,
+    required this.onRefreshLibrary,
     required this.onResolveConflict,
     required this.onAddFolder,
     required this.onShowDatabaseState,
@@ -67,10 +136,23 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
   /// avec la raison en infobulle plutôt qu'un refus après coup.
   final bool networkAllowed;
 
-  /// Une passe manuelle est en cours (spinner) ou vient de se terminer sans
-  /// incident (coche brève).
-  final bool isRefreshing;
-  final bool refreshed;
+  /// Mode Spectacle : la synchro **automatique** (veille, push) est suspendue.
+  /// L'actualisation manuelle, geste explicite, reste possible.
+  final bool autoSyncPaused;
+
+  /// Bibliothèques visées par la passe manuelle en cours (vide : aucune passe).
+  /// Chacune l'indique par un spinner sur sa ligne ; le bouton d'actualisation,
+  /// lui, ne change pas d'aspect.
+  final Set<int> refreshingLibraryIds;
+
+  /// Bilan de la dernière passe par bibliothèque (clé : `Library.id`) : ce qui
+  /// a changé, ou l'échec avec « Réessayer » (qui relance [onRefreshLibrary]).
+  final Map<int, LibraryPassOutcome> passOutcomes;
+
+  /// Étape en cours de la passe, par bibliothèque. Une bibliothèque sans entrée
+  /// n'a pas été atteinte (ou la passe rejointe n'a rien remonté) : libellé
+  /// générique.
+  final Map<int, SyncPassStage> passStages;
 
   /// Bibliothèque dont le dernier push est en conflit (choix utilisateur requis).
   final int? conflictLibraryId;
@@ -78,6 +160,9 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
   /// Actualise toutes les bibliothèques Drive. Le bouton n'existe que s'il y en
   /// a au moins une.
   final VoidCallback onRefresh;
+
+  /// Actualise une seule bibliothèque (clic sur sa date de synchro).
+  final void Function(domain.Library library) onRefreshLibrary;
   final void Function(domain.Library library) onResolveConflict;
   final VoidCallback onAddFolder;
   final VoidCallback onShowDatabaseState;
@@ -90,30 +175,60 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
   /// (activité), sans que le passage de l'un à l'autre ne change la hauteur.
   static const double _statusSlotHeight = 30;
 
+  /// Une passe manuelle tourne : pas de seconde en parallèle.
+  bool get _isRefreshing => refreshingLibraryIds.isNotEmpty;
+
+  /// Une actualisation est lançable : réseau autorisé et aucune passe en cours.
+  bool get _canRefresh => networkAllowed && !_isRefreshing;
+
+  /// Marge intérieure des infos de la ligne méta : c'est elle qui dessine le
+  /// fond de survol autour du texte. Appliquée aussi quand l'info n'est pas
+  /// cliquable, pour que la mise en page ne bouge pas quand elle le devient.
+  static const EdgeInsets _metaPadding = EdgeInsets.symmetric(
+    horizontal: 6,
+    vertical: 3,
+  );
+
+  /// Info de la ligne méta, cliquable si [onTap] est fourni (sans cadre ni
+  /// ripple, infobulle et curseur main). `onTap` nul : même encombrement,
+  /// aucune interaction.
+  Widget _metaInfo({
+    required Widget child,
+    String? tooltip,
+    VoidCallback? onTap,
+  }) {
+    if (onTap == null) return Padding(padding: _metaPadding, child: child);
+    return Tooltip(
+      message: tooltip ?? '',
+      child: InkWell(
+        borderRadius: AppRadius.radiusSm,
+        onTap: onTap,
+        child: Padding(padding: _metaPadding, child: child),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(AppIcons.folders, size: 16, color: scheme.onSurfaceVariant),
-            const SizedBox(width: 8),
-            Text(
-              'Éléments indexés'.toUpperCase(),
-              style: AppTextStyles.sectionLabel(context),
-            ),
-            const Spacer(),
-            if (items.any((item) => !item.isLocal)) _buildRefreshButton(scheme),
+        SettingsSectionHeader(
+          icon: AppIcons.folders,
+          title: 'Éléments indexés',
+          trailing: [
+            if (items.any((item) => !item.isLocal)) _buildRefreshButton(),
             BoxedIconButton(
               icon: AppIcons.add,
               tooltip: 'Ajouter un dossier',
+              framed: false,
+              compact: true,
               onPressed: onAddFolder,
             ),
           ],
         ),
-        const SizedBox(height: 14),
+        _buildSuspendedLine(context),
+        const SizedBox(height: AppSpacing.md),
         if (items.isEmpty)
           _buildEmptyIndexedState(context)
         else
@@ -121,11 +236,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: items.length,
-            separatorBuilder: (context, index) => Divider(
-              height: 17,
-              thickness: 1,
-              color: scheme.outlineVariant.withValues(alpha: 0.45),
-            ),
+            separatorBuilder: (context, index) => const Divider(height: 17),
             itemBuilder: (context, index) =>
                 _buildIndexedItemRow(context, items[index]),
           ),
@@ -134,38 +245,55 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
     );
   }
 
+  /// Pourquoi la synchro automatique ne tourne pas, quand elle ne tourne pas.
+  /// Une ligne d'état et non un toast : la raison doit rester lisible tant
+  /// qu'elle dure, y compris au toucher où l'infobulle du bouton n'existe pas.
+  /// Muette sans bibliothèque Drive (rien à suspendre) ; l'app en arrière-plan
+  /// n'y figure pas — cet écran n'est visible qu'au premier plan.
+  Widget _buildSuspendedLine(BuildContext context) {
+    if (!items.any((item) => !item.isLocal)) return const SizedBox.shrink();
+    final (IconData icon, String label)? reason = !networkAllowed
+        ? (AppIcons.cloudOff, 'Mode hors ligne · synchronisation désactivée')
+        : autoSyncPaused
+        ? (
+            AppIcons.theater,
+            'Mode Spectacle · synchronisation automatique suspendue',
+          )
+        : null;
+    if (reason == null) return const SizedBox.shrink();
+
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Icon(reason.$1, size: AppIconSize.sm, color: muted),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              reason.$2,
+              style: TextStyle(fontSize: 11, color: muted),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Actualisation manuelle des bibliothèques Drive : une action, pas un état.
   /// L'état de chaque bibliothèque (dernière synchro, indexation, conflit) vit
   /// sur sa propre ligne ; ce bouton ne fait que relancer la séquence complète
   /// (utile quand la veille, qui ne fait jamais de scan complet, y renonce).
-  Widget _buildRefreshButton(ColorScheme scheme) {
-    if (isRefreshing) {
-      return BoxedIconButton(
-        tooltip: 'Actualisation en cours…',
-        onPressed: null,
-        child: SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: scheme.primary,
-          ),
-        ),
-      );
-    }
-    if (refreshed) {
-      return BoxedIconButton(
-        tooltip: 'Actualisé',
-        onPressed: null,
-        child: Icon(AppIcons.check, size: 16, color: scheme.primary),
-      );
-    }
+  Widget _buildRefreshButton() {
     return BoxedIconButton(
       icon: AppIcons.refresh,
       tooltip: networkAllowed
           ? 'Actualiser depuis Drive'
           : 'Mode hors ligne — passez en mode Connecté pour actualiser',
-      onPressed: networkAllowed ? onRefresh : null,
+      framed: false,
+      compact: true,
+      // Désactivé pendant la passe : pas de seconde passe en parallèle.
+      onPressed: _canRefresh ? onRefresh : null,
     );
   }
 
@@ -202,6 +330,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
     final statusLine =
         _buildItemActivity(context, item, progress) ??
         _buildConflictLine(context, item) ??
+        _buildPassOutcomeLine(context, item) ??
         _buildItemMetaRow(context, item, progress);
 
     return Row(
@@ -266,7 +395,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(AppIcons.merge, size: 13, color: color),
+          Icon(AppIcons.merge, size: AppIconSize.sm, color: color),
           const SizedBox(width: 4),
           Text(
             'Conflit de synchronisation · Résoudre',
@@ -281,27 +410,74 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
     );
   }
 
+  /// Bilan de la dernière passe pour cette bibliothèque : échec (cliquable pour
+  /// réessayer) ou résumé des changements. `null` s'il n'y a rien à dire — la
+  /// ligne retombe alors sur la méta « Synchronisé … ».
+  Widget? _buildPassOutcomeLine(BuildContext context, IndexedFolderItem item) {
+    final library = item.library;
+    if (library == null) return null;
+    final outcome = passOutcomes[library.id];
+    if (outcome == null) return null;
+    final scheme = Theme.of(context).colorScheme;
+
+    if (outcome.failed) {
+      final color = scheme.error;
+      final label = outcome.authExpired
+          ? 'Session Google expirée · Renouveler ci-dessus'
+          : 'Non actualisé · Réessayer';
+      final content = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(AppIcons.error, size: AppIconSize.sm, color: color),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      );
+      // Une session expirée se règle ailleurs : relancer la passe n'y ferait rien.
+      // « Réessayer » ne relance que CETTE bibliothèque : les autres ont réussi.
+      return outcome.authExpired
+          ? content
+          : InkWell(
+              onTap: _canRefresh ? () => onRefreshLibrary(library) : null,
+              child: content,
+            );
+    }
+
+    if (!outcome.hasChanges) return null;
+    final parts = [
+      if (outcome.added > 0)
+        outcome.added == 1
+            ? '1 ajouté ou modifié'
+            : '${outcome.added} ajoutés ou modifiés',
+      if (outcome.removed > 0)
+        outcome.removed == 1 ? '1 retiré' : '${outcome.removed} retirés',
+    ];
+    final color = scheme.primary.withValues(alpha: 0.85);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(AppIcons.cloudDone, size: AppIconSize.sm, color: color),
+        const SizedBox(width: 4),
+        Text(parts.join(' · '), style: TextStyle(fontSize: 11, color: color)),
+      ],
+    );
+  }
+
   /// Libellé compact du nombre de fichiers indexés (état au repos).
   String _fileCountLabel(IndexingProgress progress) {
     final count = progress.total > 0 ? progress.total : progress.current;
     return count <= 1 ? '$count fichier' : '$count fichiers';
-  }
-
-  String _formatDriveSyncTimestamp(DateTime syncedAt) {
-    final local = syncedAt.toLocal();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final syncDay = DateTime(local.year, local.month, local.day);
-    String two(int n) => n.toString().padLeft(2, '0');
-    final time = '${two(local.hour)}:${two(local.minute)}';
-
-    if (syncDay == today) {
-      return "aujourd'hui à $time";
-    }
-    if (syncDay == today.subtract(const Duration(days: 1))) {
-      return 'hier à $time';
-    }
-    return 'le ${two(local.day)}/${two(local.month)} à $time';
   }
 
   Widget _buildDriveSyncStatus(BuildContext context, domain.Library library) {
@@ -309,11 +485,12 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
     final muted = scheme.onSurfaceVariant.withValues(alpha: 0.75);
     final lastSync = library.lastSyncedAt;
 
+    final Widget content;
     if (lastSync == null) {
-      return Row(
+      content = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(AppIcons.cloudOff, size: 13, color: muted),
+          Icon(AppIcons.cloudOff, size: AppIconSize.sm, color: muted),
           const SizedBox(width: 4),
           Text(
             'Pas encore synchronisé',
@@ -321,25 +498,33 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
           ),
         ],
       );
+    } else {
+      content = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            AppIcons.cloudDone,
+            size: AppIconSize.sm,
+            color: scheme.primary.withValues(alpha: 0.85),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: _SyncAgeText(
+              syncedAt: lastSync,
+              style: TextStyle(fontSize: 11, color: muted),
+            ),
+          ),
+        ],
+      );
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          AppIcons.cloudDone,
-          size: 13,
-          color: scheme.primary.withValues(alpha: 0.85),
-        ),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            'Synchronisé ${_formatDriveSyncTimestamp(lastSync)}',
-            style: TextStyle(fontSize: 11, color: muted),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
+    // Un clic relance la synchro de cette bibliothèque seule. Grisé (non
+    // cliquable) hors ligne ou pendant une passe : la ligne d'état de la
+    // section et le spinner de la ligne disent déjà pourquoi.
+    return _metaInfo(
+      tooltip: 'Actualiser ce dossier',
+      onTap: _canRefresh ? () => onRefreshLibrary(library) : null,
+      child: content,
     );
   }
 
@@ -358,7 +543,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: c),
+          Icon(icon, size: AppIconSize.sm, color: c),
           const SizedBox(width: 4),
           Text(label, style: TextStyle(fontSize: 11, color: c)),
         ],
@@ -374,26 +559,43 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
     // Indicateur de téléchargement : on affiche TOUJOURS « dispo/total » — le
     // total donne le nombre de fichiers, et « 13/13 » signale aussi que tout
     // est téléchargé.
-    final offline = offlineCounts[item.library!.id];
+    final library = item.library!;
+    final offline = offlineCounts[library.id];
     final Widget availability;
     if (offline == null || offline.total == 0) {
       // Décompte pas encore calculé (ou dossier vide) : nombre de fichiers seul.
-      availability = fileCount;
+      availability = _metaInfo(child: fileCount);
     } else {
       final complete = offline.available >= offline.total;
-      availability = chip(
-        complete ? AppIcons.downloadDone : AppIcons.download,
-        '${offline.available}/${offline.total} téléchargés',
-        color: complete ? scheme.primary.withValues(alpha: 0.85) : null,
+      final downloadProgress = libraryRepository.libraryDownloadProgress(
+        library.id,
+      );
+      final isDownloading =
+          downloadProgress != null && !downloadProgress.isComplete;
+      availability = _metaInfo(
+        tooltip: 'Tout télécharger',
+        // Même condition que l'entrée « Tout télécharger » du menu ⋮ : rien à
+        // lancer si tout est déjà là ou si un téléchargement est en cours.
+        onTap: complete || isDownloading ? null : () => onDownloadAll(library),
+        child: chip(
+          complete ? AppIcons.downloadDone : AppIcons.download,
+          '${offline.available}/${offline.total} téléchargés',
+          color: complete ? scheme.primary.withValues(alpha: 0.85) : null,
+        ),
       );
     }
 
-    return Row(
-      children: [
-        Flexible(child: _buildDriveSyncStatus(context, item.library!)),
-        const SizedBox(width: 12),
-        availability,
-      ],
+    // Décalée de la marge intérieure vers la gauche : le fond de survol déborde
+    // du texte, qui reste aligné sur le titre de la ligne. Les deux infos se
+    // touchent : leurs marges (2 × 6 px) font l'écart entre les textes.
+    return Transform.translate(
+      offset: Offset(-_metaPadding.left, 0),
+      child: Row(
+        children: [
+          Flexible(child: _buildDriveSyncStatus(context, item.library!)),
+          availability,
+        ],
+      ),
     );
   }
 
@@ -450,7 +652,33 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       }
     }
 
-    // 3. Au repos : rien à afficher ici.
+    // 3. Passe de synchro manuelle en cours, sans indexation ni téléchargement
+    // à montrer (les étapes sans progression chiffrée : pull, ré-élagage).
+    if (!item.isLocal && refreshingLibraryIds.contains(item.library!.id)) {
+      final muted = scheme.onSurfaceVariant;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: scheme.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(switch (passStages[item.library!.id]) {
+            SyncPassStage.detecting => 'Recherche des changements…',
+            SyncPassStage.scanning => 'Analyse complète de Drive…',
+            SyncPassStage.pulling => 'Récupération des scènes…',
+            null => 'Synchronisation…',
+          }, style: TextStyle(fontSize: 11, color: muted)),
+        ],
+      );
+    }
+
+    // 4. Au repos : rien à afficher ici.
     return null;
   }
 
@@ -563,14 +791,9 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
         offline.total > 0 &&
         offline.available >= offline.total;
 
-    final String downloadLabel;
-    if (isDownloading) {
-      downloadLabel = 'Téléchargement en cours…';
-    } else if (fullyOffline) {
-      downloadLabel = 'Déjà tout téléchargé';
-    } else {
-      downloadLabel = 'Tout télécharger';
-    }
+    final downloadLabel = isDownloading
+        ? 'Téléchargement en cours…'
+        : 'Tout télécharger';
 
     return PopupMenuButton<_LibraryAction>(
       tooltip: 'Options',
@@ -587,16 +810,16 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
         }
       },
       itemBuilder: (context) => [
-        PopupMenuItem<_LibraryAction>(
-          value: _LibraryAction.downloadAll,
-          enabled: !isDownloading && !fullyOffline,
-          height: AppMenu.itemHeight,
-          padding: AppMenu.itemPadding,
-          child: _menuRow(
-            fullyOffline ? AppIcons.downloadDone : AppIcons.download,
-            downloadLabel,
+        // Tout est déjà là : l'entrée n'a plus rien à proposer, on la retire
+        // plutôt que de l'afficher grisée.
+        if (!fullyOffline)
+          PopupMenuItem<_LibraryAction>(
+            value: _LibraryAction.downloadAll,
+            enabled: !isDownloading,
+            height: AppMenu.itemHeight,
+            padding: AppMenu.itemPadding,
+            child: _menuRow(AppIcons.download, downloadLabel),
           ),
-        ),
         PopupMenuItem<_LibraryAction>(
           value: _LibraryAction.toggleAutoDownload,
           height: AppMenu.itemHeight,

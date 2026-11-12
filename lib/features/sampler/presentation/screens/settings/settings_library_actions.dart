@@ -7,32 +7,6 @@ part of '../settings_screen.dart';
 /// Actions sur les bibliothèques : retrait, actualisation Drive, mises à jour.
 /// Méthodes de [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsLibraryActions on _SettingsScreenState {
-  /// Vérification manuelle : ignore le throttle 6h du check automatique
-  /// (voir `SoundboardApp._maybeCheckForUpdateOnLaunch`).
-  Future<void> _checkForUpdatesManually() async {
-    if (_isCheckingForUpdate) return;
-    setState(() => _isCheckingForUpdate = true);
-    try {
-      final packageInfo = await PackageInfo.fromPlatform();
-      final update = await AppUpdateChecker().checkForUpdate(
-        currentVersion: packageInfo.version,
-      );
-      if (!mounted) return;
-      if (update == null) {
-        _flashConfirmation(_kUpdateAction);
-        return;
-      }
-      await runUpdateFlow(context, update);
-    } catch (e) {
-      UpdateLog.checkFailed(e);
-      if (mounted) {
-        showCopyableSnackBar(context, 'Échec de la vérification : $e');
-      }
-    } finally {
-      if (mounted) setState(() => _isCheckingForUpdate = false);
-    }
-  }
-
   Future<void> _confirmRemoveWatchedPath(db.WatchedPath watchedPath) async {
     final label = _labelsForWatchedPath(watchedPath).title;
     final type = SafDirectoryBridge.isSafTreeUri(watchedPath.path)
@@ -70,26 +44,67 @@ extension _SettingsLibraryActions on _SettingsScreenState {
     await _removeWatchedPath(watchedPath);
   }
 
+  /// Geste « tirer pour actualiser » de la page. Sur mobile, avec une
+  /// bibliothèque Drive, il fait la même chose que le bouton de la section
+  /// (`_refreshFromDrive`, donc la même séquence du coordinateur). Ailleurs
+  /// — desktop, ou rien à synchroniser — il garde son rôle d'origine : relire
+  /// l'état de la base.
+  Future<void> _onPullToRefresh() {
+    final isMobile = Platform.isAndroid || Platform.isIOS;
+    final hasDriveLibrary = _libraries.any(
+      (library) => library.isConnectedToDrive,
+    );
+    if (!isMobile || !hasDriveLibrary) return _loadDatabaseInfo();
+    // Une passe est déjà en cours (le bouton est grisé pour la même raison) :
+    // `refreshNow` la rejoindrait, mais le geste n'a alors rien à lancer.
+    if (_refreshingLibraryIds.isNotEmpty) return Future<void>.value();
+    return _refreshFromDrive();
+  }
+
   /// Actualisation manuelle : délègue au coordinateur, qui rejoue exactement la
   /// séquence de lancement (delta d'abord, scan complet en repli, indexation
   /// AVANT le pull). Cet écran n'orchestre plus rien lui-même — deux séquences
   /// de synchronisation en parallèle finiraient par diverger, et c'est ici que
   /// la divergence était déjà réelle : le bouton tirait avant d'indexer et
   /// rescannait systématiquement.
-  Future<void> _refreshAllFromDrive() async {
-    final hasDriveLibrary = _libraries.any(
-      (library) => library.isConnectedToDrive,
-    );
-    if (!hasDriveLibrary) {
+  ///
+  /// [only] limite la passe à une bibliothèque (clic sur sa ligne) ; sans lui,
+  /// toutes les bibliothèques Drive sont actualisées.
+  Future<void> _refreshFromDrive({domain.Library? only}) async {
+    // Gestes grisés pendant une passe : ce garde couvre les appels qui ne
+    // passent pas par un widget désactivé.
+    if (_refreshingLibraryIds.isNotEmpty) return;
+    final targets = {
+      for (final library in _libraries)
+        if (library.isConnectedToDrive &&
+            (only == null || library.id == only.id))
+          library.id,
+    };
+    if (targets.isEmpty) {
       if (mounted) {
         AppSnackBar.show(context, 'Aucun dossier Drive indexé');
       }
       return;
     }
 
-    setState(() => _isSyncBusy = true);
+    _passOutcomesTimer?.cancel();
+    setState(() {
+      _refreshingLibraryIds = targets;
+      // Seuls les bilans des bibliothèques visées sont remplacés : l'échec d'une
+      // autre, resté affiché pour être lu, ne disparaît pas.
+      _passOutcomes = {
+        for (final entry in _passOutcomes.entries)
+          if (!targets.contains(entry.key)) entry.key: entry.value,
+      };
+      _passStages.clear();
+    });
     try {
       final report = await widget.autoSyncCoordinator.refreshNow(
+        only: only,
+        onStage: (library, stage) {
+          if (!mounted) return;
+          setState(() => _passStages[library.id] = stage);
+        },
         onIndexProgress: (library, progress) {
           if (!mounted) return;
           setState(() {
@@ -102,14 +117,38 @@ extension _SettingsLibraryActions on _SettingsScreenState {
       await _loadDatabaseInfo();
       if (!mounted) return;
 
+      _showPassOutcomes(report);
       _showRefreshOutcome(report);
     } catch (e) {
       if (mounted) {
         showCopyableSnackBar(context, 'Erreur lors de l\'actualisation : $e');
       }
     } finally {
-      if (mounted) setState(() => _isSyncBusy = false);
+      if (mounted) {
+        setState(() {
+          _refreshingLibraryIds = const {};
+          _passStages.clear();
+        });
+      }
     }
+  }
+
+  /// Affiche le bilan de chaque bibliothèque sur sa ligne. Les changements
+  /// s'effacent au bout de quelques secondes (la ligne revient à « Synchronisé
+  /// à… ») ; un échec reste jusqu'à la passe suivante, sans quoi il
+  /// disparaîtrait avant d'avoir été lu.
+  void _showPassOutcomes(SyncPassReport report) {
+    setState(() => _passOutcomes = {..._passOutcomes, ...report.libraries});
+    _passOutcomesTimer?.cancel();
+    _passOutcomesTimer = Timer(const Duration(seconds: 8), () {
+      if (!mounted) return;
+      setState(() {
+        _passOutcomes = {
+          for (final entry in _passOutcomes.entries)
+            if (entry.value.failed) entry.key: entry.value,
+        };
+      });
+    });
   }
 
   /// Traduit le bilan d'une passe en un message. Une passe partielle ne doit
@@ -141,29 +180,18 @@ extension _SettingsLibraryActions on _SettingsScreenState {
       AppSnackBar.show(context, 'Hors ligne — actualisation impossible');
       return;
     }
-    if (report.skipped > 0) {
-      showCopyableSnackBar(
-        context,
-        '${report.skipped} bibliothèque(s) non actualisée(s) — '
-        'réessayez ou consultez les journaux.',
-      );
-      return;
-    }
-    _flashConfirmation(_kDriveRefreshAction);
+    // Bibliothèque non actualisée : le message vit sur sa ligne (voir
+    // [_showPassOutcomes]), avec « Réessayer » — un toast global ne dirait pas
+    // laquelle. Succès : la ligne affiche ce qui a changé puis sa nouvelle date.
   }
 
   Future<void> _resolveSyncConflict(domain.Library library) async {
-    setState(() => _isSyncBusy = true);
-    try {
-      await showSyncConflictDialog(
-        context: context,
-        syncController: widget.syncController,
-        library: library,
-        onResolved: _loadDatabaseInfo,
-      );
-    } finally {
-      if (mounted) setState(() => _isSyncBusy = false);
-    }
+    await showSyncConflictDialog(
+      context: context,
+      syncController: widget.syncController,
+      library: library,
+      onResolved: _loadDatabaseInfo,
+    );
   }
 
   Future<void> _toggleAutoDownload(domain.Library library) async {

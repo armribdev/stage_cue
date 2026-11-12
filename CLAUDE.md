@@ -58,9 +58,9 @@ quatre canaux sont aussi écrits dans `<dossier de support de l'app>/logs/`
 (à côté de `db.sqlite` ; sous Windows `%APPDATA%\io.github.armribdev\Stage Cue\logs\`),
 fichier courant `stage-cue.log` + 2 archives `.1.log`/`.2.log` (~1 Mo chacun,
 rotation au démarrage et au dépassement). Pour le récupérer : **Paramètres →
-Diagnostic** → « Exporter les logs » (un `.txt` daté, en-tête de session en
-tête), « Copier dans le presse-papiers » (~500 dernières lignes) ou « Ouvrir
-le dossier des logs ». Les traces `STAGE_CUE_SYNC_TRACE` / `STAGE_CUE_AUDIO_TRACE`
+Maintenance** (section repliée : la déplier) **→ Diagnostic** → « Exporter les
+logs » (un `.txt` daté, en-tête de session en tête), « Copier les 500 dernières
+lignes » ou « Ouvrir le dossier des logs ». Les traces `STAGE_CUE_SYNC_TRACE` / `STAGE_CUE_AUDIO_TRACE`
 y sont écrites aussi quand elles sont actives. Voir
 [0025](docs/decisions/0025-journal-fichier-persistant.md).
 

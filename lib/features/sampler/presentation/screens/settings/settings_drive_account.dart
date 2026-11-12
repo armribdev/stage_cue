@@ -128,7 +128,7 @@ extension _SettingsDriveAccount on _SettingsScreenState {
 
   Widget _buildGoogleAccountAvatar(
     DriveAccountProfile account, {
-    double radius = 22,
+    double radius = 20,
   }) {
     final size = radius * 2;
 
@@ -184,7 +184,7 @@ extension _SettingsDriveAccount on _SettingsScreenState {
   /// décalent pas le reste de la section Drive. `minHeight` (et non une hauteur
   /// fixe) évite tout débordement si le contenu grandit (mise à l'échelle du
   /// texte).
-  static const double _kDriveHeaderMinHeight = 80;
+  static const double _kDriveHeaderMinHeight = 56;
 
   Widget _driveHeaderFrame(Widget child) {
     return ConstrainedBox(
@@ -208,8 +208,8 @@ extension _SettingsDriveAccount on _SettingsScreenState {
         const Row(
           children: [
             SizedBox(
-              width: 48,
-              height: 48,
+              width: 40,
+              height: 40,
               child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
             ),
             SizedBox(width: 12),
@@ -225,7 +225,7 @@ extension _SettingsDriveAccount on _SettingsScreenState {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             CircleAvatar(
-              radius: 24,
+              radius: 20,
               backgroundColor: scheme.primaryContainer,
               child: Icon(AppIcons.account, color: scheme.primary),
             ),
@@ -284,20 +284,17 @@ extension _SettingsDriveAccount on _SettingsScreenState {
       Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _buildGoogleAccountAvatar(account, radius: 24),
+          _buildGoogleAccountAvatar(account),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Compte Google',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 2),
                 Text(
                   account.label,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   account.email,
@@ -305,10 +302,10 @@ extension _SettingsDriveAccount on _SettingsScreenState {
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Row(
                   children: [
-                    Icon(statusIcon, size: 14, color: statusColor),
+                    Icon(statusIcon, size: AppIconSize.sm, color: statusColor),
                     const SizedBox(width: 4),
                     Flexible(
                       child: Text(
@@ -335,7 +332,7 @@ extension _SettingsDriveAccount on _SettingsScreenState {
                   onPressed: _disconnectDriveAccount,
                   icon: Icon(
                     AppIcons.logout,
-                    size: 18,
+                    size: AppIconSize.sm,
                     color: scheme.onSurfaceVariant,
                   ),
                   label: const Text('Déconnecter'),
