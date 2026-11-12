@@ -1,61 +1,125 @@
 part of 'music_preview_panel.dart';
 
 class _DrawerChevronButton extends StatelessWidget {
-  final ColorScheme scheme;
   final bool expanded;
   final VoidCallback? onTap;
 
-  const _DrawerChevronButton({
-    required this.scheme,
-    required this.expanded,
-    this.onTap,
-  });
+  const _DrawerChevronButton({required this.expanded, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    return BoxedIconButton(
+      icon: expanded ? AppIcons.chevronDown : AppIcons.chevronUp,
+      tooltip: expanded ? 'Réduire la régie' : 'Développer la régie',
       onPressed: onTap,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 32, minHeight: 18),
-      icon: StrokeIcon(
-        expanded ? AppIcons.chevronDown : AppIcons.chevronUp,
-        size: 16,
-        color: scheme.onSurfaceVariant.withValues(alpha: 0.75),
+      framed: false,
+      compact: true,
+    );
+  }
+}
+
+/// Pastille « ON AIR » : affichée tant que la musique est réellement en
+/// lecture (absente en pause ou sans piste). Rouge, comme un voyant de
+/// plateau : seul le point pulse doucement, le texte reste fixe pour rester
+/// lisible. Le pouls s'arrête si l'utilisateur a réduit les animations.
+class _OnAirBadge extends StatefulWidget {
+  const _OnAirBadge();
+
+  @override
+  State<_OnAirBadge> createState() => _OnAirBadgeState();
+}
+
+class _OnAirBadgeState extends State<_OnAirBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _pulse.stop();
+      _pulse.value = 1;
+    } else if (!_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.error;
+    return Semantics(
+      label: 'En lecture à l’antenne',
+      excludeSemantics: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: AppRadius.radiusSm,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FadeTransition(
+                opacity: Tween<double>(begin: 0.35, end: 1).animate(
+                  CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
+                ),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const SizedBox.square(dimension: 6),
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'ON AIR',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  height: 1.2,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-/// Éjecte la musique en cours — placé juste après le titre, donc affiché
-/// uniquement quand une piste est chargée. Désactivé tant qu'elle est en
-/// lecture (voir [MusicPreviewPanel.onEjectMusic]) : il faut d'abord mettre
-/// en pause ou attendre un fondu pour éviter une coupure sèche accidentelle.
+/// Éjecte la musique en cours — placé juste après le titre, à la place de la
+/// pastille [_OnAirBadge] : affiché uniquement quand une piste est chargée
+/// **et à l'arrêt** (voir [MusicPreviewPanel.onEjectMusic]). Il faut d'abord
+/// mettre en pause ou attendre un fondu pour éviter une coupure sèche
+/// accidentelle. Icône nue (le survol l'éclaircit) ; zone de clic de 22 px
+/// pour ne pas agrandir la ligne du titre.
 class _EjectMusicButton extends StatelessWidget {
-  final ColorScheme scheme;
-  final bool enabled;
   final VoidCallback? onTap;
 
-  const _EjectMusicButton({
-    required this.scheme,
-    required this.enabled,
-    this.onTap,
-  });
+  const _EjectMusicButton({this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: enabled ? onTap : null,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 24, minHeight: 20),
-      icon: TransportIcon(
-        TransportGlyph.eject,
-        size: 16,
-        color: enabled
-            ? scheme.onSurfaceVariant.withValues(alpha: 0.75)
-            : scheme.onSurfaceVariant.withValues(alpha: 0.3),
-      ),
+    return BoxedIconButton(
+      tooltip: 'Éjecter la piste',
+      onPressed: onTap,
+      framed: false,
+      compact: true,
+      size: 22,
+      child: const TransportIcon(TransportGlyph.eject, size: 16),
     );
   }
 }

@@ -13,13 +13,15 @@ class BoxedIconButton extends StatefulWidget {
   final StrokeIconData? icon;
 
   /// Contenu alternatif à [icon] — ex. un logo (`Image.asset`) qu'aucune
-  /// `StrokeIconData` ne peut représenter. Fournir l'un ou l'autre, jamais aucun.
+  /// `StrokeIconData` ne peut représenter, ou un [TransportIcon]. Il hérite de
+  /// la couleur du bouton (survol compris) s'il n'en fixe pas. Fournir l'un ou
+  /// l'autre, jamais aucun.
   final Widget? child;
   final String tooltip;
   final VoidCallback? onPressed;
 
   /// Cadre rond (cercle) plutôt qu'arrondi `sm` — le côté étant fixe, un rayon
-  /// de [_size] / 2 donne un cercle parfait.
+  /// de [size] / 2 donne un cercle parfait.
   final bool circular;
 
   /// `false` : icône nue, sans bordure ni fond (zone de clic inchangée) — pour
@@ -32,7 +34,9 @@ class BoxedIconButton extends StatefulWidget {
   /// écarte trop les icônes.
   final bool compact;
 
-  static const double _size = 32;
+  /// Côté de la zone de clic (carrée). 32 par défaut ; plus petit pour une
+  /// rangée qui ne doit pas grandir (ex. à côté d'un titre).
+  final double size;
 
   const BoxedIconButton({
     super.key,
@@ -43,6 +47,7 @@ class BoxedIconButton extends StatefulWidget {
     this.circular = false,
     this.framed = true,
     this.compact = false,
+    this.size = 32,
   }) : assert(
          (icon == null) != (child == null),
          'Fournir soit icon, soit child — jamais les deux, jamais aucun.',
@@ -60,7 +65,7 @@ class _BoxedIconButtonState extends State<BoxedIconButton> {
     final scheme = Theme.of(context).colorScheme;
     final framed = widget.framed;
     final radius = widget.circular
-        ? BorderRadius.circular(BoxedIconButton._size / 2)
+        ? BorderRadius.circular(widget.size / 2)
         : AppRadius.radiusSm;
     final iconColor = !framed && _hovered && widget.onPressed != null
         ? scheme.onSurface
@@ -76,8 +81,8 @@ class _BoxedIconButtonState extends State<BoxedIconButton> {
           hoverColor: framed ? null : Colors.transparent,
           onHover: framed ? null : (value) => setState(() => _hovered = value),
           child: Container(
-            width: BoxedIconButton._size,
-            height: BoxedIconButton._size,
+            width: widget.size,
+            height: widget.size,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               borderRadius: radius,
@@ -85,12 +90,16 @@ class _BoxedIconButtonState extends State<BoxedIconButton> {
                   ? Border.fromBorderSide(AppElevation.border(scheme))
                   : null,
             ),
-            child:
-                widget.child ??
-                switch (widget.icon) {
-                  final icon? => StrokeIcon(icon, size: 16, color: iconColor),
-                  null => const SizedBox.shrink(),
-                },
+            // [child] hérite de la couleur via l'[IconTheme] : un glyphe sans
+            // couleur propre (ex. [TransportIcon]) suit donc le survol.
+            child: switch ((widget.icon, widget.child)) {
+              (final icon?, _) => StrokeIcon(icon, size: 16, color: iconColor),
+              (_, final child?) => IconTheme.merge(
+                data: IconThemeData(color: iconColor),
+                child: child,
+              ),
+              _ => const SizedBox.shrink(),
+            },
           ),
         ),
       ),

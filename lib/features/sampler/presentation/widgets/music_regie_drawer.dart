@@ -194,11 +194,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
             children: [
               Expanded(child: onAirControls),
               const SizedBox(width: 8),
-              _DrawerChevronButton(
-                scheme: scheme,
-                expanded: true,
-                onTap: widget.onModeToggle,
-              ),
+              _DrawerChevronButton(expanded: true, onTap: widget.onModeToggle),
             ],
           );
     final leftColumn = Column(
@@ -250,7 +246,6 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
             width: _MusicRegieDrawer._centerChevronColumnWidth,
             child: Center(
               child: _DrawerChevronButton(
-                scheme: scheme,
                 expanded: true,
                 onTap: widget.onModeToggle,
               ),
@@ -322,14 +317,14 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
     final titleRow = current == null
         ? titleText
         : Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(child: titleText),
-              _EjectMusicButton(
-                scheme: scheme,
-                enabled: !isPlaying,
-                onTap: widget.onEjectMusic,
-              ),
+              Flexible(child: titleText),
+              const SizedBox(width: 10),
+              if (isPlaying)
+                const _OnAirBadge()
+              else
+                _EjectMusicButton(onTap: widget.onEjectMusic),
             ],
           );
 
@@ -437,12 +432,13 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
             style: currentTitleStyle,
           ),
         ),
-        if (hasCurrent)
-          _EjectMusicButton(
-            scheme: scheme,
-            enabled: !isPlaying,
-            onTap: widget.onEjectMusic,
-          ),
+        if (hasCurrent) ...[
+          const SizedBox(width: 8),
+          if (isPlaying)
+            const _OnAirBadge()
+          else
+            _EjectMusicButton(onTap: widget.onEjectMusic),
+        ],
       ],
     );
 
@@ -532,11 +528,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
         // Chevron en bout de bandeau, jamais au-dessus : la rangée est déjà
         // plus haute que lui (boutons de lecture), donc la barre réduite ne
         // grandit pas d'un pixel pour l'accueillir.
-        _DrawerChevronButton(
-          scheme: scheme,
-          expanded: false,
-          onTap: widget.onModeToggle,
-        ),
+        _DrawerChevronButton(expanded: false, onTap: widget.onModeToggle),
       ],
     );
   }
