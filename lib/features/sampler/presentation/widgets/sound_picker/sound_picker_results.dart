@@ -356,6 +356,24 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
     );
   }
 
+  /// Coche « déjà joué cette session », avec le nombre de lectures en infobulle.
+  Widget _buildPlayedMark(Sound sound, ColorScheme scheme) {
+    return Tooltip(
+      message:
+          'Joué ${widget.notifier.sessionPlayCountFor(sound.id)} '
+          'fois cette session',
+      child: SizedBox(
+        width: _actionButtonSize,
+        height: _actionButtonSize,
+        child: StrokeIcon(
+          AppIcons.checkCircle,
+          size: 16,
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+        ),
+      ),
+    );
+  }
+
   /// Fin de ligne : aperçu (sauf variante d'un multipad, qui se déclenche
   /// directement, et gestion scindée, où le volet de détails l'offre) suivi de
   /// l'action propre au mode.
@@ -378,19 +396,26 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
       inBoard: inBoard,
       isCurrentVariant: isCurrentVariant,
     );
+    // Recherche rapide : la coche « déjà joué » passe avant l'aperçu.
+    final playedMark =
+        _isQuickSearch && widget.notifier.hasPlayedInSession(sound.id)
+        ? _buildPlayedMark(sound, scheme)
+        : null;
     // En Mode Spectacle sans casque configuré, l'aperçu sortirait en salle :
     // pas de bouton plutôt qu'un bouton qui ne fait que refuser. Gestion
     // scindée : l'aperçu est déjà dans le volet de détails (`StartOffsetEditor`).
-    if (_isPadVariant ||
-        _isSplitLayout ||
-        widget.notifier.isRoomPreviewBlockedInLive) {
-      return action;
-    }
+    final hasPreview =
+        !(_isPadVariant ||
+            _isSplitLayout ||
+            widget.notifier.isRoomPreviewBlockedInLive);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildPreviewButton(sound, scheme),
-        const SizedBox(width: 4),
+        if (playedMark != null) ...[playedMark, const SizedBox(width: 4)],
+        if (hasPreview) ...[
+          _buildPreviewButton(sound, scheme),
+          const SizedBox(width: 4),
+        ],
         action,
       ],
     );
@@ -407,36 +432,13 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
   }) {
     switch (widget.mode) {
       case QuickSearchMode():
-        final playedInSession = widget.notifier.hasPlayedInSession(sound.id);
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (playedInSession) ...[
-              Tooltip(
-                message:
-                    'Joué ${widget.notifier.sessionPlayCountFor(sound.id)} '
-                    'fois cette session',
-                child: SizedBox(
-                  width: _actionButtonSize,
-                  height: _actionButtonSize,
-                  child: StrokeIcon(
-                    AppIcons.checkCircle,
-                    size: 16,
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-            ],
-            _roundIconButton(
-              scheme: scheme,
-              icon: sound.type == SoundType.music
-                  ? AppIcons.playlistAdd
-                  : AppIcons.layers,
-              iconColor: scheme.primary,
-              onPressed: () => unawaited(_prepareAndClose(sound)),
-            ),
-          ],
+        return _roundIconButton(
+          scheme: scheme,
+          icon: sound.type == SoundType.music
+              ? AppIcons.playlistAdd
+              : AppIcons.layers,
+          iconColor: scheme.primary,
+          onPressed: () => unawaited(_prepareAndClose(sound)),
         );
 
       case AmbiancePickerMode():
