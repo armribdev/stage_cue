@@ -68,6 +68,7 @@ class StrokeIcon extends StatelessWidget {
                 _pathOf(data),
                 data.strokeWidth,
                 resolvedColor,
+                resolvedSize,
               ),
             ),
     );
@@ -82,11 +83,22 @@ class _StrokeIconPainter extends CustomPainter {
   final double strokeWidth;
   final Color color;
 
-  const _StrokeIconPainter(this.path, this.strokeWidth, this.color);
+  /// Taille demandée. La boîte peut être plus grande (parent à contraintes
+  /// serrées : `SizedBox`, `Container` à taille fixe) : comme [Icon], le tracé
+  /// garde sa taille et se centre au lieu de s'étirer.
+  final double iconSize;
+
+  const _StrokeIconPainter(
+    this.path,
+    this.strokeWidth,
+    this.color,
+    this.iconSize,
+  );
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.scale(size.width / 24, size.height / 24);
+    canvas.translate((size.width - iconSize) / 2, (size.height - iconSize) / 2);
+    canvas.scale(iconSize / 24);
     canvas.drawPath(
       path,
       Paint()
@@ -101,5 +113,8 @@ class _StrokeIconPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_StrokeIconPainter old) =>
-      old.path != path || old.strokeWidth != strokeWidth || old.color != color;
+      old.path != path ||
+      old.strokeWidth != strokeWidth ||
+      old.color != color ||
+      old.iconSize != iconSize;
 }
