@@ -37,6 +37,9 @@ class PadCard extends StatefulWidget {
   /// Écoute le pad au casque (voir [PadButton.onCue]).
   final VoidCallback? onCue;
 
+  /// La pré-écoute de ce pad est en cours (voir [PadButton.isCueActive]).
+  final bool isCueActive;
+
   const PadCard({
     super.key,
     required this.padItem,
@@ -51,6 +54,7 @@ class PadCard extends StatefulWidget {
     this.onEdit,
     this.onShowSounds,
     this.onCue,
+    this.isCueActive = false,
   });
 
   @override
@@ -305,6 +309,7 @@ class _PadCardState extends State<PadCard> with TickerProviderStateMixin {
             onEdit: widget.onEdit,
             onShowSounds: widget.onShowSounds,
             onCue: widget.onCue,
+            isCueActive: widget.isCueActive,
           );
           final onBlockedTap = widget.onBlockedTap;
           if (!blocked || onBlockedTap == null) return button;

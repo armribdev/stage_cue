@@ -271,6 +271,9 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
               padItem.pad.sounds.isNotEmpty
           ? () => unawaited(_notifier.previewPadOnCue(padItem))
           : null,
+      isCueActive:
+          padItem.pad.sounds.isNotEmpty &&
+          _notifier.libraryPreviewIsPlaying(padItem.pad.sounds.first.id),
     );
   }
 

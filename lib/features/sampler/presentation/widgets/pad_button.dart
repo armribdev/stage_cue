@@ -43,6 +43,10 @@ class PadButton extends StatelessWidget {
   /// Mode Spectacle — c'est là qu'on en a besoin.
   final VoidCallback? onCue;
 
+  /// La pré-écoute de ce pad est audible : le bouton [onCue] passe à l'accent
+  /// (plein, sans l'atténuation de repos) pour montrer qu'il joue.
+  final bool isCueActive;
+
   const PadButton({
     super.key,
     required this.padItem,
@@ -53,6 +57,7 @@ class PadButton extends StatelessWidget {
     this.onEdit,
     this.onShowSounds,
     this.onCue,
+    this.isCueActive = false,
   });
 
   _PadVisual get _visual {
@@ -403,14 +408,15 @@ class PadButton extends StatelessWidget {
   /// [includeSounds] : icône « sons du pad ». Un pad prêt ouvre ce choix en
   /// touchant son libellé « N sons » ; les états en route / bloqué n'ont pas
   /// ce libellé, l'icône reste donc leur seule porte d'entrée.
-  List<(StrokeIconData, double, VoidCallback?)> _iconClusterEntries({
+  List<(StrokeIconData, double, VoidCallback?, bool)> _iconClusterEntries({
     required bool includeSounds,
   }) => [
-    if (onCue != null) (AppIcons.padCue, 15.0, onCue),
+    if (onCue != null) (AppIcons.padCue, 15.0, onCue, isCueActive),
     if (includeSounds && padItem.totalSoundCount > 1 && onShowSounds != null)
-      (AppIcons.padSounds, 15.0, onShowSounds),
-    if (isEditable && onEdit != null) (AppIcons.padEdit, 15.0, onEdit),
-    if (isEditable && onRemove != null) (AppIcons.padRemove, 17.0, onRemove),
+      (AppIcons.padSounds, 15.0, onShowSounds, false),
+    if (isEditable && onEdit != null) (AppIcons.padEdit, 15.0, onEdit, false),
+    if (isEditable && onRemove != null)
+      (AppIcons.padRemove, 17.0, onRemove, false),
   ];
 
   Widget? _buildIconCluster(ColorScheme scheme, {bool includeSounds = false}) {
@@ -422,7 +428,7 @@ class PadButton extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final (icon, size, onPressed) in entries)
+        for (final (icon, size, onPressed, active) in entries)
           _HoverTint(
             onTap: onPressed,
             builder: (context, hovered) => SizedBox(
@@ -439,7 +445,7 @@ class PadButton extends StatelessWidget {
                   child: StrokeIcon(
                     icon,
                     size: size,
-                    color: _hoverTint(color, hovered),
+                    color: active ? scheme.primary : _hoverTint(color, hovered),
                   ),
                 ),
               ),
