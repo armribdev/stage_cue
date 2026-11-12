@@ -182,50 +182,62 @@ class PadButton extends StatelessWidget {
           // jamais centré : c'est ce qui distingue un pad "Console Linear"
           // d'une tuile Material générique. Les icônes d'action ne partagent
           // plus la rangée du titre, qui garde toute la largeur.
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Padding(
-                    // Réserve la pastille de téléchargement (coin haut droit).
-                    padding: EdgeInsets.only(
-                      right: padItem.isDownloading ? _downloadCornerSize : 0,
-                    ),
-                    child: Text(
-                      padItem.displayName,
-                      maxLines: _titleMaxLines,
-                      overflow: TextOverflow.ellipsis,
-                      style: titleStyle,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      child: isMulti
-                          ? Align(
-                              alignment: Alignment.centerLeft,
-                              child: _buildVariantChip(scheme),
-                            )
-                          : _buildBottomMeta(
-                              scheme,
-                              hasCustomColor: hasCustomColor,
-                            ),
-                    ),
-                    ?iconCluster,
-                  ],
-                ),
-              ],
+          _buildAnchoredBody(
+            title: Text(
+              padItem.displayName,
+              maxLines: _titleMaxLines,
+              overflow: TextOverflow.ellipsis,
+              style: titleStyle,
             ),
+            bottom: isMulti
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildVariantChip(scheme),
+                  )
+                : _buildBottomMeta(scheme, hasCustomColor: hasCustomColor),
+            iconCluster: iconCluster,
           ),
           // Badges informatifs : le corps du pad porte l'action. La pause
           // musique est signalée uniquement dans la régie, pas sur le pad.
           if (padItem.isDownloading) _buildDownloadCorner(scheme.tertiary),
           ?_buildProgress(scheme, hasCustomColor: hasCustomColor),
+        ],
+      ),
+    );
+  }
+
+  /// Corps commun des pads prêt / en route / bloqué : titre ancré en haut,
+  /// état ([bottom]) et actions ([iconCluster]) ancrés en bas — les actions
+  /// ne changent pas de place quand le pad change d'état. Marges basse et
+  /// droite réduites : les icônes (cases de 20 px, glyphe en haut à gauche) et
+  /// la puce « N sons » (4 px de padding) ajoutent déjà de l'air.
+  Widget _buildAnchoredBody({
+    required Widget title,
+    required Widget bottom,
+    required Widget? iconCluster,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 6, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: Padding(
+              // Réserve la pastille de téléchargement (coin haut droit).
+              padding: EdgeInsets.only(
+                right: padItem.isDownloading ? _downloadCornerSize : 0,
+              ),
+              child: title,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(child: bottom),
+              ?iconCluster,
+            ],
+          ),
         ],
       ),
     );
@@ -457,55 +469,45 @@ class PadButton extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       child: Stack(
+        fit: StackFit.expand,
         children: [
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: onColor,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      StrokeIcon(
-                        downloading
-                            ? AppIcons.downloading
-                            : AppIcons.cloudDownload,
-                        size: 12,
-                        color: onColor.withValues(alpha: 0.75),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        downloading ? 'téléchargement…' : 'Télécharger',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: onColor.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+          _buildAnchoredBody(
+            title: Text(
+              label,
+              maxLines: _titleMaxLines,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                height: 1.2,
+                fontWeight: FontWeight.w600,
+                color: onColor,
               ),
             ),
+            bottom: Row(
+              children: [
+                StrokeIcon(
+                  downloading ? AppIcons.downloading : AppIcons.cloudDownload,
+                  size: 12,
+                  color: onColor.withValues(alpha: 0.75),
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    downloading ? 'téléchargement…' : 'Télécharger',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: onColor.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            iconCluster: iconCluster,
           ),
           if (downloading) _buildDownloadCorner(onColor),
-          if (iconCluster != null)
-            Positioned(top: 4, right: 4, child: iconCluster),
         ],
       ),
     );
@@ -536,43 +538,33 @@ class PadButton extends StatelessWidget {
           : scheme.outlineVariant.withValues(alpha: 0.5),
       onTap: onTap,
       onLongPress: onLongPress,
-      child: Stack(
-        children: [
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: scheme.onSurface.withValues(alpha: 0.45),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      StrokeIcon(icon, size: 12, color: accent),
-                      const SizedBox(width: 4),
-                      Text(hint, style: TextStyle(fontSize: 11, color: accent)),
-                    ],
-                  ),
-                ],
+      child: _buildAnchoredBody(
+        title: Text(
+          label,
+          maxLines: _titleMaxLines,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 15,
+            height: 1.2,
+            fontWeight: FontWeight.w500,
+            color: scheme.onSurface.withValues(alpha: 0.45),
+          ),
+        ),
+        bottom: Row(
+          children: [
+            StrokeIcon(icon, size: 12, color: accent),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                hint,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: accent),
               ),
             ),
-          ),
-          if (iconCluster != null)
-            Positioned(top: 4, right: 4, child: iconCluster),
-        ],
+          ],
+        ),
+        iconCluster: iconCluster,
       ),
     );
   }
