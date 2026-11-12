@@ -6,6 +6,7 @@ import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../../../../core/theme/app_dialog.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Constantes partagées pour modales et petits dialogues.
 abstract final class AppModalStyle {
@@ -125,7 +126,7 @@ class AppModalShell extends StatelessWidget {
                     width: 34,
                     height: 34,
                   ),
-                  icon: const Icon(AppIcons.close, size: AppIconSize.sm),
+                  icon: const StrokeIcon(AppIcons.close, size: AppIconSize.sm),
                 ),
               ],
             ),
@@ -149,7 +150,7 @@ class AppNavigationCard extends StatelessWidget {
     required this.onTap,
   });
 
-  final IconData icon;
+  final StrokeIconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -168,7 +169,7 @@ class AppNavigationCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, color: scheme.primary),
+              StrokeIcon(icon, color: scheme.primary),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -191,7 +192,7 @@ class AppNavigationCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(AppIcons.chevronRight, color: scheme.onSurfaceVariant),
+              StrokeIcon(AppIcons.chevronRight, color: scheme.onSurfaceVariant),
             ],
           ),
         ),
@@ -210,7 +211,7 @@ class AppChoiceOption extends StatelessWidget {
     this.vertical = false,
   });
 
-  final IconData icon;
+  final StrokeIconData icon;
   final String label;
   final VoidCallback onTap;
 
@@ -240,7 +241,7 @@ class AppChoiceOption extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, color: scheme.primary),
+          StrokeIcon(icon, color: scheme.primary),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -259,7 +260,7 @@ class AppChoiceOption extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: scheme.primary, size: 32),
+          StrokeIcon(icon, color: scheme.primary, size: 32),
           const SizedBox(height: 12),
           Text(
             label,

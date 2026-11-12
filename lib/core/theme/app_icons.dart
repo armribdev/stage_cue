@@ -1,115 +1,162 @@
-import 'package:flutter/widgets.dart';
-import 'package:lucide_icons_flutter/lucide_icons_300.dart';
-import 'package:lucide_icons_flutter/lucide_icons_400.dart';
+import 'lucide_paths.dart';
+import 'stroke_icon.dart';
 
-/// Icônes de l'application — jeu Lucide à trait fin (graisse 300 ≈ 1,5 px sur
-/// une grille de 24), police bundlée en local : l'app reste utilisable
-/// backstage hors ligne.
+/// Icônes de l'application — jeu Lucide à trait fin, **dessinées en tracés
+/// vectoriels** ([StrokeIcon]) plutôt qu'en police : un glyphe de police est
+/// rasterisé au pixel près par Skia, d'où des escaliers sur un trait de ~1 px
+/// sous Windows à 100 %. Les tracés sont embarqués dans l'app
+/// ([LucidePaths], généré par `tool/gen_lucide_paths.mjs`) : elle reste
+/// utilisable backstage hors ligne.
 ///
 /// Nommées par **concept** (`delete`, `cloudOff`…), pas par glyphe : changer
-/// de jeu ou de graisse se fait ici, en un seul endroit. Pour une nouvelle
-/// icône, ajouter un concept ici plutôt que d'importer Lucide dans un écran, et
-/// ne jamais utiliser `Icons.*` (Material).
+/// de jeu ou d'épaisseur se fait ici, en un seul endroit. Pour une nouvelle
+/// icône, ajouter un concept ici (puis relancer le générateur) plutôt que
+/// d'importer Lucide dans un écran, et ne jamais utiliser `Icons.*` (Material).
 ///
 /// Lucide n'a pas de variante pleine : un état « actif » (favori, case cochée)
 /// se distingue par la couleur ou un autre glyphe, pas par le remplissage.
 abstract final class AppIcons {
-  // ── Actions flottantes d'un pad (graisse 400) ─────────────────────────────
-  // Posées sans fond ni bordure sur un pad de couleur arbitraire : à trait
-  // 300 elles se lisent trop fines, d'où la graisse au-dessus du reste du jeu.
-  static const IconData padCue = LucideIcons400.headphones;
-  static const IconData padSounds = LucideIcons400.listMusic;
-  static const IconData padEdit = LucideIcons400.pencil;
-  static const IconData padRemove = LucideIcons400.x;
+  // ── Actions flottantes d'un pad ───────────────────────────────────────────
+  // Mêmes tracés que le reste du jeu, nommés à part : posées sans fond ni
+  // bordure sur un pad de couleur arbitraire, elles pourront être ajustées
+  // sans toucher aux autres usages.
+  static const StrokeIconData padCue = StrokeIconData(LucidePaths.headphones);
+  static const StrokeIconData padSounds = StrokeIconData(LucidePaths.listMusic);
+  static const StrokeIconData padEdit = StrokeIconData(LucidePaths.pencil);
+  static const StrokeIconData padRemove = StrokeIconData(LucidePaths.x);
 
   // ── Actions courantes ─────────────────────────────────────────────────────
-  static const IconData add = LucideIcons300.plus;
-  static const IconData close = LucideIcons300.x;
-  static const IconData check = LucideIcons300.check;
-  static const IconData edit = LucideIcons300.pencil;
-  static const IconData copy = LucideIcons300.copy;
-  static const IconData delete = LucideIcons300.trash2;
-  static const IconData cut = LucideIcons300.scissors;
-  static const IconData refresh = LucideIcons300.refreshCw;
-  static const IconData search = LucideIcons300.search;
-  static const IconData swap = LucideIcons300.arrowLeftRight;
-  static const IconData more = LucideIcons300.ellipsisVertical;
-  static const IconData settings = LucideIcons300.settings;
-  static const IconData menu = LucideIcons300.menu;
-  static const IconData tune = LucideIcons300.slidersHorizontal;
-  static const IconData text = LucideIcons300.type;
-  static const IconData lock = LucideIcons300.lock;
-  static const IconData keyboard = LucideIcons300.keyboard;
+  static const StrokeIconData add = StrokeIconData(LucidePaths.plus);
+  static const StrokeIconData close = StrokeIconData(LucidePaths.x);
+  static const StrokeIconData check = StrokeIconData(LucidePaths.check);
+  static const StrokeIconData edit = StrokeIconData(LucidePaths.pencil);
+  static const StrokeIconData copy = StrokeIconData(LucidePaths.copy);
+  static const StrokeIconData delete = StrokeIconData(LucidePaths.trash2);
+  static const StrokeIconData cut = StrokeIconData(LucidePaths.scissors);
+  static const StrokeIconData refresh = StrokeIconData(LucidePaths.refreshCw);
+  static const StrokeIconData search = StrokeIconData(LucidePaths.search);
+  static const StrokeIconData swap = StrokeIconData(LucidePaths.arrowLeftRight);
+  static const StrokeIconData more = StrokeIconData(
+    LucidePaths.ellipsisVertical,
+  );
+  static const StrokeIconData settings = StrokeIconData(LucidePaths.settings);
+  static const StrokeIconData menu = StrokeIconData(LucidePaths.menu);
+  static const StrokeIconData tune = StrokeIconData(
+    LucidePaths.slidersHorizontal,
+  );
+  static const StrokeIconData text = StrokeIconData(LucidePaths.type);
+  static const StrokeIconData lock = StrokeIconData(LucidePaths.lock);
+  static const StrokeIconData keyboard = StrokeIconData(LucidePaths.keyboard);
 
   // ── Navigation ────────────────────────────────────────────────────────────
-  static const IconData back = LucideIcons300.arrowLeft;
-  static const IconData arrowUp = LucideIcons300.arrowUp;
-  static const IconData chevronRight = LucideIcons300.chevronRight;
-  static const IconData chevronDown = LucideIcons300.chevronDown;
-  static const IconData chevronUp = LucideIcons300.chevronUp;
-  static const IconData fullscreen = LucideIcons300.maximize;
-  static const IconData fullscreenExit = LucideIcons300.minimize;
-  static const IconData logout = LucideIcons300.logOut;
-  static const IconData library = LucideIcons300.libraryBig;
-  static const IconData allSounds = LucideIcons300.layoutGrid;
-  static const IconData theater = LucideIcons300.drama;
+  static const StrokeIconData back = StrokeIconData(LucidePaths.arrowLeft);
+  static const StrokeIconData arrowUp = StrokeIconData(LucidePaths.arrowUp);
+  static const StrokeIconData chevronRight = StrokeIconData(
+    LucidePaths.chevronRight,
+  );
+  static const StrokeIconData chevronDown = StrokeIconData(
+    LucidePaths.chevronDown,
+  );
+  static const StrokeIconData chevronUp = StrokeIconData(LucidePaths.chevronUp);
+  static const StrokeIconData fullscreen = StrokeIconData(LucidePaths.maximize);
+  static const StrokeIconData fullscreenExit = StrokeIconData(
+    LucidePaths.minimize,
+  );
+  static const StrokeIconData logout = StrokeIconData(LucidePaths.logOut);
+  static const StrokeIconData library = StrokeIconData(LucidePaths.libraryBig);
+  static const StrokeIconData allSounds = StrokeIconData(
+    LucidePaths.layoutGrid,
+  );
+  static const StrokeIconData theater = StrokeIconData(LucidePaths.drama);
 
   // ── États et retours ──────────────────────────────────────────────────────
-  static const IconData info = LucideIcons300.info;
-  static const IconData help = LucideIcons300.circleHelp;
-  static const IconData error = LucideIcons300.circleAlert;
-  static const IconData warning = LucideIcons300.triangleAlert;
-  static const IconData blocked = LucideIcons300.ban;
-  static const IconData checkCircle = LucideIcons300.circleCheck;
-  static const IconData checkboxOn = LucideIcons300.squareCheck;
-  static const IconData checkboxOff = LucideIcons300.square;
-  static const IconData visible = LucideIcons300.eye;
-  static const IconData hidden = LucideIcons300.eyeOff;
-  static const IconData favorite = LucideIcons300.star;
-  static const IconData sparkles = LucideIcons300.sparkles;
-  static const IconData offline = LucideIcons300.zap;
+  static const StrokeIconData info = StrokeIconData(LucidePaths.info);
+  static const StrokeIconData help = StrokeIconData(LucidePaths.circleHelp);
+  static const StrokeIconData error = StrokeIconData(LucidePaths.circleAlert);
+  static const StrokeIconData warning = StrokeIconData(
+    LucidePaths.triangleAlert,
+  );
+  static const StrokeIconData blocked = StrokeIconData(LucidePaths.ban);
+  static const StrokeIconData checkCircle = StrokeIconData(
+    LucidePaths.circleCheck,
+  );
+  static const StrokeIconData checkboxOn = StrokeIconData(
+    LucidePaths.squareCheck,
+  );
+  static const StrokeIconData checkboxOff = StrokeIconData(LucidePaths.square);
+  static const StrokeIconData visible = StrokeIconData(LucidePaths.eye);
+  static const StrokeIconData hidden = StrokeIconData(LucidePaths.eyeOff);
+  static const StrokeIconData favorite = StrokeIconData(LucidePaths.star);
+  static const StrokeIconData sparkles = StrokeIconData(LucidePaths.sparkles);
+  static const StrokeIconData offline = StrokeIconData(LucidePaths.zap);
 
   // ── Lecture et audio ──────────────────────────────────────────────────────
-  static const IconData rewind = LucideIcons300.rewind;
-  static const IconData fastForward = LucideIcons300.fastForward;
-  static const IconData shuffle = LucideIcons300.shuffle;
-  static const IconData repeatOne = LucideIcons300.repeat1;
-  static const IconData volumeOn = LucideIcons300.volume2;
-  static const IconData volumeOff = LucideIcons300.volumeX;
-  static const IconData headphones = LucideIcons300.headphones;
-  static const IconData headphonesOff = LucideIcons300.headphoneOff;
-  static const IconData onAir = LucideIcons300.radio;
-  static const IconData merge = LucideIcons300.merge;
+  static const StrokeIconData rewind = StrokeIconData(LucidePaths.rewind);
+  static const StrokeIconData fastForward = StrokeIconData(
+    LucidePaths.fastForward,
+  );
+  static const StrokeIconData shuffle = StrokeIconData(LucidePaths.shuffle);
+  static const StrokeIconData repeatOne = StrokeIconData(LucidePaths.repeat1);
+  static const StrokeIconData volumeOn = StrokeIconData(LucidePaths.volume2);
+  static const StrokeIconData volumeOff = StrokeIconData(LucidePaths.volumeX);
+  static const StrokeIconData headphones = StrokeIconData(
+    LucidePaths.headphones,
+  );
+  static const StrokeIconData headphonesOff = StrokeIconData(
+    LucidePaths.headphoneOff,
+  );
+  static const StrokeIconData onAir = StrokeIconData(LucidePaths.radio);
+  static const StrokeIconData merge = StrokeIconData(LucidePaths.merge);
 
   // ── Types de son ──────────────────────────────────────────────────────────
-  static const IconData soundEffect = LucideIcons300.audioLines;
-  static const IconData music = LucideIcons300.music;
-  static const IconData ambiance = LucideIcons300.waves;
-  static const IconData queue = LucideIcons300.listMusic;
-  static const IconData playlistAdd = LucideIcons300.listPlus;
-  static const IconData layers = LucideIcons300.layers;
-  static const IconData audioFile = LucideIcons300.fileAudio;
+  static const StrokeIconData soundEffect = StrokeIconData(
+    LucidePaths.audioLines,
+  );
+  static const StrokeIconData music = StrokeIconData(LucidePaths.music);
+  static const StrokeIconData ambiance = StrokeIconData(LucidePaths.waves);
+  static const StrokeIconData queue = StrokeIconData(LucidePaths.listMusic);
+  static const StrokeIconData playlistAdd = StrokeIconData(
+    LucidePaths.listPlus,
+  );
+  static const StrokeIconData layers = StrokeIconData(LucidePaths.layers);
+  static const StrokeIconData audioFile = StrokeIconData(LucidePaths.fileAudio);
 
   // ── Dossiers, Drive et cache ──────────────────────────────────────────────
-  static const IconData folder = LucideIcons300.folder;
-  static const IconData folderOpen = LucideIcons300.folderOpen;
-  static const IconData folders = LucideIcons300.folders;
-  static const IconData folderOff = LucideIcons300.folderX;
-  static const IconData folderShared = LucideIcons300.folderSymlink;
-  static const IconData cloud = LucideIcons300.cloud;
-  static const IconData cloudOff = LucideIcons300.cloudOff;
-  static const IconData cloudDone = LucideIcons300.cloudCheck;
-  static const IconData cloudDownload = LucideIcons300.cloudDownload;
-  static const IconData download = LucideIcons300.download;
-  static const IconData downloading = LucideIcons300.circleArrowDown;
-  static const IconData downloadDone = LucideIcons300.circleCheckBig;
-  static const IconData appUpdate = LucideIcons300.monitorDown;
-  static const IconData storage = LucideIcons300.hardDrive;
-  static const IconData diagnostic = LucideIcons300.receipt;
-  static const IconData smartphone = LucideIcons300.smartphone;
+  static const StrokeIconData folder = StrokeIconData(LucidePaths.folder);
+  static const StrokeIconData folderOpen = StrokeIconData(
+    LucidePaths.folderOpen,
+  );
+  static const StrokeIconData folders = StrokeIconData(LucidePaths.folders);
+  static const StrokeIconData folderOff = StrokeIconData(LucidePaths.folderX);
+  static const StrokeIconData folderShared = StrokeIconData(
+    LucidePaths.folderSymlink,
+  );
+  static const StrokeIconData cloud = StrokeIconData(LucidePaths.cloud);
+  static const StrokeIconData cloudOff = StrokeIconData(LucidePaths.cloudOff);
+  static const StrokeIconData cloudDone = StrokeIconData(
+    LucidePaths.cloudCheck,
+  );
+  static const StrokeIconData cloudDownload = StrokeIconData(
+    LucidePaths.cloudDownload,
+  );
+  static const StrokeIconData download = StrokeIconData(LucidePaths.download);
+  static const StrokeIconData downloading = StrokeIconData(
+    LucidePaths.circleArrowDown,
+  );
+  static const StrokeIconData downloadDone = StrokeIconData(
+    LucidePaths.circleCheckBig,
+  );
+  static const StrokeIconData appUpdate = StrokeIconData(
+    LucidePaths.monitorDown,
+  );
+  static const StrokeIconData storage = StrokeIconData(LucidePaths.hardDrive);
+  static const StrokeIconData diagnostic = StrokeIconData(LucidePaths.receipt);
+  static const StrokeIconData smartphone = StrokeIconData(
+    LucidePaths.smartphone,
+  );
 
   // ── Comptes ───────────────────────────────────────────────────────────────
-  static const IconData account = LucideIcons300.circleUser;
-  static const IconData person = LucideIcons300.user;
-  static const IconData groups = LucideIcons300.users;
+  static const StrokeIconData account = StrokeIconData(LucidePaths.circleUser);
+  static const StrokeIconData person = StrokeIconData(LucidePaths.user);
+  static const StrokeIconData groups = StrokeIconData(LucidePaths.users);
 }

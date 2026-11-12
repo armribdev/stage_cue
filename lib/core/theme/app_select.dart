@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app_icons.dart';
 import 'app_tokens.dart';
+import './stroke_icon.dart';
 
 /// Une entrée d'un [AppSelect].
 class AppSelectOption<T> {
@@ -39,7 +40,7 @@ class AppSelect<T> extends StatelessWidget {
   /// Libellé affiché quand [value] ne correspond à aucune option.
   final String? fallbackLabel;
 
-  final IconData? leadingIcon;
+  final StrokeIconData? leadingIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -94,7 +95,7 @@ class AppSelect<T> extends StatelessWidget {
                         ),
                       ),
                       if (option.value == value)
-                        const Icon(
+                        const StrokeIcon(
                           AppIcons.check,
                           size: 16,
                           color: AppColors.accent,
@@ -117,7 +118,7 @@ class _SelectField extends StatefulWidget {
   const _SelectField({required this.label, required this.leadingIcon});
 
   final String label;
-  final IconData? leadingIcon;
+  final StrokeIconData? leadingIcon;
 
   @override
   State<_SelectField> createState() => _SelectFieldState();
@@ -149,12 +150,8 @@ class _SelectFieldState extends State<_SelectField> {
         ),
         child: Row(
           children: [
-            if (widget.leadingIcon != null) ...[
-              Icon(
-                widget.leadingIcon,
-                size: 16,
-                color: scheme.onSurfaceVariant,
-              ),
+            if (widget.leadingIcon case final leadingIcon?) ...[
+              StrokeIcon(leadingIcon, size: 16, color: scheme.onSurfaceVariant),
               const SizedBox(width: AppSpacing.sm),
             ],
             Expanded(
@@ -166,7 +163,7 @@ class _SelectFieldState extends State<_SelectField> {
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
-            const Icon(
+            const StrokeIcon(
               AppIcons.chevronDown,
               size: 16,
               color: AppColors.textDim,

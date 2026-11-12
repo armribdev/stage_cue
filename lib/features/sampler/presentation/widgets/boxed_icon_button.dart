@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Icône d'action secondaire de barre d'outils — cadre + bordure fine plutôt
 /// qu'une icône Material nue, pour rester dans le langage visuel "Console
@@ -9,10 +10,10 @@ import '../../../../core/theme/app_tokens.dart';
 /// sur un pad (contraste dynamique selon la couleur du pad), voir plutôt le
 /// style local de `pad_item.dart`, qui ne peut pas partager ce widget statique.
 class BoxedIconButton extends StatefulWidget {
-  final IconData? icon;
+  final StrokeIconData? icon;
 
   /// Contenu alternatif à [icon] — ex. un logo (`Image.asset`) qu'aucune
-  /// `IconData` ne peut représenter. Fournir l'un ou l'autre, jamais aucun.
+  /// `StrokeIconData` ne peut représenter. Fournir l'un ou l'autre, jamais aucun.
   final Widget? child;
   final String tooltip;
   final VoidCallback? onPressed;
@@ -85,7 +86,11 @@ class _BoxedIconButtonState extends State<BoxedIconButton> {
                   : null,
             ),
             child:
-                widget.child ?? Icon(widget.icon, size: 16, color: iconColor),
+                widget.child ??
+                switch (widget.icon) {
+                  final icon? => StrokeIcon(icon, size: 16, color: iconColor),
+                  null => const SizedBox.shrink(),
+                },
           ),
         ),
       ),

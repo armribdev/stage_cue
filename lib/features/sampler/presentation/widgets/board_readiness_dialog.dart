@@ -10,6 +10,7 @@ import '../../../../core/theme/app_select.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../models/board_readiness.dart';
 import '../providers/sampler_provider.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Bilan de préparation du plateau, montré avant d'entrer en Mode Spectacle.
 ///
@@ -208,7 +209,7 @@ class _BoardReadinessDialogState extends State<BoardReadinessDialog> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(AppIcons.refresh, size: 16),
+                  : const StrokeIcon(AppIcons.refresh, size: 16),
               onPressed: _isLoadingDevices ? null : _refreshDevices,
             ),
           ],
@@ -251,7 +252,7 @@ class _Section extends StatelessWidget {
   });
 
   final String label;
-  final IconData icon;
+  final StrokeIconData icon;
   final List<BoardReadinessIssue> issues;
   final bool emphasize;
 
@@ -276,7 +277,7 @@ class _Section extends StatelessWidget {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Icon(icon, size: AppIconSize.sm, color: color),
+                  child: StrokeIcon(icon, size: AppIconSize.sm, color: color),
                 ),
                 const SizedBox(width: 8),
                 Expanded(child: Text(_describe(issue))),

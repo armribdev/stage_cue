@@ -13,6 +13,7 @@ import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/layout_utils.dart';
 import 'waveform_envelope.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Zone cliquable autour de la poignée sur desktop (souris).
 const _kHandleHitHalfWidthDesktop = 14.0;
@@ -326,7 +327,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
         ),
         child: Row(
           children: [
-            Icon(
+            StrokeIcon(
               AppIcons.info,
               size: AppIconSize.sm,
               color: scheme.onSurfaceVariant,
@@ -481,7 +482,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
 }
 
 class _NudgeButton extends StatelessWidget {
-  final IconData icon;
+  final StrokeIconData icon;
   final VoidCallback? onPressed;
   final String tooltip;
 
@@ -495,7 +496,7 @@ class _NudgeButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onPressed,
-      icon: Icon(icon, size: AppIconSize.lg),
+      icon: StrokeIcon(icon, size: AppIconSize.lg),
       visualDensity: VisualDensity.compact,
       tooltip: tooltip,
     );

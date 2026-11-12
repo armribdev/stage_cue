@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_dialog.dart';
 import '../../../../core/theme/app_icons.dart';
+import '../../../../core/theme/stroke_icon.dart';
 import '../../../../core/theme/transport_icon.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';

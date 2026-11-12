@@ -300,7 +300,7 @@ extension _SettingsSections on _SettingsScreenState {
                     ),
                     const SizedBox(width: AppSpacing.sm),
                   ],
-                  Icon(
+                  StrokeIcon(
                     expanded ? AppIcons.chevronUp : AppIcons.chevronDown,
                     size: AppIconSize.sm,
                     color: scheme.onSurfaceVariant,

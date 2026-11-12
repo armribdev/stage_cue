@@ -8,6 +8,7 @@ import '../../../../core/utils/indexed_folder_labels.dart';
 import '../../data/repositories/library_repository.dart';
 import 'app_form_dialog.dart';
 import '../../../../core/theme/app_dialog.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Dossier Drive choisi par l'utilisateur dans le navigateur.
 class DriveFolderSelection {
@@ -286,7 +287,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
             children: [
               IconButton(
                 onPressed: canGoUp ? _goUp : null,
-                icon: const Icon(AppIcons.arrowUp),
+                icon: const StrokeIcon(AppIcons.arrowUp),
               ),
               Expanded(
                 child: Text(
@@ -309,7 +310,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
         ),
         FilledButton.icon(
           onPressed: canSelect ? _selectCurrentFolder : null,
-          icon: const Icon(AppIcons.check),
+          icon: const StrokeIcon(AppIcons.check),
           label: const Text('Sélectionner ce dossier'),
         ),
       ],
@@ -365,9 +366,9 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
       itemBuilder: (context, index) {
         final folder = _folders[index];
         return ListTile(
-          leading: const Icon(AppIcons.folder),
+          leading: const StrokeIcon(AppIcons.folder),
           title: Text(folder.name),
-          trailing: const Icon(AppIcons.chevronRight),
+          trailing: const StrokeIcon(AppIcons.chevronRight),
           onTap: () => _openFolder(folder),
         );
       },
@@ -403,9 +404,9 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
 
       children.add(
         ListTile(
-          leading: Icon(_iconForEntry(entry)),
+          leading: StrokeIcon(_iconForEntry(entry)),
           title: Text(entry.name),
-          trailing: const Icon(AppIcons.chevronRight),
+          trailing: const StrokeIcon(AppIcons.chevronRight),
           onTap: () => _openEntry(entry),
         ),
       );
@@ -432,7 +433,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
     );
   }
 
-  IconData _iconForEntry(_PickerEntry entry) {
+  StrokeIconData _iconForEntry(_PickerEntry entry) {
     return switch (entry.kind) {
       _PickerEntryKind.myDrive => AppIcons.person,
       _PickerEntryKind.sharedDrive => AppIcons.groups,

@@ -106,7 +106,7 @@ class _PassageQueueSection extends StatelessWidget {
               const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: onChooseMusic,
-                icon: const Icon(AppIcons.add, size: AppIconSize.sm),
+                icon: const StrokeIcon(AppIcons.add, size: AppIconSize.sm),
                 label: const Text('Ajouter à la file'),
               ),
             ],
@@ -162,7 +162,7 @@ class _QueueRow extends StatelessWidget {
               if (onRemove != null && !enableSwipeToRemove)
                 IconButton(
                   onPressed: onRemove,
-                  icon: const Icon(AppIcons.close, size: AppIconSize.sm),
+                  icon: const StrokeIcon(AppIcons.close, size: AppIconSize.sm),
                   visualDensity: VisualDensity.compact,
                 ),
             ],
@@ -199,7 +199,7 @@ class _QueueRow extends StatelessWidget {
           color: scheme.errorContainer,
           borderRadius: BorderRadius.circular(_queueDragBorderRadius),
         ),
-        child: Icon(AppIcons.delete, color: scheme.onErrorContainer),
+        child: StrokeIcon(AppIcons.delete, color: scheme.onErrorContainer),
       ),
       onDismissed: (_) => onRemove!(),
       child: content,
@@ -236,7 +236,7 @@ class _PadColorChip extends StatelessWidget {
         ),
       ),
       child: size >= 32
-          ? Icon(
+          ? StrokeIcon(
               SoundType.music.icon,
               size: size * 0.45,
               color: _chipIconColor(color, scheme),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_icons.dart';
 import '../../domain/entities/sound.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Libellés, icônes et couleurs d'avatar pour les types de sons.
 extension SoundTypeUi on SoundType {
@@ -11,7 +12,7 @@ extension SoundTypeUi on SoundType {
     SoundType.ambiance => 'Ambiance',
   };
 
-  IconData get icon => switch (this) {
+  StrokeIconData get icon => switch (this) {
     SoundType.soundEffect => AppIcons.soundEffect,
     SoundType.music => AppIcons.music,
     SoundType.ambiance => AppIcons.ambiance,
@@ -74,7 +75,7 @@ class SoundTypeAvatar extends StatelessWidget {
       return CircleAvatar(
         radius: radius,
         backgroundColor: background,
-        child: Icon(icon, size: iconSize, color: foreground),
+        child: StrokeIcon(icon, size: iconSize, color: foreground),
       );
     }
 
@@ -82,7 +83,7 @@ class SoundTypeAvatar extends StatelessWidget {
       return CircleAvatar(
         radius: radius,
         backgroundColor: scheme.surfaceContainerHighest,
-        child: Icon(
+        child: StrokeIcon(
           AppIcons.help,
           size: iconSize,
           color: scheme.onSurfaceVariant,
@@ -93,7 +94,7 @@ class SoundTypeAvatar extends StatelessWidget {
     return CircleAvatar(
       radius: radius,
       backgroundColor: colors.background,
-      child: Icon(type!.icon, size: iconSize, color: colors.foreground),
+      child: StrokeIcon(type!.icon, size: iconSize, color: colors.foreground),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/app_dialog.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 typedef BoardCreationResult = ({String name, int? color, int? libraryId});
 
@@ -66,7 +67,7 @@ class AppFormDialog extends StatelessWidget {
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints.tightFor(width: 34, height: 34),
-            icon: const Icon(AppIcons.close),
+            icon: const StrokeIcon(AppIcons.close),
           ),
         ],
       ),
@@ -95,7 +96,7 @@ class AppTextInputDialog extends StatefulWidget {
   final String confirmLabel;
   final String? initialValue;
   final String? hint;
-  final IconData? icon;
+  final StrokeIconData? icon;
 
   /// Affiche le dialogue et renvoie le texte saisi (rogné), ou `null` si annulé.
   static Future<String?> show(
@@ -104,7 +105,7 @@ class AppTextInputDialog extends StatefulWidget {
     required String confirmLabel,
     String? initialValue,
     String? hint,
-    IconData? icon,
+    StrokeIconData? icon,
   }) {
     return showAppDialog<String>(
       context: context,
@@ -187,12 +188,13 @@ class _AppTextInputDialogState extends State<AppTextInputDialog> {
           onSubmitted: (_) => _submit(),
           decoration: InputDecoration(
             hintText: widget.hint,
-            prefixIcon: widget.icon == null
-                ? null
-                : Icon(
-                    widget.icon,
-                    color: scheme.primary.withValues(alpha: 0.9),
-                  ),
+            prefixIcon: switch (widget.icon) {
+              final icon? => StrokeIcon(
+                icon,
+                color: scheme.primary.withValues(alpha: 0.9),
+              ),
+              null => null,
+            },
           ),
         ),
       ),
@@ -402,7 +404,7 @@ class _AppBoardCreationDialogState extends State<AppBoardCreationDialog> {
               onSubmitted: (_) => _submit(),
               decoration: InputDecoration(
                 hintText: widget.suggestedName,
-                prefixIcon: Icon(
+                prefixIcon: StrokeIcon(
                   AppIcons.sparkles,
                   color: scheme.primary.withValues(alpha: 0.9),
                 ),
@@ -470,7 +472,7 @@ class _DestinationSelector extends StatelessWidget {
       children: [
         ChoiceChip(
           label: const Text('Local'),
-          avatar: const Icon(AppIcons.smartphone, size: AppIconSize.sm),
+          avatar: const StrokeIcon(AppIcons.smartphone, size: AppIconSize.sm),
           selected: selectedLibraryId == null,
           showCheckmark: false,
           onSelected: (_) => onSelect(null),
@@ -478,7 +480,10 @@ class _DestinationSelector extends StatelessWidget {
         for (final library in libraries)
           ChoiceChip(
             label: Text(library.name),
-            avatar: const Icon(AppIcons.folderShared, size: AppIconSize.sm),
+            avatar: const StrokeIcon(
+              AppIcons.folderShared,
+              size: AppIconSize.sm,
+            ),
             selected: selectedLibraryId == library.id,
             showCheckmark: false,
             onSelected: (_) => onSelect(library.id),
@@ -562,13 +567,13 @@ class _ColorSwatch extends StatelessWidget {
             ),
           ),
           child: color == null
-              ? Icon(
+              ? StrokeIcon(
                   AppIcons.blocked,
                   size: AppIconSize.sm,
                   color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
                 )
               : isSelected
-              ? Icon(
+              ? StrokeIcon(
                   AppIcons.check,
                   size: AppIconSize.sm,
                   color: color!.computeLuminance() > 0.4

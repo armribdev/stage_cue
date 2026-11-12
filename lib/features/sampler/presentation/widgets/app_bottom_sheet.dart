@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Constantes partagées pour les tiroirs du bas (sélection de sons, régie…).
 abstract final class AppBottomSheetStyle {
@@ -42,7 +43,7 @@ class AppBottomSheetShell extends StatelessWidget {
   });
 
   final String title;
-  final IconData? leadingIcon;
+  final StrokeIconData? leadingIcon;
   final Widget? header;
   final Widget Function(BuildContext context, ScrollController scrollController)
   bodyBuilder;
@@ -79,7 +80,7 @@ class _AppBottomSheetTitle extends StatelessWidget {
   const _AppBottomSheetTitle({required this.title, this.leadingIcon});
 
   final String title;
-  final IconData? leadingIcon;
+  final StrokeIconData? leadingIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +102,8 @@ class _AppBottomSheetTitle extends StatelessWidget {
       padding: AppBottomSheetStyle.titlePadding,
       child: Row(
         children: [
-          Icon(leadingIcon, color: scheme.primary),
+          if (leadingIcon case final icon?)
+            StrokeIcon(icon, color: scheme.primary),
           const SizedBox(width: 8),
           Expanded(child: Text(title, style: style)),
         ],

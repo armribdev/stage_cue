@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Boutons d'action GO + secondaire, partagés entre sélecteurs de sons.
 class SoundPickerActionButtons extends StatelessWidget {
@@ -20,7 +21,7 @@ class SoundPickerActionButtons extends StatelessWidget {
   final bool goEnabled;
   final VoidCallback? onSecondary;
   final bool secondaryEnabled;
-  final IconData secondaryIcon;
+  final StrokeIconData secondaryIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +44,7 @@ class SoundPickerActionButtons extends StatelessWidget {
           height: _secondaryButtonSize,
           child: IconButton(
             onPressed: secondaryEnabled ? onSecondary : null,
-            icon: Icon(secondaryIcon, size: AppIconSize.sm),
+            icon: StrokeIcon(secondaryIcon, size: AppIconSize.sm),
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             style: IconButton.styleFrom(

@@ -219,7 +219,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                           // Favori : l'étoile suit directement le titre.
                           if (_isQuickSearch && sound.isFavorite) ...[
                             const SizedBox(width: 6),
-                            Icon(
+                            StrokeIcon(
                               AppIcons.favorite,
                               size: 16,
                               color: scheme.primary,
@@ -331,7 +331,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
           ),
         ],
         if (_isQuickSearch && _localIds != null && !_isLocal(sound)) ...[
-          Icon(
+          StrokeIcon(
             AppIcons.cloud,
             size: AppIconSize.sm,
             color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
@@ -419,7 +419,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                 child: SizedBox(
                   width: _actionButtonSize,
                   height: _actionButtonSize,
-                  child: Icon(
+                  child: StrokeIcon(
                     AppIcons.checkCircle,
                     size: 16,
                     color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
@@ -444,7 +444,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         return SizedBox(
           width: _actionButtonSize,
           height: _actionButtonSize,
-          child: Icon(
+          child: StrokeIcon(
             AppIcons.onAir,
             size: AppIconSize.sm,
             color: scheme.primary,
@@ -456,7 +456,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
           return SizedBox(
             width: _actionButtonSize,
             height: _actionButtonSize,
-            child: Icon(
+            child: StrokeIcon(
               onAir ? AppIcons.onAir : AppIcons.check,
               size: AppIconSize.sm,
               color: scheme.primary,
@@ -481,7 +481,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         return SizedBox(
           width: _actionButtonSize,
           height: _actionButtonSize,
-          child: Icon(
+          child: StrokeIcon(
             onPad ? AppIcons.check : AppIcons.add,
             color: onPad ? scheme.primary : scheme.onSurfaceVariant,
           ),
@@ -505,7 +505,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
           return SizedBox(
             width: _actionButtonSize,
             height: _actionButtonSize,
-            child: Icon(AppIcons.soundEffect, color: scheme.primary),
+            child: StrokeIcon(AppIcons.soundEffect, color: scheme.primary),
           );
         }
         if (widget.notifier.hasPlayedInSession(sound.id)) {
@@ -514,7 +514,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
             child: SizedBox(
               width: _actionButtonSize,
               height: _actionButtonSize,
-              child: Icon(
+              child: StrokeIcon(
                 AppIcons.checkCircle,
                 size: 16,
                 color: scheme.onSurfaceVariant.withValues(alpha: 0.7),

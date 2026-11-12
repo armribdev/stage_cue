@@ -9,6 +9,7 @@ import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
 import 'package:stage_cue/features/sampler/presentation/models/pad_sound_slot.dart';
 import 'package:stage_cue/features/sampler/presentation/providers/sampler_provider.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/pad_button.dart';
+import '../../../../support/find_stroke_icon.dart';
 
 class FakeAudioPlayerService implements AudioPlayerService {
   final StreamController<bool> _controller = StreamController<bool>.broadcast();
@@ -173,8 +174,8 @@ void main() {
 
     // Le titre garde toute la largeur : plus de coupure autour des icônes.
     final title = tester.getRect(find.textContaining('Aa Bb'));
-    final edit = tester.getRect(find.byIcon(AppIcons.padEdit));
-    final close = tester.getRect(find.byIcon(AppIcons.padRemove));
+    final edit = tester.getRect(findStrokeIcon(AppIcons.padEdit));
+    final close = tester.getRect(findStrokeIcon(AppIcons.padRemove));
     final pad = tester.getRect(find.byType(PadButton));
 
     expect(title.bottom, lessThanOrEqualTo(edit.top));
@@ -233,7 +234,7 @@ void main() {
       ),
     );
 
-    expect(find.byIcon(AppIcons.padSounds), findsNothing);
+    expect(findStrokeIcon(AppIcons.padSounds), findsNothing);
 
     await tester.tap(find.text('2 sons'));
     expect(showSounds, 1);

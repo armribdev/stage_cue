@@ -318,7 +318,7 @@ class _TransitionCell extends StatelessWidget {
   final String? label;
 
   /// Icône (coupe sèche) affichée à la place du libellé.
-  final IconData? icon;
+  final StrokeIconData? icon;
   final bool isSelected;
 
   /// Durée verrouillée : affiche un cadenas en filigrane derrière le chiffre.
@@ -345,8 +345,9 @@ class _TransitionCell extends StatelessWidget {
     final foreground = isSelected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
-    final Widget child = icon != null
-        ? Icon(icon, size: size * 0.55, color: foreground)
+    final glyph = icon;
+    final Widget child = glyph != null
+        ? StrokeIcon(glyph, size: size * 0.55, color: foreground)
         : Text(
             label!,
             style: labelStyle?.copyWith(
@@ -363,7 +364,7 @@ class _TransitionCell extends StatelessWidget {
             children: [
               Transform.translate(
                 offset: const Offset(0, -2),
-                child: Icon(
+                child: StrokeIcon(
                   AppIcons.lock,
                   size: size * 0.7,
                   color: foreground.withValues(alpha: 0.22),

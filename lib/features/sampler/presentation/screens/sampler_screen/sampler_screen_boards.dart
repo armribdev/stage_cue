@@ -97,7 +97,7 @@ extension _SamplerScreenBoards on _SamplerScreenState {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(AppIcons.edit),
+                leading: const StrokeIcon(AppIcons.edit),
                 title: const Text('Renommer'),
                 onTap: () {
                   Navigator.pop(context);
@@ -105,7 +105,7 @@ extension _SamplerScreenBoards on _SamplerScreenState {
                 },
               ),
               ListTile(
-                leading: const Icon(AppIcons.copy),
+                leading: const StrokeIcon(AppIcons.copy),
                 title: const Text('Dupliquer'),
                 onTap: () {
                   Navigator.pop(context);
@@ -113,7 +113,7 @@ extension _SamplerScreenBoards on _SamplerScreenState {
                 },
               ),
               ListTile(
-                leading: Icon(AppIcons.delete, color: scheme.error),
+                leading: StrokeIcon(AppIcons.delete, color: scheme.error),
                 title: Text('Supprimer', style: TextStyle(color: scheme.error)),
                 onTap: () {
                   Navigator.pop(context);
@@ -154,7 +154,7 @@ extension _SamplerScreenBoards on _SamplerScreenState {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(
+              StrokeIcon(
                 AppIcons.edit,
                 size: AppIconSize.sm,
                 color: scheme.onSurface,
@@ -170,7 +170,7 @@ extension _SamplerScreenBoards on _SamplerScreenState {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(
+              StrokeIcon(
                 AppIcons.copy,
                 size: AppIconSize.sm,
                 color: scheme.onSurface,
@@ -187,7 +187,11 @@ extension _SamplerScreenBoards on _SamplerScreenState {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(AppIcons.delete, size: AppIconSize.sm, color: scheme.error),
+              StrokeIcon(
+                AppIcons.delete,
+                size: AppIconSize.sm,
+                color: scheme.error,
+              ),
               const SizedBox(width: AppSpacing.sm),
               Text('Supprimer', style: TextStyle(color: scheme.error)),
             ],

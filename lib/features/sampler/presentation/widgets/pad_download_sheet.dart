@@ -5,6 +5,7 @@ import '../../../../core/theme/app_tokens.dart';
 import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
 import 'pad_button.dart' show padSoundAvailabilityIcon;
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Feuille bottom-sheet pour télécharger les sons manquants d'un pad.
 class PadDownloadSheet extends StatefulWidget {
@@ -150,7 +151,10 @@ class _PadDownloadSheetState extends State<PadDownloadSheet> {
                         color: scheme.onPrimary,
                       ),
                     )
-                  : const Icon(AppIcons.cloudDownload, size: AppIconSize.sm),
+                  : const StrokeIcon(
+                      AppIcons.cloudDownload,
+                      size: AppIconSize.sm,
+                    ),
               label: Text(
                 padItem.isFullyReady
                     ? 'Tout est prêt'

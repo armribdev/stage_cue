@@ -227,7 +227,7 @@ extension _SettingsDriveAccount on _SettingsScreenState {
             CircleAvatar(
               radius: 20,
               backgroundColor: scheme.primaryContainer,
-              child: Icon(AppIcons.account, color: scheme.primary),
+              child: StrokeIcon(AppIcons.account, color: scheme.primary),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -305,7 +305,11 @@ extension _SettingsDriveAccount on _SettingsScreenState {
                 const SizedBox(height: 2),
                 Row(
                   children: [
-                    Icon(statusIcon, size: AppIconSize.sm, color: statusColor),
+                    StrokeIcon(
+                      statusIcon,
+                      size: AppIconSize.sm,
+                      color: statusColor,
+                    ),
                     const SizedBox(width: 4),
                     Flexible(
                       child: Text(
@@ -330,7 +334,7 @@ extension _SettingsDriveAccount on _SettingsScreenState {
               else
                 TextButton.icon(
                   onPressed: _disconnectDriveAccount,
-                  icon: Icon(
+                  icon: StrokeIcon(
                     AppIcons.logout,
                     size: AppIconSize.sm,
                     color: scheme.onSurfaceVariant,

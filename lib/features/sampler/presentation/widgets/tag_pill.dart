@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Cotes d'une étiquette selon sa densité (normale ou compacte).
 class _PillMetrics {
@@ -175,7 +176,7 @@ class _TagPillState extends State<TagPill> {
                   onTap: widget.onRemove,
                   child: Padding(
                     padding: const EdgeInsets.all(2),
-                    child: Icon(
+                    child: StrokeIcon(
                       AppIcons.close,
                       size: m.fontSize,
                       color: scheme.onSurfaceVariant,

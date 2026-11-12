@@ -63,9 +63,12 @@ Polices bundlées en local (`assets/fonts/`, OFL), jamais via `google_fonts`.
 
 ### Icônes — `AppIcons`
 
-Jeu Lucide à trait fin (graisse 300), police bundlée en local, nommé par
-concept dans `lib/core/theme/app_icons.dart` ([0034](decisions/0034-icones-lucide-via-appicons.md)).
-Jamais `Icons.*` : ajouter un concept à `AppIcons`. Pas de variante pleine — un
+Jeu Lucide à trait fin, dessiné en tracés vectoriels (`StrokeIcon`) et non en
+police — un glyphe sortait crénelé sous Windows —, nommé par concept dans
+`lib/core/theme/app_icons.dart` ([0034](decisions/0034-icones-lucide-via-appicons.md),
+[0038](decisions/0038-icones-lucide-en-traces-vectoriels.md)).
+Jamais `Icons.*` : ajouter un concept à `AppIcons`, puis relancer
+`node tool/gen_lucide_paths.mjs`. Pas de variante pleine — un
 état actif se marque par la couleur ou un autre glyphe.
 
 ### Espacements — `AppSpacing`

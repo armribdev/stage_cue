@@ -19,6 +19,7 @@ import '../utils/sound_type_ui.dart';
 import '../widgets/app_bottom_sheet.dart';
 import '../widgets/sound_picker_actions.dart';
 import '../widgets/tag_pill.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Résultat renvoyé à la fermeture de [SoundLibraryScreen].
 class SoundLibraryScreenResult {
@@ -421,17 +422,17 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
           segments: [
             ButtonSegment(
               value: SoundType.soundEffect,
-              icon: Icon(SoundType.soundEffect.icon, size: 16),
+              icon: StrokeIcon(SoundType.soundEffect.icon, size: 16),
               label: Text(SoundType.soundEffect.label),
             ),
             ButtonSegment(
               value: SoundType.ambiance,
-              icon: Icon(SoundType.ambiance.icon, size: 16),
+              icon: StrokeIcon(SoundType.ambiance.icon, size: 16),
               label: Text(SoundType.ambiance.label),
             ),
             ButtonSegment(
               value: SoundType.music,
-              icon: Icon(SoundType.music.icon, size: 16),
+              icon: StrokeIcon(SoundType.music.icon, size: 16),
               label: Text(SoundType.music.label),
             ),
           ],
@@ -451,11 +452,11 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
         autofocus: true,
         decoration: InputDecoration(
           hintText: 'Rechercher un son...',
-          prefixIcon: const Icon(AppIcons.search),
+          prefixIcon: const StrokeIcon(AppIcons.search),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
                   onPressed: _clearSearch,
-                  icon: const Icon(AppIcons.close),
+                  icon: const StrokeIcon(AppIcons.close),
                 )
               : null,
         ),
@@ -485,7 +486,7 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
+                  StrokeIcon(
                     _selectedType.icon,
                     size: 64,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,

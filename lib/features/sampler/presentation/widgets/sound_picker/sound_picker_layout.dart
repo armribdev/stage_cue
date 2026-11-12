@@ -35,7 +35,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
+            StrokeIcon(
               AppIcons.tune,
               size: 32,
               color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
@@ -111,7 +111,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
           if (widget._isFullPage) ...[
             ExcludeFocus(
               child: IconButton(
-                icon: const Icon(AppIcons.back),
+                icon: const StrokeIcon(AppIcons.back),
                 onPressed: () => unawaited(Navigator.of(context).maybePop()),
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
@@ -143,7 +143,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
                       ? const SizedBox.shrink()
                       : ExcludeFocus(
                           child: IconButton(
-                            icon: const Icon(
+                            icon: const StrokeIcon(
                               AppIcons.close,
                               size: AppIconSize.sm,
                             ),
@@ -172,7 +172,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
     if (_lockedTypeFilter != null) return const SizedBox.shrink();
 
     // "Tous" uniquement pour QuickSearch, Library et Manage
-    final segments = <(String, SoundType?, IconData)>[
+    final segments = <(String, SoundType?, StrokeIconData)>[
       if (_isQuickSearch || _isLibrary || _isManage)
         ('Tous', null, AppIcons.allSounds),
       (
@@ -184,7 +184,12 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
       (SoundType.ambiance.label, SoundType.ambiance, SoundType.ambiance.icon),
     ];
 
-    Widget segment(String label, SoundType? type, IconData icon, bool isLast) {
+    Widget segment(
+      String label,
+      SoundType? type,
+      StrokeIconData icon,
+      bool isLast,
+    ) {
       final selected = _effectiveTypeFilter == type;
       final colors =
           type?.avatarColors(scheme) ??
@@ -217,7 +222,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
+              StrokeIcon(
                 icon,
                 size: 16,
                 color: selected ? colors.foreground : scheme.onSurfaceVariant,
@@ -340,7 +345,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
             if (widget._isFullPage)
               ExcludeFocus(
                 child: IconButton(
-                  icon: const Icon(AppIcons.back),
+                  icon: const StrokeIcon(AppIcons.back),
                   onPressed: () => unawaited(Navigator.of(context).maybePop()),
                   padding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
@@ -434,7 +439,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
           child: Row(
             mainAxisSize: MainAxisSize.max,
             children: [
-              Icon(
+              StrokeIcon(
                 AppIcons.folder,
                 size: 16,
                 color: selected == null
@@ -456,7 +461,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
                 ),
               ),
               const SizedBox(width: 2),
-              Icon(
+              StrokeIcon(
                 AppIcons.chevronDown,
                 size: AppIconSize.sm,
                 color: scheme.onSurfaceVariant,

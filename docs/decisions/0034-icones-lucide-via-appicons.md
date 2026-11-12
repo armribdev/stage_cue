@@ -1,6 +1,6 @@
 # 0034 — Icônes Lucide à trait fin, centralisées dans `AppIcons`
 
-**Statut :** acceptée
+**Statut :** acceptée — le rendu en police est remplacé par des tracés vectoriels dans [0038](0038-icones-lucide-en-traces-vectoriels.md) ; le reste tient
 **Date :** 2026-11-07
 
 ## Contexte

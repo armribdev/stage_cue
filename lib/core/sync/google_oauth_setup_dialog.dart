@@ -7,6 +7,7 @@ import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'google_oauth_config.dart';
 import '../theme/app_dialog.dart';
+import '../theme/stroke_icon.dart';
 
 /// Vérifie la config OAuth desktop et propose la saisie des credentials si besoin.
 /// Retourne `true` si la connexion Drive peut être tentée.
@@ -144,7 +145,7 @@ class _GoogleOAuthCredentialsDialogState
                           : () => setState(
                               () => _obscureSecret = !_obscureSecret,
                             ),
-                      icon: Icon(
+                      icon: StrokeIcon(
                         _obscureSecret ? AppIcons.visible : AppIcons.hidden,
                       ),
                     ),

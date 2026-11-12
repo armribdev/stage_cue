@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_tokens.dart';
 import 'compact_switch.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Briques communes de l'écran Paramètres : toutes les sections partagent le
 /// même squelette (libellé en capitales, contenu, séparateur) et les mêmes
@@ -17,7 +18,7 @@ class SettingsSectionHeader extends StatelessWidget {
     this.trailing = const [],
   });
 
-  final IconData icon;
+  final StrokeIconData icon;
   final String title;
   final List<Widget> trailing;
 
@@ -26,7 +27,7 @@ class SettingsSectionHeader extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
-        Icon(icon, size: 16, color: scheme.onSurfaceVariant),
+        StrokeIcon(icon, size: 16, color: scheme.onSurfaceVariant),
         const SizedBox(width: AppSpacing.sm),
         Text(title.toUpperCase(), style: AppTextStyles.sectionLabel(context)),
         if (trailing.isNotEmpty) ...[const Spacer(), ...trailing],
@@ -45,7 +46,7 @@ class SettingsSection extends StatelessWidget {
     required this.child,
   });
 
-  final IconData icon;
+  final StrokeIconData icon;
   final String title;
   final List<Widget> trailing;
   final Widget child;
@@ -185,7 +186,7 @@ class SettingsButton extends StatelessWidget {
   });
 
   final String label;
-  final IconData icon;
+  final StrokeIconData icon;
   final VoidCallback? onPressed;
   final bool busy;
 
@@ -200,7 +201,7 @@ class SettingsButton extends StatelessWidget {
               height: 14,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : Icon(icon, size: 16),
+          : StrokeIcon(icon, size: 16),
       label: Text(label),
     );
   }

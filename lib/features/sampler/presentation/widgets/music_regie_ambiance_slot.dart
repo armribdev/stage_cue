@@ -71,7 +71,7 @@ class _AmbianceSlot extends StatelessWidget {
     iconSize: 16,
     color: scheme.onSurfaceVariant,
     onPressed: onStop,
-    icon: const Icon(AppIcons.close),
+    icon: const StrokeIcon(AppIcons.close),
   );
 
   Widget _name(ColorScheme scheme, String text, {required bool active}) {
@@ -98,7 +98,7 @@ class _AmbianceSlot extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          StrokeIcon(
             SoundType.ambiance.icon,
             size: AppIconSize.sm,
             color: scheme.primary,
@@ -132,7 +132,7 @@ class _AmbianceSlot extends StatelessWidget {
             width: 220,
             child: Row(
               children: [
-                Icon(
+                StrokeIcon(
                   SoundType.ambiance.icon,
                   size: AppIconSize.sm,
                   color: scheme.primary,
@@ -146,12 +146,12 @@ class _AmbianceSlot extends StatelessWidget {
           ),
         ),
         MenuItemButton(
-          leadingIcon: const Icon(AppIcons.swap, size: AppIconSize.sm),
+          leadingIcon: const StrokeIcon(AppIcons.swap, size: AppIconSize.sm),
           onPressed: onChoose,
           child: const Text('Changer d\'ambiance'),
         ),
         MenuItemButton(
-          leadingIcon: const Icon(AppIcons.close, size: AppIconSize.sm),
+          leadingIcon: const StrokeIcon(AppIcons.close, size: AppIconSize.sm),
           onPressed: onStop,
           child: const Text('Arrêter'),
         ),
@@ -170,7 +170,7 @@ class _AmbianceSlot extends StatelessWidget {
               border: Border.fromBorderSide(AppElevation.border(scheme)),
               borderRadius: AppRadius.radiusSm,
             ),
-            child: Icon(
+            child: StrokeIcon(
               SoundType.ambiance.icon,
               size: 16,
               color: scheme.primary,
@@ -184,7 +184,7 @@ class _AmbianceSlot extends StatelessWidget {
   Widget _buildRow(ColorScheme scheme, PadItem? onAir) {
     return Row(
       children: [
-        Icon(
+        StrokeIcon(
           SoundType.ambiance.icon,
           size: 16,
           color: onAir != null ? scheme.primary : scheme.onSurfaceVariant,

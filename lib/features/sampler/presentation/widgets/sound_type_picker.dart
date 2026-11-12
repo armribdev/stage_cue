@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../domain/entities/sound.dart';
 import '../utils/sound_type_ui.dart';
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Sélecteur compact du type de son (bruitage, ambiance, musique).
 class SoundTypePicker extends StatelessWidget {
@@ -30,7 +31,7 @@ class SoundTypePicker extends StatelessWidget {
         for (final type in _types)
           ButtonSegment<SoundType>(
             value: type,
-            icon: Icon(type.icon, size: AppIconSize.sm),
+            icon: StrokeIcon(type.icon, size: AppIconSize.sm),
             tooltip: type.label,
           ),
       ],

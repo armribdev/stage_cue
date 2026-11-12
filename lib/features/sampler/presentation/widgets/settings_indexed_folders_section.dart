@@ -15,6 +15,7 @@ import '../../../../core/sync/auto_sync_coordinator.dart'
     show LibraryPassOutcome, SyncPassStage;
 import 'boxed_icon_button.dart';
 import 'settings_layout.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Élément de la liste « Éléments indexés » (dossier local ou bibliothèque Drive).
 class IndexedFolderItem {
@@ -252,7 +253,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
   /// n'y figure pas — cet écran n'est visible qu'au premier plan.
   Widget _buildSuspendedLine(BuildContext context) {
     if (!items.any((item) => !item.isLocal)) return const SizedBox.shrink();
-    final (IconData icon, String label)? reason = !networkAllowed
+    final (StrokeIconData icon, String label)? reason = !networkAllowed
         ? (AppIcons.cloudOff, 'Mode hors ligne · synchronisation désactivée')
         : autoSyncPaused
         ? (
@@ -267,7 +268,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       padding: const EdgeInsets.only(top: 6),
       child: Row(
         children: [
-          Icon(reason.$1, size: AppIconSize.sm, color: muted),
+          StrokeIcon(reason.$1, size: AppIconSize.sm, color: muted),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -304,7 +305,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(AppIcons.folderOff, size: 48, color: muted),
+          StrokeIcon(AppIcons.folderOff, size: 48, color: muted),
           const SizedBox(height: 8),
           Text(
             'Aucun dossier indexé',
@@ -338,7 +339,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       children: [
         CircleAvatar(
           backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-          child: Icon(
+          child: StrokeIcon(
             item.isLocal &&
                     SafDirectoryBridge.isSafTreeUri(item.watchedPath!.path)
                 ? AppIcons.cloud
@@ -395,7 +396,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(AppIcons.merge, size: AppIconSize.sm, color: color),
+          StrokeIcon(AppIcons.merge, size: AppIconSize.sm, color: color),
           const SizedBox(width: 4),
           Text(
             'Conflit de synchronisation · Résoudre',
@@ -428,7 +429,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       final content = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(AppIcons.error, size: AppIconSize.sm, color: color),
+          StrokeIcon(AppIcons.error, size: AppIconSize.sm, color: color),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
@@ -467,7 +468,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(AppIcons.cloudDone, size: AppIconSize.sm, color: color),
+        StrokeIcon(AppIcons.cloudDone, size: AppIconSize.sm, color: color),
         const SizedBox(width: 4),
         Text(parts.join(' · '), style: TextStyle(fontSize: 11, color: color)),
       ],
@@ -490,7 +491,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       content = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(AppIcons.cloudOff, size: AppIconSize.sm, color: muted),
+          StrokeIcon(AppIcons.cloudOff, size: AppIconSize.sm, color: muted),
           const SizedBox(width: 4),
           Text(
             'Pas encore synchronisé',
@@ -502,7 +503,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       content = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          StrokeIcon(
             AppIcons.cloudDone,
             size: AppIconSize.sm,
             color: scheme.primary.withValues(alpha: 0.85),
@@ -538,12 +539,12 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final muted = scheme.onSurfaceVariant.withValues(alpha: 0.75);
 
-    Widget chip(IconData icon, String label, {Color? color}) {
+    Widget chip(StrokeIconData icon, String label, {Color? color}) {
       final c = color ?? muted;
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: AppIconSize.sm, color: c),
+          StrokeIcon(icon, size: AppIconSize.sm, color: c),
           const SizedBox(width: 4),
           Text(label, style: TextStyle(fontSize: 11, color: c)),
         ],
@@ -731,7 +732,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
               GestureDetector(
                 onTap: onCancel,
                 behavior: HitTestBehavior.opaque,
-                child: Icon(
+                child: StrokeIcon(
                   AppIcons.close,
                   size: 16,
                   color: scheme.onSurfaceVariant,
@@ -756,7 +757,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       // entrée, pour homogénéiser l'action « Retirer » entre les deux types.
       return PopupMenuButton<_LibraryAction>(
         tooltip: 'Options',
-        icon: Icon(AppIcons.more, color: muted),
+        icon: StrokeIcon(AppIcons.more, color: muted),
         popUpAnimationStyle: AnimationStyle.noAnimation,
         onSelected: (action) {
           if (action == _LibraryAction.remove) {
@@ -797,7 +798,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
 
     return PopupMenuButton<_LibraryAction>(
       tooltip: 'Options',
-      icon: Icon(AppIcons.more, color: muted),
+      icon: StrokeIcon(AppIcons.more, color: muted),
       popUpAnimationStyle: AnimationStyle.noAnimation,
       onSelected: (action) {
         switch (action) {
@@ -848,14 +849,14 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
 
   /// Ligne icône + libellé pour une entrée du menu ⋮ (mise en page homogène).
   Widget _menuRow(
-    IconData icon,
+    StrokeIconData icon,
     String label, {
     Color? iconColor,
     Color? textColor,
   }) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: iconColor),
+        StrokeIcon(icon, size: 20, color: iconColor),
         const SizedBox(width: 12),
         Text(label, style: TextStyle(color: textColor)),
       ],
@@ -878,7 +879,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
             child: Row(
               children: [
-                Icon(AppIcons.storage, size: 16, color: muted),
+                StrokeIcon(AppIcons.storage, size: 16, color: muted),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -886,7 +887,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
                     style: TextStyle(fontSize: 12, color: muted),
                   ),
                 ),
-                Icon(AppIcons.info, size: 16, color: muted),
+                StrokeIcon(AppIcons.info, size: 16, color: muted),
               ],
             ),
           ),

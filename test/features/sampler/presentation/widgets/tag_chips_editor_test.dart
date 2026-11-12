@@ -11,6 +11,7 @@ import 'package:stage_cue/features/sampler/domain/entities/tag_category_with_tag
 import 'package:stage_cue/features/sampler/domain/entities/tag_item.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/tag_chips_editor.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/tag_pill.dart';
+import '../../../../support/find_stroke_icon.dart';
 
 TagItem _tag(int id, int categoryId, String name) => TagItem(
   id: id,
@@ -58,7 +59,7 @@ void main() {
   }
 
   Future<void> openPicker(WidgetTester tester) async {
-    await tester.tap(find.byIcon(AppIcons.add));
+    await tester.tap(findStrokeIcon(AppIcons.add));
     await tester.pumpAndSettle();
   }
 
@@ -73,7 +74,7 @@ void main() {
     await pump(tester, tagCatalog: const []);
 
     expect(find.text('Aucun tag disponible'), findsOneWidget);
-    expect(find.byIcon(AppIcons.add), findsNothing);
+    expect(findStrokeIcon(AppIcons.add), findsNothing);
   });
 
   testWidgets('le panneau reste ouvert après un ajout, recherche vidée', (
@@ -237,7 +238,7 @@ void main() {
 
     expect(selected, {1, 2, 3, 4});
     expect(find.byType(TextField), findsNothing);
-    expect(find.byIcon(AppIcons.add), findsNothing);
+    expect(findStrokeIcon(AppIcons.add), findsNothing);
   });
 
   testWidgets(

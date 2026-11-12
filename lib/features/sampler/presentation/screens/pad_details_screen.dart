@@ -18,6 +18,7 @@ import '../../domain/entities/tag_item.dart';
 import '../widgets/scrolling_text.dart';
 import '../widgets/sound_picker_overlay.dart';
 import '../widgets/tag_pill.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Écran de détails d'un pad — réglages, sons, mode de lecture.
 class PadDetailsScreen extends StatefulWidget {
@@ -285,7 +286,11 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
         border: Border.fromBorderSide(border),
       ),
       child: _isCapturingHotkey
-          ? Icon(AppIcons.keyboard, size: AppIconSize.sm, color: scheme.primary)
+          ? StrokeIcon(
+              AppIcons.keyboard,
+              size: AppIconSize.sm,
+              color: scheme.primary,
+            )
           : (label != null
                 ? Padding(
                     padding: const EdgeInsets.all(4),
@@ -347,7 +352,11 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
             color: scheme.surface,
             border: Border.fromBorderSide(AppElevation.border(scheme)),
           ),
-          child: Icon(AppIcons.close, size: 10, color: scheme.onSurfaceVariant),
+          child: StrokeIcon(
+            AppIcons.close,
+            size: 10,
+            color: scheme.onSurfaceVariant,
+          ),
         ),
       ),
     );
@@ -458,7 +467,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
               hintText: widget.padItem.displayName,
               suffixIcon: _displayNameController.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(AppIcons.close),
+                      icon: const StrokeIcon(AppIcons.close),
                       onPressed: () {
                         setState(() => _displayNameController.clear());
                         _updateDisplayName();
@@ -532,7 +541,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                       ? 'Masquer les volumes'
                       : 'Afficher les volumes',
                   child: IconButton(
-                    icon: Icon(
+                    icon: StrokeIcon(
                       _volumeControlsVisible
                           ? AppIcons.volumeOn
                           : AppIcons.volumeOff,
@@ -552,7 +561,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                 ),
               TextButton.icon(
                 onPressed: () => _addSound(context),
-                icon: const Icon(AppIcons.add, size: AppIconSize.sm),
+                icon: const StrokeIcon(AppIcons.add, size: AppIconSize.sm),
                 label: const Text('Ajouter'),
               ),
             ],
@@ -665,7 +674,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
           ],
         ),
         child: isSelected
-            ? Icon(AppIcons.check, color: onSurface, size: 20)
+            ? StrokeIcon(AppIcons.check, color: onSurface, size: 20)
             : Text(
                 'D',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -702,7 +711,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
           ],
         ),
         child: isSelected
-            ? Icon(AppIcons.check, color: _checkColor(color), size: 20)
+            ? StrokeIcon(AppIcons.check, color: _checkColor(color), size: 20)
             : null,
       ),
     );
@@ -727,12 +736,12 @@ class _PlayModeSelector extends StatelessWidget {
       segments: const [
         ButtonSegment(
           value: PadPlayMode.random,
-          icon: Icon(AppIcons.shuffle, size: 16),
+          icon: StrokeIcon(AppIcons.shuffle, size: 16),
           label: Text('Aléatoire'),
         ),
         ButtonSegment(
           value: PadPlayMode.sequential,
-          icon: Icon(AppIcons.repeatOne, size: 16),
+          icon: StrokeIcon(AppIcons.repeatOne, size: 16),
           label: Text('Séquentiel'),
         ),
       ],
@@ -883,7 +892,7 @@ class _SoundRowState extends State<_SoundRow> {
         ),
         if (!isLocal) ...[
           const SizedBox(width: 6),
-          Icon(
+          StrokeIcon(
             AppIcons.cloud,
             size: AppIconSize.sm,
             color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
@@ -963,7 +972,7 @@ class _SoundRowState extends State<_SoundRow> {
             if (widget.canRemove) ...[
               const SizedBox(width: 2),
               IconButton(
-                icon: const Icon(AppIcons.close, size: 16),
+                icon: const StrokeIcon(AppIcons.close, size: 16),
                 onPressed: widget.onRemove,
                 color: scheme.onSurfaceVariant,
                 visualDensity: VisualDensity.compact,

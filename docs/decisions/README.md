@@ -54,10 +54,11 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0031](0031-tags-de-l-ia-en-suggestions-avec-score.md) | Tags de l'IA : suggestions toujours affichées, avec leur score, acceptées une à une | acceptée |
 | [0032](0032-cascades-emulees-par-declencheurs.md) | Cascades de suppression émulées par des déclencheurs SQLite, pas par `foreign_keys` | acceptée |
 | [0033](0033-toast-global-au-dessus-du-navigator.md) | Notifications en toast global au-dessus du Navigator, plus de `SnackBar` | acceptée |
-| [0034](0034-icones-lucide-via-appicons.md) | Icônes Lucide à trait fin, centralisées dans `AppIcons` | acceptée |
+| [0034](0034-icones-lucide-via-appicons.md) | Icônes Lucide à trait fin, centralisées dans `AppIcons` | acceptée (rendu remplacé par 0038) |
 | [0035](0035-suppression-d-un-son-par-la-corbeille-drive.md) | Supprimer un son = le mettre à la corbeille Drive, avant de toucher à la base | acceptée |
 | [0036](0036-volume-auto-par-sonie-lufs-selon-le-type.md) | Volume « auto » : sonie LUFS pondérée K, cible selon le type de son | acceptée |
 | [0037](0037-mode-reseau-binaire-spectacle-masque-les-pads.md) | Mode réseau binaire : c'est le Mode Spectacle qui masque les pads injouables | acceptée |
 | [0037](0037-mise-a-jour-par-fermeture-de-l-app-sans-appmutex.md) | Mise à jour : l'app se ferme d'elle-même, l'installeur n'a plus d'AppMutex | acceptée |
+| [0038](0038-icones-lucide-en-traces-vectoriels.md) | Icônes Lucide dessinées en tracés vectoriels (`StrokeIcon`), plus en police | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

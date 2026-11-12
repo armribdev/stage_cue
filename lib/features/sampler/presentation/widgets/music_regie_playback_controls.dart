@@ -18,7 +18,7 @@ class _DrawerChevronButton extends StatelessWidget {
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 18),
-      icon: Icon(
+      icon: StrokeIcon(
         expanded ? AppIcons.chevronDown : AppIcons.chevronUp,
         size: 16,
         color: scheme.onSurfaceVariant.withValues(alpha: 0.75),

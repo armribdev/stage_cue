@@ -56,7 +56,7 @@ extension _SamplerScreenContent on _SamplerScreenState {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    StrokeIcon(
                       AppIcons.error,
                       size: 40,
                       color: Theme.of(context).colorScheme.error,
@@ -94,7 +94,7 @@ extension _SamplerScreenContent on _SamplerScreenState {
                     ),
                     child: Row(
                       children: [
-                        Icon(
+                        StrokeIcon(
                           AppIcons.error,
                           size: AppIconSize.sm,
                           color: Theme.of(context).colorScheme.onErrorContainer,
@@ -180,7 +180,7 @@ extension _SamplerScreenContent on _SamplerScreenState {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
             children: [
-              Icon(
+              StrokeIcon(
                 AppIcons.cloudDownload,
                 size: 16,
                 color: scheme.onSurfaceVariant,

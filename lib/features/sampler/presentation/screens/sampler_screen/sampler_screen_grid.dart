@@ -21,7 +21,7 @@ extension _SamplerScreenGrid on _SamplerScreenState {
     return DashedSlotFrame(
       onTap: () => _openAddPadFlow(board, rowIndex: rowIndex),
       child: Center(
-        child: Icon(
+        child: StrokeIcon(
           AppIcons.add,
           size: 24,
           color: scheme.onSurfaceVariant.withValues(alpha: 0.5),

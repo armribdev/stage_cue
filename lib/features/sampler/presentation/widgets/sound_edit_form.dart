@@ -23,6 +23,7 @@ import 'auto_tag_status_row.dart';
 import 'sound_type_picker.dart';
 import 'start_offset_editor.dart';
 import 'tag_chips_editor.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 /// Formulaire d'édition d'un son de la bibliothèque (nom, type, couleur,
 /// volume, point d'entrée, tags).
@@ -544,7 +545,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(AppIcons.delete, size: AppIconSize.sm),
+              : const StrokeIcon(AppIcons.delete, size: AppIconSize.sm),
           label: const Text('Supprimer…'),
         ),
       ],
@@ -775,7 +776,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                 ? 'Retirer des favoris'
                 : 'Ajouter aux favoris',
             onPressed: _isTogglingFavorite ? null : _toggleFavorite,
-            icon: Icon(
+            icon: StrokeIcon(
               _isFavorite ? AppIcons.favorite : AppIcons.favorite,
               size: 24,
             ),
@@ -797,7 +798,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
         suffixIcon: _nameController.text.isEmpty
             ? null
             : IconButton(
-                icon: const Icon(AppIcons.close, size: AppIconSize.sm),
+                icon: const StrokeIcon(AppIcons.close, size: AppIconSize.sm),
                 tooltip: 'Effacer le nom',
                 onPressed: () {
                   _nameController.clear();
@@ -902,7 +903,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Icon(
+                    : StrokeIcon(
                         _waveformRegenerated
                             ? AppIcons.check
                             : AppIcons.refresh,
@@ -1021,7 +1022,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
           ),
         ),
         child: isSelected
-            ? Icon(
+            ? StrokeIcon(
                 AppIcons.check,
                 size: AppIconSize.sm,
                 color: color == null

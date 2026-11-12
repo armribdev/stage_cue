@@ -69,7 +69,7 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
 
   Widget _roundIconButton({
     required ColorScheme scheme,
-    IconData? icon,
+    StrokeIconData? icon,
     // Glyphe de transport plein (lecture/pause) à la place d'une icône Lucide.
     TransportGlyph? transport,
     required VoidCallback? onPressed,
@@ -89,9 +89,14 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
         height: _actionButtonSize,
         child: IconButton(
           onPressed: onPressed,
-          icon: transport != null
-              ? TransportIcon(transport, size: AppIconSize.sm)
-              : Icon(icon, size: AppIconSize.sm),
+          icon: switch ((transport, icon)) {
+            (final transport?, _) => TransportIcon(
+              transport,
+              size: AppIconSize.sm,
+            ),
+            (null, final icon?) => StrokeIcon(icon, size: AppIconSize.sm),
+            (null, null) => const SizedBox.shrink(),
+          },
           padding: EdgeInsets.zero,
           visualDensity: VisualDensity.compact,
           style: IconButton.styleFrom(

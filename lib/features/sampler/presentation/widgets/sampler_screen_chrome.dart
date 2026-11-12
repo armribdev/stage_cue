@@ -14,6 +14,7 @@ import 'audio_vu_meter.dart';
 import 'boxed_icon_button.dart';
 import 'hover_icon_button.dart';
 import 'waveform_mark_button.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 part 'sampler_boards_chrome.dart';
 
@@ -136,7 +137,7 @@ class StopAllButton extends StatelessWidget {
                   children: [
                     TransportIcon(
                       TransportGlyph.stop,
-                      size: AppIconSize.sm,
+                      size: AppIconSize.md,
                       color: scheme.error,
                     ),
                     const SizedBox(width: 4),
@@ -164,7 +165,7 @@ class StopAllButton extends StatelessWidget {
 /// Icône + voyant rouge pulsé — même langage visuel que le badge ON AIR.
 /// [baseIcon] permet de réutiliser le voyant sur différentes icônes (menu, masque).
 class LiveModeActiveIcon extends StatefulWidget {
-  final IconData baseIcon;
+  final StrokeIconData baseIcon;
 
   const LiveModeActiveIcon({super.key}) : baseIcon = AppIcons.theater;
 
@@ -219,7 +220,7 @@ class _LiveModeActiveIconState extends State<LiveModeActiveIcon>
         clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
-          Icon(widget.baseIcon, color: scheme.error),
+          StrokeIcon(widget.baseIcon, color: scheme.error),
           Positioned(
             right: -2,
             top: -2,
@@ -403,9 +404,9 @@ class SamplerDesktopMenuButton extends StatelessWidget {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(
+              StrokeIcon(
                 AppIcons.theater,
-                size: AppIconSize.sm,
+                size: AppIconSize.md,
                 color: scheme.onSurface,
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -419,9 +420,9 @@ class SamplerDesktopMenuButton extends StatelessWidget {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(
+              StrokeIcon(
                 AppIcons.library,
-                size: AppIconSize.sm,
+                size: AppIconSize.md,
                 color: scheme.onSurface,
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -436,9 +437,9 @@ class SamplerDesktopMenuButton extends StatelessWidget {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(
+              StrokeIcon(
                 AppIcons.settings,
-                size: AppIconSize.sm,
+                size: AppIconSize.md,
                 color: scheme.onSurface,
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -453,11 +454,11 @@ class SamplerDesktopMenuButton extends StatelessWidget {
             padding: AppMenu.itemPadding,
             child: Row(
               children: [
-                Icon(
+                StrokeIcon(
                   fullScreen == true
                       ? AppIcons.fullscreenExit
                       : AppIcons.fullscreen,
-                  size: AppIconSize.sm,
+                  size: AppIconSize.md,
                   color: scheme.onSurface,
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -476,9 +477,9 @@ class SamplerDesktopMenuButton extends StatelessWidget {
             padding: AppMenu.itemPadding,
             child: Row(
               children: [
-                Icon(
+                StrokeIcon(
                   AppIcons.logout,
-                  size: AppIconSize.sm,
+                  size: AppIconSize.md,
                   color: scheme.onSurface,
                 ),
                 const SizedBox(width: AppSpacing.sm),

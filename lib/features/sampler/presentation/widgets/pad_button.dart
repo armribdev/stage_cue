@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/theme/stroke_icon.dart';
 import '../../domain/entities/pad.dart';
 import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
@@ -114,7 +115,7 @@ class PadButton extends StatelessWidget {
       child: Stack(
         children: [
           Center(
-            child: Icon(
+            child: StrokeIcon(
               AppIcons.queue,
               size: 24,
               color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
@@ -311,7 +312,7 @@ class PadButton extends StatelessWidget {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          StrokeIcon(
             switch (padItem.pad.playMode) {
               PadPlayMode.random => AppIcons.shuffle,
               PadPlayMode.sequential => AppIcons.repeatOne,
@@ -328,7 +329,7 @@ class PadButton extends StatelessWidget {
             ),
           ),
           if (onShowSounds != null)
-            Icon(AppIcons.chevronRight, size: 12, color: tint),
+            StrokeIcon(AppIcons.chevronRight, size: 12, color: tint),
         ],
       );
     }
@@ -390,7 +391,7 @@ class PadButton extends StatelessWidget {
   /// [includeSounds] : icône « sons du pad ». Un pad prêt ouvre ce choix en
   /// touchant son libellé « N sons » ; les états en route / bloqué n'ont pas
   /// ce libellé, l'icône reste donc leur seule porte d'entrée.
-  List<(IconData, double, VoidCallback?)> _iconClusterEntries({
+  List<(StrokeIconData, double, VoidCallback?)> _iconClusterEntries({
     required bool includeSounds,
   }) => [
     if (onCue != null) (AppIcons.padCue, 15.0, onCue),
@@ -415,11 +416,19 @@ class PadButton extends StatelessWidget {
             builder: (context, hovered) => SizedBox(
               width: _iconTargetSize,
               height: _iconTargetSize,
-              child: Center(
-                child: Icon(
-                  icon,
-                  size: size,
-                  color: _hoverTint(color, hovered),
+              // Aligné sur la grille de pixels : un `Center` posait l'icône
+              // à un demi-pixel (20 − 15 = 5), ce qui brouille le trait.
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Padding(
+                  padding: EdgeInsets.all(
+                    ((_iconTargetSize - size) / 2).floorToDouble(),
+                  ),
+                  child: StrokeIcon(
+                    icon,
+                    size: size,
+                    color: _hoverTint(color, hovered),
+                  ),
                 ),
               ),
             ),
@@ -472,7 +481,7 @@ class PadButton extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
+                      StrokeIcon(
                         downloading
                             ? AppIcons.downloading
                             : AppIcons.cloudDownload,
@@ -552,7 +561,7 @@ class PadButton extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(icon, size: 12, color: accent),
+                      StrokeIcon(icon, size: 12, color: accent),
                       const SizedBox(width: 4),
                       Text(hint, style: TextStyle(fontSize: 11, color: accent)),
                     ],
@@ -592,7 +601,11 @@ class PadButton extends StatelessWidget {
                 color: color,
               ),
             ),
-            Icon(AppIcons.cloudDownload, size: AppIconSize.sm, color: color),
+            StrokeIcon(
+              AppIcons.cloudDownload,
+              size: AppIconSize.sm,
+              color: color,
+            ),
           ],
         ),
       ),
@@ -951,5 +964,5 @@ Widget padSoundAvailabilityIcon(
     PadSoundAvailability.missingFile => (AppIcons.error, scheme.error),
     PadSoundAvailability.unsupportedFormat => (AppIcons.blocked, scheme.error),
   };
-  return Icon(icon, size: size, color: color);
+  return StrokeIcon(icon, size: size, color: color);
 }

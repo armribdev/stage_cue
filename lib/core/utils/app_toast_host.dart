@@ -8,6 +8,7 @@ import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'app_snackbar.dart';
 import 'layout_utils.dart';
+import '../theme/stroke_icon.dart';
 
 /// Largeur max d'un toast — au-delà, il paraît démesuré sur un écran de bureau
 /// large ; en dessous, il s'adapte pour ne pas déborder sur un téléphone étroit.
@@ -188,7 +189,7 @@ class _ToastCard extends StatelessWidget {
     action.onPressed();
   }
 
-  (IconData, Color) _icon(ColorScheme scheme) => switch (toast.severity) {
+  (StrokeIconData, Color) _icon(ColorScheme scheme) => switch (toast.severity) {
     AppToastSeverity.info => (AppIcons.info, scheme.onSurfaceVariant),
     AppToastSeverity.success => (AppIcons.checkCircle, AppColors.success),
     AppToastSeverity.error => (AppIcons.error, scheme.error),
@@ -221,7 +222,7 @@ class _ToastCard extends StatelessWidget {
             children: [
               Flexible(child: message),
               const SizedBox(width: AppSpacing.sm),
-              Icon(
+              StrokeIcon(
                 AppIcons.copy,
                 size: AppIconSize.sm,
                 color: scheme.onSurfaceVariant,
@@ -251,7 +252,7 @@ class _ToastCard extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 16, color: iconColor),
+              StrokeIcon(icon, size: 16, color: iconColor),
               const SizedBox(width: AppSpacing.sm),
               Flexible(child: message),
               if (action != null) ...[
@@ -270,7 +271,7 @@ class _ToastCard extends StatelessWidget {
               const SizedBox(width: AppSpacing.xs),
               IconButton(
                 onPressed: () => controller.dismiss(toast.id),
-                icon: const Icon(
+                icon: const StrokeIcon(
                   AppIcons.close,
                   size: AppIconSize.sm,
                   semanticLabel: 'Fermer',

@@ -9,6 +9,7 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../utils/tag_category_ui.dart';
 import 'boxed_icon_button.dart';
+import '../../../../core/theme/stroke_icon.dart';
 
 // ── Bouton d'ajout ────────────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ class _TagAddButtonState extends State<TagAddButton> {
                   AnimatedRotation(
                     turns: open ? 0.125 : 0,
                     duration: const Duration(milliseconds: 150),
-                    child: Icon(AppIcons.add, size: 16, color: color),
+                    child: StrokeIcon(AppIcons.add, size: 16, color: color),
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -240,7 +241,7 @@ class _TagPickerPanelState extends State<TagPickerPanel> {
                 padding: const EdgeInsets.fromLTRB(12, 2, 4, 2),
                 child: Row(
                   children: [
-                    Icon(
+                    StrokeIcon(
                       AppIcons.search,
                       size: 16,
                       color: scheme.onSurfaceVariant,
