@@ -94,10 +94,20 @@ const List<String> _kDriveScopes = [
 
 /// Authentification Google Drive sur Windows/Linux via OAuth navigateur.
 class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
-  GoogleDriveDesktopAuthenticator({GoogleSignIn? googleSignIn})
-    : _googleSignIn = googleSignIn;
+  GoogleDriveDesktopAuthenticator({
+    GoogleSignIn? googleSignIn,
+    int consentPort = _kConsentRedirectPort,
+    Duration consentTimeout = _kConsentTimeout,
+    Future<void> Function(Uri url)? openBrowser,
+  }) : _googleSignIn = googleSignIn,
+       _consentPort = consentPort,
+       _consentTimeout = consentTimeout,
+       _openBrowser = openBrowser ?? _launchBrowser;
 
   final GoogleSignIn? _googleSignIn;
+  final int _consentPort;
+  final Duration _consentTimeout;
+  final Future<void> Function(Uri url) _openBrowser;
   GoogleSignIn? _resolvedSignIn;
   DriveAccountProfile? _cachedProfile;
   StreamSubscription<auth.AccessCredentials>? _credentialSubscription;
@@ -287,7 +297,29 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
   /// renouvellement possible. Avec `prompt=consent` le refresh token est
   /// toujours émis. (`signIn()` relisait en plus le jeton stocké sans ouvrir le
   /// navigateur.)
-  Future<auth.AccessCredentials?> _requestConsent() async {
+  Future<auth.AccessCredentials?> _requestConsent() {
+    // Un seul serveur de redirection à la fois (le port est fixe) : un second
+    // clic pendant l'attente rouvre simplement la page de consentement au lieu
+    // de lier une deuxième fois le port 8000.
+    final pending = _pendingConsent;
+    if (pending != null) {
+      final url = _pendingConsentUrl;
+      if (url != null) {
+        unawaited(_openConsentPage(url));
+      }
+      return pending;
+    }
+    final attempt = _runConsent().whenComplete(() {
+      _pendingConsent = null;
+      _pendingConsentUrl = null;
+    });
+    return _pendingConsent = attempt;
+  }
+
+  Future<auth.AccessCredentials?>? _pendingConsent;
+  String? _pendingConsentUrl;
+
+  Future<auth.AccessCredentials?> _runConsent() async {
     SyncLog.info(
       'Drive : consentement OAuth — navigateur ouvert, en attente de la '
       'réponse.',
@@ -302,22 +334,45 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
             ),
             _kDriveScopes,
             httpClient,
-            (url) => unawaited(_openConsentPage(url)),
-            listenPort: _kConsentRedirectPort,
+            (url) {
+              _pendingConsentUrl = url;
+              unawaited(_openConsentPage(url));
+            },
+            listenPort: _consentPort,
             customPostAuthPage: _kPostAuthPageHtml,
           )
-          .timeout(_kConsentTimeout);
+          .timeout(_consentTimeout);
     } on TimeoutException {
       SyncLog.warn(
         'Drive : consentement OAuth abandonné — aucune réponse du navigateur '
-        'en ${_kConsentTimeout.inMinutes} min.',
+        'en ${_consentTimeout.inSeconds} s.',
       );
+      await _releaseConsentPort();
       return null;
     } on auth.UserConsentException catch (e) {
       SyncLog.warn('Drive : consentement OAuth refusé — ${e.message}');
       return null;
     } finally {
       httpClient.close();
+    }
+  }
+
+  /// `Future.timeout` n'annule pas le flux de `googleapis_auth`, qui reste
+  /// suspendu sur `server.first` avec le port 8000 lié : la tentative suivante
+  /// échouait alors avec « Failed to create server socket ». Une requête
+  /// bidon fait aboutir ce `first` (le flux la rejette, sans état valide) et
+  /// son `finally` ferme le serveur.
+  Future<void> _releaseConsentPort() async {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
+    try {
+      final request = await client.getUrl(
+        Uri.http('localhost:$_consentPort', '/'),
+      );
+      await (await request.close()).drain<void>();
+    } catch (e) {
+      SyncLog.warn('Drive : port de consentement non libéré — $e');
+    } finally {
+      client.close(force: true);
     }
   }
 
@@ -330,8 +385,12 @@ class GoogleDriveDesktopAuthenticator implements DriveAuthenticator {
         'prompt': 'consent',
       },
     );
-    // Pas de `url_launcher` dans le projet : on lance l'opener natif (cf.
-    // l'ouverture du dossier des logs).
+    await _openBrowser(target);
+  }
+
+  // Pas de `url_launcher` dans le projet : on lance l'opener natif (cf.
+  // l'ouverture du dossier des logs).
+  static Future<void> _launchBrowser(Uri target) async {
     final (String executable, List<String> args) = Platform.isWindows
         ? ('rundll32', ['url.dll,FileProtocolHandler', target.toString()])
         : Platform.isMacOS
