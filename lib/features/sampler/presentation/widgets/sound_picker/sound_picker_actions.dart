@@ -16,16 +16,7 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
     final sound = shown[index];
     switch (widget.mode) {
       case QuickSearchMode():
-        final ok = await widget.notifier.previewSound(sound.id);
-        if (!mounted) return;
-        // Échec : on reste ouvert pour que le message (casque indisponible…)
-        // soit lu, au lieu de fermer l'overlay sur un « rien ne s'est passé ».
-        if (!ok) {
-          _showPreviewFailureToast();
-          return;
-        }
-        _keepPreviewOnClose = true;
-        Navigator.of(context).pop();
+        await _playQuickSearchSound(sound);
       case MusicPickerMode(playNow: true):
         await _playMusicNow(sound);
       case MusicPickerMode():
@@ -44,10 +35,17 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
   }
 
   // QuickSearch
-  Future<void> _previewSound(Sound sound) async {
-    final ok = await widget.notifier.previewSound(sound.id);
-    if (!mounted || ok) return;
-    _showPreviewFailureToast();
+  /// Clic / Entrée : joue le son pour de vrai puis ferme. Échec : on reste
+  /// ouvert pour que le message soit lu, au lieu de fermer l'overlay sur un
+  /// « rien ne s'est passé ». L'aperçu, lui, passe par son bouton de ligne.
+  Future<void> _playQuickSearchSound(Sound sound) async {
+    final ok = await widget.notifier.playSoundFromQuickSearch(sound.id);
+    if (!mounted) return;
+    if (!ok) {
+      _showPreviewFailureToast();
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   Future<void> _toggleLibraryPreview(Sound sound) async {

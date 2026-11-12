@@ -582,9 +582,6 @@ void main() {
       when(() => repo.getSoundById(10)).thenAnswer((_) async => son);
       n.startLiveSession();
 
-      expect(await n.previewSound(10), isFalse);
-      expect(n.consumeLastPreviewError(), contains('Mode Spectacle'));
-
       expect(await n.toggleLibraryPreview(10), isFalse);
       expect(n.consumeLastPreviewError(), contains('Mode Spectacle'));
       verifyNever(() => repo.getSoundById(any()));
@@ -596,7 +593,7 @@ void main() {
       when(() => repo.getSoundById(10)).thenAnswer((_) async => null);
       n.startLiveSession();
 
-      expect(await n.previewSound(10), isFalse); // son introuvable
+      expect(await n.toggleLibraryPreview(10), isFalse); // son introuvable
       expect(n.hasPendingPreviewError, isFalse);
     });
 
@@ -625,17 +622,25 @@ void main() {
       expect(n.hasPendingPreviewError, isFalse);
     });
 
-    test('musique en recherche-éclair avec casque actif → lecteur cue, '
-        'pas la régie (refus remonté si le casque est HS)', () async {
+    test('aperçu d\'une musique avec casque HS → refus remonté, jamais de '
+        'repli sur la salle', () async {
       CueAudioService.instance.setSelectedDevice('Casque débranché');
       final son = sound(10, type: SoundType.music);
       when(() => repo.getSoundById(10)).thenAnswer((_) async => son);
 
-      expect(await n.previewSound(10), isFalse);
+      expect(await n.toggleLibraryPreview(10), isFalse);
 
-      // Le refus prouve le passage par le lecteur d'aperçu cue : la régie
-      // (salle) n'a jamais été sollicitée.
       expect(n.consumeLastPreviewError(), isNotNull);
+      expect(n.libraryPreviewSoundId, isNull);
+    });
+
+    test('recherche-éclair : un son introuvable ne joue rien et ne touche '
+        'pas à l\'aperçu', () async {
+      when(() => repo.getSoundById(10)).thenAnswer((_) async => null);
+
+      expect(await n.playSoundFromQuickSearch(10), isFalse);
+      expect(n.hasPendingPreviewError, isFalse);
+      expect(n.hasNonMusicSoundsPlaying, isFalse);
     });
   });
 }

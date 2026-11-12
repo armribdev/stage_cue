@@ -106,12 +106,14 @@ class SamplerNotifier extends ChangeNotifier {
   @visibleForTesting
   bool debugTreatReadyAvailabilityAsEligible = false;
 
-  /// Lecteurs dédiés à la pré-écoute (recherche-éclair) : indépendants des pads,
-  /// du master musique et de la file. Plusieurs bruitages/ambiances peuvent
-  /// jouer simultanément ; chacun se libère seul à la fin de sa lecture.
-  final Set<PreviewPlayback> _previewPlayers = {};
+  /// Pads de bruitage hors-scène (id négatif) lancés depuis la recherche-éclair
+  /// sans pad sur le plateau (voir `playSoundFromQuickSearch`). Ce sont de vraies
+  /// lectures : le bouton « Tout arrêter » les coupe, contrairement à l'aperçu.
+  final Map<int, PadItem> _offStageSfxPads = {};
 
-  /// Lecteur unique pour l'aperçu bibliothèque (play/pause, un son à la fois).
+  /// Lecteur d'aperçu unique (play/pause, un son à la fois), indépendant des
+  /// pads, de la régie et du bouton « Tout arrêter » : il ne se pilote que par
+  /// ses propres boutons (voir `toggleLibraryPreview`).
   PreviewPlayback? _libraryPreviewPlayer;
   int? _libraryPreviewSoundId;
   StreamSubscription<bool>? _libraryPreviewSub;
@@ -442,6 +444,7 @@ class SamplerNotifier extends ChangeNotifier {
     // pré-écoutes ; le pad musique qui joue est détaché hors-scène pour ne pas
     // être disposé par le rechargement du plateau.
     await stopAllNonMusicSounds();
+    stopLibraryPreview(notify: false);
     _music._detachPlayingMusicToOffStage();
     _ambiance._detachPlayingToOffStage();
     // Annule les téléchargements encore EN FILE des pads qui quittent la scène
@@ -790,7 +793,8 @@ class SamplerNotifier extends ChangeNotifier {
     await _playOverlappingSoundAtIndex(resolved, soundIndex);
   }
 
-  Future<void> _playOverlappingSoundAtIndex(
+  /// Retourne `false` si aucune voix n'a démarré (déjà journalisé).
+  Future<bool> _playOverlappingSoundAtIndex(
     PadItem resolved,
     int soundIndex,
   ) async {
@@ -805,7 +809,7 @@ class SamplerNotifier extends ChangeNotifier {
         resolved,
         reason: 'aucun lecteur chargé pour la variante ${soundIndex + 1}',
       );
-      return;
+      return false;
     }
     await _syncPadSoundMetadata(resolved, soundIndex);
     // Point d'entrée : le déclenchement démarre à cet offset au lieu du sample 0.
@@ -839,23 +843,25 @@ class SamplerNotifier extends ChangeNotifier {
     _markPlayedAt(resolved, soundIndex);
     _notifyPad(resolved);
     notifyListeners();
+    return started;
   }
 
   /// Coupe tous les bruitages en cours (bouton panique « Tout arrêter »).
   /// Laisse jouer musique et ambiance : utile en live pour tuer un bruitage
-  /// sans casser le tapis sonore.
+  /// sans casser le tapis sonore. Ne touche pas à l'aperçu, qui est un lecteur
+  /// indépendant.
   Future<void> stopAllNonMusicSounds() async {
     var changed = false;
-    for (final padItem in _state.pads) {
-      if (padItem.pad.isExclusiveVoicePad) continue;
-      if (!padItem.isPlaying) continue;
+    final playing = [
+      for (final padItem in _state.pads)
+        if (!padItem.pad.isExclusiveVoicePad) padItem,
+      ..._offStageSfxPads.values,
+    ].where((padItem) => padItem.isPlaying);
+    for (final padItem in playing.toList()) {
       await _stopAllSlotPlayers(padItem);
       changed = true;
     }
-    if (_libraryPreviewSoundId != null || _previewPlayers.isNotEmpty) {
-      changed = true;
-    }
-    stopAllPreviews();
+    _disposeIdleOffStageSfxPads();
     if (changed) notifyListeners();
   }
 
@@ -875,12 +881,20 @@ class SamplerNotifier extends ChangeNotifier {
     );
   }
 
-  /// Au moins un bruitage (ni musique ni ambiance) joue actuellement, ou une
-  /// pré-écoute (recherche rapide / bibliothèque) est en cours.
+  /// Au moins un bruitage (ni musique ni ambiance) joue actuellement. L'aperçu
+  /// n'en fait pas partie : c'est un lecteur indépendant.
   bool get hasNonMusicSoundsPlaying =>
       _state.pads.any((p) => !p.pad.isExclusiveVoicePad && p.isPlaying) ||
-      _libraryPreviewSoundId != null ||
-      _previewPlayers.isNotEmpty;
+      _offStageSfxPads.values.any((p) => p.isPlaying);
+
+  /// Libère les pads de bruitage hors-scène qui ne jouent plus.
+  void _disposeIdleOffStageSfxPads() {
+    _offStageSfxPads.removeWhere((_, padItem) {
+      if (padItem.isPlaying) return false;
+      padItem.dispose();
+      return true;
+    });
+  }
 
   /// Arrête toutes les voix de chaque variante du pad (sans notifier).
   Future<void> _stopAllSlotPlayers(PadItem padItem) async {
@@ -1104,10 +1118,14 @@ class SamplerNotifier extends ChangeNotifier {
   void dispose() {
     _appPreferences?.removeListener(_onConnectivityModeChanged);
     _downloadQueue.dispose();
-    stopAllPreviews();
+    stopLibraryPreview(notify: false);
     for (final padItem in _state.pads) {
       padItem.dispose();
     }
+    for (final padItem in _offStageSfxPads.values) {
+      padItem.dispose();
+    }
+    _offStageSfxPads.clear();
     _music._disposeOffStagePads();
     _ambiance._disposeOffStagePads();
     super.dispose();

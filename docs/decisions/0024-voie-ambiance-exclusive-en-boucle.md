@@ -65,6 +65,7 @@ en cours.
   `SamplerNotifier._buildOffStagePad`, commun aux deux voies. Un son a un seul
   type, donc les réserves musique et ambiance ne peuvent pas entrer en
   collision.
-- La recherche-éclair (Ctrl+F) continue de jouer une ambiance en
-  **pré-écoute** éphémère : seuls un pad ambiance et le sélecteur de la régie
-  mettent une ambiance à l'antenne.
+- ~~La recherche-éclair (Ctrl+F) joue une ambiance en pré-écoute éphémère.~~
+  Amendé par [0039](0039-apercu-lecteur-independant-recherche-eclair-lit-pour-de-vrai.md) :
+  le clic / Entrée de la recherche-éclair met l'ambiance à l'antenne
+  (`playAmbianceBySoundId`) ; l'écoute seule passe par le bouton d'aperçu.

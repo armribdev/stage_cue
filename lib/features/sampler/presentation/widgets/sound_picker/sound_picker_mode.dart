@@ -10,7 +10,8 @@ sealed class SoundPickerMode {
   const SoundPickerMode();
 }
 
-/// Recherche-éclair (Ctrl+F) : preview + préparer un bruitage/ambiance.
+/// Recherche-éclair (Ctrl+F) : jouer le son (clic / Entrée), l'écouter en
+/// aperçu (bouton de ligne) ou le préparer sur le plateau (bouton de droite).
 final class QuickSearchMode extends SoundPickerMode {
   /// Filtre de type pré-appliqué (Ctrl+G/H/J) — modifiable ensuite via les chips.
   final SoundType? initialTypeFilter;

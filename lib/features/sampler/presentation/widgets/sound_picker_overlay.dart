@@ -283,11 +283,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   /// depuis la barre.
   bool _autoPreview = true;
 
-  /// Recherche-éclair : Entrée lance une audition puis ferme le panneau — cette
-  /// audition doit survivre à la fermeture. Toute autre sortie (Échap, clic
-  /// à côté…) coupe la pré-écoute en cours.
-  bool _keepPreviewOnClose = false;
-
   // ── État du sélecteur de pad ──────────────────────────────────────────────
   Set<int> _padSoundIds = const {};
   final Set<int> _addingSoundIds = {};
@@ -540,15 +535,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   @override
   void dispose() {
-    // La recherche-éclair ne garde son aperçu que si Entrée vient de le lancer
-    // (audition puis fermeture) ; toute autre sortie, comme les autres
-    // sélecteurs, ne laisse rien jouer derrière elle.
-    if (_isQuickSearch) {
-      // Pas de notify : évite setState sur SamplerScreen pendant le pop.
-      if (!_keepPreviewOnClose) widget.notifier.stopAllPreviews();
-    } else if (!_isPadVariant) {
-      widget.notifier.stopLibraryPreview(notify: false);
-    }
+    // Un aperçu n'a de sens que pendant que le sélecteur est ouvert : on le
+    // coupe à la fermeture. Pas de notify : évite setState sur SamplerScreen
+    // pendant le pop.
+    if (!_isPadVariant) widget.notifier.stopLibraryPreview(notify: false);
     widget.notifier.removeListener(_onNotifierChanged);
     _searchDebounce?.cancel();
     _focusNode.dispose();

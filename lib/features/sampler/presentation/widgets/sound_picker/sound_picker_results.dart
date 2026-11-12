@@ -152,7 +152,11 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
           setState(() => _selectedIndex = index);
           switch (widget.mode) {
             case QuickSearchMode():
-              unawaited(_previewSound(sound));
+              // Mode Spectacle : un clic ne fait que sélectionner (un clic de
+              // trop ne doit pas sortir en salle) ; Entrée joue la sélection.
+              if (!widget.notifier.isLiveSessionActive) {
+                unawaited(_playQuickSearchSound(sound));
+              }
             case MusicPickerMode(playNow: true):
               unawaited(_playMusicNow(sound));
             case MusicPickerMode():

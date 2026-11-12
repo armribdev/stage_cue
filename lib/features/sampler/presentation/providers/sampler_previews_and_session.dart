@@ -1,28 +1,46 @@
 part of 'sampler_provider.dart';
 
-/// Pré-écoutes (recherche-éclair / bibliothèque), session live Mode Spectacle,
-/// préparation quick-search et pads brouillon. Méthodes de [SamplerNotifier]
-/// extraites via extension dans le même `part`.
+/// Pré-écoute (lecteur d'aperçu unique), lecture directe depuis la
+/// recherche-éclair, session live Mode Spectacle, préparation quick-search et
+/// pads brouillon. Méthodes de [SamplerNotifier] extraites via extension dans
+/// le même `part`.
 
 extension SamplerPreviewsAndSession on SamplerNotifier {
-  /// Pré-écoute d'un son (recherche-éclair).
+  /// Joue pour de vrai le son choisi en recherche-éclair (clic / Entrée), par
+  /// la voie de son type — jamais par le lecteur d'aperçu : musique sur la
+  /// régie, ambiance à l'antenne, bruitage en salle depuis son point d'entrée.
   ///
-  /// Bruitages/ambiances en fire-and-forget depuis le [Sound.startOffsetMs].
-  /// La musique passe par la régie live — donc en salle — sauf si un casque
-  /// de pré-écoute est configuré : elle prend alors le lecteur d'aperçu
-  /// (play/pause), sans toucher à la régie ni à la salle.
-  Future<bool> previewSound(int soundId) async {
-    if (_refuseRoomPreviewInLive()) return false;
+  /// Le bruitage passe par un pad hors-scène (aucun pad ajouté au plateau) ; il
+  /// compte comme n'importe quel bruitage joué : « Tout arrêter » le coupe et
+  /// la session live le comptabilise. Retourne `false` si rien n'a démarré (le
+  /// motif est alors lisible via `consumeLastMusicPlaybackError`).
+  Future<bool> playSoundFromQuickSearch(int soundId) async {
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
-    if (sound.type == SoundType.music) {
-      if (CueAudioService.instance.isCueActive) {
-        return toggleLibraryPreview(soundId);
-      }
-      final padItem = await playMusicBySoundId(soundId);
-      return padItem != null;
+    switch (sound.type) {
+      case SoundType.music:
+        return await playMusicBySoundId(soundId) != null;
+      case SoundType.ambiance:
+        return await playAmbianceBySoundId(soundId) != null;
+      case SoundType.soundEffect:
+      case null:
+        return _playOffStageSfx(sound);
     }
-    return _playEphemeralPreview(sound);
+  }
+
+  Future<bool> _playOffStageSfx(Sound sound) async {
+    _disposeIdleOffStageSfxPads();
+    var padItem = _offStageSfxPads[-sound.id];
+    if (padItem == null) {
+      padItem = await _buildOffStagePad(sound);
+      if (padItem == null) return false;
+      _offStageSfxPads[padItem.pad.id] = padItem;
+    }
+    if (!padItem.isPlayable && !await downloadAndLoadPad(padItem)) {
+      reportPadTriggerFailure(padItem);
+      return false;
+    }
+    return _playOverlappingSoundAtIndex(padItem, 0);
   }
 
   /// Écoute au casque d'un pad du plateau, sans le déclencher en salle.
@@ -58,7 +76,9 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       _libraryPreviewSoundId == soundId &&
       (_libraryPreviewPlayer?.isPlaying ?? false);
 
-  /// Bascule play/pause pour l'aperçu bibliothèque (lecteur unique).
+  /// Bascule play/pause pour l'aperçu (lecteur unique, un son à la fois). C'est
+  /// le seul point d'entrée de la pré-écoute : elle reste étrangère aux pads,
+  /// à la régie et au bouton « Tout arrêter ».
   ///
   /// [requireCue] : n'a de sens qu'au casque — échoue plutôt que de sortir sur
   /// la salle quand aucun casque n'est configuré.
@@ -179,57 +199,6 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
   void _refusePreview(CueUnavailableException e) {
     _lastPreviewError = e.message;
     _notify();
-  }
-
-  /// Pré-écoute fire-and-forget depuis le point d'entrée du son.
-  Future<bool> _playEphemeralPreview(Sound sound) async {
-    try {
-      final path = await _resolvePlayablePath(
-        sound,
-        downloadIfNeeded: allowsSoundDownload,
-      );
-      final player = await CueAudioService.instance.createPreviewPlayer(path);
-      _previewPlayers.add(player);
-      StreamSubscription<bool>? sub;
-      sub = player.onPlayerStateChanged.listen((playing) {
-        if (playing) return;
-        sub?.cancel();
-        _previewPlayers.remove(player);
-        player.dispose();
-        _notify();
-      });
-      var startOffsetMs = sound.startOffsetMs;
-      final duration = player.duration;
-      if (duration > Duration.zero) {
-        final maxMs = duration.inMilliseconds;
-        if (startOffsetMs >= maxMs) {
-          startOffsetMs = (maxMs - 1).clamp(0, maxMs);
-        }
-      }
-      await player.playFromPosition(
-        Duration(milliseconds: startOffsetMs),
-        volume: sound.volume,
-      );
-      _markPlayed(sound.id);
-      _notify();
-      return true;
-    } on CueUnavailableException catch (e) {
-      _refusePreview(e);
-      return false;
-    } catch (e) {
-      AudioLoadLog.warn('Pré-écoute échouée pour « ${sound.title} » : $e');
-      return false;
-    }
-  }
-
-  void stopAllPreviews() {
-    stopLibraryPreview(notify: false);
-    if (_previewPlayers.isEmpty) return;
-    final players = _previewPlayers.toList();
-    _previewPlayers.clear();
-    for (final player in players) {
-      player.dispose();
-    }
   }
 
   /// À appeler à l'entrée en mode live (Mode Spectacle) : le prochain pad
