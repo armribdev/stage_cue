@@ -171,7 +171,6 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
       await widget.notifier.updateDraftPadSounds(mode.draftPadId!, draftIds);
       if (!mounted) return;
       setState(_syncPadSoundIds);
-      if (mounted) Navigator.of(context).pop();
       return;
     }
     setState(() => _addingSoundIds.add(sound.id));
