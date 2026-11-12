@@ -285,7 +285,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
         border: Border.fromBorderSide(border),
       ),
       child: _isCapturingHotkey
-          ? Icon(AppIcons.keyboard, size: 18, color: scheme.primary)
+          ? Icon(AppIcons.keyboard, size: AppIconSize.sm, color: scheme.primary)
           : (label != null
                 ? Padding(
                     padding: const EdgeInsets.all(4),
@@ -552,7 +552,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                 ),
               TextButton.icon(
                 onPressed: () => _addSound(context),
-                icon: const Icon(AppIcons.add, size: 18),
+                icon: const Icon(AppIcons.add, size: AppIconSize.sm),
                 label: const Text('Ajouter'),
               ),
             ],
@@ -885,7 +885,7 @@ class _SoundRowState extends State<_SoundRow> {
           const SizedBox(width: 6),
           Icon(
             AppIcons.cloud,
-            size: 13,
+            size: AppIconSize.sm,
             color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
           ),
         ],

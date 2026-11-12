@@ -154,7 +154,11 @@ extension _SamplerScreenBoards on _SamplerScreenState {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(AppIcons.edit, size: 18, color: scheme.onSurface),
+              Icon(
+                AppIcons.edit,
+                size: AppIconSize.sm,
+                color: scheme.onSurface,
+              ),
               const SizedBox(width: AppSpacing.sm),
               const Text('Renommer'),
             ],
@@ -166,7 +170,11 @@ extension _SamplerScreenBoards on _SamplerScreenState {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(AppIcons.copy, size: 18, color: scheme.onSurface),
+              Icon(
+                AppIcons.copy,
+                size: AppIconSize.sm,
+                color: scheme.onSurface,
+              ),
               const SizedBox(width: AppSpacing.sm),
               const Text('Dupliquer'),
             ],
@@ -179,7 +187,7 @@ extension _SamplerScreenBoards on _SamplerScreenState {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(AppIcons.delete, size: 18, color: scheme.error),
+              Icon(AppIcons.delete, size: AppIconSize.sm, color: scheme.error),
               const SizedBox(width: AppSpacing.sm),
               Text('Supprimer', style: TextStyle(color: scheme.error)),
             ],

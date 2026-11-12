@@ -150,7 +150,7 @@ class _PadDownloadSheetState extends State<PadDownloadSheet> {
                         color: scheme.onPrimary,
                       ),
                     )
-                  : const Icon(AppIcons.cloudDownload, size: 18),
+                  : const Icon(AppIcons.cloudDownload, size: AppIconSize.sm),
               label: Text(
                 padItem.isFullyReady
                     ? 'Tout est prêt'

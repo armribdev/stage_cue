@@ -592,7 +592,7 @@ class PadButton extends StatelessWidget {
                 color: color,
               ),
             ),
-            Icon(AppIcons.cloudDownload, size: 14, color: color),
+            Icon(AppIcons.cloudDownload, size: AppIconSize.sm, color: color),
           ],
         ),
       ),

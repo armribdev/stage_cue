@@ -454,7 +454,7 @@ class _CompactNextUpLabel extends StatelessWidget {
       children: [
         TransportIcon(
           TransportGlyph.next,
-          size: 14,
+          size: AppIconSize.sm,
           color: color.withValues(alpha: 0.6),
         ),
         const SizedBox(width: 4),

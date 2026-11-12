@@ -82,6 +82,20 @@ abstract final class AppTextStyles {
   );
 }
 
+/// Tailles d'icône. Les glyphes Lucide sont dessinés sur une grille de 24 :
+/// à 100 % d'échelle, une taille quelconque (13, 14, 18…) pose les traits
+/// entre deux pixels et l'icône paraît crénelée. Se limiter à cette échelle.
+abstract final class AppIconSize {
+  /// Icône en ligne avec du texte, bouton compact, méta.
+  static const double sm = 16;
+
+  /// Icône autonome (bouton d'icône, en-tête).
+  static const double md = 20;
+
+  /// Icône mise en avant.
+  static const double lg = 24;
+}
+
 /// Familles de police de la direction "Console Linear" — Manrope pour
 /// l'interface, JetBrains Mono pour tout affichage technique (durées,
 /// compteurs, chemins, identifiants). Bundlées en assets locaux : pas de

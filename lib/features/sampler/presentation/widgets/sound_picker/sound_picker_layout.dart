@@ -143,7 +143,10 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
                       ? const SizedBox.shrink()
                       : ExcludeFocus(
                           child: IconButton(
-                            icon: const Icon(AppIcons.close, size: 18),
+                            icon: const Icon(
+                              AppIcons.close,
+                              size: AppIconSize.sm,
+                            ),
                             onPressed: _clearQuery,
                             padding: EdgeInsets.zero,
                             visualDensity: VisualDensity.compact,
@@ -455,7 +458,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
               const SizedBox(width: 2),
               Icon(
                 AppIcons.chevronDown,
-                size: 18,
+                size: AppIconSize.sm,
                 color: scheme.onSurfaceVariant,
               ),
             ],

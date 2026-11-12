@@ -544,7 +544,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(AppIcons.delete, size: 18),
+              : const Icon(AppIcons.delete, size: AppIconSize.sm),
           label: const Text('Supprimer…'),
         ),
       ],
@@ -797,7 +797,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
         suffixIcon: _nameController.text.isEmpty
             ? null
             : IconButton(
-                icon: const Icon(AppIcons.close, size: 18),
+                icon: const Icon(AppIcons.close, size: AppIconSize.sm),
                 tooltip: 'Effacer le nom',
                 onPressed: () {
                   _nameController.clear();
@@ -906,7 +906,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                         _waveformRegenerated
                             ? AppIcons.check
                             : AppIcons.refresh,
-                        size: 18,
+                        size: AppIconSize.sm,
                       ),
                 label: Text(
                   _waveformRegenerated
@@ -1023,7 +1023,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
         child: isSelected
             ? Icon(
                 AppIcons.check,
-                size: 18,
+                size: AppIconSize.sm,
                 color: color == null
                     ? scheme.onSurfaceVariant
                     : _checkmarkColor(effectiveColor),

@@ -333,7 +333,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         if (_isQuickSearch && _localIds != null && !_isLocal(sound)) ...[
           Icon(
             AppIcons.cloud,
-            size: 13,
+            size: AppIconSize.sm,
             color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
           ),
         ],
@@ -444,7 +444,11 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         return SizedBox(
           width: _actionButtonSize,
           height: _actionButtonSize,
-          child: Icon(AppIcons.onAir, size: 18, color: scheme.primary),
+          child: Icon(
+            AppIcons.onAir,
+            size: AppIconSize.sm,
+            color: scheme.primary,
+          ),
         );
 
       case MusicPickerMode():
@@ -454,7 +458,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
             height: _actionButtonSize,
             child: Icon(
               onAir ? AppIcons.onAir : AppIcons.check,
-              size: 18,
+              size: AppIconSize.sm,
               color: scheme.primary,
             ),
           );

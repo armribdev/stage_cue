@@ -98,7 +98,11 @@ class _AmbianceSlot extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(SoundType.ambiance.icon, size: 14, color: scheme.primary),
+          Icon(
+            SoundType.ambiance.icon,
+            size: AppIconSize.sm,
+            color: scheme.primary,
+          ),
           const SizedBox(width: 6),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: _pillNameMaxWidth),
@@ -128,7 +132,11 @@ class _AmbianceSlot extends StatelessWidget {
             width: 220,
             child: Row(
               children: [
-                Icon(SoundType.ambiance.icon, size: 14, color: scheme.primary),
+                Icon(
+                  SoundType.ambiance.icon,
+                  size: AppIconSize.sm,
+                  color: scheme.primary,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: _name(scheme, current.displayName, active: true),
@@ -138,12 +146,12 @@ class _AmbianceSlot extends StatelessWidget {
           ),
         ),
         MenuItemButton(
-          leadingIcon: const Icon(AppIcons.swap, size: 18),
+          leadingIcon: const Icon(AppIcons.swap, size: AppIconSize.sm),
           onPressed: onChoose,
           child: const Text('Changer d\'ambiance'),
         ),
         MenuItemButton(
-          leadingIcon: const Icon(AppIcons.close, size: 18),
+          leadingIcon: const Icon(AppIcons.close, size: AppIconSize.sm),
           onPressed: onStop,
           child: const Text('Arrêter'),
         ),

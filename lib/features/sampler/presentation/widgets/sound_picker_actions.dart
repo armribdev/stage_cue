@@ -43,7 +43,7 @@ class SoundPickerActionButtons extends StatelessWidget {
           height: _secondaryButtonSize,
           child: IconButton(
             onPressed: secondaryEnabled ? onSecondary : null,
-            icon: Icon(secondaryIcon, size: 18),
+            icon: Icon(secondaryIcon, size: AppIconSize.sm),
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             style: IconButton.styleFrom(

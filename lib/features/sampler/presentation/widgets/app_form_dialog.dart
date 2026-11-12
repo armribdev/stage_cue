@@ -470,7 +470,7 @@ class _DestinationSelector extends StatelessWidget {
       children: [
         ChoiceChip(
           label: const Text('Local'),
-          avatar: const Icon(AppIcons.smartphone, size: 18),
+          avatar: const Icon(AppIcons.smartphone, size: AppIconSize.sm),
           selected: selectedLibraryId == null,
           showCheckmark: false,
           onSelected: (_) => onSelect(null),
@@ -478,7 +478,7 @@ class _DestinationSelector extends StatelessWidget {
         for (final library in libraries)
           ChoiceChip(
             label: Text(library.name),
-            avatar: const Icon(AppIcons.folderShared, size: 18),
+            avatar: const Icon(AppIcons.folderShared, size: AppIconSize.sm),
             selected: selectedLibraryId == library.id,
             showCheckmark: false,
             onSelected: (_) => onSelect(library.id),
@@ -564,13 +564,13 @@ class _ColorSwatch extends StatelessWidget {
           child: color == null
               ? Icon(
                   AppIcons.blocked,
-                  size: 14,
+                  size: AppIconSize.sm,
                   color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
                 )
               : isSelected
               ? Icon(
                   AppIcons.check,
-                  size: 14,
+                  size: AppIconSize.sm,
                   color: color!.computeLuminance() > 0.4
                       ? Colors.black87
                       : Colors.white,

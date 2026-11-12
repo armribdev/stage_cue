@@ -326,7 +326,11 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
         ),
         child: Row(
           children: [
-            Icon(AppIcons.info, size: 18, color: scheme.onSurfaceVariant),
+            Icon(
+              AppIcons.info,
+              size: AppIconSize.sm,
+              color: scheme.onSurfaceVariant,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -491,7 +495,7 @@ class _NudgeButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onPressed,
-      icon: Icon(icon, size: 22),
+      icon: Icon(icon, size: AppIconSize.lg),
       visualDensity: VisualDensity.compact,
       tooltip: tooltip,
     );

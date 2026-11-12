@@ -90,8 +90,8 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
         child: IconButton(
           onPressed: onPressed,
           icon: transport != null
-              ? TransportIcon(transport, size: 18)
-              : Icon(icon, size: 18),
+              ? TransportIcon(transport, size: AppIconSize.sm)
+              : Icon(icon, size: AppIconSize.sm),
           padding: EdgeInsets.zero,
           visualDensity: VisualDensity.compact,
           style: IconButton.styleFrom(

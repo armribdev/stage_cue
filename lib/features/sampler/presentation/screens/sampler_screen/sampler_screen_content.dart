@@ -96,7 +96,7 @@ extension _SamplerScreenContent on _SamplerScreenState {
                       children: [
                         Icon(
                           AppIcons.error,
-                          size: 18,
+                          size: AppIconSize.sm,
                           color: Theme.of(context).colorScheme.onErrorContainer,
                         ),
                         const SizedBox(width: 8),

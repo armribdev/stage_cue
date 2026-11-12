@@ -276,7 +276,7 @@ class _Section extends StatelessWidget {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Icon(icon, size: 14, color: color),
+                  child: Icon(icon, size: AppIconSize.sm, color: color),
                 ),
                 const SizedBox(width: 8),
                 Expanded(child: Text(_describe(issue))),

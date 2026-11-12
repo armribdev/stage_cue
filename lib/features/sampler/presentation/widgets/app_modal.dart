@@ -125,7 +125,7 @@ class AppModalShell extends StatelessWidget {
                     width: 34,
                     height: 34,
                   ),
-                  icon: const Icon(AppIcons.close, size: 18),
+                  icon: const Icon(AppIcons.close, size: AppIconSize.sm),
                 ),
               ],
             ),

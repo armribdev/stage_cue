@@ -290,7 +290,11 @@ class _BoardSceneSelectorState extends State<BoardSceneSelector> {
                     child: Row(
                       children: [
                         if (board.id == selectedId)
-                          Icon(AppIcons.check, size: 18, color: scheme.primary)
+                          Icon(
+                            AppIcons.check,
+                            size: AppIconSize.sm,
+                            color: scheme.primary,
+                          )
                         else
                           const SizedBox(width: 18),
                         const SizedBox(width: AppSpacing.sm),
@@ -313,7 +317,7 @@ class _BoardSceneSelectorState extends State<BoardSceneSelector> {
           padding: AppMenu.itemPadding,
           child: const Row(
             children: [
-              Icon(AppIcons.add, size: 18),
+              Icon(AppIcons.add, size: AppIconSize.sm),
               SizedBox(width: AppSpacing.sm),
               Text('Nouvelle scène'),
             ],
@@ -352,7 +356,11 @@ class _BoardSceneSelectorState extends State<BoardSceneSelector> {
               board: board,
               framed: false,
               color: color,
-              trailing: Icon(AppIcons.chevronDown, size: 18, color: color),
+              trailing: Icon(
+                AppIcons.chevronDown,
+                size: AppIconSize.sm,
+                color: color,
+              ),
             ),
           ),
         ),

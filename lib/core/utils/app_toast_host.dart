@@ -223,7 +223,7 @@ class _ToastCard extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Icon(
                 AppIcons.copy,
-                size: 14,
+                size: AppIconSize.sm,
                 color: scheme.onSurfaceVariant,
                 semanticLabel: 'Copier le message',
               ),
@@ -272,7 +272,7 @@ class _ToastCard extends StatelessWidget {
                 onPressed: () => controller.dismiss(toast.id),
                 icon: const Icon(
                   AppIcons.close,
-                  size: 14,
+                  size: AppIconSize.sm,
                   semanticLabel: 'Fermer',
                 ),
                 color: scheme.onSurfaceVariant,
