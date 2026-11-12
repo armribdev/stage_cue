@@ -93,6 +93,10 @@ class LocalPadDataSource {
           )
           .get();
 
+      // Un pad sans son n'existe pas : on ignore ceux que l'ancien parcours de
+      // création a pu laisser en base (app fermée pendant le choix du son).
+      if (soundRows.isEmpty) continue;
+
       pads.add(
         domain_pad.Pad(
           id: padRow.read<int>('id'),
@@ -152,6 +156,9 @@ class LocalPadDataSource {
     int? sortOrder,
     int rowIndex = 0,
   }) async {
+    if (soundIds.isEmpty) {
+      throw ArgumentError.value(soundIds, 'soundIds', 'Un pad exige un son');
+    }
     final nextOrder =
         sortOrder ??
         (await _database

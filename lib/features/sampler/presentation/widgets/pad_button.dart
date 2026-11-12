@@ -56,9 +56,9 @@ class PadButton extends StatelessWidget {
   });
 
   _PadVisual get _visual {
-    if (padItem.isDraft && padItem.totalSoundCount == 0) {
-      return _PadVisual.draft;
-    }
+    // Un brouillon n'est pas encore créé : il garde son cadre pointillé jusqu'à
+    // son remplacement par le vrai pad, même une fois le son choisi.
+    if (padItem.isDraft) return _PadVisual.draft;
     if (padItem.isPlayable || padItem.appearsReady) return _PadVisual.ready;
     final reason = padItem.unavailabilityReason;
     if (padItem.isDownloading ||

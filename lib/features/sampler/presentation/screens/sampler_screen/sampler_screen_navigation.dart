@@ -143,12 +143,27 @@ extension _SamplerScreenNavigation on _SamplerScreenState {
   }
 
   Future<void> _openAddPadFlow(SoundBoard board, {int rowIndex = 0}) async {
+    // Un pad sans son n'existe pas : le brouillon (cadre pointillé, jamais en
+    // base) tient la place le temps du choix, et le pad n'est créé qu'avec le
+    // son choisi. Fermer le sélecteur sans choisir abandonne le brouillon.
     final draftPadId = _notifier.beginDraftPad(rowIndex: rowIndex);
     if (draftPadId == null) return;
 
+    final selectedIds = <int>[];
+    await SoundPickerOverlay.showForPad(
+      context,
+      notifier: _notifier,
+      draftPadId: draftPadId,
+      draftSelectedIds: selectedIds,
+    );
+
+    if (selectedIds.isEmpty) {
+      _notifier.cancelDraftPad(draftPadId);
+      return;
+    }
     final padItem = await _notifier.commitDraftPad(
       draftPadId: draftPadId,
-      soundIds: [],
+      soundIds: selectedIds,
     );
     if (!mounted || padItem == null) return;
 
@@ -157,14 +172,7 @@ extension _SamplerScreenNavigation on _SamplerScreenState {
       padItem: padItem,
       notifier: _notifier,
       appPreferences: widget.services.appPreferences,
-      openPickerOnStart: true,
     );
-
-    if (!mounted) return;
-    final current = _notifier.findPadItemById(padItem.pad.id);
-    if (current != null && current.pad.sounds.isEmpty) {
-      await _notifier.removeSound(current);
-    }
   }
 
   /// Déclenche un pad depuis une touche assignée (voir

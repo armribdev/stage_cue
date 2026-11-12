@@ -26,7 +26,6 @@ class PadDetailsScreen extends StatefulWidget {
   final SamplerNotifier notifier;
   final AppPreferences appPreferences;
   final bool isModal;
-  final bool openPickerOnStart;
 
   const PadDetailsScreen({
     super.key,
@@ -34,7 +33,6 @@ class PadDetailsScreen extends StatefulWidget {
     required this.notifier,
     required this.appPreferences,
     this.isModal = false,
-    this.openPickerOnStart = false,
   });
 
   /// Page plein écran sur téléphone, fenêtre modale sur tablette et desktop.
@@ -43,7 +41,6 @@ class PadDetailsScreen extends StatefulWidget {
     required PadItem padItem,
     required SamplerNotifier notifier,
     required AppPreferences appPreferences,
-    bool openPickerOnStart = false,
   }) {
     return openAdaptiveScreen(
       context: context,
@@ -52,7 +49,6 @@ class PadDetailsScreen extends StatefulWidget {
         notifier: notifier,
         appPreferences: appPreferences,
         isModal: isModal,
-        openPickerOnStart: openPickerOnStart,
       ),
     );
   }
@@ -93,11 +89,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     _displayNameController = TextEditingController(text: pad.name ?? '');
     _hotkeyCaptureFocusNode = FocusNode(debugLabel: 'pad-hotkey-capture');
     _loadTagCatalog();
-    if (widget.openPickerOnStart) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _addSound(context);
-      });
-    }
   }
 
   @override

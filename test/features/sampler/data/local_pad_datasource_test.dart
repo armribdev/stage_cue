@@ -42,4 +42,41 @@ void main() {
       expect(pads.map((p) => p.id), [kept]);
     },
   );
+
+  group('un pad sans son ne peut pas exister', () {
+    test('createPadWithSettings refuse une liste de sons vide', () async {
+      final boardId = await database
+          .into(database.soundBoards)
+          .insert(db.SoundBoardsCompanion.insert(name: 'Scène'));
+
+      await expectLater(
+        dataSource.createPadWithSettings(boardId: boardId, soundIds: const []),
+        throwsArgumentError,
+      );
+      expect(await database.select(database.pads).get(), isEmpty);
+    });
+
+    test('getBoardPads ignore un pad resté vide en base', () async {
+      final boardId = await database
+          .into(database.soundBoards)
+          .insert(db.SoundBoardsCompanion.insert(name: 'Scène'));
+      final soundId = await database
+          .into(database.sounds)
+          .insert(
+            db.SoundsCompanion.insert(
+              title: 'a',
+              displayName: 'a',
+              filePath: '/x/a.mp3',
+            ),
+          );
+      final kept = await dataSource.createPad(boardId, soundId);
+      await database
+          .into(database.pads)
+          .insert(db.PadsCompanion.insert(boardId: boardId));
+
+      final pads = await dataSource.getBoardPads(boardId);
+
+      expect(pads.map((p) => p.id), [kept]);
+    });
+  });
 }
