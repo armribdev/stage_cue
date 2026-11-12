@@ -63,6 +63,9 @@ class _SoundboardAppState extends State<SoundboardApp>
   /// et on la restaure en sortant.
   bool _wasMaximizedBeforeFullScreen = false;
 
+  /// Une transition plein écran est en cours (voir `_applyFullScreenPreference`).
+  bool _isApplyingFullScreen = false;
+
   /// Erreur SoLoud courante — `null` une fois le moteur prêt (démarrage ou retry).
   Object? _audioEngineError;
 
@@ -81,14 +84,10 @@ class _SoundboardAppState extends State<SoundboardApp>
     if (_isWindowsDesktop) {
       HardwareKeyboard.instance.addHandler(_handleKeyEvent);
       windowManager.addListener(this);
-      // Rouvre l'app dans le dernier état plein écran/fenêtré connu.
-      if (widget.services.appPreferences.isWindowsFullScreen) {
-        unawaited(
-          _enterFullScreen().then((_) {
-            if (mounted) setState(() {});
-          }),
-        );
-      }
+      // Rouvre l'app dans le dernier état plein écran/fenêtré connu, puis suit
+      // le réglage (Paramètres, F11).
+      widget.services.appPreferences.addListener(_onPreferencesChanged);
+      unawaited(_applyFullScreenPreference());
       // Pas de check update tant que l'audio est mort : on priorise le retry.
       if (_audioEngineError == null) {
         unawaited(_maybeCheckForUpdateOnLaunch());
@@ -226,6 +225,7 @@ class _SoundboardAppState extends State<SoundboardApp>
     if (_isWindowsDesktop) {
       HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
       windowManager.removeListener(this);
+      widget.services.appPreferences.removeListener(_onPreferencesChanged);
       // Filet de sécurité si l'app se ferme pendant le plein écran : la barre
       // des tâches Windows ne doit pas rester masquée après coup.
       if (_boundsBeforeFullScreen != null) {
@@ -238,7 +238,8 @@ class _SoundboardAppState extends State<SoundboardApp>
 
   bool _handleKeyEvent(KeyEvent event) {
     if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.f11) {
-      _toggleFullScreen();
+      final prefs = widget.services.appPreferences;
+      unawaited(prefs.setWindowsFullScreen(!prefs.isWindowsFullScreen));
       return true;
     }
     return false;
@@ -262,16 +263,34 @@ class _SoundboardAppState extends State<SoundboardApp>
     }
   }
 
-  Future<void> _toggleFullScreen() async {
-    if (_boundsBeforeFullScreen == null) {
-      await _enterFullScreen();
-    } else {
-      await _exitFullScreen();
+  void _onPreferencesChanged() => unawaited(_applyFullScreenPreference());
+
+  /// Met la fenêtre en conformité avec `isWindowsFullScreen`. Un seul passage à
+  /// la fois : si le réglage rebascule pendant une transition, la boucle
+  /// rattrape l'état final au lieu d'empiler des transitions concurrentes.
+  Future<void> _applyFullScreenPreference() async {
+    if (_isApplyingFullScreen) return;
+    _isApplyingFullScreen = true;
+    final prefs = widget.services.appPreferences;
+    var changed = false;
+    try {
+      while (prefs.isWindowsFullScreen != (_boundsBeforeFullScreen != null)) {
+        if (prefs.isWindowsFullScreen) {
+          await _enterFullScreen();
+        } else {
+          await _exitFullScreen();
+        }
+        changed = true;
+      }
+    } catch (e) {
+      // La fenêtre n'a pas suivi : on aligne le réglage sur l'état réel plutôt
+      // que de retenter à chaque lancement.
+      AppLog.warn('Bascule plein écran impossible : $e');
+      await prefs.setWindowsFullScreen(_boundsBeforeFullScreen != null);
+    } finally {
+      _isApplyingFullScreen = false;
     }
-    await widget.services.appPreferences.setWindowsFullScreen(
-      _boundsBeforeFullScreen != null,
-    );
-    if (mounted) setState(() {});
+    if (changed && mounted) setState(() {});
   }
 
   Future<void> _quitApp() async {
@@ -442,13 +461,9 @@ class _SoundboardAppState extends State<SoundboardApp>
             )
           : SamplerScreen(
               services: widget.services,
-              isWindowsFullScreen: _isWindowsDesktop
-                  ? _boundsBeforeFullScreen != null
+              onQuitApp: _isWindowsDesktop && _boundsBeforeFullScreen != null
+                  ? () => unawaited(_quitApp())
                   : null,
-              onToggleWindowsFullScreen: _isWindowsDesktop
-                  ? () => unawaited(_toggleFullScreen())
-                  : null,
-              onQuitApp: _isWindowsDesktop ? () => unawaited(_quitApp()) : null,
             ),
     );
   }

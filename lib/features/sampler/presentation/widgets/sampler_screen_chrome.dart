@@ -262,8 +262,6 @@ class SamplerDesktopAppBar extends StatelessWidget
   final VoidCallback onQuickSearch;
   final Widget stopAllButton;
   final Widget syncIndicator;
-  final bool? isWindowsFullScreen;
-  final VoidCallback? onToggleWindowsFullScreen;
   final VoidCallback? onQuitApp;
 
   const SamplerDesktopAppBar({
@@ -281,8 +279,6 @@ class SamplerDesktopAppBar extends StatelessWidget
     required this.onQuickSearch,
     required this.stopAllButton,
     required this.syncIndicator,
-    this.isWindowsFullScreen,
-    this.onToggleWindowsFullScreen,
     this.onQuitApp,
   });
 
@@ -306,8 +302,6 @@ class SamplerDesktopAppBar extends StatelessWidget
           onTogglePerformanceMode: onTogglePerformanceMode,
           onOpenLibrary: onOpenLibrary,
           onOpenSettings: onOpenSettings,
-          isWindowsFullScreen: isWindowsFullScreen,
-          onToggleWindowsFullScreen: onToggleWindowsFullScreen,
           onQuitApp: onQuitApp,
         ),
       ),
@@ -351,8 +345,6 @@ class SamplerDesktopMenuButton extends StatelessWidget {
   final VoidCallback onTogglePerformanceMode;
   final Future<void> Function() onOpenLibrary;
   final Future<void> Function() onOpenSettings;
-  final bool? isWindowsFullScreen;
-  final VoidCallback? onToggleWindowsFullScreen;
   final VoidCallback? onQuitApp;
 
   const SamplerDesktopMenuButton({
@@ -361,8 +353,6 @@ class SamplerDesktopMenuButton extends StatelessWidget {
     required this.onTogglePerformanceMode,
     required this.onOpenLibrary,
     required this.onOpenSettings,
-    this.isWindowsFullScreen,
-    this.onToggleWindowsFullScreen,
     this.onQuitApp,
   });
 
@@ -372,8 +362,6 @@ class SamplerDesktopMenuButton extends StatelessWidget {
   /// deux calques de retour visuel superposés pour une seule action.
   Future<void> _openMenu(BuildContext context) async {
     final scheme = Theme.of(context).colorScheme;
-    final fullScreen = isWindowsFullScreen;
-    final toggleFullScreen = onToggleWindowsFullScreen;
     final quitApp = onQuitApp;
 
     final button = context.findRenderObject()! as RenderBox;
@@ -447,30 +435,9 @@ class SamplerDesktopMenuButton extends StatelessWidget {
             ],
           ),
         ),
-        if (toggleFullScreen != null)
-          PopupMenuItem<String>(
-            value: 'fullscreen',
-            height: AppMenu.itemHeight,
-            padding: AppMenu.itemPadding,
-            child: Row(
-              children: [
-                StrokeIcon(
-                  fullScreen == true
-                      ? AppIcons.fullscreenExit
-                      : AppIcons.fullscreen,
-                  size: AppIconSize.md,
-                  color: scheme.onSurface,
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  fullScreen == true ? 'Quitter le plein écran' : 'Plein écran',
-                ),
-              ],
-            ),
-          ),
-        // Uniquement en plein écran : la fenêtre n'a alors plus de barre de
-        // titre ni de bouton de fermeture natif pour quitter l'app.
-        if (fullScreen == true && quitApp != null)
+        // Fourni uniquement en plein écran : la fenêtre n'a alors plus de barre
+        // de titre ni de bouton de fermeture natif pour quitter l'app.
+        if (quitApp != null)
           PopupMenuItem<String>(
             value: 'quit',
             height: AppMenu.itemHeight,
@@ -498,8 +465,6 @@ class SamplerDesktopMenuButton extends StatelessWidget {
         unawaited(onOpenLibrary());
       case 'settings':
         unawaited(onOpenSettings());
-      case 'fullscreen':
-        toggleFullScreen?.call();
       case 'quit':
         quitApp?.call();
     }

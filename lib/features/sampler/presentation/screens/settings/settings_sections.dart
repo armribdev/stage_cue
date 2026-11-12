@@ -27,6 +27,28 @@ extension _SettingsSections on _SettingsScreenState {
     );
   }
 
+  /// Section « Affichage » : plein écran de la fenêtre (Windows uniquement).
+  /// `SoundboardApp` observe la préférence et met la fenêtre en conformité ; F11
+  /// bascule la même préférence, l'interrupteur la suit donc.
+  Widget _buildDisplaySection() {
+    return SettingsSection(
+      icon: AppIcons.fullscreen,
+      title: 'Affichage',
+      child: ListenableBuilder(
+        listenable: widget.appPreferences,
+        builder: (context, _) => SettingsRow.toggle(
+          title: 'Plein écran',
+          description:
+              'Masque la barre de titre et la barre des tâches (raccourci : '
+              'F11). « Quitter » reste dans le menu de l\'app.',
+          value: widget.appPreferences.isWindowsFullScreen,
+          onChanged: (value) =>
+              unawaited(widget.appPreferences.setWindowsFullScreen(value)),
+        ),
+      ),
+    );
+  }
+
   /// Section « Audio » : choix du périphérique de sortie de pré-écoute (cue).
   /// Windows uniquement — permet d'auditionner un son sur un casque séparé
   /// pendant que la sortie « salle » reste sur le device système.
@@ -259,6 +281,7 @@ extension _SettingsSections on _SettingsScreenState {
                         );
                       },
                     ),
+                    if (Platform.isWindows) _buildDisplaySection(),
                     if (CueAudioService.isSupported) _buildAudioSection(),
                     if (widget.autoTagPack != null)
                       _buildAutoTagSection(widget.autoTagPack!),

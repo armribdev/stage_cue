@@ -88,8 +88,9 @@ class AppPreferences extends ChangeNotifier {
   /// séparé pendant que la sortie « salle » reste sur le device par défaut.
   String? get cueOutputDeviceId => _cueOutputDeviceId;
 
-  /// Dernier état plein écran connu de la fenêtre Windows — appliqué à la
-  /// réouverture de l'app (voir `SoundboardApp._toggleFullScreen`).
+  /// Plein écran voulu pour la fenêtre Windows. Source de vérité : `SoundboardApp`
+  /// l'observe et met la fenêtre en conformité (réglage Paramètres, F11), puis
+  /// le rétablit à la réouverture de l'app.
   bool get isWindowsFullScreen => _isWindowsFullScreen;
 
   /// Horodatage du dernier check de mise à jour **automatique** (lancement) —
@@ -177,10 +178,11 @@ class AppPreferences extends ChangeNotifier {
     await _save();
   }
 
-  /// Persiste l'état plein écran de la fenêtre Windows (F11).
+  /// Choisit le plein écran de la fenêtre Windows (Paramètres, F11).
   Future<void> setWindowsFullScreen(bool value) async {
     if (_isWindowsFullScreen == value) return;
     _isWindowsFullScreen = value;
+    notifyListeners();
     await _save();
   }
 

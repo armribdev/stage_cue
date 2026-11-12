@@ -47,22 +47,12 @@ part 'sampler_screen/sampler_screen_content.dart';
 class SamplerScreen extends StatefulWidget {
   final AppServices services;
 
-  /// État plein écran Windows courant — `null` si la fonctionnalité n'est
-  /// pas disponible sur cette plateforme (masque les entrées de menu).
-  final bool? isWindowsFullScreen;
-  final VoidCallback? onToggleWindowsFullScreen;
-
-  /// Ferme complètement l'application — proposé dans le menu uniquement en
-  /// plein écran, la fenêtre n'ayant alors plus de bouton de fermeture natif.
+  /// Ferme complètement l'application — fourni (donc proposé dans le menu)
+  /// uniquement en plein écran, la fenêtre n'ayant alors plus de bouton de
+  /// fermeture natif. Le plein écran lui-même se règle dans Paramètres.
   final VoidCallback? onQuitApp;
 
-  const SamplerScreen({
-    super.key,
-    required this.services,
-    this.isWindowsFullScreen,
-    this.onToggleWindowsFullScreen,
-    this.onQuitApp,
-  });
+  const SamplerScreen({super.key, required this.services, this.onQuitApp});
 
   @override
   State<SamplerScreen> createState() => _SamplerScreenState();
@@ -321,8 +311,6 @@ class _SamplerScreenState extends State<SamplerScreen> {
                       active:
                           widget.services.autoSyncCoordinator.visiblePassActive,
                     ),
-                    isWindowsFullScreen: widget.isWindowsFullScreen,
-                    onToggleWindowsFullScreen: widget.onToggleWindowsFullScreen,
                     onQuitApp: widget.onQuitApp,
                   )
                 : SamplerAppBar(
