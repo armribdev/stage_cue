@@ -19,6 +19,7 @@ import '../models/board_readiness.dart';
 import '../widgets/pad_download_sheet.dart';
 import '../widgets/sampler_screen_chrome.dart';
 import '../widgets/section_context_anchor.dart';
+import '../widgets/sync_activity_indicator.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../../../core/app/app_services.dart';
@@ -315,6 +316,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onOpenSettings: _openSettings,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
                     stopAllButton: StopAllButton(notifier: _notifier),
+                    syncIndicator: SyncActivityIndicator(
+                      active:
+                          widget.services.autoSyncCoordinator.visiblePassActive,
+                    ),
                     isWindowsFullScreen: widget.isWindowsFullScreen,
                     onToggleWindowsFullScreen: widget.onToggleWindowsFullScreen,
                     onQuitApp: widget.onQuitApp,
@@ -326,6 +331,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onTogglePerformanceMode: _togglePerformanceMode,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
                     stopAllButton: StopAllButton(notifier: _notifier),
+                    syncIndicator: SyncActivityIndicator(
+                      active:
+                          widget.services.autoSyncCoordinator.visiblePassActive,
+                    ),
                   ),
             drawer: prefersDesktopUi
                 ? null

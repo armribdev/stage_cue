@@ -139,9 +139,18 @@ extension LibraryRepositoryPushPull on LibraryRepository {
       // Rien n'a été fusionné : c'est le snapshot RACINE (les boards) qui fait
       // foi pour dire si le distant est à jour ou simplement vide. Les nœuds
       // dossier, eux, peuvent légitimement n'avoir jamais été poussés.
-      return rootOutcome is PullNoRemoteSnapshot
-          ? const PullNoRemoteSnapshot()
-          : const PullUpToDate();
+      if (rootOutcome is PullNoRemoteSnapshot) {
+        return const PullNoRemoteSnapshot();
+      }
+      // « À jour » est un constat fait maintenant : c'est la date de la dernière
+      // synchro, au même titre qu'une fusion. Sans cette écriture, la date
+      // n'avançait que sur un push ou une fusion réelle, et une actualisation
+      // sans rien de neuf (le cas courant) laissait l'ancienne.
+      await _dataSource.updateSyncState(
+        id: library.id,
+        lastSyncedAt: DateTime.now(),
+      );
+      return const PullUpToDate();
     }
   }
 }

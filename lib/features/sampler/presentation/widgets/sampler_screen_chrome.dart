@@ -26,6 +26,7 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onTogglePerformanceMode;
   final VoidCallback onQuickSearch;
   final Widget stopAllButton;
+  final Widget syncIndicator;
 
   const SamplerAppBar({
     super.key,
@@ -35,6 +36,7 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onTogglePerformanceMode,
     required this.onQuickSearch,
     required this.stopAllButton,
+    required this.syncIndicator,
   });
 
   @override
@@ -64,6 +66,9 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
         child: Container(color: AppElevation.border(scheme).color, height: 1),
       ),
       actions: [
+        // En tête de rangée : son apparition ne déplace que le titre, jamais
+        // les boutons sous le doigt (stop, recherche).
+        syncIndicator,
         // Vumètre de sortie : uniquement là où la barre a la place (tablette+).
         if (context.deviceClass.isAtLeastTablet)
           const Center(child: AudioVuMeter()),
@@ -131,7 +136,7 @@ class StopAllButton extends StatelessWidget {
                   children: [
                     TransportIcon(
                       TransportGlyph.stop,
-                      size: 14,
+                      size: AppIconSize.sm,
                       color: scheme.error,
                     ),
                     const SizedBox(width: 4),
@@ -255,6 +260,7 @@ class SamplerDesktopAppBar extends StatelessWidget
   final Future<void> Function() onOpenSettings;
   final VoidCallback onQuickSearch;
   final Widget stopAllButton;
+  final Widget syncIndicator;
   final bool? isWindowsFullScreen;
   final VoidCallback? onToggleWindowsFullScreen;
   final VoidCallback? onQuitApp;
@@ -273,6 +279,7 @@ class SamplerDesktopAppBar extends StatelessWidget
     required this.onOpenSettings,
     required this.onQuickSearch,
     required this.stopAllButton,
+    required this.syncIndicator,
     this.isWindowsFullScreen,
     this.onToggleWindowsFullScreen,
     this.onQuitApp,
@@ -316,6 +323,7 @@ class SamplerDesktopAppBar extends StatelessWidget
         child: Container(color: AppElevation.border(scheme).color, height: 1),
       ),
       actions: [
+        syncIndicator,
         stopAllButton,
         BoxedIconButton(
           icon: AppIcons.search,
@@ -395,7 +403,11 @@ class SamplerDesktopMenuButton extends StatelessWidget {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(AppIcons.theater, size: 18, color: scheme.onSurface),
+              Icon(
+                AppIcons.theater,
+                size: AppIconSize.sm,
+                color: scheme.onSurface,
+              ),
               const SizedBox(width: AppSpacing.sm),
               const Text('Démarrer une session live'),
             ],
@@ -407,7 +419,11 @@ class SamplerDesktopMenuButton extends StatelessWidget {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(AppIcons.library, size: 18, color: scheme.onSurface),
+              Icon(
+                AppIcons.library,
+                size: AppIconSize.sm,
+                color: scheme.onSurface,
+              ),
               const SizedBox(width: AppSpacing.sm),
               const Text('Gérer la bibliothèque'),
             ],
@@ -420,7 +436,11 @@ class SamplerDesktopMenuButton extends StatelessWidget {
           padding: AppMenu.itemPadding,
           child: Row(
             children: [
-              Icon(AppIcons.settings, size: 18, color: scheme.onSurface),
+              Icon(
+                AppIcons.settings,
+                size: AppIconSize.sm,
+                color: scheme.onSurface,
+              ),
               const SizedBox(width: AppSpacing.sm),
               const Text('Paramètres'),
             ],
@@ -437,7 +457,7 @@ class SamplerDesktopMenuButton extends StatelessWidget {
                   fullScreen == true
                       ? AppIcons.fullscreenExit
                       : AppIcons.fullscreen,
-                  size: 18,
+                  size: AppIconSize.sm,
                   color: scheme.onSurface,
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -456,7 +476,11 @@ class SamplerDesktopMenuButton extends StatelessWidget {
             padding: AppMenu.itemPadding,
             child: Row(
               children: [
-                Icon(AppIcons.logout, size: 18, color: scheme.onSurface),
+                Icon(
+                  AppIcons.logout,
+                  size: AppIconSize.sm,
+                  color: scheme.onSurface,
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 const Text('Quitter'),
               ],

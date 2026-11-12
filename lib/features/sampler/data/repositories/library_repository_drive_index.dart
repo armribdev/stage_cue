@@ -189,6 +189,7 @@ extension LibraryRepositoryDriveIndex on LibraryRepository {
 
       return DriveIndexResult(
         newFileCount: indexedCount,
+        prunedCount: prunedCount,
         presentDriveFileIds: seenDriveIds,
       );
     } catch (e) {

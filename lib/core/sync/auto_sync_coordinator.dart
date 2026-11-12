@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:drift/drift.dart'
     show TableUpdate, TableUpdateQuery, UpdateKind;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
 
 import '../../features/sampler/data/models/indexing_progress.dart';
 import '../../features/sampler/data/repositories/library_repository.dart';
@@ -52,6 +53,47 @@ enum SyncPassTrigger {
   bool get isWatch => this == SyncPassTrigger.watch;
 }
 
+/// Étape d'une passe pour une bibliothèque, remontée à l'UI qui l'a demandée.
+/// Une bibliothèque que la passe n'a pas encore atteinte n'a pas d'étape.
+enum SyncPassStage {
+  /// Delta Drive (`changes.list`) : qu'est-ce qui a bougé depuis la dernière passe ?
+  detecting,
+
+  /// Scan complet, faute de pouvoir se fier au delta (la progression chiffrée
+  /// arrive par `onIndexProgress`).
+  scanning,
+
+  /// Pull du snapshot de la bibliothèque (scènes, tags).
+  pulling,
+}
+
+/// Ce qu'une passe a fait d'une bibliothèque : de quoi dire à l'utilisateur ce
+/// qui a changé, ou pourquoi cette bibliothèque-là n'a pas été actualisée.
+class LibraryPassOutcome {
+  /// Sons créés ou modifiés localement par l'indexation (delta ou scan complet).
+  final int added;
+
+  /// Sons retirés parce que leur fichier a disparu de Drive.
+  final int removed;
+
+  /// Échec de l'indexation de cette bibliothèque ; `null` si elle est passée.
+  /// Son état local est alors celui d'avant la passe.
+  final Object? error;
+
+  /// L'échec est une session Google expirée (reconnexion, pas simple réessai).
+  final bool authExpired;
+
+  const LibraryPassOutcome({
+    this.added = 0,
+    this.removed = 0,
+    this.error,
+    this.authExpired = false,
+  });
+
+  bool get failed => error != null;
+  bool get hasChanges => added > 0 || removed > 0;
+}
+
 /// Bilan d'une passe, pour l'UI qui l'a déclenchée à la main.
 class SyncPassReport {
   /// Bibliothèques indexées **et** tirées jusqu'au bout.
@@ -78,6 +120,10 @@ class SyncPassReport {
   /// démarrer ne se raconte pas comme « une bibliothèque non actualisée ».
   final Object? error;
 
+  /// Résultat par bibliothèque (clé : `Library.id`), pour les bibliothèques
+  /// effectivement traitées. Vide si la passe n'a rien tenté.
+  final Map<int, LibraryPassOutcome> libraries;
+
   const SyncPassReport({
     this.synced = 0,
     this.skipped = 0,
@@ -85,6 +131,7 @@ class SyncPassReport {
     this.offline = false,
     this.localMode = false,
     this.error,
+    this.libraries = const {},
   });
 }
 
@@ -135,6 +182,21 @@ class AutoSyncCoordinator {
   /// et doubleraient le trafic Drive. Une demande manuelle rejoint la passe en
   /// cours plutôt que d'en ouvrir une seconde.
   Future<SyncPassReport>? _passInFlight;
+
+  /// Une passe qui **fait quelque chose** est en cours : lancement et
+  /// actualisation manuelle dès leur début, veille seulement une fois que son
+  /// delta a trouvé du nouveau. Une sonde de veille qui conclut « rien de neuf »
+  /// ne passe donc jamais à `true` — elle reviendrait toutes les 5 minutes et
+  /// ferait clignoter un écran de régie pour zéro information
+  /// ([0022](../../../docs/decisions/0022-veille-drive-en-cours-de-session.md)).
+  ///
+  /// Distinct de `SyncStatus` : celui-ci ne passe à `syncing` qu'au pull, alors
+  /// que l'indexation (delta, scan complet) est la partie longue de la passe.
+  final ValueNotifier<bool> _visiblePassActive = ValueNotifier(false);
+
+  /// Voir [_visiblePassActive]. Lu par l'indicateur discret de la barre du
+  /// sampler.
+  ValueListenable<bool> get visiblePassActive => _visiblePassActive;
 
   /// Bibliothèques pour lesquelles la veille a déjà signalé qu'elle renonçait au
   /// scan complet — cf. [SyncLog.watchFullScanDeferred].
@@ -210,10 +272,22 @@ class AutoSyncCoordinator {
   /// systématiquement paie des secondes pour ce que le chemin incrémental
   /// rattrape en une requête, et tirer avant d'indexer recâble les boards sur
   /// des sons pas encore connus ([0005](../../../docs/decisions/0005-ordre-de-synchronisation-au-lancement.md)).
+  ///
+  /// [only] restreint la passe à une bibliothèque (clic sur sa ligne) ; la
+  /// séquence, elle, ne change pas. Si une passe est déjà en vol, la demande la
+  /// rejoint telle quelle — l'UI grise ses gestes pendant une passe manuelle,
+  /// donc on ne rejoint en pratique que lancement ou veille, qui couvrent tout.
   Future<SyncPassReport> refreshNow({
+    Library? only,
     void Function(Library library, IndexingProgress progress)? onIndexProgress,
+    void Function(Library library, SyncPassStage stage)? onStage,
   }) {
-    return _startPass(SyncPassTrigger.manual, onIndexProgress: onIndexProgress);
+    return _startPass(
+      SyncPassTrigger.manual,
+      only: only,
+      onIndexProgress: onIndexProgress,
+      onStage: onStage,
+    );
   }
 
   /// L'app revient au premier plan : sonde tout de suite plutôt que d'attendre
@@ -315,7 +389,9 @@ class AutoSyncCoordinator {
 
   Future<SyncPassReport> _startPass(
     SyncPassTrigger trigger, {
+    Library? only,
     void Function(Library, IndexingProgress)? onIndexProgress,
+    void Function(Library, SyncPassStage)? onStage,
   }) {
     final inFlight = _passInFlight;
     if (inFlight != null) {
@@ -323,17 +399,26 @@ class AutoSyncCoordinator {
       // manuelle arrivée pendant le pull de lancement n'affichera donc pas de
       // progression — elle n'a rien à relancer.
       SyncLog.trace('passe ${trigger.name} : rejoint la passe en cours');
+      // Une demande de l'utilisateur rejoignant une sonde de veille encore
+      // « muette » : la passe sert désormais un geste, elle doit se voir.
+      if (!trigger.isWatch) _setPassVisible(true);
       return inFlight;
     }
-    final pass = _runPass(trigger, onIndexProgress: onIndexProgress).whenComplete(
-      () {
-        _passInFlight = null;
-        // L'analyse vient APRÈS le pull : le pull remplace les tags d'un dossier
-        // par ceux du distant, et publier des tags posés avant lui les ferait
-        // écraser (décision 0029).
-        _scheduleAutoTag();
-      },
-    );
+    if (!trigger.isWatch) _setPassVisible(true);
+    final pass =
+        _runPass(
+          trigger,
+          only: only,
+          onIndexProgress: onIndexProgress,
+          onStage: onStage,
+        ).whenComplete(() {
+          _passInFlight = null;
+          _setPassVisible(false);
+          // L'analyse vient APRÈS le pull : le pull remplace les tags d'un dossier
+          // par ceux du distant, et publier des tags posés avant lui les ferait
+          // écraser (décision 0029).
+          _scheduleAutoTag();
+        });
     _passInFlight = pass;
     return pass;
   }
@@ -409,7 +494,9 @@ class AutoSyncCoordinator {
   /// un bouton qui attend un bilan.
   Future<SyncPassReport> _runPass(
     SyncPassTrigger trigger, {
+    Library? only,
     void Function(Library, IndexingProgress)? onIndexProgress,
+    void Function(Library, SyncPassStage)? onStage,
   }) async {
     if (!_appPreferences.allowsNetworkSync) {
       return const SyncPassReport(localMode: true);
@@ -417,7 +504,16 @@ class AutoSyncCoordinator {
     try {
       final reconnected = await _repository.reconnectSilently();
 
-      final libraries = await _connectedLibraries();
+      final connected = await _connectedLibraries();
+      final libraries = only == null
+          ? connected
+          : connected.where((library) => library.id == only.id).toList();
+      if (only != null) {
+        SyncLog.trace(
+          'passe ${trigger.name} : limitée à ${only.name}'
+          '${libraries.isEmpty ? ' (non connectée à Drive, rien à faire)' : ''}',
+        );
+      }
       if (libraries.isEmpty) {
         return const SyncPassReport(); // Usage 100 % local : la synchro reste idle.
       }
@@ -464,12 +560,16 @@ class AutoSyncCoordinator {
         final presentByLibrary = <int, Set<String>>{};
         var skipped = 0;
         var authExpired = false;
+        // Bilan par bibliothèque : ajouts/retraits d'un côté, échecs de l'autre.
+        final changes = <int, ({int added, int removed})>{};
+        final failures = <int, Object>{};
 
         for (final library in libraries) {
           try {
             // Chemin rapide : n'appliquer que ce qui a changé depuis la
             // dernière passe. Il se déclare lui-même insuffisant dès qu'il y a
             // le moindre doute, et on retombe alors sur le scan complet.
+            onStage?.call(library, SyncPassStage.detecting);
             final outcome = await _repository
                 .applyDriveChanges(library: library)
                 .timeout(const Duration(seconds: 30));
@@ -487,8 +587,12 @@ class AutoSyncCoordinator {
                     upserted: upserted,
                     removed: removed,
                   );
+                  // La veille a trouvé du nouveau : le pull qui suit mérite
+                  // d'être vu.
+                  _setPassVisible(true);
                 }
                 _fullScanDeferredReported.remove(library.id);
+                changes[library.id] = (added: upserted, removed: removed);
                 fullyIndexed.add(library);
               case DriveSyncNeedsFullScan(:final reason):
                 if (trigger.isWatch) {
@@ -503,6 +607,7 @@ class AutoSyncCoordinator {
                   continue;
                 }
                 SyncLog.fullScanRequired(library: library.name, reason: reason);
+                onStage?.call(library, SyncPassStage.scanning);
                 final result = await _repository
                     .indexDriveFolder(
                       library: library,
@@ -512,6 +617,12 @@ class AutoSyncCoordinator {
                     )
                     .timeout(const Duration(seconds: 120));
                 fullyIndexed.add(library);
+                // Retraits déjà élagués par le scan ; le ré-élagage de l'étape 3
+                // ajoute ceux qu'un pull aurait ressuscités puis retirés.
+                changes[library.id] = (
+                  added: result.newFileCount,
+                  removed: result.prunedCount,
+                );
                 presentByLibrary[library.id] = result.presentDriveFileIds;
             }
           } catch (e) {
@@ -519,6 +630,7 @@ class AutoSyncCoordinator {
             // (les autres bibliothèques continuent), mais plus muet — c'est la
             // conséquence la plus lourde de toute la passe de lancement.
             if (e is DriveAuthException) authExpired = true;
+            failures[library.id] = e;
             skipped++;
             SyncLog.librarySkipped(library: library.name, error: e);
           }
@@ -528,6 +640,7 @@ class AutoSyncCoordinator {
         //    pour les bibliothèques entièrement indexées : les nœuds et les sons
         //    référencés existent alors bien tous localement.
         for (final library in fullyIndexed) {
+          onStage?.call(library, SyncPassStage.pulling);
           if (trigger.isWatch) {
             await _syncController.pullInBackground(library);
           } else {
@@ -541,10 +654,17 @@ class AutoSyncCoordinator {
           //    lors de l'indexation. Sans effet si le pull n'a rien ressuscité.
           final present = presentByLibrary[library.id];
           if (present != null) {
-            await _repository.pruneSoundsAbsentFromDrive(
+            final pruned = await _repository.pruneSoundsAbsentFromDrive(
               library: library,
               presentDriveFileIds: present,
             );
+            final before = changes[library.id];
+            if (before != null && pruned > 0) {
+              changes[library.id] = (
+                added: before.added,
+                removed: before.removed + pruned,
+              );
+            }
           }
         }
 
@@ -557,6 +677,18 @@ class AutoSyncCoordinator {
           synced: fullyIndexed.length,
           skipped: skipped,
           authExpired: authExpired,
+          libraries: {
+            for (final entry in changes.entries)
+              entry.key: LibraryPassOutcome(
+                added: entry.value.added,
+                removed: entry.value.removed,
+              ),
+            for (final entry in failures.entries)
+              entry.key: LibraryPassOutcome(
+                error: entry.value,
+                authExpired: entry.value is DriveAuthException,
+              ),
+          },
         );
       } finally {
         _ignoreUpdates = false;
@@ -573,6 +705,13 @@ class AutoSyncCoordinator {
       _syncController.markOffline();
       return SyncPassReport(error: e);
     }
+  }
+
+  void _setPassVisible(bool value) {
+    // Une passe peut finir après `dispose` : un `ValueNotifier` détruit refuse
+    // l'écriture.
+    if (_disposed) return;
+    _visiblePassActive.value = value;
   }
 
   /// Journalise le renoncement de la veille au scan complet — une seule fois par
@@ -600,5 +739,6 @@ class AutoSyncCoordinator {
     _autoTagDebounce?.cancel();
     _insertSubscription?.cancel();
     _subscription?.cancel();
+    _visiblePassActive.dispose();
   }
 }

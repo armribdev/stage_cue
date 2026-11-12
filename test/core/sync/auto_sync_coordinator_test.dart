@@ -327,6 +327,34 @@ void main() {
       );
     });
 
+    test(
+      'limitée à une bibliothèque : les autres ne sont pas touchées',
+      () async {
+        stubSequence(
+          libraries: [_library(1), _library(2)],
+          onApplyChanges: (_) =>
+              const DriveSyncApplied(upserted: 1, removed: 0),
+        );
+
+        final report = await coordinator.refreshNow(only: _library(2));
+
+        // Même séquence (delta, puis pull), mais sur la seule bibliothèque visée.
+        expect(calls, ['apply:2', 'pull:2']);
+        expect(report.libraries.keys, [2]);
+        expect(report.synced, 1);
+      },
+    );
+
+    test('limitée à une bibliothèque non connectée : rien à faire', () async {
+      stubSequence(libraries: [_library(1)]);
+
+      final report = await coordinator.refreshNow(only: _library(9));
+
+      expect(calls, isEmpty);
+      expect(report.synced, 0);
+      expect(report.libraries, isEmpty);
+    });
+
     test('la progression du scan remonte avec sa bibliothèque', () async {
       final library = _library(1);
       stubSequence(libraries: [library]);
@@ -337,6 +365,68 @@ void main() {
       );
 
       expect(seen, [1]);
+    });
+
+    test(
+      'le bilan dit, bibliothèque par bibliothèque, ce qui a changé',
+      () async {
+        stubSequence(
+          libraries: [_library(1), _library(2)],
+          onApplyChanges: (library) => library.id == 1
+              ? const DriveSyncApplied(upserted: 3, removed: 1)
+              : const DriveSyncNeedsFullScan('test'),
+        );
+
+        final report = await coordinator.refreshNow();
+
+        expect(report.libraries[1]?.added, 3);
+        expect(report.libraries[1]?.removed, 1);
+        // Scan complet : `newFileCount` du stub (0), aucun échec.
+        expect(report.libraries[2]?.failed, isFalse);
+        expect(report.libraries[2]?.hasChanges, isFalse);
+      },
+    );
+
+    test('les étapes remontent dans l’ordre, par bibliothèque', () async {
+      stubSequence(
+        libraries: [_library(1), _library(2)],
+        onApplyChanges: (library) => library.id == 1
+            ? const DriveSyncApplied(upserted: 0, removed: 0)
+            : const DriveSyncNeedsFullScan('test'),
+      );
+      final stages = <String>[];
+
+      await coordinator.refreshNow(
+        onStage: (library, stage) => stages.add('${library.id}:${stage.name}'),
+      );
+
+      // Indexation de toutes les bibliothèques, PUIS pull (décision 0005).
+      expect(stages, [
+        '1:detecting',
+        '2:detecting',
+        '2:scanning',
+        '1:pulling',
+        '2:pulling',
+      ]);
+    });
+
+    test('un échec est rattaché à SA bibliothèque, pas aux autres', () async {
+      stubSequence(libraries: [_library(1), _library(2)]);
+      when(
+        () => repository.applyDriveChanges(
+          library: any(
+            named: 'library',
+            that: isA<Library>().having((l) => l.id, 'id', 2),
+          ),
+        ),
+      ).thenThrow(StateError('réseau'));
+
+      final report = await coordinator.refreshNow();
+
+      expect(report.skipped, 1);
+      expect(report.libraries[2]?.failed, isTrue);
+      expect(report.libraries[2]?.authExpired, isFalse);
+      expect(report.libraries[1]?.failed, isFalse);
     });
 
     test(
@@ -354,6 +444,7 @@ void main() {
         // pastille resterait sur un état sain.
         expect(report.authExpired, isTrue);
         expect(report.synced, 0);
+        expect(report.libraries[1]?.authExpired, isTrue);
         verify(() => syncController.handleAuthFailure()).called(1);
       },
     );
@@ -459,6 +550,104 @@ void main() {
       // chaque aller-retour.
       expect(calls, ['apply:1', 'watch-pull:1']);
     });
+  });
+
+  group('passe visible (indicateur de la barre)', () {
+    /// Transitions successives de `visiblePassActive`.
+    List<bool> recordVisibility() {
+      final seen = <bool>[];
+      coordinator.visiblePassActive.addListener(
+        () => seen.add(coordinator.visiblePassActive.value),
+      );
+      return seen;
+    }
+
+    test('actualisation manuelle : visible de bout en bout', () async {
+      stubSequence(libraries: [_library(1)]);
+      final seen = recordVisibility();
+
+      await coordinator.refreshNow();
+
+      expect(seen, [true, false]);
+    });
+
+    test('veille qui ne trouve rien : jamais visible', () async {
+      stubSequence(
+        libraries: [_library(1)],
+        onApplyChanges: (_) => const DriveSyncApplied(upserted: 0, removed: 0),
+      );
+      final seen = recordVisibility();
+
+      coordinator.onAppResumed();
+      await pump();
+
+      // « Rien de neuf » revient toutes les 5 minutes : l'afficher ferait
+      // clignoter un écran de régie pour zéro information.
+      expect(calls, ['apply:1', 'watch-pull:1']);
+      expect(seen, isEmpty);
+    });
+
+    test(
+      'veille qui trouve du nouveau : visible jusqu\'à la fin du pull',
+      () async {
+        final gate = Completer<void>();
+        stubSequence(
+          libraries: [_library(1)],
+          onApplyChanges: (_) =>
+              const DriveSyncApplied(upserted: 2, removed: 0),
+        );
+        when(() => syncController.pullInBackground(any())).thenAnswer((
+          _,
+        ) async {
+          await gate.future;
+        });
+        final seen = recordVisibility();
+
+        coordinator.onAppResumed();
+        await pump();
+        expect(coordinator.visiblePassActive.value, isTrue);
+
+        gate.complete();
+        await pump();
+        expect(seen, [true, false]);
+      },
+    );
+
+    test('veille qui renonce au scan complet : jamais visible', () async {
+      stubSequence(
+        libraries: [_library(1)],
+        onApplyChanges: (_) => const DriveSyncNeedsFullScan('jeton expiré'),
+      );
+      final seen = recordVisibility();
+
+      coordinator.onAppResumed();
+      await pump();
+
+      expect(seen, isEmpty);
+    });
+
+    test(
+      'un geste manuel qui rejoint une veille muette la rend visible',
+      () async {
+        final gate = Completer<DriveSyncOutcome>();
+        stubSequence(libraries: [_library(1)]);
+        when(
+          () => repository.applyDriveChanges(library: any(named: 'library')),
+        ).thenAnswer((_) => gate.future);
+        final seen = recordVisibility();
+
+        coordinator.onAppResumed();
+        await pump();
+        expect(seen, isEmpty, reason: 'la sonde n\'a encore rien trouvé');
+
+        final manual = coordinator.refreshNow();
+        expect(coordinator.visiblePassActive.value, isTrue);
+
+        gate.complete(const DriveSyncApplied(upserted: 0, removed: 0));
+        await manual;
+        expect(seen, [true, false]);
+      },
+    );
   });
 
   group('verrou de passe', () {

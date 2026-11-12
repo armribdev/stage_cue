@@ -37,8 +37,12 @@ class DriveIndexResult {
   /// [LibraryRepository.pruneSoundsAbsentFromDrive]).
   final Set<String> presentDriveFileIds;
 
+  /// Nombre de sons élagués par ce scan (fichiers disparus de Drive).
+  final int prunedCount;
+
   const DriveIndexResult({
     required this.newFileCount,
+    this.prunedCount = 0,
     required this.presentDriveFileIds,
   });
 }
