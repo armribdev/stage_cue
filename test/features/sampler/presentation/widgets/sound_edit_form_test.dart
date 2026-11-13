@@ -220,6 +220,38 @@ void main() {
     expect(row?.isProcessed, isTrue);
   });
 
+  testWidgets(
+    'le titre focus montre une croix qui le vide sans perdre le focus',
+    (tester) async {
+      await pumpForm(tester, processed: true);
+      final clear = find.byTooltip('Effacer le nom');
+      expect(clear, findsNothing);
+
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      expect(clear, findsOneWidget);
+
+      // Appui puis relâchement séparés par une image, comme à la souris : sur
+      // desktop, l'appui seul retire le focus aux champs « extérieurs ».
+      final gesture = await tester.startGesture(tester.getCenter(clear));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        '',
+      );
+      // Champ vidé : plus de croix, mais le formulaire est « modifié ».
+      expect(clear, findsNothing);
+      expect(isEnabled(tester, 'Enregistrer'), isTrue);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).focusNode?.hasFocus,
+        isTrue,
+      );
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
   group('suggestions de l’IA (décision 0031)', () {
     /// Laisse la lecture des tags (vraie E/S Drift) se terminer, puis redessine.
     Future<void> loadTags(WidgetTester tester) async {

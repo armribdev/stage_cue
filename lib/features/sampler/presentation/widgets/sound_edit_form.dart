@@ -16,11 +16,10 @@ import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_auto_tag.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
-import '../utils/sound_type_ui.dart';
 import 'app_form_dialog.dart';
 import 'auto_tag_chips.dart';
 import 'auto_tag_status_row.dart';
-import 'sound_type_picker.dart';
+import 'sound_type_selector.dart';
 import 'start_offset_editor.dart';
 import 'tag_chips_editor.dart';
 import '../../../../core/theme/stroke_icon.dart';
@@ -123,6 +122,8 @@ class _SoundEditFormState extends State<SoundEditForm> {
 
   late String _displayName;
   late final TextEditingController _nameController;
+  // Ne sert qu'à afficher la croix « effacer » tant que le titre est focus.
+  late final FocusNode _nameFocus = FocusNode()..addListener(_onNameFocus);
   late int? _colorValue;
   late double _volume;
   late int _startOffsetMs;
@@ -269,7 +270,12 @@ class _SoundEditFormState extends State<SoundEditForm> {
     }
     _regeneratedResetTimer?.cancel();
     _nameController.dispose();
+    _nameFocus.dispose();
     super.dispose();
+  }
+
+  void _onNameFocus() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadTags() async {
@@ -644,14 +650,6 @@ class _SoundEditFormState extends State<SoundEditForm> {
                   children: [
                     _buildHeader(),
                     const SizedBox(height: 20),
-                    _section('Nom affiché', _buildNameField()),
-                    _section(
-                      'Type de son',
-                      SoundTypePicker(
-                        selected: _type,
-                        onChanged: (type) => _update(() => _type = type),
-                      ),
-                    ),
                     _section('Couleur par défaut', _buildColors()),
                     _section('Volume par défaut', _buildVolume()),
                     _section('Point d\'entrée', _buildStartOffset(scheme)),
@@ -742,33 +740,67 @@ class _SoundEditFormState extends State<SoundEditForm> {
 
   Widget _buildHeader() {
     final scheme = Theme.of(context).colorScheme;
+    const titleStyle = TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+      letterSpacing: AppTypography.titleLetterSpacing,
+    );
     return Row(
       children: [
-        SoundTypeAvatar(
+        // L'avatar est le sélecteur du type de son.
+        SoundTypeSelector(
           type: _type,
           colorValue: _colorValue,
-          radius: 24,
-          iconSize: 24,
+          onChanged: (type) => _update(() => _type = type),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 6),
         Expanded(
-          // Une seule ligne : l'en-tête garde la même hauteur quel que soit le
-          // titre, sinon tout le formulaire se décale d'un son à l'autre. Le
-          // titre complet reste lisible au survol.
-          child: Tooltip(
-            message: widget.sound.title,
-            child: Text(
-              widget.sound.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                letterSpacing: AppTypography.titleLetterSpacing,
+          // Le titre est le nom affiché, éditable en place. Une seule ligne :
+          // l'en-tête garde la même hauteur quel que soit le titre, sinon tout
+          // le formulaire se décale d'un son à l'autre. Champ vidé : le titre
+          // du fichier (en indice) est ce qui sera enregistré, voir
+          // `_resolvedName`.
+          child: TextField(
+            controller: _nameController,
+            focusNode: _nameFocus,
+            onChanged: (v) => _update(() => _displayName = v),
+            maxLines: 1,
+            style: titleStyle,
+            // Aucun cadre, même au focus : le thème global donne aux champs un
+            // fond et un contour, ici on veut un simple texte éditable.
+            decoration: InputDecoration(
+              isCollapsed: true,
+              filled: false,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              hintText: widget.sound.title,
+              hintStyle: titleStyle.copyWith(
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
               ),
             ),
           ),
         ),
+        // Croix « tout effacer » tant que le titre est focus : le champ vidé
+        // retombe sur le titre du fichier à l'enregistrement (`_resolvedName`).
+        // TextFieldTapRegion : sur desktop, un appui hors du champ lui retire le
+        // focus dès le pointeur-bas, donc la croix disparaîtrait avant le
+        // relâchement. ExcludeFocus : le clic ne doit pas non plus prendre le
+        // focus au champ.
+        if (_nameFocus.hasFocus && _nameController.text.isNotEmpty)
+          TextFieldTapRegion(
+            child: ExcludeFocus(
+              child: IconButton(
+                tooltip: 'Effacer le nom',
+                icon: const StrokeIcon(AppIcons.close, size: AppIconSize.sm),
+                color: scheme.onSurfaceVariant,
+                onPressed: () {
+                  _nameController.clear();
+                  _update(() => _displayName = '');
+                },
+              ),
+            ),
+          ),
         if (widget.notifier != null) ...[
           const SizedBox(width: 8),
           IconButton(
@@ -776,36 +808,11 @@ class _SoundEditFormState extends State<SoundEditForm> {
                 ? 'Retirer des favoris'
                 : 'Ajouter aux favoris',
             onPressed: _isTogglingFavorite ? null : _toggleFavorite,
-            icon: StrokeIcon(
-              _isFavorite ? AppIcons.favorite : AppIcons.favorite,
-              size: 24,
-            ),
+            icon: StrokeIcon(AppIcons.favorite, size: 24, filled: _isFavorite),
             color: _isFavorite ? scheme.primary : scheme.onSurfaceVariant,
           ),
         ],
       ],
-    );
-  }
-
-  Widget _buildNameField() {
-    return TextFormField(
-      controller: _nameController,
-      onChanged: (v) => _update(() => _displayName = v),
-      decoration: InputDecoration(
-        hintText: widget.sound.title,
-        // Croix « tout effacer » : le champ vidé retombe sur le titre du
-        // fichier à l'enregistrement (voir `_resolvedName`).
-        suffixIcon: _nameController.text.isEmpty
-            ? null
-            : IconButton(
-                icon: const StrokeIcon(AppIcons.close, size: AppIconSize.sm),
-                tooltip: 'Effacer le nom',
-                onPressed: () {
-                  _nameController.clear();
-                  _update(() => _displayName = '');
-                },
-              ),
-      ),
     );
   }
 
