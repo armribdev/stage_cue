@@ -263,7 +263,7 @@ extension LibraryRepositoryPlayback on LibraryRepository {
         file: file,
       );
     } catch (e) {
-      debugPrint('Échec matérialisation métadonnées ${sound.title}: $e');
+      AudioLoadLog.warn('Échec matérialisation métadonnées ${sound.title}: $e');
     }
   }
 

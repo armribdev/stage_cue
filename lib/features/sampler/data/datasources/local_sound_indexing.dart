@@ -526,7 +526,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
 
       return indexedCount;
     } catch (e) {
-      debugPrint(
+      SyncLog.warn(
         'Erreur lors de l\'indexation du dossier ${directory.path}: $e',
       );
       onProgress?.call(
@@ -596,7 +596,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
           await indexAudioFile(localFile);
           indexedCount++;
         } catch (e) {
-          debugPrint(
+          SyncLog.warn(
             'Erreur lors de l\'indexation SAF de ${entry.relativePath}: $e',
           );
         }

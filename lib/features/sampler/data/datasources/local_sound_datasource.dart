@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
@@ -12,6 +11,7 @@ import '../../../../core/utils/file_utils.dart'
     show scanDirectoryForAudioFiles, computeQuickHash;
 import '../../../../core/audio/soloud_file_loader.dart';
 import '../../../../core/audio/audio_load_log.dart';
+import '../../../../core/sync/sync_log.dart';
 import '../../../../core/audio/audio_file_validation.dart';
 import '../../../../core/audio/loudness_analyzer.dart';
 import '../../../../core/audio/waveform_extractor.dart';
@@ -145,7 +145,7 @@ class LocalSoundDataSource {
         try {
           SoLoud.instance.disposeSource(source);
         } catch (e) {
-          debugPrint('Dispose SoLoud (probe durée) échoué: $e');
+          AudioLoadLog.warn('Dispose SoLoud (probe durée) échoué: $e');
         }
       }
     }

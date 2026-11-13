@@ -311,7 +311,7 @@ class SamplerNotifier extends ChangeNotifier {
       // Persiste soit l'enveloppe (succès), soit le marqueur d'échec (unsupported).
       await _repository.persistWaveformProbe(sound.id, probe);
     } catch (e) {
-      debugPrint('Persistance waveform échouée (${sound.title}): $e');
+      AudioLoadLog.warn('Persistance waveform échouée (${sound.title}): $e');
       return;
     }
     if (_activeBoardId != boardId) return;

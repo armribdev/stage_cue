@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
+import '../../../../core/audio/audio_load_log.dart';
 
 /// Vumètre du niveau de sortie master, alimenté par la visualisation SoLoud.
 ///
@@ -63,7 +64,7 @@ class _AudioVuMeterState extends State<AudioVuMeter>
       _audioData = AudioData(GetSamplesKind.wave);
       _ticker = createTicker(_tick)..start();
     } catch (e) {
-      debugPrint('[VU] initialisation impossible: $e');
+      AudioLoadLog.warn('[VU] initialisation impossible: $e');
       _audioData?.dispose();
       _audioData = null;
     }

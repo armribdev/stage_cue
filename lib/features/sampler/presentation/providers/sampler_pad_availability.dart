@@ -26,7 +26,9 @@ extension SamplerPadAvailability on SamplerNotifier {
       } on SoundNotAvailableLocallyException {
         rethrow;
       } catch (e) {
-        debugPrint('Résolution du chemin échouée pour ${sound.title}: $e');
+        AudioLoadLog.warn(
+          'Résolution du chemin échouée pour ${sound.title}: $e',
+        );
         if (sound.libraryId != null && sound.relativePath != null) rethrow;
         final file = File(sound.filePath);
         if (!await file.exists() || !await isPlausibleAudioFile(file)) {

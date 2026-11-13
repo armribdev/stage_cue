@@ -16,7 +16,7 @@ extension SamplerPadAudioEngine on SamplerNotifier {
     try {
       previousSlot.dispose();
     } catch (e) {
-      debugPrint('Dispose slot échoué: $e');
+      AudioLoadLog.warn('Dispose slot échoué: $e');
     }
 
     padItem.slots[index] = keepReadyAppearance

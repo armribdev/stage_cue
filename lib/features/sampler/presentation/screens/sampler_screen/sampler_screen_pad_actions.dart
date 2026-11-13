@@ -10,7 +10,7 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
   Future<void> _handlePadTap(BuildContext context, PadItem padItem) async {
     final resolved = _notifier.findPadItemById(padItem.pad.id) ?? padItem;
 
-    debugPrint(
+    AudioLoadLog.trace(
       '[TAP] pad="${resolved.pad.displayName}" id=${resolved.pad.id} '
       'isPlayable=${resolved.isPlayable} appearsReady=${resolved.appearsReady} '
       'isPlaying=${resolved.isPlaying} isDownloading=${resolved.isDownloading} '
@@ -32,14 +32,14 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
 
     // Fichier local validé, lecteur SoLoud pas encore chargé.
     if (resolved.appearsReady) {
-      debugPrint(
+      AudioLoadLog.trace(
         '[TAP] pad="${resolved.pad.displayName}" → appearsReady, refreshing players',
       );
       unawaited(HapticFeedback.selectionClick());
       await _notifier.refreshPadPlayback(resolved.pad.id);
       if (!mounted) return;
       final after = _notifier.findPadItemById(resolved.pad.id) ?? resolved;
-      debugPrint(
+      AudioLoadLog.trace(
         '[TAP] pad="${resolved.pad.displayName}" → after refresh: isPlayable=${after.isPlayable}',
       );
       if (after.isPlayable) {
@@ -57,7 +57,7 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
 
     if (reason == PadUnavailabilityReason.offline ||
         reason == PadUnavailabilityReason.unsupportedFormat) {
-      debugPrint(
+      AudioLoadLog.trace(
         '[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason',
       );
       unawaited(HapticFeedback.heavyImpact());
@@ -68,7 +68,7 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
 
     if (reason == PadUnavailabilityReason.missingFile ||
         _notifier.isPadTapBlocked(resolved)) {
-      debugPrint(
+      AudioLoadLog.trace(
         '[TAP] pad="${resolved.pad.displayName}" → BLOQUÉ reason=$reason',
       );
       _notifier.reportPadTriggerFailure(resolved);
@@ -83,7 +83,7 @@ extension _SamplerScreenPadActions on _SamplerScreenState {
       return;
     }
 
-    debugPrint(
+    AudioLoadLog.trace(
       '[TAP] pad="${resolved.pad.displayName}" → EN ROUTE / preparing',
     );
     // EN ROUTE (bouton DL) : on télécharge SANS jouer. Le moment de lecture

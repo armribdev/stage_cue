@@ -140,7 +140,7 @@ extension LibraryRepositoryLibraries on LibraryRepository {
         // Session expirée ou non connecté — cas attendu, pas de log.
         if (message.contains('invalid_token')) continue;
         if (_driveOwnerRefreshLogged.add(library.name)) {
-          debugPrint(
+          SyncLog.warn(
             'Refresh propriétaire Drive échoué pour ${library.name}: $e',
           );
         }

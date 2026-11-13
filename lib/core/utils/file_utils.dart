@@ -1,7 +1,7 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
+import '../sync/sync_log.dart';
 
 final List<String> audioExtensions = [
   'mp3',
@@ -67,7 +67,7 @@ Future<String?> computeQuickHash(File file, {int sampleSize = 65536}) async {
     final unsigned = hash.toUnsigned(64);
     return '${length.toRadixString(16)}-${unsigned.toRadixString(16)}';
   } catch (e) {
-    debugPrint('Impossible de calculer le hash de ${file.path}: $e');
+    SyncLog.warn('Impossible de calculer le hash de ${file.path}: $e');
     return null;
   }
 }
@@ -116,7 +116,7 @@ Future<List<File>> scanDirectoryForAudioFiles(Directory directory) async {
       await _scanDirectoryRecursive(directory, audioFiles);
     }
   } catch (e) {
-    debugPrint('Erreur lors du scan de ${directory.path}: $e');
+    SyncLog.warn('Erreur lors du scan de ${directory.path}: $e');
   }
 
   return audioFiles;
