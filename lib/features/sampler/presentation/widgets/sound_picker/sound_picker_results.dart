@@ -227,6 +227,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                               AppIcons.favorite,
                               size: 16,
                               color: scheme.primary,
+                              filled: true,
                             ),
                           ],
                         ],

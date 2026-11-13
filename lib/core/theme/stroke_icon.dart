@@ -27,6 +27,11 @@ class StrokeIcon extends StatelessWidget {
   final double? size;
   final Color? color;
 
+  /// Tracé rempli de [color] en plus du contour. Réservé à un état « actif » où
+  /// le remplissage est le signal (étoile de favori) ; ne convient qu'à un tracé
+  /// fermé.
+  final bool filled;
+
   /// Libellé lu par les lecteurs d'écran ; sans lui l'icône est décorative.
   final String? semanticLabel;
 
@@ -35,6 +40,7 @@ class StrokeIcon extends StatelessWidget {
     super.key,
     this.size,
     this.color,
+    this.filled = false,
     this.semanticLabel,
   });
 
@@ -69,6 +75,7 @@ class StrokeIcon extends StatelessWidget {
                 data.strokeWidth,
                 resolvedColor,
                 resolvedSize,
+                filled,
               ),
             ),
     );
@@ -87,18 +94,29 @@ class _StrokeIconPainter extends CustomPainter {
   /// serrées : `SizedBox`, `Container` à taille fixe) : comme [Icon], le tracé
   /// garde sa taille et se centre au lieu de s'étirer.
   final double iconSize;
+  final bool filled;
 
   const _StrokeIconPainter(
     this.path,
     this.strokeWidth,
     this.color,
     this.iconSize,
+    this.filled,
   );
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.translate((size.width - iconSize) / 2, (size.height - iconSize) / 2);
     canvas.scale(iconSize / 24);
+    if (filled) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true,
+      );
+    }
     canvas.drawPath(
       path,
       Paint()
@@ -116,5 +134,6 @@ class _StrokeIconPainter extends CustomPainter {
       old.path != path ||
       old.strokeWidth != strokeWidth ||
       old.color != color ||
-      old.iconSize != iconSize;
+      old.iconSize != iconSize ||
+      old.filled != filled;
 }

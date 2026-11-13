@@ -13,8 +13,9 @@ import 'stroke_icon.dart';
 /// icône, ajouter un concept ici (puis relancer le générateur) plutôt que
 /// d'importer Lucide dans un écran, et ne jamais utiliser `Icons.*` (Material).
 ///
-/// Lucide n'a pas de variante pleine : un état « actif » (favori, case cochée)
-/// se distingue par la couleur ou un autre glyphe, pas par le remplissage.
+/// Lucide n'a pas de variante pleine : un état « actif » (case cochée…) se
+/// distingue par la couleur ou un autre glyphe. Seule exception, l'étoile de
+/// favori : `StrokeIcon(AppIcons.favorite, filled: true)` la remplit.
 abstract final class AppIcons {
   // ── Actions flottantes d'un pad ───────────────────────────────────────────
   // Mêmes tracés que le reste du jeu, nommés à part : posées sans fond ni

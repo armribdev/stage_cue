@@ -78,6 +78,8 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
     // Désactive tout fond (actif ou survol) — seule la couleur d'icône
     // porte l'état. Pour les toggles serrés type favoris/hors-ligne.
     bool flat = false,
+    // Icône Lucide remplie (étoile de favori active).
+    bool filledIcon = false,
   }) {
     assert((icon == null) != (transport == null));
     // ExcludeFocus : empêche ce bouton de voler le focus au champ de
@@ -94,7 +96,11 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
               transport,
               size: AppIconSize.sm,
             ),
-            (null, final icon?) => StrokeIcon(icon, size: AppIconSize.sm),
+            (null, final icon?) => StrokeIcon(
+              icon,
+              size: AppIconSize.sm,
+              filled: filledIcon,
+            ),
             (null, null) => const SizedBox.shrink(),
           },
           padding: EdgeInsets.zero,

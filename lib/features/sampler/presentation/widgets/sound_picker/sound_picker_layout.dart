@@ -278,7 +278,8 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
         ),
         _roundIconButton(
           scheme: scheme,
-          icon: _favoritesOnly ? AppIcons.favorite : AppIcons.favorite,
+          icon: AppIcons.favorite,
+          filledIcon: _favoritesOnly,
           iconColor: _favoritesOnly ? scheme.primary : scheme.onSurfaceVariant,
           active: _favoritesOnly,
           flat: true,

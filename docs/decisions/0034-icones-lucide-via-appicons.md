@@ -22,6 +22,7 @@ Le jeu **Lucide** (`lucide_icons_flutter`, MIT, police bundlée en local donc ut
 
 - Plus aucun `Icons.*` dans `lib/` ni `test/` : une nouvelle icône est un nouveau concept dans `AppIcons`. Les tests cherchent `AppIcons.x` (`find.byIcon`).
 - Lucide n'a **pas de variante pleine** : un état actif (favori, case cochée) se distingue par la couleur ou un autre glyphe (`checkboxOn` / `checkboxOff`), jamais par le remplissage. Les étoiles de favori ne changent donc plus de forme, seulement de couleur.
+  - **Mise à jour (2026-11-13)** : l'étoile de favori est désormais **remplie** quand le son est favori (`StrokeIcon(..., filled: true)`, remplissage + contour), à la demande explicite de l'utilisateur — la couleur seule se lisait mal. C'est la seule icône Lucide concernée ; les autres états actifs gardent la règle ci-dessus.
 - Plusieurs concepts Material voisins sont fusionnés (`_rounded` / `_outlined`, `cloud` / `cloud_queue`, les trois `check_circle*`) ; `folder_shared` devient `folderSymlink`, `download_done` devient `circleCheckBig` : à revoir à l'écran si le sens n'est pas évident.
 - Restent en Material les icônes **implicites** de widgets qu'on n'a pas redessinés : bouton retour des `AppBar` (écrans plein écran mobile). La flèche du `DropdownButtonFormField` est passée explicitement.
 - Le package déclare toutes ses graisses (100 à 600) dans son `pubspec.yaml` : le poids réel en release est à mesurer, la graisse inutilisée peut rester embarquée.

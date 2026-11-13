@@ -58,7 +58,9 @@ jamais d'une valeur codée en dur qui existe déjà comme token.
   Une nouvelle icône = un nouveau concept dans `AppIcons` puis
   `node tool/gen_lucide_paths.mjs`, jamais un import de Lucide dans un écran.
   Pas de variante pleine : un état actif se marque par la
-  couleur ou un autre glyphe, pas par le remplissage. Un widget Material qui
+  couleur ou un autre glyphe, pas par le remplissage — sauf l'étoile de favori,
+  remplie quand le son est favori (`StrokeIcon(AppIcons.favorite, filled: true)`,
+  [0034](../../docs/decisions/0034-icones-lucide-via-appicons.md)). Un widget Material qui
   dessine son icône tout seul (flèche de `DropdownButtonFormField`, retour d'`AppBar`)
   se règle avec son paramètre `icon:`.
 
