@@ -171,9 +171,9 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
     // Musique : type verrouillé → pas de barre de filtres.
     if (_lockedTypeFilter != null) return const SizedBox.shrink();
 
-    // "Tous" uniquement pour QuickSearch, Library et Manage
+    // "Tous" partout où la barre est affichée (le pad part sur « Bruitage »).
     final segments = <(String, SoundType?, StrokeIconData)>[
-      if (_isQuickSearch || _isLibrary || _isManage)
+      if (_isQuickSearch || _isLibrary || _isManage || _isPadPicker)
         ('Tous', null, AppIcons.allSounds),
       (
         SoundType.soundEffect.label,
