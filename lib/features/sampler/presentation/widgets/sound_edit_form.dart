@@ -17,11 +17,11 @@ import '../../domain/entities/sound_auto_tag.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
 import 'app_form_dialog.dart';
-import 'auto_tag_chips.dart';
-import 'auto_tag_status_row.dart';
+import 'sound_color_picker.dart';
+import 'sound_tags_section.dart';
 import 'sound_type_selector.dart';
+import 'sound_volume_field.dart';
 import 'start_offset_editor.dart';
-import 'tag_chips_editor.dart';
 import '../../../../core/theme/stroke_icon.dart';
 
 /// Formulaire d'édition d'un son de la bibliothèque (nom, type, couleur,
@@ -109,17 +109,6 @@ class SoundEditFormController {
 }
 
 class _SoundEditFormState extends State<SoundEditForm> {
-  static const List<Color> _defaultColorChoices = <Color>[
-    Colors.blue,
-    Colors.green,
-    Colors.orange,
-    Colors.purple,
-    Colors.red,
-    Colors.teal,
-    Colors.brown,
-    Colors.grey,
-  ];
-
   late String _displayName;
   late final TextEditingController _nameController;
   // Ne sert qu'à afficher la croix « effacer » tant que le titre est focus.
@@ -650,10 +639,42 @@ class _SoundEditFormState extends State<SoundEditForm> {
                   children: [
                     _buildHeader(),
                     const SizedBox(height: 20),
-                    _section('Couleur par défaut', _buildColors()),
-                    _section('Volume par défaut', _buildVolume()),
+                    _section(
+                      'Couleur par défaut',
+                      SoundColorPicker(
+                        value: _colorValue,
+                        onChanged: (v) => _update(() => _colorValue = v),
+                      ),
+                    ),
+                    _section(
+                      'Volume par défaut',
+                      SoundVolumeField(
+                        volume: _volume,
+                        onChanged: _setVolume,
+                        isMeasuring: _isMeasuringVolume,
+                        onAuto: widget.notifier != null
+                            ? _applyAutoVolume
+                            : null,
+                      ),
+                    ),
                     _section('Point d\'entrée', _buildStartOffset(scheme)),
-                    _section('Tags', _buildTags(), isLast: !_canDelete),
+                    _section(
+                      'Tags',
+                      SoundTagsSection(
+                        tagCatalog: widget.tagCatalog,
+                        selectedTagIds: _tagIds,
+                        autoTags: _autoTags,
+                        tagsLoaded: _tagsLoaded,
+                        tagsFailed: _tagsFailed,
+                        hasAnalysis: widget.autoTag != null,
+                        analysisStatus: _analysisStatus,
+                        analysisRequested: _analysisRequested,
+                        onTagAdded: (id) => _update(() => _tagIds.add(id)),
+                        onTagRemoved: (id) => _update(() => _tagIds.remove(id)),
+                        onStartAnalysis: _startAnalysis,
+                      ),
+                      isLast: !_canDelete,
+                    ),
                     if (_canDelete)
                       _section(
                         'Suppression',
@@ -816,73 +837,6 @@ class _SoundEditFormState extends State<SoundEditForm> {
     );
   }
 
-  Widget _buildColors() {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        _colorSwatch(
-          label: 'D',
-          color: null,
-          isSelected: _colorValue == null,
-          onTap: () => _update(() => _colorValue = null),
-        ),
-        for (final color in _defaultColorChoices)
-          _colorSwatch(
-            color: color,
-            isSelected: _colorValue == color.toARGB32(),
-            onTap: () => _update(() => _colorValue = color.toARGB32()),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildVolume() {
-    return Row(
-      children: [
-        Expanded(
-          child: Slider(
-            value: _volume,
-            min: 0.0,
-            max: 1.0,
-            label: '${(_volume * 100).round()}%',
-            onChanged: _setVolume,
-          ),
-        ),
-        SizedBox(
-          width: 44,
-          child: Text(
-            '${(_volume * 100).round()}%',
-            textAlign: TextAlign.end,
-            style: AppFonts.monoStyle(const TextStyle(fontSize: 13)),
-          ),
-        ),
-        if (widget.notifier != null) ...[
-          const SizedBox(width: 8),
-          Tooltip(
-            message:
-                'Mesure la sonie du fichier et règle le volume pour '
-                'normaliser',
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(64, 32),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-              onPressed: _isMeasuringVolume ? null : _applyAutoVolume,
-              child: _isMeasuringVolume
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Auto'),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
   Widget _buildStartOffset(ColorScheme scheme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -936,118 +890,4 @@ class _SoundEditFormState extends State<SoundEditForm> {
       ],
     );
   }
-
-  Widget _buildTags() {
-    if (_tagsFailed) {
-      return Text(
-        'Tags indisponibles — réessayez en rouvrant le son.',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      );
-    }
-    if (!_tagsLoaded) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      );
-    }
-    final editor = TagChipsEditor(
-      tagCatalog: widget.tagCatalog,
-      selectedTagIds: _tagIds,
-      onTagAdded: (id) => _update(() => _tagIds.add(id)),
-      onTagRemoved: (id) => _update(() => _tagIds.remove(id)),
-    );
-    final status = _analysisStatus;
-    // Analysé : rien à dire, les suggestions parlent d'elles-mêmes. Sinon : le
-    // bouton « Analyser », ou la raison pour laquelle le son ne peut pas l'être.
-    final showStatus =
-        widget.autoTag != null &&
-        status != null &&
-        status != SoundAnalysisStatus.analyzed;
-    final hasPending = _autoTags.any((s) => !_tagIds.contains(s.tag.id));
-    if (!hasPending && !showStatus) return editor;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        editor,
-        if (hasPending) ...[
-          const SizedBox(height: 14),
-          AutoTagChips(
-            suggestions: _autoTags,
-            colors: _categoryColorsByTagId(),
-            acceptedTagIds: _tagIds,
-            // Accepter = ajouter aux tags du son, enregistré avec le formulaire.
-            onAdd: (s) => _update(() => _tagIds.add(s.tag.id)),
-          ),
-        ],
-        if (showStatus) ...[
-          const SizedBox(height: 10),
-          AutoTagStatusRow(
-            // Demandée, pas encore dans la file du passage : déjà « en attente ».
-            status: _analysisRequested && status == SoundAnalysisStatus.pending
-                ? SoundAnalysisStatus.queued
-                : status,
-            onStart: _startAnalysis,
-          ),
-        ],
-      ],
-    );
-  }
-
-  Map<int, Color> _categoryColorsByTagId() => {
-    for (final cat in widget.tagCatalog)
-      for (final tag in cat.tags) tag.id: Color(cat.category.color),
-  };
-
-  Widget _colorSwatch({
-    Color? color,
-    required bool isSelected,
-    required VoidCallback onTap,
-    String? label,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    final effectiveColor = color ?? scheme.surfaceContainerHighest;
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: 38,
-        height: 38,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: effectiveColor,
-          border: Border.all(
-            color: isSelected ? scheme.primary : scheme.outlineVariant,
-            width: isSelected ? 3 : 1,
-          ),
-        ),
-        child: isSelected
-            ? StrokeIcon(
-                AppIcons.check,
-                size: AppIconSize.sm,
-                color: color == null
-                    ? scheme.onSurfaceVariant
-                    : _checkmarkColor(effectiveColor),
-              )
-            : (label != null
-                  ? Text(
-                      label,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  : null),
-      ),
-    );
-  }
-
-  Color _checkmarkColor(Color bg) =>
-      bg.computeLuminance() > 0.6 ? Colors.black : Colors.white;
 }

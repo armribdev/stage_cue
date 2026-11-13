@@ -6,6 +6,9 @@ import '../../domain/entities/pad.dart';
 import '../models/pad_sound_slot.dart';
 import '../providers/sampler_provider.dart';
 import 'dashed_slot_frame.dart';
+import 'hover_tint.dart';
+import 'pad_progress_bars.dart';
+import 'pad_surface.dart';
 
 /// Famille visuelle d'un pad — projette les 4 états d'availability sur 3 repères
 /// lisibles d'un coup d'œil sous stress live (refonte UX P0) :
@@ -172,7 +175,7 @@ class PadButton extends StatelessWidget {
         ? scheme.tertiary.withValues(alpha: 0.45)
         : scheme.outlineVariant.withValues(alpha: 0.45);
 
-    return _PadSurface(
+    return PadSurface(
       fill: fill,
       border: border,
       // Halo de la couleur du pad (ou de l'accent) : un pad "à l'antenne" se
@@ -272,11 +275,11 @@ class PadButton extends StatelessWidget {
       height: 3,
       child: IgnorePointer(
         child: isMusic
-            ? _MusicProgressBar(padItem: padItem, color: color)
+            ? MusicProgressBar(padItem: padItem, color: color)
             : Stack(
                 children: [
                   for (final ticket in padItem.playbackTickets)
-                    _PolyphonicProgressBar(
+                    PolyphonicProgressBar(
                       key: ValueKey<int>(ticket.id),
                       ticket: ticket,
                       color: color.withValues(alpha: 0.8),
@@ -355,7 +358,7 @@ class PadButton extends StatelessWidget {
     // Le libellé lui-même ouvre le choix du son (pas d'icône dédiée) : le
     // chevron signale qu'il est cliquable. Même teinte et même survol que les
     // icônes du pad, sans fond. Le tap est capté ici avant celui du pad.
-    return _HoverTint(
+    return HoverTint(
       onTap: onShowSounds,
       builder: (context, hovered) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -402,7 +405,7 @@ class PadButton extends StatelessWidget {
 
   /// Rangée d'icônes nues (ni fond ni bordure) : au repos elles sont
   /// atténuées, le survol ne fait que les ramener à pleine intensité
-  /// ([_HoverTint]). Leur couleur vient de [_iconStyle], contrastée avec le
+  /// ([HoverTint]). Leur couleur vient de [_iconStyle], contrastée avec le
   /// fond arbitraire du pad.
   ///
   /// [includeSounds] : icône « sons du pad ». Un pad prêt ouvre ce choix en
@@ -429,7 +432,7 @@ class PadButton extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final (icon, size, onPressed, active) in entries)
-          _HoverTint(
+          HoverTint(
             onTap: onPressed,
             builder: (context, hovered) => SizedBox(
               width: _iconTargetSize,
@@ -469,7 +472,7 @@ class PadButton extends StatelessWidget {
     final onColor = scheme.onTertiaryContainer;
     final iconCluster = _buildIconCluster(scheme, includeSounds: true);
 
-    return _PadSurface(
+    return PadSurface(
       fill: scheme.tertiaryContainer,
       border: scheme.tertiary.withValues(alpha: 0.6),
       onTap: onTap,
@@ -537,7 +540,7 @@ class PadButton extends StatelessWidget {
         : (AppIcons.cloudOff, 'hors-ligne');
     final iconCluster = _buildIconCluster(scheme, includeSounds: true);
 
-    return _PadSurface(
+    return PadSurface(
       fill: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
       border: isMissing
           ? scheme.error.withValues(alpha: 0.55)
@@ -606,337 +609,6 @@ class PadButton extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Surface d'un pad : carte à hairline qui réagit au survol (bordure
-/// éclaircie), au clic (voile sombre) et à la lecture (halo [glow]). Les
-/// changements de fond et de bordure sont fondus plutôt que commutés.
-///
-/// Pas de `Transform.scale` à l'enfoncement : le texte du pad serait rééchantillonné
-/// (flou), cf. `pad_item.dart`.
-class _PadSurface extends StatefulWidget {
-  final Color fill;
-  final Color border;
-
-  /// Couleur du halo de lecture ; `null` = pas de halo.
-  final Color? glow;
-  final VoidCallback? onTap;
-  final VoidCallback? onLongPress;
-  final Widget child;
-
-  const _PadSurface({
-    required this.fill,
-    required this.border,
-    required this.child,
-    this.glow,
-    this.onTap,
-    this.onLongPress,
-  });
-
-  @override
-  State<_PadSurface> createState() => _PadSurfaceState();
-}
-
-class _PadSurfaceState extends State<_PadSurface> {
-  static const Duration _fade = Duration(milliseconds: 140);
-
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final interactive = widget.onTap != null || widget.onLongPress != null;
-    final border = interactive && _hovered
-        ? Color.alphaBlend(Colors.white.withValues(alpha: 0.2), widget.border)
-        : widget.border;
-    final glow = widget.glow;
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        // Halo derrière la carte, rogné à l'extérieur de son contour : un
-        // `BoxShadow` Flutter n'est pas rogné sous la boîte (contrairement au
-        // CSS), il traverserait le fond translucide et teinterait l'intérieur.
-        Positioned.fill(
-          child: IgnorePointer(
-            child: ClipPath(
-              clipper: const _OutsidePadClipper(),
-              child: AnimatedContainer(
-                duration: _fade,
-                curve: Curves.easeOut,
-                decoration: BoxDecoration(
-                  borderRadius: AppRadius.radiusPad,
-                  boxShadow: glow == null
-                      ? const []
-                      : [
-                          BoxShadow(
-                            color: glow.withValues(alpha: 0.3),
-                            blurRadius: 16,
-                          ),
-                        ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        _buildCard(interactive: interactive, border: border),
-      ],
-    );
-  }
-
-  Widget _buildCard({required bool interactive, required Color border}) {
-    return TweenAnimationBuilder<Color?>(
-      tween: ColorTween(end: widget.fill),
-      duration: _fade,
-      builder: (context, fill, child) => TweenAnimationBuilder<Color?>(
-        tween: ColorTween(end: border),
-        duration: _fade,
-        builder: (context, border, child) => Card(
-          elevation: 0,
-          // Le clip épouse les coins arrondis : la progression collée au
-          // bord bas ne déborde pas.
-          clipBehavior: Clip.antiAlias,
-          color: fill,
-          shape: RoundedRectangleBorder(
-            borderRadius: AppRadius.radiusPad,
-            side: BorderSide(color: border ?? widget.border),
-          ),
-          child: child,
-        ),
-        child: child,
-      ),
-      child: interactive
-          ? InkWell(
-              onTap: widget.onTap,
-              onLongPress: widget.onLongPress,
-              borderRadius: AppRadius.radiusPad,
-              highlightColor: Colors.black.withValues(alpha: 0.16),
-              onHover: (value) => setState(() => _hovered = value),
-              child: widget.child,
-            )
-          : widget.child,
-    );
-  }
-}
-
-/// Découpe tout sauf le contour du pad : ne laisse passer que la partie
-/// extérieure du halo de lecture.
-class _OutsidePadClipper extends CustomClipper<Path> {
-  const _OutsidePadClipper();
-
-  @override
-  Path getClip(Size size) {
-    final pad = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      const Radius.circular(AppRadius.pad),
-    );
-    return Path.combine(
-      PathOperation.difference,
-      Path()..addRect((Offset.zero & size).inflate(64)),
-      Path()..addRRect(pad),
-    );
-  }
-
-  @override
-  bool shouldReclip(_OutsidePadClipper oldClipper) => false;
-}
-
-/// Barre de progression de lecture d'un pad musique, synchronisée sur la
-/// position **réelle** du lecteur. Contrairement à une simple animation 0→1
-/// relancée à chaque `play`, elle se ré-aligne à chaque rebuild sur
-/// `player.position` (ou sur la position mémorisée en pause) : une reprise après
-/// pause repart de l'endroit où le son a été suspendu, jamais de zéro.
-class _MusicProgressBar extends StatefulWidget {
-  final PadItem padItem;
-  final Color color;
-
-  const _MusicProgressBar({required this.padItem, required this.color});
-
-  @override
-  State<_MusicProgressBar> createState() => _MusicProgressBarState();
-}
-
-class _MusicProgressBarState extends State<_MusicProgressBar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    );
-    _syncToPlayback();
-  }
-
-  @override
-  void didUpdateWidget(covariant _MusicProgressBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Le grid se reconstruit à chaque `_notify()` du notifier : on en profite
-    // pour recaler la barre sur la position réelle (corrige aussi la dérive).
-    _syncToPlayback();
-  }
-
-  /// Ré-aligne la barre sur l'état de lecture courant du pad :
-  /// - en lecture : anime depuis la position réelle jusqu'à la fin, sur le temps
-  ///   restant — l'`AnimationController` de durée = durée totale interpole
-  ///   linéairement le reste depuis `value` (`forward()` prend `durée × (1 −
-  ///   value)`) ;
-  /// - en pause : fige à la position mémorisée d'où la reprise repartira ;
-  /// - arrêté : ramène à zéro (barre masquée).
-  void _syncToPlayback() {
-    final pad = widget.padItem;
-    final totalMs =
-        (pad.progressPlayer?.duration ?? Duration.zero).inMilliseconds;
-
-    if (pad.isPlaying && totalMs > 0) {
-      final posMs = (pad.progressPlayer?.position.inMilliseconds ?? 0).clamp(
-        0,
-        totalMs,
-      );
-      _controller.duration = Duration(milliseconds: totalMs);
-      _controller.value = posMs / totalMs;
-      _controller.forward();
-    } else if (pad.isPaused && totalMs > 0) {
-      final posMs = (pad.pausedPlaybackPosition?.inMilliseconds ?? 0).clamp(
-        0,
-        totalMs,
-      );
-      _controller.stop();
-      _controller.value = posMs / totalMs;
-    } else {
-      _controller.stop();
-      _controller.value = 0.0;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  static const _barHeight = 3.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        final value = _controller.value;
-        // Rien à afficher tant que le pad est arrêté et la barre vide.
-        if (!widget.padItem.isPlaying && value <= 0.0) {
-          return const SizedBox.shrink();
-        }
-        return LinearProgressIndicator(
-          value: value,
-          backgroundColor: widget.color.withValues(alpha: 0.16),
-          valueColor: AlwaysStoppedAnimation<Color>(widget.color),
-          minHeight: _barHeight,
-        );
-      },
-    );
-  }
-}
-
-/// Barre de progression d'une voix polyphonique : anime 0→1 sur la durée du son
-/// à partir de sa position réelle (au cas où la barre apparaît après le départ),
-/// indépendamment des rebuilds du pad (chevauchements superposés).
-class _PolyphonicProgressBar extends StatefulWidget {
-  final PadPlaybackTicket ticket;
-  final Color color;
-
-  const _PolyphonicProgressBar({
-    super.key,
-    required this.ticket,
-    required this.color,
-  });
-
-  @override
-  State<_PolyphonicProgressBar> createState() => _PolyphonicProgressBarState();
-}
-
-class _PolyphonicProgressBarState extends State<_PolyphonicProgressBar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    final total = widget.ticket.duration;
-    final elapsed = DateTime.now().difference(widget.ticket.startedAt);
-    final totalMs = total.inMilliseconds;
-    final startValue = totalMs > 0
-        ? (elapsed.inMilliseconds / totalMs).clamp(0.0, 1.0)
-        : 1.0;
-    _controller = AnimationController(
-      vsync: this,
-      duration: total > Duration.zero ? total : const Duration(milliseconds: 1),
-    );
-    _controller.value = startValue;
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  static const _barHeight = 3.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) => Positioned.fill(
-        child: LinearProgressIndicator(
-          value: _controller.value,
-          backgroundColor: Colors.transparent,
-          valueColor: AlwaysStoppedAnimation<Color>(widget.color),
-          minHeight: _barHeight,
-        ),
-      ),
-    );
-  }
-}
-
-/// Zone cliquable sans fond ni ripple : le contenu se teinte lui-même via
-/// l'état de survol fourni à [builder] (direction "Console Linear", cf.
-/// décision 0023). Le `GestureDetector` opaque capte le tap avant celui du pad.
-class _HoverTint extends StatefulWidget {
-  const _HoverTint({required this.onTap, required this.builder});
-
-  final VoidCallback? onTap;
-  final Widget Function(BuildContext context, bool hovered) builder;
-
-  @override
-  State<_HoverTint> createState() => _HoverTintState();
-}
-
-class _HoverTintState extends State<_HoverTint> {
-  bool _hovered = false;
-
-  void _setHovered(bool value) {
-    if (_hovered == value) return;
-    setState(() => _hovered = value);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: widget.onTap == null
-          ? MouseCursor.defer
-          : SystemMouseCursors.click,
-      onEnter: (_) => _setHovered(true),
-      onExit: (_) => _setHovered(false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: widget.builder(context, _hovered),
       ),
     );
   }
