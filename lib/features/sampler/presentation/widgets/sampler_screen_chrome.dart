@@ -27,7 +27,6 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onTogglePerformanceMode;
   final VoidCallback onQuickSearch;
   final Widget stopAllButton;
-  final Widget syncIndicator;
 
   const SamplerAppBar({
     super.key,
@@ -37,7 +36,6 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onTogglePerformanceMode,
     required this.onQuickSearch,
     required this.stopAllButton,
-    required this.syncIndicator,
   });
 
   @override
@@ -67,9 +65,6 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
         child: Container(color: AppElevation.border(scheme).color, height: 1),
       ),
       actions: [
-        // En tête de rangée : son apparition ne déplace que le titre, jamais
-        // les boutons sous le doigt (stop, recherche).
-        syncIndicator,
         // Vumètre de sortie : uniquement là où la barre a la place (tablette+).
         if (context.deviceClass.isAtLeastTablet)
           const Center(child: AudioVuMeter()),
@@ -261,7 +256,6 @@ class SamplerDesktopAppBar extends StatelessWidget
   final Future<void> Function() onOpenSettings;
   final VoidCallback onQuickSearch;
   final Widget stopAllButton;
-  final Widget syncIndicator;
   final VoidCallback? onQuitApp;
 
   const SamplerDesktopAppBar({
@@ -278,7 +272,6 @@ class SamplerDesktopAppBar extends StatelessWidget
     required this.onOpenSettings,
     required this.onQuickSearch,
     required this.stopAllButton,
-    required this.syncIndicator,
     this.onQuitApp,
   });
 
@@ -318,7 +311,6 @@ class SamplerDesktopAppBar extends StatelessWidget
         child: Container(color: AppElevation.border(scheme).color, height: 1),
       ),
       actions: [
-        syncIndicator,
         stopAllButton,
         BoxedIconButton(
           icon: AppIcons.search,

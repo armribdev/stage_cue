@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:drift/drift.dart'
     show TableUpdate, TableUpdateQuery, UpdateKind;
-import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
 
 import '../../features/sampler/data/models/indexing_progress.dart';
 import '../../features/sampler/data/repositories/library_repository.dart';
@@ -182,21 +181,6 @@ class AutoSyncCoordinator {
   /// et doubleraient le trafic Drive. Une demande manuelle rejoint la passe en
   /// cours plutôt que d'en ouvrir une seconde.
   Future<SyncPassReport>? _passInFlight;
-
-  /// Une passe qui **fait quelque chose** est en cours : lancement et
-  /// actualisation manuelle dès leur début, veille seulement une fois que son
-  /// delta a trouvé du nouveau. Une sonde de veille qui conclut « rien de neuf »
-  /// ne passe donc jamais à `true` — elle reviendrait toutes les 5 minutes et
-  /// ferait clignoter un écran de régie pour zéro information
-  /// ([0022](../../../docs/decisions/0022-veille-drive-en-cours-de-session.md)).
-  ///
-  /// Distinct de `SyncStatus` : celui-ci ne passe à `syncing` qu'au pull, alors
-  /// que l'indexation (delta, scan complet) est la partie longue de la passe.
-  final ValueNotifier<bool> _visiblePassActive = ValueNotifier(false);
-
-  /// Voir [_visiblePassActive]. Lu par l'indicateur discret de la barre du
-  /// sampler.
-  ValueListenable<bool> get visiblePassActive => _visiblePassActive;
 
   /// Bibliothèques pour lesquelles la veille a déjà signalé qu'elle renonçait au
   /// scan complet — cf. [SyncLog.watchFullScanDeferred].
@@ -399,12 +383,8 @@ class AutoSyncCoordinator {
       // manuelle arrivée pendant le pull de lancement n'affichera donc pas de
       // progression — elle n'a rien à relancer.
       SyncLog.trace('passe ${trigger.name} : rejoint la passe en cours');
-      // Une demande de l'utilisateur rejoignant une sonde de veille encore
-      // « muette » : la passe sert désormais un geste, elle doit se voir.
-      if (!trigger.isWatch) _setPassVisible(true);
       return inFlight;
     }
-    if (!trigger.isWatch) _setPassVisible(true);
     final pass =
         _runPass(
           trigger,
@@ -413,7 +393,6 @@ class AutoSyncCoordinator {
           onStage: onStage,
         ).whenComplete(() {
           _passInFlight = null;
-          _setPassVisible(false);
           // L'analyse vient APRÈS le pull : le pull remplace les tags d'un dossier
           // par ceux du distant, et publier des tags posés avant lui les ferait
           // écraser (décision 0029).
@@ -587,9 +566,6 @@ class AutoSyncCoordinator {
                     upserted: upserted,
                     removed: removed,
                   );
-                  // La veille a trouvé du nouveau : le pull qui suit mérite
-                  // d'être vu.
-                  _setPassVisible(true);
                 }
                 _fullScanDeferredReported.remove(library.id);
                 changes[library.id] = (added: upserted, removed: removed);
@@ -707,13 +683,6 @@ class AutoSyncCoordinator {
     }
   }
 
-  void _setPassVisible(bool value) {
-    // Une passe peut finir après `dispose` : un `ValueNotifier` détruit refuse
-    // l'écriture.
-    if (_disposed) return;
-    _visiblePassActive.value = value;
-  }
-
   /// Journalise le renoncement de la veille au scan complet — une seule fois par
   /// bibliothèque, la raison étant stable d'un tick à l'autre.
   void _reportWatchFullScanDeferred(Library library, String reason) {
@@ -739,6 +708,5 @@ class AutoSyncCoordinator {
     _autoTagDebounce?.cancel();
     _insertSubscription?.cancel();
     _subscription?.cancel();
-    _visiblePassActive.dispose();
   }
 }
