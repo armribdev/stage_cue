@@ -44,6 +44,7 @@ class _MusicRegieDrawer extends StatefulWidget {
   final ValueChanged<double>? onMusicVolumeChanged;
   final ValueChanged<Duration>? onSeekMusic;
   final double ambianceVolume;
+  final AmbianceTransition? ambianceTransition;
   final VoidCallback? onChooseAmbiance;
   final VoidCallback? onStopAmbiance;
   final ValueChanged<double>? onAmbianceVolumeChanged;
@@ -77,6 +78,7 @@ class _MusicRegieDrawer extends StatefulWidget {
     this.onMusicVolumeChanged,
     this.onSeekMusic,
     this.ambianceVolume = 1.0,
+    this.ambianceTransition,
     this.onChooseAmbiance,
     this.onStopAmbiance,
     this.onAmbianceVolumeChanged,
@@ -289,6 +291,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
     return _AmbianceSlot(
       current: widget.state.currentAmbiancePad,
       volume: widget.ambianceVolume,
+      transition: widget.ambianceTransition,
       layout: layout,
       onChoose: widget.onChooseAmbiance,
       onStop: widget.onStopAmbiance,

@@ -240,6 +240,7 @@ extension _SamplerScreenContent on _SamplerScreenState {
       musicVolume: _notifier.musicVolume,
       resolveMusicPad: _notifier.resolveMusicPad,
       ambianceVolume: _notifier.ambianceVolume,
+      ambianceTransition: _notifier.ambianceTransition,
       onChooseAmbiance: () => unawaited(_openAmbiancePicker()),
       onStopAmbiance: (fade) => unawaited(
         _notifier.stopCurrentAmbiance(

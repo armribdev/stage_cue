@@ -212,12 +212,26 @@ class _PadColorChip extends StatelessWidget {
   final PadItem padItem;
   final double size;
 
-  const _PadColorChip({required this.padItem, required this.size});
+  /// Glyphe posé sur la pastille (à partir de 32 px) : musique par défaut,
+  /// l'ambiance passe le sien pour rester identifiable d'un coup d'œil.
+  final StrokeIconData? icon;
+
+  /// `false` : pastille neutre, sans la couleur du pad (voie ambiance).
+  final bool tinted;
+
+  const _PadColorChip({
+    required this.padItem,
+    required this.size,
+    this.icon,
+    this.tinted = true,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color = padItem.pad.colorValue != null
+    final color = !tinted
+        ? scheme.surfaceContainerHighest
+        : padItem.pad.colorValue != null
         ? Color(padItem.pad.colorValue!)
         : padItem.pad.sounds.isNotEmpty
         ? soundEffectiveColor(padItem.pad.sounds.first, scheme)
@@ -237,7 +251,7 @@ class _PadColorChip extends StatelessWidget {
       ),
       child: size >= 32
           ? StrokeIcon(
-              SoundType.music.icon,
+              icon ?? SoundType.music.icon,
               size: size * 0.45,
               color: _chipIconColor(color, scheme),
             )

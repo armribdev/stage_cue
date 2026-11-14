@@ -1,5 +1,28 @@
 part of 'sampler_provider.dart';
 
+/// Fondu en cours sur la voie ambiance — de quoi afficher un loader dans la
+/// régie. [id] change à chaque fondu : l'UI relance son animation même si deux
+/// fondus de même nature s'enchaînent.
+class AmbianceTransition {
+  final int id;
+  final AmbianceTransitionKind kind;
+  final Duration duration;
+
+  const AmbianceTransition({
+    required this.id,
+    required this.kind,
+    required this.duration,
+  });
+}
+
+enum AmbianceTransitionKind {
+  /// Arrêt de l'ambiance à l'antenne.
+  fadeOut,
+
+  /// Remplacement par une autre ambiance (fondu enchaîné).
+  crossfade,
+}
+
 /// Voie ambiance de la régie : une seule ambiance à la fois, jouée en boucle
 /// depuis son point d'entrée. Un nouveau déclenchement remplace l'ambiance en
 /// cours par un fondu enchaîné — pas de file, pas de reprise, pas de pause
@@ -31,6 +54,27 @@ class AmbianceController {
   /// lecteurs ne doivent pas effacer l'ambiance à l'antenne.
   int _transitionLockCount = 0;
   bool get _inTransition => _transitionLockCount > 0;
+
+  /// Fondu en cours pour l'affichage (`null` au repos). Champ direct hors
+  /// `SamplerState` : il ne vit que le temps d'un fondu.
+  AmbianceTransition? _transition;
+  int _transitionSeq = 0;
+  AmbianceTransition? get transition => _transition;
+
+  void _beginTransition(AmbianceTransitionKind kind, Duration duration) {
+    _transition = AmbianceTransition(
+      id: ++_transitionSeq,
+      kind: kind,
+      duration: duration,
+    );
+    _o._notify();
+  }
+
+  void _endTransition() {
+    if (_transition == null) return;
+    _transition = null;
+    _o._notify();
+  }
 
   /// Pads ambiance hors-scène : créés depuis le sélecteur de la régie, ou
   /// détachés du plateau quittant la scène pendant qu'ils jouent.
@@ -116,6 +160,7 @@ class AmbianceController {
         _setOnAir(padItem, index);
 
         // Équi-puissance, comme le fondu enchaîné musique.
+        _beginTransition(AmbianceTransitionKind.crossfade, crossfade);
         await Future.wait([
           previousPlayer.fadeEnvelope(
             previousVolume,
@@ -192,6 +237,7 @@ class AmbianceController {
       }
     } finally {
       if (_transitionLockCount > 0) _transitionLockCount--;
+      _endTransition();
     }
 
     if (previousPlaying && !identical(previous, padItem)) {
@@ -401,6 +447,7 @@ class AmbianceController {
     final player = padItem.currentPlayer;
     if (player != null && padItem.isPlaying && fade > Duration.zero) {
       _transitionLockCount++;
+      _beginTransition(AmbianceTransitionKind.fadeOut, fade);
       try {
         await player.fadeEnvelope(
           _o._effectiveVolume(padItem),
@@ -410,6 +457,7 @@ class AmbianceController {
         );
       } finally {
         if (_transitionLockCount > 0) _transitionLockCount--;
+        _endTransition();
       }
     }
     await _stopPadPlayers(padItem);

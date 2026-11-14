@@ -183,6 +183,7 @@ class SamplerNotifier extends ChangeNotifier {
 
   double get musicVolume => _music.musicVolume;
   double get ambianceVolume => _ambiance.ambianceVolume;
+  AmbianceTransition? get ambianceTransition => _ambiance.transition;
 
   SamplerNotifier(
     this._repository,

@@ -101,6 +101,9 @@ class MusicPreviewPanel extends StatefulWidget {
   /// Voie ambiance : volume de voie, choix (sélecteur), arrêt avec un fondu
   /// (`null` = fondu par défaut du contrôleur) et réglage du volume.
   final double ambianceVolume;
+
+  /// Fondu en cours sur la voie ambiance (loader sur ses boutons).
+  final AmbianceTransition? ambianceTransition;
   final VoidCallback? onChooseAmbiance;
   final ValueChanged<Duration?>? onStopAmbiance;
   final ValueChanged<double>? onAmbianceVolumeChanged;
@@ -110,6 +113,7 @@ class MusicPreviewPanel extends StatefulWidget {
     required this.state,
     required this.musicVolume,
     this.ambianceVolume = 1.0,
+    this.ambianceTransition,
     this.onChooseAmbiance,
     this.onStopAmbiance,
     this.onAmbianceVolumeChanged,
@@ -380,6 +384,7 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
       onMusicVolumeChanged: widget.onMusicVolumeChanged,
       onSeekMusic: widget.onSeekMusic,
       ambianceVolume: widget.ambianceVolume,
+      ambianceTransition: widget.ambianceTransition,
       onChooseAmbiance: widget.onChooseAmbiance,
       // Le sélecteur de fondu (1/3/5 s, coupe) est pensé pour la musique :
       // l'ambiance garde toujours son propre fondu, plus long et plus doux.
