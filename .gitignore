@@ -55,3 +55,7 @@ lib/core/sync/google_oauth_secrets.dart
 
 # Analyses ponctuelles locales (vocabulaire des titres de sons)
 /docs/analyses/
+
+# Artefacts locaux (sortie CMake d'une variable non expansée, tâche adb avec IP perso)
+/$buildDir/
+/tasks.json
