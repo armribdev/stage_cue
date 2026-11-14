@@ -351,109 +351,6 @@ class MusicController {
     await playNextInQueueNow();
   }
 
-  /// Fondu sortant de la musique en cours (sans lancer la file).
-  Future<void> fadeOutCurrentMusic(Duration duration) async {
-    final current = _o._state.currentMusicPad;
-    if (current == null || !current.isPlaying) return;
-    if (duration == Duration.zero) {
-      await _stopMusicPad(current, manual: true, clearOnAir: false);
-      return;
-    }
-    final player = current.currentPlayer;
-    if (player == null) return;
-
-    _musicAdvanceLockCount++;
-    try {
-      await player.fadeEnvelope(
-        _effectiveVolume(current),
-        duration,
-        fadeIn: false,
-        curve: FadeCurve.cubic,
-      );
-      _capturePausedPlayback(current);
-      await player.stop();
-      current.isPlaying = false;
-      current._currentPlayerIndex = null;
-      _o._notify();
-    } finally {
-      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
-    }
-  }
-
-  /// Enchaîne vers la musique suivante avec un fondu enchaîné.
-  Future<void> crossfadeToNextMusic(Duration duration) async {
-    if (_o._state.musicQueuePadIds.isEmpty) return;
-
-    if (duration == Duration.zero) {
-      await playNextInQueueNow();
-      return;
-    }
-
-    final current = _o._state.currentMusicPad;
-    if (current == null || !current.isPlaying) {
-      await _fadeInNextFromQueue(duration);
-      return;
-    }
-
-    final nextId = _o._state.musicQueuePadIds.first;
-    final next = await _prepareNextQueuedMusic(nextId);
-    if (next == null) return;
-
-    final currentPlayer = current.currentPlayer;
-    if (currentPlayer == null) return;
-
-    final soundIndex = _o._pickSoundIndex(next);
-    final nextPlayer = next.slots[soundIndex].player;
-    if (nextPlayer == null) {
-      _setMusicLoadError(next);
-      return;
-    }
-    final targetVolume = _effectiveVolume(next, soundIndex: soundIndex);
-
-    _musicAdvanceLockCount++;
-    try {
-      _o._state = _o._state.copyWith(
-        musicQueuePadIds: _o._state.musicQueuePadIds.sublist(1),
-      );
-      _o._notify();
-
-      await nextPlayer.playAtVolume(
-        0,
-        startOffset: _startOffsetOf(next, soundIndex, nextPlayer),
-      );
-      next._currentPlayerIndex = soundIndex;
-      next.isPlaying = true;
-
-      // Équi-puissance : les deux voix se croisent à loudness constante, sans
-      // creux au milieu (contrairement à un croisement cubique).
-      await Future.wait([
-        currentPlayer.fadeEnvelope(
-          _effectiveVolume(current),
-          duration,
-          fadeIn: false,
-          curve: FadeCurve.equalPower,
-        ),
-        nextPlayer.fadeEnvelope(
-          targetVolume,
-          duration,
-          fadeIn: true,
-          curve: FadeCurve.equalPower,
-        ),
-      ]);
-
-      if (currentPlayer.isPlaying) {
-        await currentPlayer.stop();
-      }
-      current.isPlaying = false;
-      current._currentPlayerIndex = null;
-
-      _o._state = _o._state.copyWith(currentMusicPad: next);
-      _o._notify();
-    } finally {
-      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
-    }
-  }
-
   // ── Volume musique ────────────────────────────────────────────────────────
 
   Future<void> setMusicVolume(double value, {bool smooth = false}) async {
@@ -486,61 +383,6 @@ class MusicController {
     _o._notify();
   }
 
-  PadItem? _resolvePadItem(int? padId) {
-    if (padId == null) return null;
-    for (final padItem in _o._state.pads) {
-      if (padItem.pad.id == padId) return padItem;
-    }
-    return _offStageMusicPads[padId];
-  }
-
-  /// Résout un pad musique par id — sur la scène ou hors-scène (régie seule).
-  PadItem? resolveMusicPad(int padId) => _resolvePadItem(padId);
-
-  /// Pad musique **simple** (un seul son) correspondant à un son, sur la scène
-  /// ou hors-scène. Un multipad ne doit jamais être résolu ici : depuis la
-  /// recherche, on ne veut déclencher que le son précis choisi, pas laisser le
-  /// multipad piocher parmi ses variantes ([_pickSoundIndex]).
-  PadItem? _findSimpleMusicPadForSound(int soundId) {
-    for (final padItem in _o._state.pads) {
-      final sounds = padItem.pad.sounds;
-      if (sounds.length == 1 && sounds.first.id == soundId) return padItem;
-    }
-    for (final padItem in _offStageMusicPads.values) {
-      final sounds = padItem.pad.sounds;
-      if (sounds.length == 1 && sounds.first.id == soundId) return padItem;
-    }
-    return null;
-  }
-
-  /// Pad musique correspondant à un son, sur la scène ou hors-scène — ne
-  /// renvoie jamais un multipad (voir [_findSimpleMusicPadForSound]).
-  PadItem? findMusicPadForSound(int soundId) =>
-      _findSimpleMusicPadForSound(soundId);
-
-  /// Réinjecte en mémoire les métadonnées à jour d'un son (point d'entrée,
-  /// volume, etc.) sur tous les pads qui le référencent, sans toucher aux
-  /// lecteurs audio en cours — le nouveau point d'entrée s'applique à la
-  /// prochaine lecture seulement.
-  Future<void> refreshSoundMetadata(int soundId) async {
-    await _syncSoundMetadataInPads(_o._state.pads, soundId);
-    await _syncSoundMetadataInPads(_offStageMusicPads.values, soundId);
-    _o._notify();
-  }
-
-  Future<void> _syncSoundMetadataInPads(
-    Iterable<PadItem> padItems,
-    int soundId,
-  ) async {
-    for (final padItem in padItems) {
-      for (var i = 0; i < padItem.pad.sounds.length; i++) {
-        if (padItem.pad.sounds[i].id == soundId) {
-          await _o._syncPadSoundMetadata(padItem, i);
-        }
-      }
-    }
-  }
-
   // ── Synchronisation état ──────────────────────────────────────────────────
 
   void _syncMusicStateWithPads() {
@@ -560,36 +402,6 @@ class MusicController {
       musicQueuePadIds: nextQueue,
       clearCurrentMusicPad: nextCurrent == null && currentId != null,
     );
-  }
-
-  /// Détache le pad musique en cours de lecture vers la réserve hors-scène afin
-  /// qu'il survive à un changement de plateau (tapis sonore continu) : il n'est
-  /// pas disposé par le rechargement et reste piloté par la régie. Idempotent si
-  /// le pad courant est déjà hors-scène.
-  void _detachPlayingMusicToOffStage() {
-    final current = _o._state.currentMusicPad;
-    if (current == null || !current.isPlaying) return;
-    _offStageMusicPads[current.pad.id] = current;
-  }
-
-  /// Ré-adopte un pad musique précédemment détaché hors-scène quand on revient
-  /// sur son plateau d'origine (le retire de la réserve pour le remettre en
-  /// scène), évitant la création d'un second lecteur pour un son déjà en cours.
-  PadItem? _reclaimOffStagePad(int padId) => _offStageMusicPads.remove(padId);
-
-  /// true si [padId] correspond à un pad conservé hors-scène (à ne pas disposer
-  /// lors du rechargement du plateau).
-  bool _isKeptOffStage(int padId) => _offStageMusicPads.containsKey(padId);
-
-  /// Supprime les pads hors-scène qui ne jouent plus (appelé au changement de plateau).
-  void cleanupOffStagePads() {
-    final toRemove = _offStageMusicPads.entries
-        .where((e) => !e.value.isPlaying)
-        .map((e) => e.key)
-        .toList();
-    for (final id in toRemove) {
-      _offStageMusicPads.remove(id)?.dispose();
-    }
   }
 
   // ── Interne ───────────────────────────────────────────────────────────────
@@ -738,34 +550,6 @@ class MusicController {
     _o._notify();
   }
 
-  /// Coupe un pad musique avec un fondu sortant, sans mémoriser de position
-  /// de reprise (contrairement à [fadeOutCurrentMusic]) : le pad repart de
-  /// zéro — et pioche un nouveau son via [_pickSoundIndex] pour un multipad —
-  /// au prochain tap plutôt que de reprendre en pause.
-  Future<void> _fadeOutAndStopMusicPad(
-    PadItem padItem,
-    Duration duration,
-  ) async {
-    final player = padItem.currentPlayer;
-    if (duration == Duration.zero || player == null) {
-      await _stopMusicPad(padItem, manual: true);
-      return;
-    }
-
-    _musicAdvanceLockCount++;
-    try {
-      await player.fadeEnvelope(
-        _effectiveVolume(padItem),
-        duration,
-        fadeIn: false,
-        curve: FadeCurve.cubic,
-      );
-    } finally {
-      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
-    }
-    await _stopMusicPad(padItem, manual: true);
-  }
-
   void _handleMusicPlaybackEnded(PadItem padItem) {
     if (_skipMusicAutoAdvance) return;
     if (_o._state.currentMusicPad?.pad.id != padItem.pad.id) return;
@@ -788,198 +572,11 @@ class MusicController {
     unawaited(_playMusicPad(next));
   }
 
-  Future<PadItem?> _findOrCreateMusicPadForSound(int soundId) async {
-    var existing = _findSimpleMusicPadForSound(soundId);
-    if (existing != null) {
-      for (var i = 0; i < existing.pad.sounds.length; i++) {
-        await _o._syncPadSoundMetadata(existing, i);
-      }
-      return existing;
-    }
-
-    final boardId = _o._activeBoardId;
-    if (boardId != null) {
-      final padIdBySound = await _o._repository.getSoundIdToFirstPadIdInBoard(
-        boardId,
-      );
-      if (padIdBySound.containsKey(soundId)) {
-        await _o.loadSounds(boardId: boardId);
-        existing = _findSimpleMusicPadForSound(soundId);
-        if (existing != null) {
-          for (var i = 0; i < existing.pad.sounds.length; i++) {
-            await _o._syncPadSoundMetadata(existing, i);
-          }
-          return existing;
-        }
-      }
-    }
-
-    return _createOffStageMusicPad(soundId);
-  }
-
-  Future<void> _refreshPadAvailability(PadItem padItem) async {
-    if (padItem.isPlayable) return;
-    await _o._loadPlayersForPad(padItem, padItem.pad);
-  }
-
-  Future<bool> _prepareMusicPadForPlayback(
-    PadItem padItem, {
-    required bool downloadIfNeeded,
-  }) async {
-    if (padItem.isPlayable) return true;
-    await _o._loadPlayersForPad(padItem, padItem.pad);
-    if (padItem.isPlayable) return true;
-    if (!downloadIfNeeded) return false;
-    return _o.downloadAndLoadPad(padItem);
-  }
-
-  bool _isMusicPadPermanentlyUnavailable(PadItem padItem) {
-    return padItem.unavailabilityReason == PadUnavailabilityReason.offline ||
-        padItem.unavailabilityReason == PadUnavailabilityReason.missingFile ||
-        padItem.unavailabilityReason ==
-            PadUnavailabilityReason.unsupportedFormat;
-  }
-
-  void _scheduleMusicPadDownload(PadItem padItem) {
-    if (padItem.isPlayable) return;
-    if (_isMusicPadPermanentlyUnavailable(padItem)) return;
-    if (padItem.pendingDownloadCount == 0) return;
-    unawaited(_o.downloadAndLoadPad(padItem));
-  }
-
-  Future<PadItem?> _createOffStageMusicPad(int soundId) async {
-    final Sound? sound;
-    try {
-      sound = await _o._repository.getSoundById(soundId);
-    } catch (e) {
-      AudioLoadLog.warn('Impossible de préparer la musique pour la régie : $e');
-      _reportPlaybackError('Impossible de préparer cette musique.');
-      return null;
-    }
-    if (sound == null) {
-      _setMusicLoadError();
-      return null;
-    }
-    if (sound.type != SoundType.music) {
-      _reportPlaybackError('Ce son n\'est pas une musique.');
-      return null;
-    }
-
-    final padItem = await _o._buildOffStagePad(sound);
-    if (padItem == null) {
-      _reportPlaybackError('Impossible de préparer cette musique.');
-      return null;
-    }
-    _offStageMusicPads[padItem.pad.id] = padItem;
-    return padItem;
-  }
-
-  /// [detail] : cause précise de l'échec (ex. raison du lecteur) — à défaut, la
-  /// raison de disponibilité du pad sert de motif au journal.
-  void _setMusicLoadError([PadItem? padItem, String? detail]) {
-    final reason = padItem?.unavailabilityReason;
-    // Un token révoqué remonte en `offline` (cf. correction du classement dans
-    // `resolvePlayablePath`) : distinguer « session expirée » d'un vrai hors-ligne
-    // pour ne pas envoyer l'opérateur vérifier une connexion pourtant active.
-    if ((reason == PadUnavailabilityReason.offline || reason == null) &&
-        _o.driveSessionExpired) {
-      _lastPlaybackError = 'Session Google expirée — touchez « Reconnecter ».';
-    } else {
-      _lastPlaybackError = switch (reason) {
-        PadUnavailabilityReason.offline => 'Son indisponible hors-ligne.',
-        PadUnavailabilityReason.missingFile => 'Fichier audio introuvable.',
-        PadUnavailabilityReason.unsupportedFormat =>
-          'Format audio non supporté.',
-        _ => 'Fichier audio introuvable ou indisponible hors-ligne.',
-      };
-    }
-    if (padItem != null) {
-      _o.reportPadTriggerFailure(
-        padItem,
-        reason: detail ?? _o.triggerFailureReason(padItem),
-      );
-    } else {
-      AudioLoadLog.warn('Lecture impossible : $_lastPlaybackError');
-    }
-    _o._notify();
-  }
-
   void _capturePausedPlayback(PadItem padItem) {
     final player = padItem.currentPlayer;
     if (player == null) return;
     padItem.pausedPlaybackPosition = player.position;
     padItem.pausedPlayerIndex = padItem._currentPlayerIndex;
-  }
-
-  Future<void> _fadeInNextFromQueue(Duration duration) async {
-    if (_o._state.musicQueuePadIds.isEmpty) return;
-
-    final nextId = _o._state.musicQueuePadIds.first;
-    final next = await _prepareNextQueuedMusic(nextId);
-    if (next == null) return;
-
-    final previous = _o._state.currentMusicPad;
-
-    _musicAdvanceLockCount++;
-    try {
-      _o._state = _o._state.copyWith(
-        musicQueuePadIds: _o._state.musicQueuePadIds.sublist(1),
-      );
-      _o._notify();
-
-      final soundIndex = _o._pickSoundIndex(next);
-      final nextPlayer = next.slots[soundIndex].player;
-      if (nextPlayer == null) {
-        _setMusicLoadError(next);
-        return;
-      }
-      final targetVolume = _effectiveVolume(next, soundIndex: soundIndex);
-
-      await nextPlayer.playAtVolume(
-        0,
-        startOffset: _startOffsetOf(next, soundIndex, nextPlayer),
-      );
-      next._currentPlayerIndex = soundIndex;
-      next.isPlaying = true;
-      await nextPlayer.fadeEnvelope(
-        targetVolume,
-        duration,
-        fadeIn: true,
-        curve: FadeCurve.equalPower,
-      );
-
-      if (previous != null && previous.pad.id != next.pad.id) {
-        await previous.currentPlayer?.stop();
-        previous.isPlaying = false;
-        previous._currentPlayerIndex = null;
-      }
-
-      _o._state = _o._state.copyWith(currentMusicPad: next);
-      _o._notify();
-    } finally {
-      if (_musicAdvanceLockCount > 0) _musicAdvanceLockCount--;
-    }
-  }
-
-  Future<PadItem?> _prepareNextQueuedMusic(int nextId) async {
-    final next = _resolvePadItem(nextId);
-    if (next == null) {
-      _setMusicLoadError();
-      return null;
-    }
-
-    if (!next.isPlayable) {
-      final ready = await _prepareMusicPadForPlayback(
-        next,
-        downloadIfNeeded: true,
-      );
-      if (!ready) {
-        _setMusicLoadError(next);
-        return null;
-      }
-    }
-
-    return next;
   }
 
   void _applyMusicVolumeToPlayingPads({bool smooth = false}) {
@@ -1012,13 +609,6 @@ class MusicController {
       if (a[i] != b[i]) return false;
     }
     return true;
-  }
-
-  void _disposeOffStagePads() {
-    for (final padItem in _offStageMusicPads.values) {
-      padItem.dispose();
-    }
-    _offStageMusicPads.clear();
   }
 }
 

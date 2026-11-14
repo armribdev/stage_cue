@@ -39,6 +39,9 @@ import 'sound_search_index.dart';
 
 part 'sampler_state.dart';
 part 'music_controller.dart';
+part 'music_fades.dart';
+part 'music_offstage_pads.dart';
+part 'music_availability.dart';
 part 'ambiance_controller.dart';
 part 'sampler_pad_availability.dart';
 part 'sampler_pad_audio_engine.dart';
