@@ -76,15 +76,77 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       _libraryPreviewSoundId == soundId &&
       (_libraryPreviewPlayer?.isPlaying ?? false);
 
+  /// Position de lecture de l'aperçu de [soundId] (zéro s'il n'est pas chargé).
+  Duration libraryPreviewPosition(int soundId) =>
+      _libraryPreviewSoundId == soundId
+      ? (_libraryPreviewPlayer?.position ?? Duration.zero)
+      : Duration.zero;
+
+  /// Charge l'aperçu de [soundId] sans le jouer et rend sa durée, ou `null` si
+  /// le son n'est pas lisible ici (pas téléchargé, format, casque indisponible).
+  ///
+  /// Sert à l'éditeur du point d'entrée, qui a besoin de la durée avant tout
+  /// ▶ : il charge ainsi le lecteur unique plutôt que d'en ouvrir un second.
+  /// Ne télécharge rien. Un aperçu déjà chargé pour ce son (même en cours de
+  /// lecture) est conservé tel quel ; celui d'un autre son est remplacé.
+  Future<Duration?> loadLibraryPreview(int soundId) async {
+    final existing = _libraryPreviewPlayer;
+    if (_libraryPreviewSoundId == soundId && existing != null) {
+      return existing.duration;
+    }
+    final sound = await _repository.getSoundById(soundId);
+    if (sound == null) return null;
+    // Le lecteur est unique : l'aperçu d'un autre son (▶ d'une ligne, son
+    // précédent de la file de traitement) cède la place. Sans cela, le contrôle
+    // ci-dessous le prendrait pour un concurrent et l'éditeur afficherait
+    // « Téléchargez le son » alors que le fichier est bien là.
+    if (_libraryPreviewSoundId != soundId) stopLibraryPreview();
+    try {
+      final path = await _resolvePlayablePath(sound);
+      final player = await CueAudioService.instance.createPreviewPlayer(path);
+      // Un autre aperçu (bouton de ligne) a pris le lecteur pendant le
+      // chargement : il gagne, ce chargement-ci est jeté.
+      if (_libraryPreviewPlayer != null) {
+        player.dispose();
+        return _libraryPreviewSoundId == soundId
+            ? _libraryPreviewPlayer?.duration
+            : null;
+      }
+      _attachLibraryPreview(sound.id, player);
+      return player.duration;
+    } catch (e) {
+      // Pas de lecteur à montrer : l'éditeur affiche son message d'indisponibilité.
+      AudioLoadLog.trace('Chargement de l\'aperçu « ${sound.title} » : $e');
+      return null;
+    }
+  }
+
+  /// Relance l'aperçu en cours de [soundId] depuis [position] (tête de lecture
+  /// déplacée à la main). Sans effet si ce son n'est pas en train de jouer.
+  Future<void> seekLibraryPreview(
+    int soundId,
+    Duration position, {
+    required double volume,
+  }) async {
+    if (!libraryPreviewIsPlaying(soundId)) return;
+    await _libraryPreviewPlayer?.playFromPosition(position, volume: volume);
+  }
+
   /// Bascule play/pause pour l'aperçu (lecteur unique, un son à la fois). C'est
   /// le seul point d'entrée de la pré-écoute : elle reste étrangère aux pads,
   /// à la régie et au bouton « Tout arrêter ».
   ///
   /// [requireCue] : n'a de sens qu'au casque — échoue plutôt que de sortir sur
   /// la salle quand aucun casque n'est configuré.
+  ///
+  /// [from] et [volume] : départ et niveau d'un nouvel aperçu, quand ils ne
+  /// sont pas ceux enregistrés (l'éditeur écoute ses réglages non validés).
+  /// Par défaut : point d'entrée et volume du son.
   Future<bool> toggleLibraryPreview(
     int soundId, {
     bool requireCue = false,
+    Duration? from,
+    double? volume,
   }) async {
     final player = _libraryPreviewPlayer;
     if (_libraryPreviewSoundId == soundId && player != null) {
@@ -101,10 +163,14 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     }
 
     if (_refuseRoomPreviewInLive()) return false;
-    stopLibraryPreview(notify: false);
     final sound = await _repository.getSoundById(soundId);
     if (sound == null) return false;
-    return _startLibraryPreview(sound, requireCue: requireCue);
+    return _startLibraryPreview(
+      sound,
+      requireCue: requireCue,
+      from: from,
+      volume: volume,
+    );
   }
 
   /// Vrai en Mode Spectacle quand une pré-écoute sortirait en salle (sortie
@@ -147,36 +213,54 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     if (notify) _notify();
   }
 
+  /// Pose [player] comme lecteur d'aperçu unique de [soundId] : la fin de piste
+  /// ou l'arrêt le libère.
+  void _attachLibraryPreview(int soundId, PreviewPlayback player) {
+    _libraryPreviewPlayer = player;
+    _libraryPreviewSoundId = soundId;
+    _libraryPreviewSub = player.onPlayerStateChanged.listen((playing) {
+      if (playing) return;
+      stopLibraryPreview();
+    });
+  }
+
   Future<bool> _startLibraryPreview(
     Sound sound, {
     bool requireCue = false,
+    Duration? from,
+    double? volume,
   }) async {
     try {
-      final path = await _resolvePlayablePath(
-        sound,
-        downloadIfNeeded: allowsSoundDownload,
-      );
-      final player = await CueAudioService.instance.createPreviewPlayer(
-        path,
-        requireCue: requireCue,
-      );
-      _libraryPreviewPlayer = player;
-      _libraryPreviewSoundId = sound.id;
-      _libraryPreviewSub = player.onPlayerStateChanged.listen((playing) {
-        if (playing) return;
-        stopLibraryPreview();
-      });
-      var startOffsetMs = sound.startOffsetMs;
+      // Un aperçu déjà chargé (et à l'arrêt) pour ce son est réutilisé, sauf
+      // pour une écoute au casque obligatoire : il a pu être ouvert sans cette
+      // garantie. Dans tous les autres cas le lecteur courant est remplacé.
+      var player = _libraryPreviewSoundId == sound.id && !requireCue
+          ? _libraryPreviewPlayer
+          : null;
+      if (player == null) {
+        stopLibraryPreview(notify: false);
+        final path = await _resolvePlayablePath(
+          sound,
+          downloadIfNeeded: allowsSoundDownload,
+        );
+        player = await CueAudioService.instance.createPreviewPlayer(
+          path,
+          requireCue: requireCue,
+        );
+        _attachLibraryPreview(sound.id, player);
+      }
+      var startMs =
+          (from ?? Duration(milliseconds: sound.startOffsetMs)).inMilliseconds;
       final duration = player.duration;
       if (duration > Duration.zero) {
         final maxMs = duration.inMilliseconds;
-        if (startOffsetMs >= maxMs) {
-          startOffsetMs = (maxMs - 1).clamp(0, maxMs);
+        if (startMs >= maxMs) {
+          startMs = (maxMs - 1).clamp(0, maxMs);
         }
       }
       await player.playFromPosition(
-        Duration(milliseconds: startOffsetMs),
-        volume: sound.volume,
+        Duration(milliseconds: startMs),
+        volume: volume ?? sound.volume,
       );
       _markPlayed(sound.id);
       _notify();

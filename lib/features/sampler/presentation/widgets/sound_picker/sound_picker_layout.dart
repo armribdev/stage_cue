@@ -211,13 +211,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: selected ? colors.background : Colors.transparent,
-            border: isLast
-                ? null
-                : Border(
-                    right: BorderSide(
-                      color: scheme.outlineVariant.withValues(alpha: 0.6),
-                    ),
-                  ),
+            border: isLast ? null : Border(right: AppElevation.border(scheme)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -249,9 +243,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: AppRadius.radiusMd,
-          border: Border.all(
-            color: scheme.outlineVariant.withValues(alpha: 0.6),
-          ),
+          border: Border.fromBorderSide(AppElevation.border(scheme)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -274,7 +266,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
           width: 1,
           height: 22,
           margin: const EdgeInsets.symmetric(horizontal: 6),
-          color: scheme.outlineVariant.withValues(alpha: 0.6),
+          color: AppElevation.border(scheme).color,
         ),
         _roundIconButton(
           scheme: scheme,
@@ -388,6 +380,8 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
         itemBuilder: (_) => [
           PopupMenuItem(
             value: (folder: null),
+            height: AppMenu.itemHeight,
+            padding: AppMenu.itemPadding,
             child: Text(
               'Tous les dossiers',
               style: TextStyle(
@@ -398,6 +392,8 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
           for (final entry in folders)
             PopupMenuItem(
               value: (folder: entry.folder),
+              height: AppMenu.itemHeight,
+              padding: AppMenu.itemPadding,
               child: Row(
                 children: [
                   Expanded(
@@ -431,10 +427,10 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
           decoration: BoxDecoration(
             color: scheme.surfaceContainer,
             borderRadius: AppRadius.radiusMd,
-            border: Border.all(
-              color: selected == null
-                  ? scheme.outlineVariant.withValues(alpha: 0.6)
-                  : scheme.primary,
+            border: Border.fromBorderSide(
+              selected == null
+                  ? AppElevation.border(scheme)
+                  : AppElevation.emphasizedBorder(scheme),
             ),
           ),
           child: Row(
@@ -474,13 +470,9 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
     );
   }
 
-  /// Ligne de séparation fine et atténuée sous la barre de filtres — un
-  /// `Divider` plein-largeur par défaut tranche trop avec les chips arrondis.
+  /// Filet hairline sous la barre de filtres — le même que le pied d'aide et
+  /// l'encart de file, pour que les séparations de la liste se lisent d'un bloc.
   Widget _buildFilterDivider(ColorScheme scheme) {
-    return Container(
-      height: 1,
-      margin: const EdgeInsets.symmetric(horizontal: 12),
-      color: scheme.outlineVariant.withValues(alpha: 0.4),
-    );
+    return Container(height: 1, color: AppElevation.border(scheme).color);
   }
 }

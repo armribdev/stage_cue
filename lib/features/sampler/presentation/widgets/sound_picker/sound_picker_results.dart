@@ -37,12 +37,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
             child: Text(
               'FAVORIS & RÉCENTS',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: scheme.onSurfaceVariant,
-              ),
+              style: AppTextStyles.sectionLabel(context),
             ),
           ),
         Expanded(
@@ -356,6 +351,9 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         scheme: scheme,
         transport: isPlaying ? TransportGlyph.pause : TransportGlyph.play,
         iconColor: scheme.primary,
+        // Pas de fond au survol : l'icône s'éclaircit à peine.
+        hoverIconColor: Color.lerp(scheme.primary, scheme.onSurface, 0.35),
+        flat: true,
         onPressed: () => unawaited(_toggleLibraryPreview(sound)),
       ),
     );
@@ -380,8 +378,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
   }
 
   /// Fin de ligne : aperçu (sauf variante d'un multipad, qui se déclenche
-  /// directement, et gestion scindée, où le volet de détails l'offre) suivi de
-  /// l'action propre au mode.
+  /// directement) suivi de l'action propre au mode.
   Widget _buildTrailing(
     Sound sound,
     ColorScheme scheme, {
@@ -408,11 +405,10 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         : null;
     // En Mode Spectacle sans casque configuré, l'aperçu sortirait en salle :
     // pas de bouton plutôt qu'un bouton qui ne fait que refuser. Gestion
-    // scindée : l'aperçu est déjà dans le volet de détails (`StartOffsetEditor`).
+    // scindée comprise : le ▶ de la ligne télécharge le son au besoin, ce que
+    // l'aperçu du volet de détails (`StartOffsetEditor`) ne fait pas.
     final hasPreview =
-        !(_isPadVariant ||
-            _isSplitLayout ||
-            widget.notifier.isRoomPreviewBlockedInLive);
+        !(_isPadVariant || widget.notifier.isRoomPreviewBlockedInLive);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

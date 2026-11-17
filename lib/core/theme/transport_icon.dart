@@ -1,14 +1,14 @@
 import 'package:flutter/widgets.dart';
 
-/// Glyphes de transport (lecture, pause, suivant, stop, éjecter).
-enum TransportGlyph { play, pause, next, stop, eject }
+/// Glyphes de transport (lecture, pause, précédent, suivant, stop, éjecter).
+enum TransportGlyph { play, pause, previous, next, stop, eject }
 
 /// Icône de transport **pleine aux angles arrondis** — la convention des
 /// lecteurs modernes (Spotify, Apple Music).
 ///
 /// Lucide n'a pas de variante pleine ([décision 0034](../../../docs/decisions/0034-icones-lucide-via-appicons.md)),
 /// et un triangle de lecture au trait fin se lit comme un pictogramme de
-/// formulaire plutôt que comme un bouton de régie : ces quatre glyphes sont
+/// formulaire plutôt que comme un bouton de régie : ces glyphes sont
 /// donc dessinés ici, sur la même grille de 24 que `AppIcons`.
 ///
 /// Se pose comme un [Icon] : taille et couleur viennent de l'[IconTheme]
@@ -88,6 +88,14 @@ class _TransportPainter extends CustomPainter {
       case TransportGlyph.pause:
         bar(6, 10);
         bar(14, 18);
+      case TransportGlyph.previous:
+        // Miroir exact de `next`.
+        roundedTriangle(
+          const Offset(17.5, 6.4),
+          const Offset(17.5, 17.6),
+          const Offset(9, 12),
+        );
+        bar(4, 7, radius: 1.2);
       case TransportGlyph.next:
         roundedTriangle(
           const Offset(6.5, 6.4),

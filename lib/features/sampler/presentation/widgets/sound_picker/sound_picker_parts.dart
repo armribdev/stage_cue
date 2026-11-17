@@ -80,6 +80,8 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
     bool flat = false,
     // Icône Lucide remplie (étoile de favori active).
     bool filledIcon = false,
+    // Couleur de l'icône au survol (sans fond) ; `null` = ne change pas.
+    Color? hoverIconColor,
   }) {
     assert((icon == null) != (transport == null));
     // ExcludeFocus : empêche ce bouton de voler le focus au champ de
@@ -105,18 +107,27 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
           },
           padding: EdgeInsets.zero,
           visualDensity: VisualDensity.compact,
-          style: IconButton.styleFrom(
-            shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusMd),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            backgroundColor: !flat && active
-                ? scheme.primary.withValues(alpha: 0.12)
-                : Colors.transparent,
-            disabledBackgroundColor: Colors.transparent,
-            hoverColor: flat
-                ? Colors.transparent
-                : scheme.onSurface.withValues(alpha: 0.08),
-            foregroundColor: iconColor,
-          ),
+          style:
+              IconButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusMd),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                backgroundColor: !flat && active
+                    ? scheme.primary.withValues(alpha: 0.12)
+                    : Colors.transparent,
+                disabledBackgroundColor: Colors.transparent,
+                hoverColor: flat
+                    ? Colors.transparent
+                    : scheme.onSurface.withValues(alpha: 0.08),
+                foregroundColor: iconColor,
+              ).copyWith(
+                foregroundColor: hoverIconColor == null
+                    ? null
+                    : WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.hovered)
+                            ? hoverIconColor
+                            : iconColor,
+                      ),
+              ),
           constraints: const BoxConstraints.tightFor(
             width: _actionButtonSize,
             height: _actionButtonSize,

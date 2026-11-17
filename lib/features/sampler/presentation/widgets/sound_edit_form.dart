@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
-import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/autotag/auto_tag_analysis.dart';
 import '../../../../core/autotag/auto_tag_status.dart';
 import '../../../../core/logging/app_log.dart';
@@ -145,13 +143,6 @@ class _SoundEditFormState extends State<SoundEditForm> {
   bool _tagsFailed = false;
   bool _isSaving = false;
   bool _isDeleting = false;
-  bool _isRegeneratingWaveform = false;
-
-  /// Vrai brièvement après une régénération réussie : le bouton affiche une
-  /// coche + « Waveform régénérée » avant de reprendre son libellé normal.
-  bool _waveformRegenerated = false;
-  Timer? _regeneratedResetTimer;
-  static const _regeneratedFeedbackDuration = Duration(seconds: 2);
   bool _isMeasuringVolume = false;
   bool _wasDirty = false;
 
@@ -177,6 +168,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
     _startOffsetMs = _baseStartOffsetMs = sound.startOffsetMs;
     _type = _baseType = sound.type;
     _waveform = sound.waveform;
+    if (_waveform == null) unawaited(_loadMissingWaveform());
     _loadTags();
     final autoTag = widget.autoTag;
     if (autoTag != null) {
@@ -186,6 +178,15 @@ class _SoundEditFormState extends State<SoundEditForm> {
       autoTag.activity.addListener(_onAnalysisActivity);
       unawaited(_refreshAnalysis());
     }
+  }
+
+  /// Un son sans enveloppe (indexé avant que la waveform couvre tous les types)
+  /// la reçoit à l'ouverture de sa fiche, sans attendre qu'on le pose sur un
+  /// plateau. Silencieux : sans waveform, l'éditeur reste utilisable.
+  Future<void> _loadMissingWaveform() async {
+    final waveform = await widget.notifier?.ensureWaveform(widget.sound.id);
+    if (waveform == null || !mounted) return;
+    setState(() => _waveform = waveform);
   }
 
   /// Le passage d'analyse a bougé : on ne relit l'état que si cela concerne ce
@@ -257,7 +258,6 @@ class _SoundEditFormState extends State<SoundEditForm> {
     if (controller != null && controller._save == save) {
       controller._save = null;
     }
-    _regeneratedResetTimer?.cancel();
     _nameController.dispose();
     _nameFocus.dispose();
     super.dispose();
@@ -548,7 +548,8 @@ class _SoundEditFormState extends State<SoundEditForm> {
   }
 
   /// Change le volume du formulaire et le répercute en direct sur l'aperçu
-  /// bibliothèque en cours (l'éditeur de point d'entrée suit via son `volume`).
+  /// bibliothèque en cours : celui du lecteur unique, que l'éditeur de point
+  /// d'entrée partage avec le bouton de ligne.
   void _setVolume(double value) {
     final volume = value.clamp(0.0, 1.0);
     _update(() => _volume = volume);
@@ -579,45 +580,6 @@ class _SoundEditFormState extends State<SoundEditForm> {
       showCopyableSnackBar(context, 'Échec de la mesure : $error');
     } finally {
       if (mounted) setState(() => _isMeasuringVolume = false);
-    }
-  }
-
-  Future<void> _regenerateWaveform() async {
-    if (_isRegeneratingWaveform) return;
-    final notifier = widget.notifier;
-    if (notifier == null) return;
-    setState(() => _isRegeneratingWaveform = true);
-    try {
-      final status = await notifier.regenerateWaveform(widget.sound);
-      final updated = await widget.repository.getSoundById(widget.sound.id);
-      if (!mounted) return;
-      switch (status) {
-        case WaveformProbeStatus.success:
-          // Confirmation sur le bouton lui-même (coche) plutôt qu'en toast.
-          setState(() {
-            _waveform = updated?.waveform ?? _waveform;
-            _waveformRegenerated = true;
-          });
-          _regeneratedResetTimer?.cancel();
-          _regeneratedResetTimer = Timer(_regeneratedFeedbackDuration, () {
-            if (mounted) setState(() => _waveformRegenerated = false);
-          });
-        case WaveformProbeStatus.unsupported:
-          showCopyableSnackBar(
-            context,
-            'Format non pris en charge pour l\'extraction de waveform.',
-          );
-        case WaveformProbeStatus.transient:
-          showCopyableSnackBar(
-            context,
-            'Moteur audio non prêt — réessayez dans un instant.',
-          );
-      }
-    } catch (error) {
-      if (!mounted) return;
-      showCopyableSnackBar(context, 'Échec de la régénération : $error');
-    } finally {
-      if (mounted) setState(() => _isRegeneratingWaveform = false);
     }
   }
 
@@ -657,7 +619,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                             : null,
                       ),
                     ),
-                    _section('Point d\'entrée', _buildStartOffset(scheme)),
+                    _section('Point d\'entrée', _buildStartOffset()),
                     _section(
                       'Tags',
                       SoundTagsSection(
@@ -837,57 +799,15 @@ class _SoundEditFormState extends State<SoundEditForm> {
     );
   }
 
-  Widget _buildStartOffset(ColorScheme scheme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'La lecture démarre à ce point au lieu du début du fichier.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-              ),
-            ),
-            // Outil de développement : en production l'enveloppe est
-            // rafraîchie automatiquement au bump de `kWaveformProbeGeneration`.
-            if (kDebugMode && widget.notifier != null)
-              TextButton.icon(
-                onPressed: _isRegeneratingWaveform || _waveformRegenerated
-                    ? null
-                    : _regenerateWaveform,
-                icon: _isRegeneratingWaveform
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : StrokeIcon(
-                        _waveformRegenerated
-                            ? AppIcons.check
-                            : AppIcons.refresh,
-                        size: AppIconSize.sm,
-                      ),
-                label: Text(
-                  _waveformRegenerated
-                      ? 'Waveform régénérée'
-                      : 'Régénérer la waveform',
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        StartOffsetEditor(
-          filePath: widget.sound.filePath,
-          waveform: _waveform,
-          initialOffsetMs: _startOffsetMs,
-          volume: _volume,
-          autoPlay: widget.autoPlayEntryPoint,
-          onChanged: (ms) => _update(() => _startOffsetMs = ms),
-        ),
-      ],
+  Widget _buildStartOffset() {
+    return StartOffsetEditor(
+      soundId: widget.sound.id,
+      notifier: widget.notifier,
+      waveform: _waveform,
+      initialOffsetMs: _startOffsetMs,
+      volume: _volume,
+      autoPlay: widget.autoPlayEntryPoint,
+      onChanged: (ms) => _update(() => _startOffsetMs = ms),
     );
   }
 }

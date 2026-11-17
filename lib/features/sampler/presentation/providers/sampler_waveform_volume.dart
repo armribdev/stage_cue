@@ -58,21 +58,39 @@ extension SamplerWaveformVolume on SamplerNotifier {
     if (probe.status == WaveformProbeStatus.success) _notify();
   }
 
-  /// Force une nouvelle extraction de l'enveloppe waveform d'un son, même si
-  /// une enveloppe existe déjà — contrairement à [_ensureWaveformForSound],
-  /// paresseux et gaté sur `waveform == null`. Action explicite demandée par
-  /// l'opérateur depuis l'écran d'édition d'un son : télécharge le fichier si
-  /// nécessaire (bibliothèque Drive non encore mise en cache).
+  /// Enveloppe waveform de [soundId], calculée **à la demande** quand un écran
+  /// l'affiche (régie musique, fiche de la bibliothèque) et que le son n'en a
+  /// pas encore : les sons indexés avant que la waveform couvre tous les types
+  /// n'en ont jamais eu, et seul le chargement d'un pad la rattrapait. À lancer
+  /// en tâche de fond (`unawaited`) : le décodage passe par la file native.
   ///
-  /// Peut lever [SoundNotAvailableLocallyException] ou [StateError] si le
-  /// fichier est introuvable/hors ligne — laissé à l'appelant pour affichage.
-  Future<WaveformProbeStatus> regenerateWaveform(Sound sound) async {
-    final path = await _resolvePlayablePath(sound, downloadIfNeeded: true);
-    final probe = await extractWaveform(path);
-    if (probe.status != WaveformProbeStatus.transient) {
+  /// Relit le son en base (l'entité de l'écran peut être périmée) et ne
+  /// télécharge rien. Une fois l'enveloppe disponible, la réinjecte dans les
+  /// pads en mémoire (scène et hors-scène) et notifie, d'où l'affichage de la
+  /// régie. `null` si rien à afficher : fichier indisponible, format refusé
+  /// (mémorisé, pas de nouvelle tentative), moteur pas prêt (on retentera).
+  Future<Uint8List?> ensureWaveform(int soundId) async {
+    final sound = await _repository.getSoundById(soundId);
+    if (sound == null) return null;
+
+    var waveform = sound.waveform;
+    if (waveform == null && waveformNeedsProbe(sound.waveformProbeGeneration)) {
+      final String path;
+      try {
+        path = await _resolvePlayablePath(sound);
+      } catch (e) {
+        AudioLoadLog.trace(
+          'Waveform « ${sound.title} » : fichier indisponible ($e)',
+        );
+        return null;
+      }
+      final probe = await extractWaveform(path);
+      if (probe.status == WaveformProbeStatus.transient) return null;
       await _repository.persistWaveformProbe(sound.id, probe);
+      waveform = probe.waveformValue;
     }
-    return probe.status;
+    if (waveform != null) await refreshSoundMetadata(soundId);
+    return waveform;
   }
 
   /// Volume « auto » d'un son : mesure sa sonie selon son type (sonie intégrée
@@ -83,7 +101,8 @@ extension SamplerWaveformVolume on SamplerNotifier {
   /// `null` si le fichier ne peut pas être mesuré (format non décodable, audio
   /// silencieux).
   ///
-  /// Même contrat d'erreur que [regenerateWaveform] (fichier hors ligne).
+  /// Peut lever [SoundNotAvailableLocallyException] ou [StateError] si le
+  /// fichier est introuvable/hors ligne — laissé à l'appelant pour affichage.
   Future<double?> computeAutoVolume(Sound sound) async {
     final path = await _resolvePlayablePath(sound, downloadIfNeeded: true);
     return measureAutoVolume(File(path), loudnessProfileOf(sound.type));

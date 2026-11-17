@@ -91,6 +91,9 @@ class MusicPreviewPanel extends StatefulWidget {
 
   /// Repositionne la lecture quand la régie est en pause (scrub sur la waveform).
   final ValueChanged<Duration>? onSeekMusic;
+
+  /// Le son à l'antenne s'affiche sans waveform : en demande le calcul (id du son).
+  final ValueChanged<int>? onWaveformMissing;
   final bool isAdvanced;
   final ValueChanged<bool> onAdvancedChanged;
   final bool isDesktop;
@@ -131,6 +134,7 @@ class MusicPreviewPanel extends StatefulWidget {
     this.onFadeOut,
     this.onTransitionToNext,
     this.onSeekMusic,
+    this.onWaveformMissing,
     this.isDesktop = false,
     this.onOccupiedHeightChanged,
   });
@@ -383,6 +387,7 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
       onReorderMusicQueue: widget.onReorderMusicQueue,
       onMusicVolumeChanged: widget.onMusicVolumeChanged,
       onSeekMusic: widget.onSeekMusic,
+      onWaveformMissing: widget.onWaveformMissing,
       ambianceVolume: widget.ambianceVolume,
       ambianceTransition: widget.ambianceTransition,
       onChooseAmbiance: widget.onChooseAmbiance,

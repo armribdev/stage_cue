@@ -68,7 +68,8 @@ class AutoTagStatusRow extends StatelessWidget {
   }
 
   static String label(SoundAnalysisStatus status) => switch (status) {
-    SoundAnalysisStatus.notMusic => 'réservée aux musiques.',
+    // Jamais affiché : `SoundTagsSection` masque la rangée pour un non-musique.
+    SoundAnalysisStatus.notMusic => '',
     SoundAnalysisStatus.processed =>
       'son déjà traité, plus analysé (ses suggestions sont figées).',
     SoundAnalysisStatus.pending => 'pas encore analysé.',

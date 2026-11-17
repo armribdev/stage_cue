@@ -634,6 +634,19 @@ void main() {
       expect(n.libraryPreviewSoundId, isNull);
     });
 
+    test('loadLibraryPreview : son inconnu ou illisible → null, aucun lecteur '
+        'ne reste posé', () async {
+      when(() => repo.getSoundById(10)).thenAnswer((_) async => null);
+      expect(await n.loadLibraryPreview(10), isNull);
+
+      // Fichier absent du disque : l'éditeur affiche son message, sans lecteur.
+      when(() => repo.getSoundById(11)).thenAnswer((_) async => sound(11));
+      expect(await n.loadLibraryPreview(11), isNull);
+
+      expect(n.libraryPreviewSoundId, isNull);
+      expect(n.libraryPreviewPosition(11), Duration.zero);
+    });
+
     test('recherche-éclair : un son introuvable ne joue rien et ne touche '
         'pas à l\'aperçu', () async {
       when(() => repo.getSoundById(10)).thenAnswer((_) async => null);

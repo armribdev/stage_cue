@@ -43,6 +43,7 @@ class _MusicRegieDrawer extends StatefulWidget {
   final void Function(int oldIndex, int newIndex)? onReorderMusicQueue;
   final ValueChanged<double>? onMusicVolumeChanged;
   final ValueChanged<Duration>? onSeekMusic;
+  final ValueChanged<int>? onWaveformMissing;
   final double ambianceVolume;
   final AmbianceTransition? ambianceTransition;
   final VoidCallback? onChooseAmbiance;
@@ -77,6 +78,7 @@ class _MusicRegieDrawer extends StatefulWidget {
     this.onReorderMusicQueue,
     this.onMusicVolumeChanged,
     this.onSeekMusic,
+    this.onWaveformMissing,
     this.ambianceVolume = 1.0,
     this.ambianceTransition,
     this.onChooseAmbiance,
@@ -356,6 +358,7 @@ class _MusicRegieDrawerState extends State<_MusicRegieDrawer> {
             isPlaying: isPlaying,
             showTimes: true,
             onSeek: widget.onSeekMusic,
+            onWaveformMissing: widget.onWaveformMissing,
           ),
         ],
       ],

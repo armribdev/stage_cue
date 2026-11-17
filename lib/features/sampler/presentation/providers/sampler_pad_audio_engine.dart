@@ -38,8 +38,8 @@ extension SamplerPadAudioEngine on SamplerNotifier {
         player: await AudioPlayerService.create(resolvedPath),
       );
       await _syncPadSoundMetadata(padItem, index);
-      // Calcul paresseux de la waveform (régie musique) — en tâche de fond pour
-      // ne pas retarder le démarrage de la lecture.
+      // Calcul paresseux de la waveform (régie, éditeur du point d'entrée) — en
+      // tâche de fond pour ne pas retarder le démarrage de la lecture.
       unawaited(_ensureWaveformForSound(padItem, index, resolvedPath));
     } on SoundNotAvailableLocallyException catch (e) {
       padItem.slots[index] = PadSoundSlot(

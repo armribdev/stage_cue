@@ -138,11 +138,16 @@ class _RegieProgressBar extends StatefulWidget {
   /// pause et qu'une waveform est affichée. `null` = pas de seek.
   final ValueChanged<Duration>? onSeek;
 
+  /// Appelé (une fois par son) quand le son affiché n'a pas de waveform : le
+  /// calcul se fait en tâche de fond, la barre linéaire sert en attendant.
+  final ValueChanged<int>? onWaveformMissing;
+
   const _RegieProgressBar({
     required this.padItem,
     this.isPlaying = false,
     this.showTimes = false,
     this.onSeek,
+    this.onWaveformMissing,
   }) : height = 4,
        waveformHeight = 34;
 
@@ -158,6 +163,10 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
 
   bool get _hasTrack => widget.padItem != null;
 
+  /// Dernier son pour lequel une waveform a été demandée (évite de relancer le
+  /// calcul à chaque reconstruction tant qu'elle n'est pas arrivée).
+  int? _waveformRequestedFor;
+
   @override
   void initState() {
     super.initState();
@@ -165,12 +174,22 @@ class _RegieProgressBarState extends State<_RegieProgressBar>
       if (mounted) setState(() {});
     });
     _syncTicker();
+    _requestMissingWaveform();
   }
 
   @override
   void didUpdateWidget(covariant _RegieProgressBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncTicker();
+    _requestMissingWaveform();
+  }
+
+  void _requestMissingWaveform() {
+    final sound = _currentSound;
+    if (sound == null || sound.waveform != null) return;
+    if (_waveformRequestedFor == sound.id) return;
+    _waveformRequestedFor = sound.id;
+    widget.onWaveformMissing?.call(sound.id);
   }
 
   void _syncTicker() {

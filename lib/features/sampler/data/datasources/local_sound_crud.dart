@@ -86,7 +86,7 @@ extension LocalSoundCrud on LocalSoundDataSource {
         .write(db.SoundsCompanion(type: Value(dbType)));
   }
 
-  /// Persiste l'issue d'une extraction waveform (régie musique) : l'enveloppe et
+  /// Persiste l'issue d'une extraction waveform (tout type) : l'enveloppe et
   /// la génération courante en cas de succès, ou le seul marqueur de génération
   /// pour un `unsupported`. Un échec `unsupported` n'efface JAMAIS une enveloppe
   /// existante : un re-sondage (rafraîchissement, régénération) qui échoue ne

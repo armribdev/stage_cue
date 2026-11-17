@@ -74,10 +74,14 @@ class SoundTagsSection extends StatelessWidget {
       onTagRemoved: onTagRemoved,
     );
     final status = analysisStatus;
-    // Analysé : rien à dire, les suggestions parlent d'elles-mêmes. Sinon : le
-    // bouton « Analyser », ou la raison pour laquelle le son ne peut pas l'être.
+    // Analysé : rien à dire, les suggestions parlent d'elles-mêmes ; pas une
+    // musique : rien à proposer non plus. Sinon : le bouton « Analyser », ou la
+    // raison pour laquelle le son ne peut pas l'être.
     final showStatus =
-        hasAnalysis && status != null && status != SoundAnalysisStatus.analyzed;
+        hasAnalysis &&
+        status != null &&
+        status != SoundAnalysisStatus.analyzed &&
+        status != SoundAnalysisStatus.notMusic;
     final hasPending = autoTags.any((s) => !selectedTagIds.contains(s.tag.id));
     if (!hasPending && !showStatus) return editor;
     return Column(

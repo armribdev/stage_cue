@@ -269,6 +269,8 @@ extension _SamplerScreenContent on _SamplerScreenState {
       onTransitionToNext: (duration) =>
           unawaited(_notifier.crossfadeToNextMusic(duration)),
       onSeekMusic: (position) => unawaited(_notifier.seekPausedMusic(position)),
+      onWaveformMissing: (soundId) =>
+          unawaited(_notifier.ensureWaveform(soundId)),
       onOccupiedHeightChanged: context.prefersDesktopUi
           ? null
           : (height) {
