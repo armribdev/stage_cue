@@ -715,7 +715,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: AppRadius.radiusXs,
           child: LinearProgressIndicator(
             value: value,
             minHeight: 5,
@@ -874,7 +874,7 @@ class SettingsIndexedFoldersSection extends StatelessWidget {
         const Divider(height: 24),
         InkWell(
           onTap: onShowDatabaseState,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: AppRadius.radiusLg,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
             child: Row(

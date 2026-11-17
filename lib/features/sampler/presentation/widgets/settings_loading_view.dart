@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 /// Skeleton de chargement de l'écran Paramètres (carte « Éléments indexés »).
 class SettingsLoadingView extends StatefulWidget {
@@ -35,10 +36,7 @@ class _SettingsLoadingViewState extends State<SettingsLoadingView>
     return Container(
       width: width,
       height: height,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(6),
-      ),
+      decoration: BoxDecoration(color: color, borderRadius: AppRadius.radiusMd),
     );
   }
 

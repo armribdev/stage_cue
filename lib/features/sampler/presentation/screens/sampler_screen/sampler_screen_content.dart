@@ -161,7 +161,7 @@ extension _SamplerScreenContent on _SamplerScreenState {
                 builder: (ctx, value, _) => LinearProgressIndicator(
                   value: value,
                   minHeight: 4,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: AppRadius.radiusSm,
                   backgroundColor: scheme.surfaceContainerHighest,
                   valueColor: AlwaysStoppedAnimation(scheme.primary),
                 ),

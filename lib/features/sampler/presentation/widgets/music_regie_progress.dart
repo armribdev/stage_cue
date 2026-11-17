@@ -36,7 +36,7 @@ class _RegieDownloadBar extends StatelessWidget {
 
     final scheme = Theme.of(context).colorScheme;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(2),
+      borderRadius: AppRadius.radiusXs,
       child: LinearProgressIndicator(
         minHeight: 3,
         value: padItem.regieDownloadProgress,

@@ -1,6 +1,6 @@
 part of 'music_preview_panel.dart';
 
-const _queueDragBorderRadius = 8.0;
+const _queueDragBorderRadius = AppRadius.lg;
 
 class _PassageQueueSection extends StatelessWidget {
   final List<PadItem> queue;
@@ -9,7 +9,7 @@ class _PassageQueueSection extends StatelessWidget {
   final void Function(int oldIndex, int newIndex)? onReorder;
   final VoidCallback? onChooseMusic;
 
-  /// En deux colonnes, la carte reçoit une hauteur fixe (voir _buildModeBody)
+  /// En deux colonnes, la section reçoit une hauteur fixe (voir _buildModeBody)
   /// pour égaler la colonne « à l'antenne ». `true` fait remplir cette
   /// hauteur par la liste elle-même (qui défile en interne si elle a plus
   /// d'éléments que de place), au lieu de la laisser pousser la carte plus
@@ -25,9 +25,9 @@ class _PassageQueueSection extends StatelessWidget {
   /// compact (40) de suppression — la plus haute des deux variantes.
   static const double _rowHeight = 48;
 
-  /// Tout ce qui n'est pas la liste : padding de carte (14×2), titre (~20)
-  /// + écart (8), écart (10) + bouton « Ajouter à la file » (42), bordures.
-  static const double _chromeHeight = 28 + 20 + 8 + 10 + 42 + 2;
+  /// Tout ce qui n'est pas la liste : libellé de section (~16) + écart (8),
+  /// écart (10) + bouton « Ajouter à la file » (42).
+  static const double _chromeHeight = 16 + 8 + 10 + 42;
 
   /// Hauteur minimale de la carte étirée pour afficher [minVisibleRows]
   /// éléments sans défiler.
@@ -85,34 +85,21 @@ class _PassageQueueSection extends StatelessWidget {
           );
     if (stretchToFill) content = Expanded(child: content);
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.radiusLg,
-        side: AppElevation.border(scheme),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'File de passage',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            content,
-            if (onChooseMusic != null) ...[
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: onChooseMusic,
-                icon: const StrokeIcon(AppIcons.add, size: AppIconSize.sm),
-                label: const Text('Ajouter à la file'),
-              ),
-            ],
-          ],
-        ),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('FILE DE PASSAGE', style: AppTextStyles.sectionLabel(context)),
+        const SizedBox(height: 8),
+        content,
+        if (onChooseMusic != null) ...[
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: onChooseMusic,
+            icon: const StrokeIcon(AppIcons.add, size: AppIconSize.sm),
+            label: const Text('Ajouter à la file'),
+          ),
+        ],
+      ],
     );
   }
 }

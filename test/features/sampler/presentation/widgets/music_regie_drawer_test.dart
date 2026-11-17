@@ -526,7 +526,7 @@ void main() {
     ) async {
       final spy = await _pumpPanel(tester);
 
-      expect(find.text('File de passage'), findsOneWidget);
+      expect(find.text('FILE DE PASSAGE'), findsOneWidget);
       expect(
         find.text(
           'Préparez la musique suivante sans interrompre celle en cours.',
@@ -710,25 +710,25 @@ void main() {
       final spy = await _pumpPanel(tester);
 
       expect(find.byTooltip('Développer la régie'), findsNothing);
-      expect(find.text('File de passage'), findsOneWidget);
+      expect(find.text('FILE DE PASSAGE'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Réduire la régie'));
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(spy.advanced, [false]);
-      expect(find.text('File de passage'), findsNothing);
+      expect(find.text('FILE DE PASSAGE'), findsNothing);
       expect(find.byTooltip('Développer la régie'), findsOneWidget);
     });
 
     testWidgets('réduit : le chevron développe', (tester) async {
       final spy = await _pumpPanel(tester, isAdvanced: false);
 
-      expect(find.text('File de passage'), findsNothing);
+      expect(find.text('FILE DE PASSAGE'), findsNothing);
       await tester.tap(find.byTooltip('Développer la régie'));
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(spy.advanced, [true]);
-      expect(find.text('File de passage'), findsOneWidget);
+      expect(find.text('FILE DE PASSAGE'), findsOneWidget);
       expect(find.byTooltip('Réduire la régie'), findsOneWidget);
     });
 
@@ -741,7 +741,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(spy.advanced, [true]);
-      expect(find.text('File de passage'), findsOneWidget);
+      expect(find.text('FILE DE PASSAGE'), findsOneWidget);
     });
 
     testWidgets('avancé : toucher le corps du tiroir ne le réduit pas', (
@@ -753,7 +753,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(spy.advanced, isEmpty);
-      expect(find.text('File de passage'), findsOneWidget);
+      expect(find.text('FILE DE PASSAGE'), findsOneWidget);
     });
   });
 
@@ -768,7 +768,7 @@ void main() {
       await _pumpPanel(tester, width: 616);
 
       final ambiance = topLeftOf(tester, 'AMBIANCE');
-      final queue = topLeftOf(tester, 'File de passage');
+      final queue = topLeftOf(tester, 'FILE DE PASSAGE');
       expect(queue.dx, greaterThan(616 / 2));
       expect(queue.dx, greaterThan(ambiance.dx));
       expect(find.byTooltip('Réduire la régie'), findsOneWidget);
@@ -780,9 +780,9 @@ void main() {
       await _pumpPanel(tester, width: 615);
 
       final ambiance = topLeftOf(tester, 'AMBIANCE');
-      final queue = topLeftOf(tester, 'File de passage');
-      // Même colonne (le titre de la file est seulement décalé par le
-      // padding de sa carte), mais plus bas.
+      final queue = topLeftOf(tester, 'FILE DE PASSAGE');
+      // Même colonne (le libellé de la file est aligné sur celui de
+      // l'ambiance), mais plus bas.
       expect(queue.dx, lessThan(615 / 2));
       expect(queue.dy, greaterThan(ambiance.dy));
       expect(find.byTooltip('Réduire la régie'), findsOneWidget);
@@ -797,7 +797,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(spy.advanced, [false]);
-      expect(find.text('File de passage'), findsNothing);
+      expect(find.text('FILE DE PASSAGE'), findsNothing);
     });
 
     testWidgets('une colonne : la file reste utilisable', (tester) async {
