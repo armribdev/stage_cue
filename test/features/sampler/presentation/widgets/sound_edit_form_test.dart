@@ -496,9 +496,17 @@ void main() {
       expect(find.textContaining('Analyse IA'), findsNothing);
     });
 
+    testWidgets('notMusic : rien n’est affiché', (tester) async {
+      await pumpWith(tester, SoundAnalysisStatus.notMusic);
+      expect(find.byKey(const ValueKey('auto-tag-status')), findsNothing);
+      expect(find.byKey(const ValueKey('auto-tag-start')), findsNothing);
+    });
+
     for (final status in SoundAnalysisStatus.values.where(
       (s) =>
-          s != SoundAnalysisStatus.pending && s != SoundAnalysisStatus.analyzed,
+          s != SoundAnalysisStatus.pending &&
+          s != SoundAnalysisStatus.analyzed &&
+          s != SoundAnalysisStatus.notMusic,
     )) {
       testWidgets('${status.name} : texte, jamais de bouton', (tester) async {
         await pumpWith(tester, status);
