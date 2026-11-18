@@ -463,6 +463,72 @@ void main() {
       );
     });
 
+    test(
+      'un snapshot d\'un appareil en v47 ne recrée pas MUSIQUE (0040)',
+      () async {
+        final lib = await database
+            .into(database.libraries)
+            .insert(
+              db.LibrariesCompanion.insert(name: 'A', localRootPath: '/cache'),
+            );
+        final folder = await database
+            .into(database.libraryFolders)
+            .insert(
+              db.LibraryFoldersCompanion.insert(
+                libraryId: lib,
+                driveFolderId: 'F',
+                relativePath: const Value(''),
+              ),
+            );
+        final soundId = await database
+            .into(database.sounds)
+            .insert(
+              db.SoundsCompanion.insert(
+                title: 'a',
+                displayName: 'a',
+                filePath: '/cache/a.mp3',
+                libraryId: Value(lib),
+                relativePath: const Value('a.mp3'),
+                driveFileId: const Value('id-a'),
+                folderId: Value(folder),
+              ),
+            );
+        final chant = await (database.select(
+          database.tagItems,
+        )..where((t) => t.normalizedName.equals('chant'))).getSingle();
+        await database
+            .into(database.soundTags)
+            .insert(
+              db.SoundTagsCompanion.insert(soundId: soundId, tagId: chant.id),
+            );
+
+        final path = p.join(tempDir.path, 'v47.db');
+        await store.exportFolderSnapshot(folder, path);
+        // Rejoue ce qu'un appareil en v47 publie : « Chant » rangé dans MUSIQUE.
+        final snap = NativeDatabase(File(path));
+        await snap.ensureOpen(_NoopUser());
+        await snap.runCustom(
+          "INSERT INTO tag_categories (id, name, color, sort_order) "
+          "VALUES (900, 'MUSIQUE', 0, 6)",
+        );
+        await snap.runCustom('UPDATE tag_items SET category_id = 900');
+        await snap.close();
+
+        await store.mergeFolderSnapshot(folder, path);
+
+        final categories = await database.select(database.tagCategories).get();
+        expect(categories.map((c) => c.name), isNot(contains('MUSIQUE')));
+        final chants = await (database.select(
+          database.tagItems,
+        )..where((t) => t.normalizedName.equals('chant'))).get();
+        expect(chants.map((t) => t.id), [chant.id], reason: 'pas de doublon');
+        expect(
+          (await database.select(database.soundTags).get()).map((r) => r.tagId),
+          [chant.id],
+        );
+      },
+    );
+
     test('upsert préserve l\'id du son (liens pad intacts)', () async {
       final lib = await database
           .into(database.libraries)

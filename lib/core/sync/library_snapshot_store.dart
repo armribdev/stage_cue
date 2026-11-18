@@ -567,7 +567,10 @@ class LibrarySnapshotStore {
 
       for (final row in categoryRows) {
         final snapCategoryId = row.read<int>('id');
-        final name = row.read<String>('name');
+        // Un appareil pas encore à jour publie encore une catégorie retirée
+        // (0040) : ses tags vont dans la catégorie d'accueil, sans la recréer.
+        final snapName = row.read<String>('name');
+        final name = db.retiredTagCategories[snapName] ?? snapName;
 
         final existing = await (_database.select(
           _database.tagCategories,

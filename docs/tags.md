@@ -17,27 +17,30 @@ son vite, en direct, en tapant un ou deux mots dans le sélecteur de sons.
   en ajouter coûte une couleur de plus à distinguer pour un gain faible. Ne pas
   scinder une catégorie large (voir AMBIANCE) : si sa liste devient longue,
   ajouter des alias plutôt que des catégories.
+- **Un tag est une famille générique, pas un nom précis.** Ce que le titre du
+  fichier porte déjà (« train », « cloche », « taverne ») n'a pas besoin d'un tag :
+  c'est un **alias** de la famille (Véhicule, Sonnerie…). Avant d'ajouter un tag,
+  se demander s'il sera dans le titre ([0040](decisions/0040-tags-generiques-et-dissolution-de-la-categorie-musique.md)).
 - **Les alias portent la recherche.** Un synonyme courant (« bagnole » →
-  Voiture, « tir » → Exploser) vaut mieux qu'un tag de plus. Un alias est unique
+  Véhicule, « tir » → Impact) vaut mieux qu'un tag de plus. Un alias est unique
   sur toute la base (`tag_aliases.normalized_alias`).
 - **Les tags qualifient le contenu, pas la voie audio.** Musique / ambiance /
   bruitage est déjà porté par `SoundType` (qui pilote les voies audio et le
   filtre du sélecteur) : ne pas le redoubler par un tag.
 
-## Les six catégories
+## Les cinq catégories
 
 | Clé en base | Libellé affiché | Sert à décrire | Exemples |
 |---|---|---|---|
-| `ACTION` | Actions | Le geste ou le verbe joué sur scène | Casser, Claquer, Marcher, Rire, Applaudir |
-| `OBJET` | Objets | L'accessoire utilisé ou évoqué | Porte, Téléphone, Voiture, Clés |
-| `MATIERE` | Matières | La texture sonore, quand l'objet précis manque | Bois, Métal, Eau, Gravier |
-| `AMBIANCE` | Ambiances | Le décor sonore : lieu, météo, moment, époque, genre, foule | Pluie, Forêt, Nuit, Médiéval, Horreur, Foule |
-| `EMOTION_STYLE` | Émotion / style | L'ambiance d'une scène ou d'une musique : émotion, énergie, style | Tension, Joyeux, Nostalgique, Angoisse, Calme, Épique |
-| `MUSIQUE` | Musique | Ce qui distingue une musique à l'usage : voix et tempo | Chant, Instrumental, Lent, Rythmé |
+| `ACTION` | Actions | Le geste joué sur scène, en familles pour la voix et le déplacement (le verbe précis est dans le titre) | Voix, Déplacement, Impact, Ouvrir/Fermer, Lancer |
+| `OBJET` | Objets | La famille d'accessoire utilisée ou évoquée | Porte, Arme, Véhicule, Machine, Sonnerie |
+| `MATIERE` | Matières | La texture sonore, quand l'objet précis manque | Bois, Métal, Feu, Glace, Végétal |
+| `AMBIANCE` | Ambiances | Le décor sonore : lieu, météo, moment, époque, genre, foule | Pluie, Nature, Nuit, Souterrain, Sacré, Western |
+| `EMOTION_STYLE` | Émotion / style | L'ambiance d'une scène ou d'une musique : émotion, énergie, style, voix, tempo, statut | Tension, Joyeux, Combat, Chant, Lent, Remix, Kitsch, Célèbre |
 
-Un même mot peut exister dans deux catégories quand il désigne deux choses
-distinctes : « Verre » est à la fois un OBJET (le gobelet) et une MATIERE (le
-bruit du verre).
+Les alias couvrent aussi l'anglais et les fautes courantes des titres
+(`rain` → Pluie, `sonette` → Sonnerie, `dog` → Animal) : les banques de sons
+sont souvent nommées en anglais.
 
 ### AMBIANCE est large par choix
 
@@ -45,25 +48,28 @@ Elle mélange lieu, météo, moment, époque et genre. C'est voulu : ces axes se
 cherchent tous de la même façon (un mot) et les séparer multiplierait les
 catégories sans rien apporter à la recherche.
 
-### MUSIQUE : voix et tempo, pas l'ambiance ni les instruments
+### Il n'y a plus de catégorie « Musique »
+
+Elle a été dissoute en v48 ([0040](decisions/0040-tags-generiques-et-dissolution-de-la-categorie-musique.md)) :
+son nom se confondait avec le type de son, et voix / tempo se posent aussi bien
+sur un bruitage. Chant, Instrumental, Lent et Rythmé sont dans `EMOTION_STYLE`,
+avec ce qui qualifie une musique à l'usage : Remix, Kitsch, Célèbre.
 
 On cherche une musique par l'ambiance qu'elle installe (« joyeux »,
-« angoisse », « nostalgique »), jamais par son instrumentation : l'ambiance se
-pose donc avec `EMOTION_STYLE`, qui sert aussi aux bruitages, et `MUSIQUE` ne
-garde que la voix (Chant / Instrumental) et le tempo (Lent / Rythmé). Les
-instruments (Piano, Cordes, Guitare…) posés par la v41 ont été retirés en v42,
-sauf ceux déjà posés sur un son.
-
-Le vocabulaire d'ambiance musicale vient des mots que l'on met déjà dans les
-noms de fichiers de musique (Nostalgie, Joie, Triste, Angoisse, Tension…). Pas
-de tag d'animaux ni de « Feu » : volontairement écartés.
+« angoisse », « nostalgique »), jamais par son instrumentation : pas de tag
+d'instrument (Piano, Cordes, Guitare… posés par la v41, retirés en v42 sauf
+ceux déjà posés sur un son). Le vocabulaire d'ambiance musicale vient des mots
+que l'on met déjà dans les noms de fichiers de musique (Nostalgie, Joie,
+Triste, Angoisse, Tension…). Les animaux, eux, ont un seul tag générique
+(`Animal`, dans OBJET) : chat, cochon, oiseaux… en sont des alias.
 
 ## Où ça vit dans le code
 
-- Seed initial et migrations de données : `lib/core/database/database.dart`
+- Seed initial et migrations de données : `lib/core/database/database_tag_seed.dart`
   (`_seedDefaultTagsIfEmpty`, `_extraTagCatalog` et `_ensureExtraTags`). Il n'existe pas de création
   de tag ou de catégorie depuis l'interface : tout nouveau tag passe par une
-  migration de données.
+  migration de données. Une catégorie retirée va dans `retiredTagCategories`
+  (migration + remappage à l'import d'un snapshot).
 - Libellés affichés : `TagCategoryUi.displayLabel`
   (`lib/features/sampler/presentation/utils/tag_category_ui.dart`). Une clé non
   listée retombe sur son nom en casse de phrase ; toute nouvelle catégorie doit
@@ -100,7 +106,8 @@ Une suggestion **n’est pas un tag** :
 - **Passer un son en « traité » fige ses suggestions** : l’IA ne l’analyse plus. Elle ne touche
   jamais un bruitage ni une ambiance.
 - Voix (Chant / Instrumental) et tempo (Lent / Rythmé) **ne sont pas** suggérés
-  automatiquement (tempo : inutilisable ; voix : suite possible, cf. 0029).
+  automatiquement (tempo : inutilisable ; voix : suite possible, cf. 0029). Il en
+  va de même des tags ajoutés en v48 (Menaçant, Combat, Remix…) : manuels.
 - **Ajouter une ambiance** : un tag nouveau passe par une migration de données comme
   d’habitude ; il faut en plus une ligne dans `kMoods` (`lib/core/autotag/mood_tagging.dart`)
   et le vecteur texte correspondant dans `assets/autotag/text_latents.f32`
@@ -115,7 +122,7 @@ qui est le nom d'un tag ou l'un de ses alias (« Sonette porte » → Sonnerie, 
 stocké ni synchronisé : le calcul se refait à l'ouverture de la fiche, d'après le catalogue du
 moment. Ajouter un alias améliore donc aussitôt les suggestions.
 
-- **Dans la fiche d'un son** : pastilles marquées « titre » (survol : le mot trouvé), à côté de
+- **Dans la fiche d'un son** : pastilles sans score (survol : le mot trouvé), à côté de
   celles de l'IA. Les ajouter suit l'enregistrement du formulaire.
 - **En masse** : bouton « Tags des titres » de l'encart de la file « À traiter ». Aperçu par son,
   chaque tag se retire d'un toucher, puis seuls les tags conservés sont **ajoutés** aux sons non

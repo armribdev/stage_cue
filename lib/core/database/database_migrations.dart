@@ -422,6 +422,16 @@ extension _AppDatabaseMigrations on AppDatabase {
       // `_createCascadeTriggers` empêchent qu'il s'en recrée.
       await _purgeOrphans();
     }
+    if (from < 48) {
+      // MUSIQUE dissoute dans EMOTION_STYLE, catalogue de tags génériques
+      // étendu, tags trop précis absorbés par leur famille (décision 0040). Données seules, aucun changement de schéma.
+      // Dissoudre d'abord : les tags existants gardent leur id, le catalogue
+      // n'a plus qu'à ajouter les alias manquants.
+      await _dissolveRetiredTagCategories();
+      await _ensureExtraTags();
+      // Après le catalogue : les tags d'accueil (Meuble, Véhicule…) existent.
+      await _withdrawSpecificTags();
+    }
   }
 
   /// Vrai si la colonne [column] existe déjà sur la table [table] (PRAGMA).

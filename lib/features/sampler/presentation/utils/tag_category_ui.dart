@@ -13,7 +13,6 @@ extension TagCategoryUi on TagCategory {
     'MATIERE' => 'Matières',
     'AMBIANCE' => 'Ambiances',
     'EMOTION_STYLE' => 'Émotion / style',
-    'MUSIQUE' => 'Musique',
     _ => _toSentenceCase(name),
   };
 }

@@ -1,29 +1,402 @@
 part of 'database.dart';
 
+/// Catégories de tags retirées → catégorie qui reçoit leurs tags (décision
+/// 0040). Publique : l'import d'un snapshot d'un appareil pas encore à jour
+/// y lit le nom d'une catégorie retirée, qu'il recréerait sinon.
+const Map<String, String> retiredTagCategories = {'MUSIQUE': 'EMOTION_STYLE'};
+
 /// Tags ajoutés après le seed initial : catégorie → (nom du tag → alias de
 /// recherche). Voir `docs/tags.md` pour le rôle de chaque catégorie.
 ///
-/// - MUSIQUE décrit ce qui distingue une musique à l'usage (voix, tempo), pas
-///   l'instrumentation : l'ambiance se pose avec EMOTION_STYLE.
-/// - Une entrée dont le tag existe déjà (Magie, Romantique) n'ajoute que ses
+/// - Un tag est une **famille générique**, pas un nom que le titre du fichier
+///   portera déjà : « train » est un alias de Véhicule, pas un tag (0040).
+/// - Voix (Chant / Instrumental) et tempo (Lent / Rythmé) vivent dans
+///   EMOTION_STYLE depuis la dissolution de MUSIQUE.
+/// - Une entrée dont le tag existe déjà (Magie, Arme, Métal) n'ajoute que ses
 ///   alias : `INSERT OR IGNORE` sur la clé d'unicité des tags.
 const Map<String, Map<String, List<String>>> _extraTagCatalog = {
-  'MUSIQUE': {
-    'Chant': ['voix', 'vocal', 'chanson', 'chanté', 'paroles'],
-    'Instrumental': ['sans paroles', 'sans voix'],
-    'Lent': ['slow', 'tempo lent', 'très lent'],
-    'Rythmé': ['rapide', 'dansant', 'tempo rapide'],
+  // Voix et Déplacement sont des familles : les verbes précis (applaudir,
+  // chuchoter, marcher…) sont des alias, le titre du fichier les porte déjà.
+  // Les autres actions (Ouvrir, Casser, Lancer…) restent des tags à part.
+  'ACTION': {
+    'Voix': [
+      'rire',
+      'rires',
+      'laugh',
+      'laughter',
+      'giggle',
+      'pleurer',
+      'pleurs',
+      'cry',
+      'crying',
+      'sob',
+      'crier',
+      'hurler',
+      'cri',
+      'cris',
+      'scream',
+      'shout',
+      'yell',
+      'chuchoter',
+      'chuchotement',
+      'whisper',
+      'siffler',
+      'sifflement',
+      'whistle',
+      'applaudir',
+      'applaudissement',
+      'applaudissements',
+      'applause',
+      'clapping',
+      'clap',
+    ],
+    'Déplacement': [
+      'marcher',
+      'pas',
+      'footsteps',
+      'steps',
+      'walking',
+      'courir',
+      'course',
+      'run',
+      'running',
+      'sauter',
+      'saut',
+      'bondir',
+      'glisser',
+      'déraper',
+      'glissement',
+      'slide',
+    ],
+    'Lancer': ['jeter', 'projeter'],
+    // Impact absorbe les coups (frapper), les détonations (exploser), les chocs
+    // qui cassent (casser) et ceux qui claquent (claquer).
+    'Impact': [
+      'punch',
+      'thud',
+      'crash',
+      'bump',
+      'frapper',
+      'toquer',
+      'knock',
+      'knocking',
+      'exploser',
+      'explode',
+      'blast',
+      'bomb',
+      'gunshot',
+      'bang',
+      'coup de feu',
+      'tir',
+      'détonation',
+      'explosion',
+      'casser',
+      'briser',
+      'bris de verre',
+      'verre cassé',
+      'break',
+      'shatter',
+      'crack',
+      'claquer',
+      'gifle',
+      'porte qui claque',
+      'slam',
+    ],
+    'Ouvrir/Fermer': [
+      'ouvrir',
+      'fermer',
+      'ouverture',
+      'fermeture',
+      'open',
+      'close',
+    ],
+  },
+  'OBJET': {
+    'Arme': [
+      'épée',
+      'pistolet',
+      'fusil',
+      'couteau',
+      'revolver',
+      'gun',
+      'sword',
+      'knife',
+      'pistol',
+      'rifle',
+    ],
+    'Véhicule': [
+      'moto',
+      'train',
+      'avion',
+      'bateau',
+      'camion',
+      'bus',
+      'vélo',
+      'voiture',
+      'auto',
+      'bagnole',
+      'car',
+      'truck',
+      'plane',
+      'boat',
+      'motorcycle',
+    ],
+    'Machine': [
+      'moteur',
+      'ordinateur',
+      'radio',
+      'télévision',
+      'appareil',
+      'aspirateur',
+      'robot',
+      'ascenseur',
+      'ascenceur',
+      'téléphone',
+      'portable',
+      'téléphone portable',
+      'phone',
+      'cellphone',
+      'engine',
+      'motor',
+      'vacuum',
+    ],
+    'Sonnerie': [
+      'cloche',
+      'sonnette',
+      'sonette',
+      'klaxon',
+      'buzzer',
+      'bip',
+      'réveil',
+      'horloge',
+      'carillon',
+      'alarme',
+      'ringing',
+      'ringtone',
+      'ring',
+      'bell',
+      'gong',
+      'horn',
+      'doorbell',
+    ],
+    'Contenant': ['bouteille', 'valise', 'coffre', 'sac', 'boîte'],
+    'Meuble': ['armoire', 'tiroir', 'commode', 'chaise', 'table', 'lit'],
+    'Outil': ['scie', 'établi', 'marteau'],
+    'Animal': [
+      'dog',
+      'wolf',
+      'cat',
+      'pig',
+      'duck',
+      'horse',
+      'frog',
+      'seagull',
+      'turkey',
+      'bird',
+      'chicken',
+      'rooster',
+      'cow',
+      'sheep',
+      'bark',
+      'barking',
+      'howl',
+      'meow',
+      'quack',
+      'gobble',
+      'animaux',
+      'oiseaux',
+      'birds',
+      'chat',
+      'chien',
+      'cochon',
+      'canard',
+      'loup',
+      'cheval',
+      'grenouille',
+      'mouette',
+      'éléphant',
+      'vache',
+      'mouton',
+      'poule',
+      'coq',
+    ],
+  },
+  'MATIERE': {
+    'Bois': ['parquet', 'planche', 'wood', 'wooden'],
+    'Métal': ['fer', 'acier', 'chaîne'],
+    'Feu': ['flamme', 'brasier', 'crépitement', 'fire'],
+    'Eau': ['river', 'water', 'splash', 'bubble', 'bubbles', 'drip'],
+    'Glace': ['neige', 'givre'],
+    'Sable': [],
+    'Boue': ['bourbier'],
+    'Cuir': [],
+    'Verre': ['glass'],
+    'Papier': ['paper'],
+    'Gravier': ['gravel'],
+    'Plastique': ['plastic'],
+    'Tissu': ['cloth', 'fabric'],
+    'Pierre': ['stone'],
+    'Végétal': ['feuilles', 'herbe', 'branches', 'buisson'],
+  },
+  'AMBIANCE': {
+    'Orage': ['tempête', 'thunder', 'storm'],
+    'Pluie': ['rain'],
+    'Nuit': ['night', 'crépuscule', 'soir', 'coucher de soleil'],
+    'Jour': ['aube', 'lever du jour', 'matin'],
+    'Mer': ['waves', 'ocean', 'sea'],
+    'Médiéval': ['bardcore'],
+    'Fantastique': ['fantôme'],
+    'Public': ['café', 'banquet', 'bar', 'restaurant', 'foule', 'crowd'],
+    'Intérieur': ['bureau', 'office', 'école', 'hôpital'],
+    'Extérieur': ['jardin'],
+    'Fête': ['soirée', 'bal', 'noël', 'christmas', 'cirque', 'foire', 'danse'],
+    'Futuriste': [
+      'cyberpunk',
+      'espace',
+      'spatial',
+      'post-apocalyptique',
+      'apocalypse',
+      'postapo',
+      'survie',
+    ],
+    'Souterrain': ['grotte', 'cave', 'catacombes', 'cachot'],
+    'Sacré': [
+      'église',
+      'church',
+      'temple',
+      'religieux',
+      'cathédrale',
+      'chapelle',
+    ],
+    'Western': ['far west', 'cowboy'],
+    'Polar': ['noir', 'film noir', 'enquête', 'détective'],
+    'Années 30': ['thirties', '30s'],
+    'Années 60': ['sixties', '60s'],
+    'Années 70': ['seventies', '70s'],
+    'Nature': [
+      'jungle',
+      'wildlife',
+      'forêt',
+      'forest',
+      'campagne',
+      'champs',
+      'rural',
+      'montagne',
+      'désert',
+    ],
+    'Horreur': ['horror', 'scary', 'creepy'],
+    'Années 90': ['nineties', '90s'],
   },
   'EMOTION_STYLE': {
-    'Joyeux': ['joie', 'gai', 'heureux', 'festif'],
+    'Joyeux': ['joie', 'gai', 'heureux', 'festif', 'solaire', 'happy'],
     'Énergique': ['dynamique', 'entraînant'],
     'Nostalgique': ['nostalgie'],
     'Angoisse': ['angoissant', 'anxiété', 'peur'],
-    'Calme': ['paisible', 'serein', 'apaisant', 'relaxant'],
+    'Calme': ['paisible', 'serein', 'apaisant', 'relaxant', 'relax', 'calm'],
     'Magie': ['merveilleux'],
     'Romantique': ['amour', 'sensuel'],
+    'Menaçant': ['menace'],
+    'Inquiétant': ['inquiétude'],
+    'Lugubre': ['funèbre', 'macabre'],
+    'Étrange': ['bizarre', 'insolite'],
+    'Onirique': ['rêve', 'rêveur', 'planant', 'dream', 'rêverie'],
+    'Solennel': ['cérémonie', 'officiel'],
+    'Majestueux': ['grandiose', 'noble'],
+    'Tendre': ['doux', 'douceur', 'affectueux'],
+    'Combat': ['bataille', 'duel', 'baston', 'action'],
+    'Poursuite': ['course-poursuite', 'traque'],
+    'Victoire': ['triomphe', 'triomphant', 'succès'],
+    'Triste': ['tristesse', 'mélancolie', 'sad'],
+    'Urgence': ['danger', 'alerte', 'alert', 'alarm'],
+    'Sombre': ['dark'],
+    'Épique': ['epic'],
+    'Colère': ['rage', 'furie', 'énervé', 'agressif'],
+    'Aventure': ['exploration', 'quête', 'voyage', 'découverte'],
+    'Lumineux': ['clair', 'radieux', 'éclatant'],
+    'Remix': ['remixé', 'mix'],
+    'Reprise': ['cover', 'covers'],
+    'BO': [
+      'bande originale',
+      'ost',
+      'soundtrack',
+      'theme',
+      'trailer',
+      'opening',
+      'générique',
+    ],
+    'Kitsch': ['kitsh', 'kitch', 'cheesy', 'ringard'],
+    'Chant': ['voix', 'vocal', 'chanson', 'chanté', 'paroles'],
+    'Instrumental': ['sans paroles', 'sans voix', 'karaoke'],
+    'Lent': ['slow', 'tempo lent', 'très lent'],
+    'Mystérieux': ['mystery'],
+    'Comédie': ['comedy', 'funny'],
+    'Rythmé': ['rapide', 'dansant', 'tempo rapide'],
+    'Célèbre': [
+      'connu',
+      'populaire',
+      'tube',
+      'hit',
+      'culte',
+      'iconique',
+      'reconnaissable',
+    ],
   },
 };
+
+/// Tags trop précis absorbés par leur famille en v48 (décision 0040) :
+/// (catégorie, tag) → (catégorie, tag d'accueil). Usages, suggestions et alias
+/// suivent, même si le tag est posé sur des sons. Leur nom reste cherchable : il
+/// figure comme alias du tag d'accueil dans [_extraTagCatalog].
+const List<(String, String, String, String)> _mergedTags = [
+  ('OBJET', 'Chaise', 'OBJET', 'Meuble'),
+  ('OBJET', 'Table', 'OBJET', 'Meuble'),
+  ('OBJET', 'Lit', 'OBJET', 'Meuble'),
+  ('OBJET', 'Voiture', 'OBJET', 'Véhicule'),
+  ('OBJET', 'Téléphone', 'OBJET', 'Machine'),
+  // Même mot, même chose : la matière est le seul « Verre » conservé.
+  ('OBJET', 'Verre', 'MATIERE', 'Verre'),
+  // Actions : un verbe précis se lit dans le titre, il reste alias de sa famille.
+  ('ACTION', 'Rire', 'ACTION', 'Voix'),
+  ('ACTION', 'Pleurer', 'ACTION', 'Voix'),
+  ('ACTION', 'Crier', 'ACTION', 'Voix'),
+  ('ACTION', 'Chuchoter', 'ACTION', 'Voix'),
+  ('ACTION', 'Siffler', 'ACTION', 'Voix'),
+  ('ACTION', 'Applaudir', 'ACTION', 'Voix'),
+  ('ACTION', 'Marcher', 'ACTION', 'Déplacement'),
+  ('ACTION', 'Courir', 'ACTION', 'Déplacement'),
+  ('ACTION', 'Sauter', 'ACTION', 'Déplacement'),
+  ('ACTION', 'Glisser', 'ACTION', 'Déplacement'),
+  ('ACTION', 'Frapper', 'ACTION', 'Impact'),
+  ('ACTION', 'Casser', 'ACTION', 'Impact'),
+  ('ACTION', 'Claquer', 'ACTION', 'Impact'),
+  ('ACTION', 'Ouvrir', 'ACTION', 'Ouvrir/Fermer'),
+  ('ACTION', 'Fermer', 'ACTION', 'Ouvrir/Fermer'),
+  ('ACTION', 'Exploser', 'ACTION', 'Impact'),
+  // Ambiances : un lieu précis, un moment fin ou un sous-genre → sa famille.
+  ('AMBIANCE', 'Forêt', 'AMBIANCE', 'Nature'),
+  ('AMBIANCE', 'Montagne', 'AMBIANCE', 'Nature'),
+  ('AMBIANCE', 'Désert', 'AMBIANCE', 'Nature'),
+  ('AMBIANCE', 'Campagne', 'AMBIANCE', 'Nature'),
+  ('AMBIANCE', 'Aube', 'AMBIANCE', 'Jour'),
+  ('AMBIANCE', 'Crépuscule', 'AMBIANCE', 'Nuit'),
+  ('AMBIANCE', 'Foule', 'AMBIANCE', 'Public'),
+  ('AMBIANCE', 'Post-apocalyptique', 'AMBIANCE', 'Futuriste'),
+];
+
+/// Tags retirés sans famille d'accueil (catégorie, tag) : supprimés
+/// **seulement** s'ils ne sont posés ni suggérés sur aucun son, sinon conservés.
+const List<(String, String)> _prunedTags = [
+  ('OBJET', 'Livre'),
+  ('OBJET', 'Fenêtre'),
+  ('OBJET', 'Clés'),
+  // Redondant avec `SoundType` (voie musique / ambiance).
+  ('EMOTION_STYLE', "Musique d'ambiance"),
+  // Gestes trop précis, sans famille : le titre les porte (ne sont plus créés).
+  ('ACTION', 'Verser'),
+  ('ACTION', 'Secouer'),
+  ('ACTION', 'Déchirer'),
+  ('ACTION', 'Frotter'),
+];
 
 /// Tags d'instrumentation posés par la v41 puis retirés en v42 (nom normalisé).
 /// Seuls ceux qu'aucun son n'utilise sont supprimés.
@@ -90,13 +463,6 @@ extension _AppDatabaseTagSeed on AppDatabase {
         sortOrder: 5,
         description: 'Couleur émotionnelle ou style de scène.',
       );
-      await insertCategory(
-        name: 'MUSIQUE',
-        color: 0xFF00BCD4,
-        sortOrder: 6,
-        description: 'Rôle ou fonction de la musique dans la scène.',
-      );
-
       Future<int> getCategoryId(String name) async {
         final row = await customSelect(
           'SELECT id FROM tag_categories WHERE name = ? LIMIT 1',
@@ -119,38 +485,15 @@ extension _AppDatabaseTagSeed on AppDatabase {
         tagByName[name] = row.read<int>('id');
       }
 
-      // ACTION
-      await insertTag('Casser', 'ACTION');
-      await insertTag('Claquer', 'ACTION');
-      await insertTag('Ouvrir', 'ACTION');
-      await insertTag('Fermer', 'ACTION');
+      // ACTION : Voix et Déplacement viennent de [_extraTagCatalog], avec les
+      // verbes précis en alias (décision 0040).
       await insertTag('Impact', 'ACTION');
-      await insertTag('Glisser', 'ACTION');
-      await insertTag('Frapper', 'ACTION');
-      await insertTag('Exploser', 'ACTION');
       await insertTag('Actionner', 'ACTION');
-      await insertTag('Marcher', 'ACTION');
-      await insertTag('Courir', 'ACTION');
-      await insertTag('Rire', 'ACTION');
-      await insertTag('Pleurer', 'ACTION');
-      await insertTag('Crier', 'ACTION');
-      await insertTag('Chuchoter', 'ACTION');
-      await insertTag('Siffler', 'ACTION');
-      await insertTag('Applaudir', 'ACTION');
       // OBJET
       await insertTag('Porte', 'OBJET');
-      await insertTag('Téléphone', 'OBJET');
-      await insertTag('Voiture', 'OBJET');
       await insertTag('Arme', 'OBJET');
-      await insertTag('Verre', 'OBJET');
-      await insertTag('Clés', 'OBJET');
       await insertTag('Outil', 'OBJET');
       await insertTag('Cuisine', 'OBJET');
-      await insertTag('Chaise', 'OBJET');
-      await insertTag('Table', 'OBJET');
-      await insertTag('Fenêtre', 'OBJET');
-      await insertTag('Livre', 'OBJET');
-      await insertTag('Lit', 'OBJET');
       // MATIERE
       await insertTag('Bois', 'MATIERE');
       await insertTag('Métal', 'MATIERE');
@@ -180,12 +523,10 @@ extension _AppDatabaseTagSeed on AppDatabase {
       await insertTag('Futuriste', 'AMBIANCE');
       await insertTag('Intérieur', 'AMBIANCE');
       await insertTag('Extérieur', 'AMBIANCE');
-      await insertTag('Foule', 'AMBIANCE');
       await insertTag('Silence', 'AMBIANCE');
       await insertTag('Pluie', 'AMBIANCE');
       await insertTag('Orage', 'AMBIANCE');
       await insertTag('Mer', 'AMBIANCE');
-      await insertTag('Forêt', 'AMBIANCE');
       await insertTag('Nuit', 'AMBIANCE');
       await insertTag('Jour', 'AMBIANCE');
       // EMOTION_STYLE
@@ -202,8 +543,6 @@ extension _AppDatabaseTagSeed on AppDatabase {
       await insertTag('Sombre', 'EMOTION_STYLE');
       await insertTag('Léger', 'EMOTION_STYLE');
       await insertTag('Poétique', 'EMOTION_STYLE');
-      // MUSIQUE
-      await insertTag('Musique d\'ambiance', 'MUSIQUE');
 
       Future<void> insertAlias(String alias, String tagName) async {
         final tagId = tagByName[tagName]!;
@@ -217,18 +556,6 @@ extension _AppDatabaseTagSeed on AppDatabase {
       await insertAlias('chute', 'Impact');
       await insertAlias('heurter', 'Impact');
       await insertAlias('impact', 'Impact');
-      await insertAlias('briser', 'Casser');
-      await insertAlias('coup de feu', 'Exploser');
-      await insertAlias('tir', 'Exploser');
-      await insertAlias('détonation', 'Exploser');
-      await insertAlias('explosion', 'Exploser');
-      await insertAlias('déraper', 'Glisser');
-      await insertAlias('glissement', 'Glisser');
-      await insertAlias('toquer', 'Frapper');
-      await insertAlias('gifle', 'Claquer');
-      await insertAlias('porte qui claque', 'Claquer');
-      await insertAlias('bris de verre', 'Casser');
-      await insertAlias('verre cassé', 'Casser');
       await insertAlias('liquide', 'Eau');
       await insertAlias('plastique', 'Plastique');
       await insertAlias('synthétique', 'Plastique');
@@ -241,23 +568,6 @@ extension _AppDatabaseTagSeed on AppDatabase {
       await insertAlias('rue', 'Urbain');
       await insertAlias('extérieur', 'Extérieur');
       await insertAlias('intérieur', 'Intérieur');
-      await insertAlias('applaudissements', 'Applaudir');
-      await insertAlias('rire', 'Rire');
-      await insertAlias('rires', 'Rire');
-      await insertAlias('pleurs', 'Pleurer');
-      await insertAlias('crier', 'Crier');
-      await insertAlias('hurler', 'Crier');
-      await insertAlias('chuchotement', 'Chuchoter');
-      await insertAlias('sifflement', 'Siffler');
-      await insertAlias('pas', 'Marcher');
-      await insertAlias('course', 'Courir');
-      await insertAlias('auto', 'Voiture');
-      await insertAlias('bagnole', 'Voiture');
-      await insertAlias('portable', 'Téléphone');
-      await insertAlias('téléphone portable', 'Téléphone');
-      await insertAlias('clef', 'Clés');
-      await insertAlias('clé', 'Clés');
-      await insertAlias('forêt', 'Forêt');
       await insertAlias('pluie', 'Pluie');
       await insertAlias('orage', 'Orage');
       await insertAlias('mer', 'Mer');
@@ -275,14 +585,12 @@ extension _AppDatabaseTagSeed on AppDatabase {
       await insertAlias('dramatique', 'Drame');
       await insertAlias('tragique', 'Drame');
       await insertAlias('enjoué', 'Léger');
-      await insertAlias('fond musical', 'Musique d\'ambiance');
-      await insertAlias('musique de fond', 'Musique d\'ambiance');
-      await insertAlias('ambiance musicale', 'Musique d\'ambiance');
-      await insertAlias('instrumental', 'Musique d\'ambiance');
     });
   }
 
-  /// Catégorie MUSIQUE + tag « Musique d'ambiance » pour les bases existantes.
+  /// Catégorie MUSIQUE + tag « Musique d'ambiance » (migration v32). Historique :
+  /// la catégorie est dissoute en v48 ([_dissolveRetiredTagCategories]), un
+  /// seed neuf ne la crée plus.
   Future<void> _ensureMusicCategoryTags() async {
     const categoryName = 'MUSIQUE';
     const tagName = 'Musique d\'ambiance';
@@ -356,7 +664,7 @@ extension _AppDatabaseTagSeed on AppDatabase {
   }
 
   /// Complète le catalogue de tags avec [_extraTagCatalog], sans créer de
-  /// catégorie (hors MUSIQUE, garantie par [_ensureMusicCategoryTags]).
+  /// catégorie.
   ///
   /// Idempotent (`INSERT OR IGNORE` sur les clés d'unicité `tags` et
   /// `tag_aliases`) : sert à la fois à l'installation neuve et à la migration
@@ -364,9 +672,6 @@ extension _AppDatabaseTagSeed on AppDatabase {
   /// ne fait jamais échouer la migration.
   Future<void> _ensureExtraTags() async {
     await transaction(() async {
-      // Garantit la catégorie (bases dont la v32 n'aurait pas tourné).
-      await _ensureMusicCategoryTags();
-
       for (final category in _extraTagCatalog.entries) {
         final categoryRow = await customSelect(
           'SELECT id FROM tag_categories WHERE name = ? LIMIT 1',
@@ -411,6 +716,101 @@ extension _AppDatabaseTagSeed on AppDatabase {
     });
   }
 
+  /// Dissout chaque catégorie de [retiredTagCategories] dans sa catégorie
+  /// d'accueil (v48, décision 0040) : ses tags sont **déplacés**, pas recréés,
+  /// si bien que les tags déjà posés sur des sons (`sound_tags`) et les
+  /// suggestions (`sound_auto_tags`) restent valides. Si l'accueil a déjà un tag
+  /// du même nom, les deux sont fusionnés. Idempotent : sans la catégorie
+  /// retirée, ne fait rien.
+  Future<void> _dissolveRetiredTagCategories() async {
+    Future<int?> categoryId(String name) async {
+      final row = await customSelect(
+        'SELECT id FROM tag_categories WHERE name = ? LIMIT 1',
+        variables: [Variable<String>(name)],
+      ).getSingleOrNull();
+      return row?.read<int>('id');
+    }
+
+    await transaction(() async {
+      for (final entry in retiredTagCategories.entries) {
+        final fromId = await categoryId(entry.key);
+        if (fromId == null) continue;
+        final toId = await categoryId(entry.value);
+        if (toId == null) {
+          // Accueil supprimé à la main : on ne devine pas où mettre les tags.
+          AppLog.warn(
+            'Catégorie de tags « ${entry.key} » non dissoute : '
+            'la catégorie d’accueil « ${entry.value} » est absente.',
+          );
+          continue;
+        }
+
+        final tags = await customSelect(
+          'SELECT id, normalized_name FROM tags WHERE category_id = ?',
+          variables: [Variable<int>(fromId)],
+        ).get();
+        var moved = 0;
+        var merged = 0;
+        for (final tag in tags) {
+          final tagId = tag.read<int>('id');
+          final twin = await customSelect(
+            'SELECT id FROM tags WHERE category_id = ? AND normalized_name = ? '
+            'LIMIT 1',
+            variables: [
+              Variable<int>(toId),
+              Variable<String>(tag.read<String>('normalized_name')),
+            ],
+          ).getSingleOrNull();
+          if (twin == null) {
+            await customStatement(
+              'UPDATE tags SET category_id = ? WHERE id = ?',
+              [toId, tagId],
+            );
+            moved++;
+          } else {
+            await _mergeTagInto(from: tagId, into: twin.read<int>('id'));
+            merged++;
+          }
+        }
+        await customStatement('DELETE FROM tag_categories WHERE id = ?', [
+          fromId,
+        ]);
+        AppLog.info(
+          'Catégorie de tags « ${entry.key} » dissoute dans « ${entry.value} » '
+          ': $moved tag(s) déplacé(s), $merged fusionné(s).',
+        );
+      }
+    });
+  }
+
+  /// Reporte les usages et les alias du tag [from] sur [into], puis supprime
+  /// [from]. À appeler dans une transaction. Les clés étrangères ne sont pas
+  /// activées : rien ne cascade, tout est fait à la main.
+  Future<void> _mergeTagInto({required int from, required int into}) async {
+    await customStatement(
+      'INSERT OR IGNORE INTO sound_tags (sound_id, tag_id, added_at) '
+      'SELECT sound_id, ?, added_at FROM sound_tags WHERE tag_id = ?',
+      [into, from],
+    );
+    await customStatement('DELETE FROM sound_tags WHERE tag_id = ?', [from]);
+    await customStatement(
+      'INSERT OR IGNORE INTO sound_auto_tags '
+      '(sound_id, tag_id, score, updated_at) '
+      'SELECT sound_id, ?, score, updated_at FROM sound_auto_tags '
+      'WHERE tag_id = ?',
+      [into, from],
+    );
+    await customStatement('DELETE FROM sound_auto_tags WHERE tag_id = ?', [
+      from,
+    ]);
+    await customStatement(
+      'UPDATE OR IGNORE tag_aliases SET tag_id = ? WHERE tag_id = ?',
+      [into, from],
+    );
+    await customStatement('DELETE FROM tag_aliases WHERE tag_id = ?', [from]);
+    await customStatement('DELETE FROM tags WHERE id = ?', [from]);
+  }
+
   /// Retire les tags d'instrumentation de la v41 ([_withdrawnInstrumentTags])
   /// qu'aucun son n'utilise, avec leurs alias. Ceux déjà posés sur un son sont
   /// conservés : les supprimer effacerait un tagging fait par l'utilisateur.
@@ -444,6 +844,61 @@ extension _AppDatabaseTagSeed on AppDatabase {
       );
       AppLog.info(
         "Tags d'instrumentation retirés : $removed "
+        '(ceux déjà posés sur un son sont conservés).',
+      );
+    });
+  }
+
+  /// Identifiant du tag [tag] de la catégorie [category], ou null.
+  Future<int?> _tagIdIn(String category, String tag) async {
+    final row = await customSelect(
+      'SELECT t.id AS id FROM tags t JOIN tag_categories c '
+      'ON c.id = t.category_id WHERE c.name = ? AND t.normalized_name = ? '
+      'LIMIT 1',
+      variables: [
+        Variable<String>(category),
+        Variable<String>(_normalize(tag)),
+      ],
+    ).getSingleOrNull();
+    return row?.read<int>('id');
+  }
+
+  /// Retire les tags trop précis (v48, décision 0040) : fusionne ceux de
+  /// [_mergedTags] dans leur famille, supprime ceux de [_prunedTags] qu'aucun
+  /// son n'utilise. À appeler **après** [_ensureExtraTags], qui crée les tags
+  /// d'accueil. Idempotent.
+  Future<void> _withdrawSpecificTags() async {
+    await transaction(() async {
+      var merged = 0;
+      var pruned = 0;
+      for (final (category, tag, intoCategory, into) in _mergedTags) {
+        final fromId = await _tagIdIn(category, tag);
+        if (fromId == null) continue;
+        final intoId = await _tagIdIn(intoCategory, into);
+        if (intoId == null) {
+          AppLog.warn(
+            'Tag « $tag » non fusionné : le tag d’accueil « $into » est absent.',
+          );
+          continue;
+        }
+        await _mergeTagInto(from: fromId, into: intoId);
+        merged++;
+      }
+      for (final (category, tag) in _prunedTags) {
+        final id = await _tagIdIn(category, tag);
+        if (id == null) continue;
+        final used = await customSelect(
+          'SELECT (SELECT COUNT(*) FROM sound_tags WHERE tag_id = ?) + '
+          '(SELECT COUNT(*) FROM sound_auto_tags WHERE tag_id = ?) AS c',
+          variables: [Variable<int>(id), Variable<int>(id)],
+        ).getSingle();
+        if (used.read<int>('c') > 0) continue;
+        await customStatement('DELETE FROM tag_aliases WHERE tag_id = ?', [id]);
+        await customStatement('DELETE FROM tags WHERE id = ?', [id]);
+        pruned++;
+      }
+      AppLog.info(
+        'Tags trop précis retirés : $merged fusionné(s), $pruned supprimé(s) '
         '(ceux déjà posés sur un son sont conservés).',
       );
     });
