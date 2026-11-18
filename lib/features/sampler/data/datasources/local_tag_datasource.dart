@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/utils/string_utils.dart';
+import '../../../../core/utils/title_tag_matcher.dart';
 import '../../domain/entities/sound_auto_tag.dart' as domain;
 import '../../domain/entities/tag_category.dart' as domain;
 import '../../domain/entities/tag_item.dart' as domain;
@@ -117,6 +118,76 @@ class LocalTagDataSource {
             );
       }
     });
+  }
+
+  /// Ajoute des tags à des sons **sans toucher à leurs tags existants**
+  /// (contrairement à [setTagsForSound], qui remplace). Ne vise que les sons non
+  /// traités, revérifié ici au moment d'écrire : un son traité est figé
+  /// (décisions 0029 et 0041). Ne change jamais le drapeau « traité ». Renvoie
+  /// ce qui a réellement été ajouté.
+  Future<({int sounds, int tags})> addTagsToUnprocessedSounds(
+    Map<int, Set<int>> tagIdsBySound,
+  ) async {
+    if (tagIdsBySound.isEmpty) return (sounds: 0, tags: 0);
+    return _database.transaction(() async {
+      final eligible =
+          await (_database.select(_database.sounds)..where(
+                (s) =>
+                    s.id.isIn(tagIdsBySound.keys) & s.isProcessed.equals(false),
+              ))
+              .map((s) => s.id)
+              .get();
+      final existing = <int, Set<int>>{};
+      for (final row in await (_database.select(
+        _database.soundTags,
+      )..where((t) => t.soundId.isIn(eligible))).get()) {
+        (existing[row.soundId] ??= {}).add(row.tagId);
+      }
+      final now = DateTime.now();
+      var tags = 0;
+      var sounds = 0;
+      for (final soundId in eligible) {
+        final missing = (tagIdsBySound[soundId] ?? const <int>{}).difference(
+          existing[soundId] ?? const <int>{},
+        );
+        for (final tagId in missing) {
+          await _database
+              .into(_database.soundTags)
+              .insert(
+                db.SoundTagsCompanion.insert(
+                  soundId: soundId,
+                  tagId: tagId,
+                  addedAt: Value(now),
+                ),
+              );
+        }
+        tags += missing.length;
+        if (missing.isNotEmpty) sounds++;
+      }
+      return (sounds: sounds, tags: tags);
+    });
+  }
+
+  /// Noms et alias de chaque tag, de quoi en déduire des tags d'un titre
+  /// (décision 0041). Deux lectures du catalogue, jamais une requête par son.
+  Future<List<TagVocabularyEntry>> getTagVocabulary() async {
+    final tagRows = await _database
+        .customSelect('SELECT id, name FROM tags')
+        .get();
+    final aliasRows = await _database
+        .customSelect('SELECT tag_id, alias FROM tag_aliases')
+        .get();
+    final phrasesByTag = <int, List<String>>{
+      for (final row in tagRows)
+        row.read<int>('id'): [row.read<String>('name')],
+    };
+    for (final row in aliasRows) {
+      phrasesByTag[row.read<int>('tag_id')]?.add(row.read<String>('alias'));
+    }
+    return [
+      for (final entry in phrasesByTag.entries)
+        TagVocabularyEntry(tagId: entry.key, phrases: entry.value),
+    ];
   }
 
   Future<Set<int>> findSoundIdsByTagQuery(String query) async {

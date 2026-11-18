@@ -17,6 +17,7 @@ import '../../../../core/audio/loudness_analyzer.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/sync/download_queue.dart';
 import '../../../../core/sync/sync_log.dart';
+import '../../../../core/utils/title_tag_matcher.dart';
 import '../../data/repositories/library_repository.dart'
     show
         LibraryRepository,

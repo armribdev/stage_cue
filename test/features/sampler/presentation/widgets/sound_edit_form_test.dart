@@ -12,6 +12,7 @@ import 'package:stage_cue/core/database/database.dart' as db;
 import 'package:stage_cue/core/utils/app_toast_host.dart';
 import 'package:stage_cue/features/sampler/data/repositories/sound_repository.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
+import 'package:stage_cue/features/sampler/domain/entities/tag_category_with_tags.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/sound_edit_form.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/tag_pill.dart';
 
@@ -75,6 +76,7 @@ void main() {
     VoidCallback? onMarkedUnprocessed,
     SoundEditFormController? controller,
     AutoTagAnalysis? autoTag,
+    List<TagCategoryWithTags> tagCatalog = const [],
   }) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -84,7 +86,7 @@ void main() {
         home: Scaffold(
           body: SoundEditForm(
             sound: soundOf(processed: processed),
-            tagCatalog: const [],
+            tagCatalog: tagCatalog,
             repository: repository,
             isQueueMode: isQueueMode,
             onSkip: onSkip,
@@ -252,24 +254,100 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );
 
-  group('suggestions de l’IA (décision 0031)', () {
-    /// Laisse la lecture des tags (vraie E/S Drift) se terminer, puis redessine.
-    Future<void> loadTags(WidgetTester tester) async {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 200)),
-      );
-      await tester.pump();
+  /// Laisse la lecture des tags (vraie E/S Drift) se terminer, puis redessine.
+  Future<void> loadTags(WidgetTester tester) async {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await tester.pump();
+  }
+
+  Future<int> tagId(String name) async =>
+      (await database
+              .customSelect(
+                'SELECT id FROM tags WHERE name = ?',
+                variables: [Variable<String>(name)],
+              )
+              .getSingle())
+          .read<int>('id');
+
+  Future<List<db.SoundTag>> userRows(WidgetTester tester) async =>
+      await tester.runAsync(() => database.select(database.soundTags).get()) ??
+      [];
+
+  group('tags déduits du titre (décision 0041)', () {
+    // Le son de test s'appelle « porte » : le catalogue a un tag Porte.
+    Future<void> pumpWithCatalog(WidgetTester tester) async {
+      final catalog = await tester.runAsync(repository.getTagCatalog);
+      await pumpForm(tester, processed: false, tagCatalog: catalog ?? const []);
+      await loadTags(tester);
     }
 
-    Future<int> tagId(String name) async =>
-        (await database
-                .customSelect(
-                  'SELECT id FROM tags WHERE name = ?',
-                  variables: [Variable<String>(name)],
-                )
-                .getSingle())
-            .read<int>('id');
+    testWidgets('le titre propose un tag marqué « titre », ajouté avec le '
+        'formulaire et pas avant', (tester) async {
+      final id = await tagId('Porte');
+      await pumpWithCatalog(tester);
 
+      expect(find.byKey(ValueKey('title-tag-$id')), findsOneWidget);
+      expect(find.text('titre'), findsOneWidget);
+
+      await tester.tap(find.byKey(ValueKey('title-tag-$id')));
+      await tester.pump();
+      expect(find.byKey(ValueKey('title-tag-$id')), findsNothing);
+      expect(await userRows(tester), isEmpty, reason: 'pas encore enregistré');
+
+      await tester.tap(button('Valider'));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pump();
+      expect((await userRows(tester)).map((r) => r.tagId), [id]);
+    });
+
+    testWidgets('valider sans l’accepter n’écrit rien dans sound_tags', (
+      tester,
+    ) async {
+      await pumpWithCatalog(tester);
+      await tester.tap(button('Valider'));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pump();
+      expect(await userRows(tester), isEmpty);
+    });
+
+    testWidgets('un tag déjà posé sur le son n’est pas reproposé', (
+      tester,
+    ) async {
+      final id = await tagId('Porte');
+      await database
+          .into(database.soundTags)
+          .insert(db.SoundTagsCompanion.insert(soundId: soundId, tagId: id));
+      await pumpWithCatalog(tester);
+      expect(find.byKey(ValueKey('title-tag-$id')), findsNothing);
+      expect(find.text('titre'), findsNothing);
+    });
+
+    testWidgets('la suggestion de l’IA pour le même tag prime : une seule '
+        'pastille, avec son score', (tester) async {
+      final id = await tagId('Porte');
+      await database
+          .into(database.soundAutoTags)
+          .insert(
+            db.SoundAutoTagsCompanion.insert(
+              soundId: soundId,
+              tagId: id,
+              score: 0.42,
+            ),
+          );
+      await pumpWithCatalog(tester);
+      expect(find.byKey(ValueKey('auto-tag-$id')), findsOneWidget);
+      expect(find.byKey(ValueKey('title-tag-$id')), findsNothing);
+      expect(find.text('42 %'), findsOneWidget);
+    });
+  });
+
+  group('suggestions de l’IA (décision 0031)', () {
     Future<void> autoTag(String name, {double score = 0.42}) async {
       await database
           .into(database.soundAutoTags)
@@ -284,12 +362,6 @@ void main() {
 
     Future<List<db.SoundAutoTag>> autoRows() =>
         database.select(database.soundAutoTags).get();
-
-    Future<List<db.SoundTag>> userRows(WidgetTester tester) async =>
-        await tester.runAsync(
-          () => database.select(database.soundTags).get(),
-        ) ??
-        [];
 
     for (final processed in [false, true]) {
       testWidgets('suggestion toujours affichée avec sa confiance '

@@ -106,3 +106,20 @@ Une suggestion **n’est pas un tag** :
   et le vecteur texte correspondant dans `assets/autotag/text_latents.f32`
   (`tool/autotag/gen_text_latents.py`, **même ordre**). Les empreintes déjà calculées
   servent telles quelles : pas de ré-analyse des fichiers.
+
+## Tags déduits du titre
+
+Pour **tous les types de sons** (musiques, bruitages, ambiances), le titre propose des tags
+([0041](decisions/0041-tags-deduits-du-titre-calcules-a-la-volee.md)) : un mot entier du titre
+qui est le nom d'un tag ou l'un de ses alias (« Sonette porte » → Sonnerie, Porte). Rien n'est
+stocké ni synchronisé : le calcul se refait à l'ouverture de la fiche, d'après le catalogue du
+moment. Ajouter un alias améliore donc aussitôt les suggestions.
+
+- **Dans la fiche d'un son** : pastilles marquées « titre » (survol : le mot trouvé), à côté de
+  celles de l'IA. Les ajouter suit l'enregistrement du formulaire.
+- **En masse** : bouton « Tags des titres » de l'encart de la file « À traiter ». Aperçu par son,
+  chaque tag se retire d'un toucher, puis seuls les tags conservés sont **ajoutés** aux sons non
+  traités (jamais remplacés), qui restent à traiter.
+- Mots entiers uniquement, accents/casse/pluriel simple ignorés, au plus 4 tags par son. Les mots
+  trop ambigus (`pas`, `theme`, `mix`, `hit`) restent des alias de recherche mais ne déduisent
+  rien d'un titre (`kAmbiguousTitlePhrases`, `lib/core/utils/title_tag_matcher.dart`).

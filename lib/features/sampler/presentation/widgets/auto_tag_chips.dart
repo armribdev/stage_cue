@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/sound_auto_tag.dart';
+import '../../domain/entities/tag_item.dart';
 import 'tag_pill.dart';
 
-/// Suggestions de tags de l'IA pour un son (décision 0031), avec leur confiance
-/// en pourcentage, de la plus à la moins sûre.
+/// Un tag que le titre du son désigne, avec les mots du titre qui l'ont désigné.
+typedef TitleTagSuggestion = ({TagItem tag, String word});
+
+/// Suggestions de tags pour un son : celles de l'IA (décision 0031), avec leur
+/// confiance en pourcentage et de la plus à la moins sûre, puis celles déduites
+/// du titre (décision 0041), marquées « titre ».
 ///
 /// Une suggestion n'est pas un tag : toucher une pastille l'**ajoute** aux tags
 /// du son, et elle disparaît d'ici (elle est alors dans l'éditeur de tags ; la
@@ -14,18 +19,23 @@ import 'tag_pill.dart';
 class AutoTagChips extends StatelessWidget {
   final List<SoundAutoTag> suggestions;
 
+  /// Tags déduits du titre. Un tag déjà proposé par l'IA n'y figure pas : la
+  /// pastille de l'IA, avec son score, prime.
+  final List<TitleTagSuggestion> titleSuggestions;
+
   /// Couleur de catégorie de chaque tag (id du tag), absente = neutre.
   final Map<int, Color> colors;
 
   /// Ids des tags déjà dans ceux du son : leurs suggestions sont masquées.
   final Set<int> acceptedTagIds;
 
-  /// Ajoute la suggestion touchée aux tags du son.
-  final ValueChanged<SoundAutoTag> onAdd;
+  /// Ajoute le tag de la suggestion touchée aux tags du son.
+  final ValueChanged<TagItem> onAdd;
 
   const AutoTagChips({
     super.key,
     required this.suggestions,
+    this.titleSuggestions = const [],
     required this.colors,
     required this.acceptedTagIds,
     required this.onAdd,
@@ -37,7 +47,13 @@ class AutoTagChips extends StatelessWidget {
       for (final s in suggestions)
         if (!acceptedTagIds.contains(s.tag.id)) s,
     ];
-    if (pending.isEmpty) return const SizedBox.shrink();
+    final pendingFromTitle = [
+      for (final s in titleSuggestions)
+        if (!acceptedTagIds.contains(s.tag.id)) s,
+    ];
+    if (pending.isEmpty && pendingFromTitle.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -49,7 +65,19 @@ class AutoTagChips extends StatelessWidget {
             color: colors[s.tag.id],
             suggestion: true,
             meta: percentLabel(s.score),
-            onTap: () => onAdd(s),
+            onTap: () => onAdd(s.tag),
+          ),
+        for (final s in pendingFromTitle)
+          Tooltip(
+            message: 'Trouvé dans le titre : « ${s.word} »',
+            child: TagPill(
+              key: ValueKey('title-tag-${s.tag.id}'),
+              label: s.tag.name,
+              color: colors[s.tag.id],
+              suggestion: true,
+              meta: 'titre',
+              onTap: () => onAdd(s.tag),
+            ),
           ),
       ],
     );

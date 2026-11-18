@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/autotag/auto_tag_status.dart';
+import '../../../../core/utils/title_tag_matcher.dart';
 import '../../domain/entities/sound_auto_tag.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import 'auto_tag_chips.dart';
@@ -8,12 +9,16 @@ import 'auto_tag_status_row.dart';
 import 'tag_chips_editor.dart';
 
 /// Section « Tags » du formulaire d'un son : éditeur des tags de l'utilisateur,
-/// suggestions de l'IA (décision 0031) et état de l'analyse. Sans état propre :
+/// suggestions de l'IA (décision 0031) et du titre (décision 0041), et état de
+/// l'analyse. Sans état propre :
 /// tout vient de [SoundEditForm], qui reste seul à décider de ce qui est modifié.
 class SoundTagsSection extends StatelessWidget {
   final List<TagCategoryWithTags> tagCatalog;
   final Set<int> selectedTagIds;
   final List<SoundAutoTag> autoTags;
+
+  /// Tags que le titre du son désigne (décision 0041), pas encore posés.
+  final List<TitleTagMatch> titleMatches;
   final bool tagsLoaded;
   final bool tagsFailed;
 
@@ -32,6 +37,7 @@ class SoundTagsSection extends StatelessWidget {
     required this.tagCatalog,
     required this.selectedTagIds,
     required this.autoTags,
+    this.titleMatches = const [],
     required this.tagsLoaded,
     required this.tagsFailed,
     required this.hasAnalysis,
@@ -46,6 +52,23 @@ class SoundTagsSection extends StatelessWidget {
     for (final cat in tagCatalog)
       for (final tag in cat.tags) tag.id: Color(cat.category.color),
   };
+
+  /// Tags déduits du titre, résolus dans le catalogue, sans ceux que l'IA
+  /// propose déjà (sa pastille, avec son score, prime).
+  List<TitleTagSuggestion> _titleSuggestions() {
+    if (titleMatches.isEmpty) return const [];
+    final tagById = {
+      for (final cat in tagCatalog)
+        for (final tag in cat.tags) tag.id: tag,
+    };
+    final proposedByAi = {for (final s in autoTags) s.tag.id};
+    return [
+      for (final match in titleMatches)
+        if (!proposedByAi.contains(match.tagId))
+          if (tagById[match.tagId] case final tag?)
+            (tag: tag, word: match.matchedText),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +105,10 @@ class SoundTagsSection extends StatelessWidget {
         status != null &&
         status != SoundAnalysisStatus.analyzed &&
         status != SoundAnalysisStatus.notMusic;
-    final hasPending = autoTags.any((s) => !selectedTagIds.contains(s.tag.id));
+    final fromTitle = _titleSuggestions();
+    final hasPending =
+        autoTags.any((s) => !selectedTagIds.contains(s.tag.id)) ||
+        fromTitle.any((s) => !selectedTagIds.contains(s.tag.id));
     if (!hasPending && !showStatus) return editor;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,10 +118,11 @@ class SoundTagsSection extends StatelessWidget {
           const SizedBox(height: 14),
           AutoTagChips(
             suggestions: autoTags,
+            titleSuggestions: fromTitle,
             colors: _categoryColorsByTagId(),
             acceptedTagIds: selectedTagIds,
             // Accepter = ajouter aux tags du son, enregistré avec le formulaire.
-            onAdd: (s) => onTagAdded(s.tag.id),
+            onAdd: (tag) => onTagAdded(tag.id),
           ),
         ],
         if (showStatus) ...[

@@ -11,6 +11,7 @@ import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/string_utils.dart';
+import '../../../../core/utils/title_tag_matcher.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
@@ -20,6 +21,7 @@ import '../providers/sound_search_index.dart';
 import '../screens/sound_details_screen.dart';
 import '../utils/quick_search_prepare.dart';
 import '../utils/sound_type_ui.dart';
+import '../utils/title_tag_proposals.dart';
 import 'app_form_dialog.dart';
 import 'scrolling_text.dart';
 import 'sound_edit_form.dart';
@@ -27,6 +29,7 @@ import 'sound_picker/sound_picker_mode.dart';
 import 'tag_pill.dart';
 
 export 'sound_picker/sound_picker_mode.dart';
+import 'title_tags_dialog.dart';
 
 part 'sound_picker/sound_picker_search.dart';
 part 'sound_picker/sound_picker_navigation.dart';

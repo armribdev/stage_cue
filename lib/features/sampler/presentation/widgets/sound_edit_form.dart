@@ -9,11 +9,13 @@ import '../../../../core/logging/app_log.dart';
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/app_snackbar.dart';
+import '../../../../core/utils/title_tag_matcher.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_auto_tag.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
+import '../utils/title_tag_proposals.dart';
 import 'app_form_dialog.dart';
 import 'sound_color_picker.dart';
 import 'sound_tags_section.dart';
@@ -129,6 +131,10 @@ class _SoundEditFormState extends State<SoundEditForm> {
   /// Suggestions de l’IA (décision 0031) : lecture seule. En accepter une
   /// l’ajoute à [_tagIds], donc à la baseline `dirty` comme tout autre tag.
   List<SoundAutoTag> _autoTags = const [];
+
+  /// Tags que le titre du son désigne (décision 0041), calculés à l'ouverture :
+  /// rien n'est stocké, la fiche suit le catalogue du moment.
+  List<TitleTagMatch> _titleMatches = const [];
 
   /// Où en est l'analyse IA de ce son (`null` = inconnu ou fonction absente).
   SoundAnalysisStatus? _analysisStatus;
@@ -280,11 +286,28 @@ class _SoundEditFormState extends State<SoundEditForm> {
           'Tags de l’IA illisibles (son ${widget.sound.id}) : $error',
         );
       }
+      // Ceux du titre (décision 0041) sont facultatifs eux aussi.
+      var fromTitle = const <TitleTagMatch>[];
+      try {
+        final matcher = TitleTagMatcher(
+          await widget.repository.getTagVocabulary(),
+        );
+        fromTitle = titleTagMatchesFor(
+          widget.sound,
+          matcher,
+          excluded: {for (final tag in tags) tag.id},
+        );
+      } catch (error) {
+        AppLog.warn(
+          'Tags du titre indisponibles (son ${widget.sound.id}) : $error',
+        );
+      }
       if (!mounted) return;
       setState(() {
         _tagIds = tags.map((t) => t.id).toSet();
         _baseTagIds = {..._tagIds};
         _autoTags = auto;
+        _titleMatches = fromTitle;
         _tagsLoaded = true;
       });
     } catch (error) {
@@ -626,6 +649,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                         tagCatalog: widget.tagCatalog,
                         selectedTagIds: _tagIds,
                         autoTags: _autoTags,
+                        titleMatches: _titleMatches,
                         tagsLoaded: _tagsLoaded,
                         tagsFailed: _tagsFailed,
                         hasAnalysis: widget.autoTag != null,

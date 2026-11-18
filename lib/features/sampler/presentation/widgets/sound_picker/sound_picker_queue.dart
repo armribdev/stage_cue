@@ -110,6 +110,55 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
     unawaited(_editInPane(shown[index]));
   }
 
+  /// Action groupée « Tags des titres » (décision 0041) : propose, pour les sons
+  /// non traités du dossier en cours, les tags que leur titre désigne, et
+  /// n'écrit que ce que l'utilisateur confirme. Le son ouvert dans le volet est
+  /// laissé de côté : sa fiche réécrit ses tags à l'enregistrement et
+  /// écraserait l'ajout.
+  Future<void> _applyTitleTags() async {
+    final List<TagVocabularyEntry> vocabulary;
+    try {
+      vocabulary = await widget.notifier.getTagVocabulary();
+    } catch (error) {
+      if (mounted) showCopyableSnackBar(context, 'Tags illisibles : $error');
+      return;
+    }
+    if (!mounted) return;
+    final proposals = proposeTitleTags(
+      sounds: _all.where(
+        (s) => _matchesSourceFolder(s) && s.id != _editingSound?.id,
+      ),
+      tagsBySound: _soundTags,
+      matcher: TitleTagMatcher(vocabulary),
+    );
+    if (proposals.isEmpty) {
+      AppSnackBar.show(context, 'Aucun tag à déduire des titres.');
+      return;
+    }
+    final selection = await TitleTagsDialog.show(
+      context,
+      proposals: proposals,
+      tagCatalog: _tagCatalog,
+    );
+    if (selection == null || selection.isEmpty || !mounted) return;
+    try {
+      final result = await widget.notifier.addTitleTagsToSounds(selection);
+      if (!mounted) return;
+      AppSnackBar.show(
+        context,
+        '${result.tags} tag${result.tags > 1 ? 's' : ''} ajouté'
+        '${result.tags > 1 ? 's' : ''} à ${result.sounds} '
+        'son${result.sounds > 1 ? 's' : ''}.',
+        severity: AppToastSeverity.success,
+      );
+    } catch (error) {
+      if (mounted) {
+        showCopyableSnackBar(context, 'Ajout des tags impossible : $error');
+      }
+    }
+    await _adoptRefreshedSnapshot();
+  }
+
   /// Encart de la file de traitement (mode gestion), tout en bas sous la liste
   /// et sa ligne de raccourcis : propose de passer en mode « traitement des non
   /// traités ». Gabarit constant d'un état à l'autre — seuls le libellé et le
@@ -169,6 +218,24 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
                 // Désactiver coupe l'aperçu en cours : l'éditeur du volet le
                 // fait lui-même en voyant `autoPlayEntryPoint` retomber.
                 onPressed: () => setState(() => _autoPreview = !_autoPreview),
+              ),
+            ),
+          // Avant de trier : tags déduits des titres, en masse (décision 0041).
+          if (!active)
+            ExcludeFocus(
+              child: TextButton(
+                onPressed: () => unawaited(_applyTitleTags()),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.standard,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  minimumSize: const Size(64, 0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  textStyle: const TextStyle(fontSize: 13),
+                ),
+                child: const Text('Tags des titres'),
               ),
             ),
           const SizedBox(width: 4),

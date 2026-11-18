@@ -5,6 +5,7 @@ import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../domain/entities/watched_path.dart';
 import '../../../../core/platform/saf_directory_bridge.dart';
+import '../../../../core/utils/title_tag_matcher.dart';
 import '../datasources/local_sound_datasource.dart';
 import '../datasources/local_tag_datasource.dart';
 import '../models/indexing_progress.dart';
@@ -353,6 +354,18 @@ class SoundRepository {
 
   Future<void> setTagsForSound(int soundId, List<int> tagIds) async {
     await _tagDataSource.setTagsForSound(soundId, tagIds);
+  }
+
+  /// Noms et alias de chaque tag, pour déduire des tags d'un titre.
+  Future<List<TagVocabularyEntry>> getTagVocabulary() async {
+    return await _tagDataSource.getTagVocabulary();
+  }
+
+  /// Ajout (jamais un remplacement) de tags à des sons non traités.
+  Future<({int sounds, int tags})> addTagsToUnprocessedSounds(
+    Map<int, Set<int>> tagIdsBySound,
+  ) async {
+    return await _tagDataSource.addTagsToUnprocessedSounds(tagIdsBySound);
   }
 
   Future<Set<int>> findSoundIdsByTagQuery(String query) async {

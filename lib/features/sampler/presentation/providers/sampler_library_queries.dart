@@ -106,4 +106,26 @@ extension SamplerLibraryQueries on SamplerNotifier {
   Future<List<TagItem>> getTagsForSound(int soundId) async {
     return await _repository.getTagsForSound(soundId);
   }
+
+  /// Noms et alias des tags, pour en déduire des tags d'un titre (décision 0041).
+  Future<List<TagVocabularyEntry>> getTagVocabulary() {
+    return _repository.getTagVocabulary();
+  }
+
+  /// Ajoute en masse des tags déduits des titres, que l'utilisateur vient de
+  /// confirmer. N'atteint que des sons non traités (revérifié à l'écriture) et
+  /// ne les marque pas traités. Invalide l'index de recherche : les tags des
+  /// sons ont changé en masse (décision 0017).
+  Future<({int sounds, int tags})> addTitleTagsToSounds(
+    Map<int, Set<int>> tagIdsBySound,
+  ) async {
+    final result = await _repository.addTagsToUnprocessedSounds(tagIdsBySound);
+    invalidateSearchIndex();
+    AppLog.info(
+      'Tags déduits des titres : ${result.tags} ajouté(s) sur '
+      '${result.sounds} son(s) '
+      '(${tagIdsBySound.length} son(s) confirmé(s)).',
+    );
+    return result;
+  }
 }
