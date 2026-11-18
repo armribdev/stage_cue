@@ -9,7 +9,7 @@ typedef TitleTagSuggestion = ({TagItem tag, String word});
 
 /// Suggestions de tags pour un son : celles de l'IA (décision 0031), avec leur
 /// confiance en pourcentage et de la plus à la moins sûre, puis celles déduites
-/// du titre (décision 0041), marquées « titre ».
+/// du titre (décision 0041), sans score ; leur infobulle donne le mot trouvé.
 ///
 /// Une suggestion n'est pas un tag : toucher une pastille l'**ajoute** aux tags
 /// du son, et elle disparaît d'ici (elle est alors dans l'éditeur de tags ; la
@@ -75,7 +75,6 @@ class AutoTagChips extends StatelessWidget {
               label: s.tag.name,
               color: colors[s.tag.id],
               suggestion: true,
-              meta: 'titre',
               onTap: () => onAdd(s.tag),
             ),
           ),

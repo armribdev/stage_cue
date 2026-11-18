@@ -12,7 +12,7 @@ Presque aucun son n'avait de tag, et l'analyse de l'IA ([0029](0029-analyse-auto
 1. **Les tags déduits du titre se calculent à la volée, sans stockage.** Une fonction pure (`TitleTagMatcher`, `lib/core/utils/title_tag_matcher.dart`) apparie le titre au nom et aux alias de chaque tag, **par mots entiers** (accents, casse et pluriel simple ignorés ; `-`, `_`, apostrophe séparent les mots ; une expression multi-mots prime sur ses mots).
 2. **Ce n'est pas l'IA** : ni `sound_auto_tags`, ni score, ni migration, ni format de snapshot. 0029 et 0031 ne sont pas amendées : l'IA continue de ne toucher que les musiques non traitées, et son score garde son sens.
 3. **Deux usages**, tous deux soumis à l'utilisateur :
-   - la fiche d'un son affiche ces tags en pastilles marquées « titre » (à côté de celles de l'IA ; si l'IA propose le même tag, sa pastille avec son score prime). Les ajouter suit l'enregistrement du formulaire ;
+   - la fiche d'un son affiche ces tags en pastilles sans score, dont l'infobulle donne le mot trouvé (à côté de celles de l'IA ; si l'IA propose le même tag, sa pastille avec son score prime). Les ajouter suit l'enregistrement du formulaire ;
    - l'action groupée « Tags des titres » (encart de la file « À traiter ») montre un aperçu par son, où chaque tag se retire d'un toucher, puis n'ajoute que ce qui est confirmé.
 4. **L'action groupée n'écrit dans `sound_tags` que sur confirmation, par ajout** (`LocalTagDataSource.addTagsToUnprocessedSounds`, jamais un remplacement), **uniquement sur des sons non traités** (revérifié au moment d'écrire) et **sans les marquer traités**. Un son traité est figé : ni l'action groupée ni l'analyse n'y touchent.
 5. Au plus 4 tags par son (`kMaxTitleTagSuggestions`) ; les tags déjà posés sont exclus.

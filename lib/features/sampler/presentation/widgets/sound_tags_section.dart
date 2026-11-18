@@ -116,6 +116,14 @@ class SoundTagsSection extends StatelessWidget {
         editor,
         if (hasPending) ...[
           const SizedBox(height: 14),
+          Text(
+            'Suggestions',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
           AutoTagChips(
             suggestions: autoTags,
             titleSuggestions: fromTitle,

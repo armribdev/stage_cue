@@ -283,13 +283,12 @@ void main() {
       await loadTags(tester);
     }
 
-    testWidgets('le titre propose un tag marqué « titre », ajouté avec le '
+    testWidgets('le titre propose un tag (sans score), ajouté avec le '
         'formulaire et pas avant', (tester) async {
       final id = await tagId('Porte');
       await pumpWithCatalog(tester);
 
       expect(find.byKey(ValueKey('title-tag-$id')), findsOneWidget);
-      expect(find.text('titre'), findsOneWidget);
 
       await tester.tap(find.byKey(ValueKey('title-tag-$id')));
       await tester.pump();
@@ -302,6 +301,17 @@ void main() {
       );
       await tester.pump();
       expect((await userRows(tester)).map((r) => r.tagId), [id]);
+    });
+
+    testWidgets('un libellé « Suggestions » surmonte les suggestions, et '
+        'disparaît quand il n’en reste aucune', (tester) async {
+      final id = await tagId('Porte');
+      await pumpWithCatalog(tester);
+      expect(find.text('Suggestions'), findsOneWidget);
+
+      await tester.tap(find.byKey(ValueKey('title-tag-$id')));
+      await tester.pump();
+      expect(find.text('Suggestions'), findsNothing);
     });
 
     testWidgets('valider sans l’accepter n’écrit rien dans sound_tags', (
@@ -325,7 +335,6 @@ void main() {
           .insert(db.SoundTagsCompanion.insert(soundId: soundId, tagId: id));
       await pumpWithCatalog(tester);
       expect(find.byKey(ValueKey('title-tag-$id')), findsNothing);
-      expect(find.text('titre'), findsNothing);
     });
 
     testWidgets('la suggestion de l’IA pour le même tag prime : une seule '
