@@ -130,3 +130,22 @@ moment. Ajouter un alias améliore donc aussitôt les suggestions.
 - Mots entiers uniquement, accents/casse/pluriel simple ignorés, au plus 4 tags par son. Les mots
   trop ambigus (`pas`, `theme`, `mix`, `hit`) restent des alias de recherche mais ne déduisent
   rien d'un titre (`kAmbiguousTitlePhrases`, `lib/core/utils/title_tag_matcher.dart`).
+
+## Pistes d'amélioration (non décidées)
+
+- **Suggérer d'après les tags que l'utilisateur a déjà posés** (voisinage d'empreintes). Pour une
+  musique non traitée, chercher ses *k* plus proches voisines (empreinte `sounds.auto_embedding`)
+  parmi les musiques déjà taguées dans `sound_tags`, et suggérer les tags qu'elles portent ; le
+  score devient « *n* voisines sur *k* », donc vérifiable, contrairement au softmax de
+  [0031](decisions/0031-tags-de-l-ia-en-suggestions-avec-score.md). Apports : marche pour **tout**
+  tag posé (Chant, Lent, BO…, pas seulement les ambiances de `kMoods`), et s'améliore à mesure
+  que l'utilisateur tague. Les ambiances zero-shot resteraient le démarrage à froid.
+  - **Prérequis** : environ 5 à 10 musiques taguées par tag, soit 50 à 100 au total (ordre de
+    grandeur, non mesuré). L'action « Tags des titres » peut les produire.
+  - **Limites** : musiques seulement (les bruitages n'ont pas d'empreinte) ; il faudrait un ADR
+    qui amende 0031. L'utilisateur avait écarté « entraîner sur ses propres exemples » faute
+    d'exemples : cette piste n'est à rouvrir que quand le volume y est.
+- **Calibrer le score de l'IA** d'après l'usage : une ligne de `sound_auto_tags` plus la présence
+  du tag dans `sound_tags` donnent le taux d'acceptation par tranche de score. À mesurer avant
+  de décider si l'on garde le « 38 % », si on le remplace par un niveau (fort / moyen) ou si on
+  le retire.
