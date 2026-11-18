@@ -94,7 +94,8 @@ Une suggestion **n’est pas un tag** :
 - **les tags du son** (`sound_tags`) : ajoutés et retirés librement ; ce sont les seuls
   que lisent la recherche, les listes et le sélecteur ;
 - **les suggestions de l’IA** (`sound_auto_tags`) : toujours affichées dans la fiche du
-  son, avec leur **score** (« Triste 38 % »), de la plus à la moins sûre. Toucher une
+  son, de la plus à la moins sûre (le score ordonne les pastilles mais n’est pas affiché,
+  [0042](decisions/0042-suggestions-de-l-ia-sans-pourcentage.md)). Toucher une
   pastille l’ajoute aux tags du son (enregistré avec le formulaire), la retoucher la
   retire. Le score est une confiance **relative**, pas une probabilité calibrée.
 
@@ -146,6 +147,6 @@ moment. Ajouter un alias améliore donc aussitôt les suggestions.
     qui amende 0031. L'utilisateur avait écarté « entraîner sur ses propres exemples » faute
     d'exemples : cette piste n'est à rouvrir que quand le volume y est.
 - **Calibrer le score de l'IA** d'après l'usage : une ligne de `sound_auto_tags` plus la présence
-  du tag dans `sound_tags` donnent le taux d'acceptation par tranche de score. À mesurer avant
-  de décider si l'on garde le « 38 % », si on le remplace par un niveau (fort / moyen) ou si on
-  le retire.
+  du tag dans `sound_tags` donnent le taux d'acceptation par tranche de score. Le pourcentage a
+  été retiré de l'affichage ([0042](decisions/0042-suggestions-de-l-ia-sans-pourcentage.md)) ; à
+  mesurer avant de décider s'il faut réafficher une valeur.

@@ -7,9 +7,9 @@ import 'tag_pill.dart';
 /// Un tag que le titre du son désigne, avec les mots du titre qui l'ont désigné.
 typedef TitleTagSuggestion = ({TagItem tag, String word});
 
-/// Suggestions de tags pour un son : celles de l'IA (décision 0031), avec leur
-/// confiance en pourcentage et de la plus à la moins sûre, puis celles déduites
-/// du titre (décision 0041), sans score ; leur infobulle donne le mot trouvé.
+/// Suggestions de tags pour un son : celles de l'IA (décision 0031), de la plus
+/// à la moins sûre mais sans afficher le score (décision 0042), puis celles
+/// déduites du titre (décision 0041) ; leur infobulle donne le mot trouvé.
 ///
 /// Une suggestion n'est pas un tag : toucher une pastille l'**ajoute** aux tags
 /// du son, et elle disparaît d'ici (elle est alors dans l'éditeur de tags ; la
@@ -20,7 +20,7 @@ class AutoTagChips extends StatelessWidget {
   final List<SoundAutoTag> suggestions;
 
   /// Tags déduits du titre. Un tag déjà proposé par l'IA n'y figure pas : la
-  /// pastille de l'IA, avec son score, prime.
+  /// pastille de l'IA prime.
   final List<TitleTagSuggestion> titleSuggestions;
 
   /// Couleur de catégorie de chaque tag (id du tag), absente = neutre.
@@ -64,7 +64,6 @@ class AutoTagChips extends StatelessWidget {
             label: s.tag.name,
             color: colors[s.tag.id],
             suggestion: true,
-            meta: percentLabel(s.score),
             onTap: () => onAdd(s.tag),
           ),
         for (final s in pendingFromTitle)
@@ -80,12 +79,5 @@ class AutoTagChips extends StatelessWidget {
           ),
       ],
     );
-  }
-
-  /// « 38 % » pour 0,38. Jamais « 0 % » pour une suggestion retenue : en dessous
-  /// de 1 % on affiche « <1 % ».
-  static String percentLabel(double score) {
-    final percent = (score * 100).round();
-    return percent < 1 ? '<1 %' : '$percent %';
   }
 }

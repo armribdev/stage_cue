@@ -1,6 +1,6 @@
 # 0031 — Tags de l'IA : des suggestions toujours affichées, avec leur score
 
-**Statut :** acceptée (amende [0030](0030-tags-de-l-ia-en-couche-separee-et-masquables.md) et [0029](0029-analyse-automatique-des-tags-sur-l-appareil.md))
+**Statut :** acceptée (amende [0030](0030-tags-de-l-ia-en-couche-separee-et-masquables.md) et [0029](0029-analyse-automatique-des-tags-sur-l-appareil.md) ; amendée par [0042](0042-suggestions-de-l-ia-sans-pourcentage.md) : le score n'est plus affiché)
 **Date :** 2026-11-04
 
 ## Contexte

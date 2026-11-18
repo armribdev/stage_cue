@@ -338,7 +338,7 @@ void main() {
     });
 
     testWidgets('la suggestion de l’IA pour le même tag prime : une seule '
-        'pastille, avec son score', (tester) async {
+        'pastille, sans score', (tester) async {
       final id = await tagId('Porte');
       await database
           .into(database.soundAutoTags)
@@ -352,7 +352,7 @@ void main() {
       await pumpWithCatalog(tester);
       expect(find.byKey(ValueKey('auto-tag-$id')), findsOneWidget);
       expect(find.byKey(ValueKey('title-tag-$id')), findsNothing);
-      expect(find.text('42 %'), findsOneWidget);
+      expect(find.text('42 %'), findsNothing);
     });
   });
 
@@ -373,7 +373,7 @@ void main() {
         database.select(database.soundAutoTags).get();
 
     for (final processed in [false, true]) {
-      testWidgets('suggestion toujours affichée avec sa confiance '
+      testWidgets('suggestion toujours affichée, sans pourcentage '
           '(son ${processed ? 'traité' : 'à traiter'})', (tester) async {
         await autoTag('Sombre', score: 0.42);
         await pumpForm(tester, processed: processed);
@@ -383,7 +383,7 @@ void main() {
           find.byKey(ValueKey('auto-tag-${await tagId('Sombre')}')),
           findsOneWidget,
         );
-        expect(find.text('42 %'), findsOneWidget);
+        expect(find.text('42 %'), findsNothing);
         expect(find.textContaining('touchez pour ajouter'), findsNothing);
       });
     }

@@ -64,8 +64,6 @@ class TagPill extends StatefulWidget {
   final bool compact;
   final bool suggestion;
 
-  /// Valeur affichée en mono après le nom (ex. confiance d'une suggestion).
-  final String? meta;
   final VoidCallback? onTap;
   final VoidCallback? onRemove;
 
@@ -78,7 +76,6 @@ class TagPill extends StatefulWidget {
     this.color,
     this.compact = false,
     this.suggestion = false,
-    this.meta,
     this.onTap,
     this.onRemove,
     this.removeTooltip,
@@ -91,7 +88,6 @@ class TagPill extends StatefulWidget {
     this.color,
     this.compact = false,
     this.suggestion = false,
-    this.meta,
     this.onTap,
     this.onRemove,
     this.removeTooltip,
@@ -205,19 +201,6 @@ class _TagPillState extends State<TagPill> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (widget.meta != null) ...[
-              const SizedBox(width: 6),
-              Text(
-                widget.meta!,
-                style: AppFonts.monoStyle(
-                  textStyle.copyWith(
-                    fontSize: m.fontSize - 1,
-                    fontWeight: FontWeight.w400,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ],
             if (trailing != null) ...[const SizedBox(width: 2), trailing],
           ],
         ),

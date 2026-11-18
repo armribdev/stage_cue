@@ -51,7 +51,7 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0028](0028-consentement-oauth-desktop-avec-refresh-token.md) | Consentement OAuth desktop maison, pour toujours obtenir un refresh token | acceptée |
 | [0029](0029-analyse-automatique-des-tags-sur-l-appareil.md) | Analyse automatique des tags sur l'appareil, par modèles ONNX en pack optionnel | acceptée (amendée par 0030 et 0031) |
 | [0030](0030-tags-de-l-ia-en-couche-separee-et-masquables.md) | Tags de l'IA : couche séparée, masquables, jamais supprimés | acceptée (amendée par 0031) |
-| [0031](0031-tags-de-l-ia-en-suggestions-avec-score.md) | Tags de l'IA : suggestions toujours affichées, avec leur score, acceptées une à une | acceptée |
+| [0031](0031-tags-de-l-ia-en-suggestions-avec-score.md) | Tags de l'IA : suggestions toujours affichées, avec leur score, acceptées une à une | acceptée (amendée par 0042 : score non affiché) |
 | [0032](0032-cascades-emulees-par-declencheurs.md) | Cascades de suppression émulées par des déclencheurs SQLite, pas par `foreign_keys` | acceptée |
 | [0033](0033-toast-global-au-dessus-du-navigator.md) | Notifications en toast global au-dessus du Navigator, plus de `SnackBar` | acceptée |
 | [0034](0034-icones-lucide-via-appicons.md) | Icônes Lucide à trait fin, centralisées dans `AppIcons` | acceptée (rendu remplacé par 0038) |
@@ -63,5 +63,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0039](0039-apercu-lecteur-independant-recherche-eclair-lit-pour-de-vrai.md) | Aperçu : lecteur unique indépendant du STOP ; la recherche-éclair joue le son pour de vrai | acceptée |
 | [0040](0040-tags-generiques-et-dissolution-de-la-categorie-musique.md) | Tags génériques (les noms précis en alias), et catégorie MUSIQUE dissoute dans EMOTION_STYLE | acceptée |
 | [0041](0041-tags-deduits-du-titre-calcules-a-la-volee.md) | Tags déduits du titre : calculés à la volée (mots entiers sur les alias), jamais stockés ni synchronisés | acceptée |
+| [0042](0042-suggestions-de-l-ia-sans-pourcentage.md) | Suggestions de l'IA : classées par score, sans pourcentage affiché | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.
