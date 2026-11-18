@@ -79,7 +79,7 @@ class SoundEditForm extends StatefulWidget {
 
   /// Hauteur de la section « Tags » du formulaire précédent, pour qu'elle
   /// s'anime d'un son à l'autre (voir [SoundEditPane]). `null` = pas de suite.
-  final TagsSectionMemory? sectionMemory;
+  final SoundFormMemory? sectionMemory;
 
   const SoundEditForm({
     super.key,
@@ -119,16 +119,24 @@ class SoundEditFormController {
   Future<void> save() => _save?.call() ?? Future<void>.value();
 }
 
-class _SoundEditFormState extends State<SoundEditForm> {
+class _SoundEditFormState extends State<SoundEditForm>
+    with SingleTickerProviderStateMixin {
   late String _displayName;
   late final TextEditingController _nameController;
   // Ne sert qu'à afficher la croix « effacer » tant que le titre est focus.
   late final FocusNode _nameFocus = FocusNode()..addListener(_onNameFocus);
   late int? _colorValue;
   late double _volume;
+
+  /// Volume montré par le curseur et la waveform de l'éditeur (voir
+  /// [VolumeGlide]) ; `_volume` reste la valeur du formulaire.
+  late final VolumeGlide _volumeGlide;
   late int _startOffsetMs;
   late SoundType? _type;
   late Uint8List? _waveform;
+
+  /// Extraction de l'enveloppe en cours (son sans waveform à l'ouverture).
+  late bool _waveformPending;
   Set<int> _tagIds = <int>{};
 
   // Baseline = dernier état enregistré (ou chargé) ; sert à calculer `dirty`.
@@ -185,9 +193,24 @@ class _SoundEditFormState extends State<SoundEditForm> {
     _nameController = TextEditingController(text: _displayName);
     _colorValue = _baseColorValue = sound.colorValue;
     _volume = _baseVolume = sound.volume.clamp(0.0, 1.0);
+    final volumeFrom = widget.sectionMemory?.volume;
+    widget.sectionMemory?.volume = _volume;
+    // Le curseur et la waveform partent du volume du formulaire précédent et
+    // glissent vers celui de ce son.
+    _volumeGlide = VolumeGlide(vsync: this, initial: volumeFrom ?? _volume);
+    if (volumeFrom != null && volumeFrom != _volume) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _volumeGlide.glideTo(
+          _volume,
+          instant: MediaQuery.maybeOf(context)?.disableAnimations ?? false,
+        );
+      });
+    }
     _startOffsetMs = _baseStartOffsetMs = sound.startOffsetMs;
     _type = _baseType = sound.type;
     _waveform = sound.waveform;
+    _waveformPending = _waveform == null && widget.notifier != null;
     if (_waveform == null) unawaited(_loadMissingWaveform());
     final preload = widget.preload;
     if (preload != null) {
@@ -215,8 +238,11 @@ class _SoundEditFormState extends State<SoundEditForm> {
   /// plateau. Silencieux : sans waveform, l'éditeur reste utilisable.
   Future<void> _loadMissingWaveform() async {
     final waveform = await widget.notifier?.ensureWaveform(widget.sound.id);
-    if (waveform == null || !mounted) return;
-    setState(() => _waveform = waveform);
+    if (!mounted) return;
+    setState(() {
+      _waveformPending = false;
+      if (waveform != null) _waveform = waveform;
+    });
   }
 
   /// Le passage d'analyse a bougé : on ne relit l'état que si cela concerne ce
@@ -295,6 +321,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
     if (controller != null && controller._save == save) {
       controller._save = null;
     }
+    _volumeGlide.dispose();
     _nameController.dispose();
     _nameFocus.dispose();
     super.dispose();
@@ -584,9 +611,22 @@ class _SoundEditFormState extends State<SoundEditForm> {
   /// Change le volume du formulaire et le répercute en direct sur l'aperçu
   /// bibliothèque en cours : celui du lecteur unique, que l'éditeur de point
   /// d'entrée partage avec le bouton de ligne.
-  void _setVolume(double value) {
+  ///
+  /// [glide] : valeur posée d'un coup (« Auto »), que le curseur et la waveform
+  /// atteignent en glissant ; sinon c'est un geste sur le curseur, suivi sans
+  /// retard.
+  void _setVolume(double value, {bool glide = false}) {
     final volume = value.clamp(0.0, 1.0);
     _update(() => _volume = volume);
+    if (glide) {
+      _volumeGlide.glideTo(
+        volume,
+        instant: MediaQuery.maybeOf(context)?.disableAnimations ?? false,
+      );
+    } else {
+      _volumeGlide.jumpTo(volume);
+    }
+    widget.sectionMemory?.volume = volume;
     widget.notifier?.setLibraryPreviewVolume(widget.sound.id, volume);
   }
 
@@ -608,7 +648,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
         );
         return;
       }
-      _setVolume(volume);
+      _setVolume(volume, glide: true);
     } catch (error) {
       if (!mounted) return;
       showCopyableSnackBar(context, 'Échec de la mesure : $error');
@@ -645,7 +685,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                     _section(
                       'Volume par défaut',
                       SoundVolumeField(
-                        volume: _volume,
+                        volume: _volumeGlide,
                         onChanged: _setVolume,
                         isMeasuring: _isMeasuringVolume,
                         onAuto: widget.notifier != null
@@ -840,8 +880,11 @@ class _SoundEditFormState extends State<SoundEditForm> {
       soundId: widget.sound.id,
       notifier: widget.notifier,
       waveform: _waveform,
+      waveformPending: _waveformPending,
+      memory: widget.sectionMemory,
       initialOffsetMs: _startOffsetMs,
       volume: _volume,
+      displayVolume: _volumeGlide,
       autoPlay: widget.autoPlayEntryPoint,
       onChanged: (ms) => _update(() => _startOffsetMs = ms),
     );

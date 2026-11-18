@@ -36,7 +36,7 @@ class SoundTagsSection extends StatefulWidget {
 
   /// Hauteur de la section du formulaire précédent, et où inscrire la sienne :
   /// elle part de l'une et s'anime vers l'autre. `null` = pas de suite.
-  final TagsSectionMemory? memory;
+  final SoundFormMemory? memory;
 
   const SoundTagsSection({
     super.key,

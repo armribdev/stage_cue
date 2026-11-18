@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -8,10 +9,10 @@ import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/transport_icon.dart';
 import '../../../../core/theme/app_tokens.dart';
-import '../../../../core/theme/skeleton.dart';
 import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../providers/sampler_provider.dart';
+import 'sound_edit_preload.dart';
 import 'waveform_envelope.dart';
 import '../../../../core/theme/stroke_icon.dart';
 
@@ -34,6 +35,10 @@ const _kTagStripHeight = 20.0;
 /// Pas des flèches du clavier, et avec Maj.
 const _kKeyStepMs = 100;
 const _kKeyBigStepMs = 1000;
+
+/// Étalement du balayage de la croissance : 1 = tous les points montent en
+/// même temps, plus grand = le front de gauche à droite est plus marqué.
+const _kRevealSweep = 1.6;
 
 /// Ce qu'un geste sur la waveform déplace.
 enum _Grab { handle, playhead }
@@ -65,11 +70,25 @@ class StartOffsetEditor extends StatefulWidget {
   /// désactivé avec son message).
   final SamplerNotifier? notifier;
   final Uint8List? waveform;
+
+  /// L'enveloppe est en cours d'extraction : la piste pulse au lieu de montrer
+  /// une ligne plate, puis la waveform croît quand elle arrive.
+  final bool waveformPending;
+
+  /// Ce que le formulaire précédent laisse (son enveloppe) et où inscrire la
+  /// nôtre, pour passer d'un son à l'autre par une transformation et non une
+  /// piste vide. `null` = pas de suite.
+  final SoundFormMemory? memory;
   final int initialOffsetMs;
 
   /// Volume d'écoute (0.0 → 1.0) : celui du son, pour que l'audition du point
   /// d'entrée soit au niveau réel. Relu à chaque lecture.
   final double volume;
+
+  /// Volume tel que montré (suit [volume], en glissant quand il change d'un
+  /// coup) : la waveform en est l'échelle, en phase avec le curseur du
+  /// formulaire.
+  final ValueListenable<double> displayVolume;
 
   /// Notifié à chaque changement de valeur (drag, nudge, reset).
   final ValueChanged<int> onChanged;
@@ -85,8 +104,11 @@ class StartOffsetEditor extends StatefulWidget {
     required this.soundId,
     required this.notifier,
     required this.waveform,
+    this.waveformPending = false,
+    this.memory,
     required this.initialOffsetMs,
     required this.volume,
+    required this.displayVolume,
     required this.onChanged,
     this.autoPlay = false,
   });
@@ -95,9 +117,63 @@ class StartOffsetEditor extends StatefulWidget {
   State<StartOffsetEditor> createState() => _StartOffsetEditorState();
 }
 
-class _StartOffsetEditorState extends State<StartOffsetEditor> {
+class _StartOffsetEditorState extends State<StartOffsetEditor>
+    with TickerProviderStateMixin {
   static const _nudgeStep = Duration(milliseconds: 100);
   static const _waveHeight = 56.0;
+
+  /// Apparition de la poignée, de la tête et de la couleur une fois le son
+  /// chargé ; durée de la transformation de l'enveloppe.
+  static const _settleDuration = Duration(milliseconds: 200);
+
+  /// Glissement de la poignée et de la tête d'une position à l'autre.
+  static const _glideDuration = Duration(milliseconds: 180);
+
+  /// Transformation de l'enveloppe affichée vers celle du son, de gauche à
+  /// droite (0 → 1) : depuis la waveform du son précédent (`_morphFrom`), ou
+  /// depuis l'axe médian s'il n'y en a pas. Part dès que l'enveloppe est connue
+  /// (et le son chargé, s'il n'en suit pas un autre), même durée que le
+  /// glissement du volume.
+  late final AnimationController _reveal = AnimationController(
+    vsync: this,
+    duration: kSoundSwitchDuration,
+  );
+
+  /// Respiration de la ligne médiane tant que l'enveloppe est attendue.
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 950),
+  );
+
+  bool get _reduceMotion =>
+      MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+
+  /// Enveloppe du son (décodée une fois par changement de `widget.waveform`).
+  late List<double> _bars = decodeWaveformBars(widget.waveform);
+
+  /// Enveloppe d'où part la transformation : celle du son précédent (laissée
+  /// par le formulaire d'avant), puis celle qui était affichée.
+  late List<double> _morphFrom =
+      widget.memory?.waveformBars ?? const <double>[];
+
+  /// Enveloppe vers laquelle `_reveal` a été lancé ; `null` = pas encore.
+  List<double>? _revealedFor;
+
+  /// La poignée et la tête glissent d'une position à l'autre. Éteint tant que
+  /// rien ne les précède : à l'ouverture elles se posent d'emblée, sans glisser
+  /// depuis le bord gauche.
+  late bool _glideEnabled = _hasPrevious;
+
+  /// Un son était affiché avant celui-ci : sa waveform, sa poignée et sa tête
+  /// restent à l'écran, telles quelles, jusqu'à ce que ce son soit chargé.
+  late final bool _hasPrevious = widget.memory?.offsetFraction != null;
+
+  /// Un geste a bougé depuis son appui : poignée / tête suivent alors le
+  /// pointeur sans retard (l'appui seul, lui, glisse jusqu'au point cliqué).
+  bool _dragMoved = false;
+
+  Duration _glideFor({required bool live}) =>
+      live || !_glideEnabled || _reduceMotion ? Duration.zero : _glideDuration;
 
   bool _loading = true;
   bool _loadFailed = false;
@@ -115,7 +191,6 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
   double? _pointerFraction;
   int? _activePointer;
   final _focusNode = FocusNode(debugLabel: 'StartOffsetEditor');
-  bool _focused = false;
   Ticker? _ticker;
 
   /// Tête de lecture, toujours affichée. À l'arrêt elle marque d'où repartira
@@ -139,7 +214,49 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
     if (oldWidget.autoPlay && !widget.autoPlay && _isPreviewing) {
       _notifier?.stopLibraryPreview();
     }
+    if (!identical(oldWidget.waveform, widget.waveform)) {
+      _bars = decodeWaveformBars(widget.waveform);
+    }
+    _syncWaveformMotion();
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncWaveformMotion();
+  }
+
+  /// Aligne les animations sur l'état : pulsation tant que l'enveloppe est
+  /// attendue, transformation une fois par enveloppe quand le son est chargé.
+  void _syncWaveformMotion() {
+    final waiting = _bars.isEmpty && (_loading || widget.waveformPending);
+    if (waiting && !_reduceMotion) {
+      if (!_pulse.isAnimating) unawaited(_pulse.repeat(reverse: true));
+    } else {
+      _pulse.reset();
+    }
+    // D'un son à l'autre, la transformation part dès l'affichage — avec le
+    // glissement du curseur de volume — sans attendre le chargement du son ;
+    // à la première ouverture, elle accompagne l'apparition de la piste.
+    if ((_loading && !_hasPrevious) || _loadFailed || waiting) return;
+    if (identical(_revealedFor, _bars)) return;
+    // Une enveloppe a déjà été montrée (plate, en attendant celle-ci) : c'est
+    // d'elle que la suivante part.
+    final shown = _revealedFor;
+    if (shown != null) _morphFrom = shown;
+    _revealedFor = _bars;
+    widget.memory?.waveformBars = _bars;
+    if (_reduceMotion) {
+      _reveal.value = 1;
+    } else {
+      unawaited(_reveal.forward(from: 0));
+    }
+  }
+
+  /// Laisse au formulaire suivant la position du point d'entrée, d'où sa
+  /// poignée partira.
+  void _rememberOffset() =>
+      widget.memory?.offsetFraction = _fractionOf(_offsetMs);
 
   Future<void> _load() async {
     final duration = await _notifier?.loadLibraryPreview(widget.soundId);
@@ -157,6 +274,15 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       _playhead = _offset;
       _loading = false;
     });
+    _syncWaveformMotion();
+    _rememberOffset();
+    // Les repères viennent de se poser : à partir de l'image suivante, ils
+    // glissent d'une position à l'autre.
+    if (!_glideEnabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _glideEnabled = true);
+      });
+    }
     // Un aperçu déjà en cours pour ce son (lancé depuis la liste) : on le suit.
     _onNotifierChanged();
     if (!widget.autoPlay || duration <= Duration.zero || _isPreviewing) return;
@@ -184,6 +310,8 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
   void dispose() {
     _notifier?.removeListener(_onNotifierChanged);
     _ticker?.dispose();
+    _reveal.dispose();
+    _pulse.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -198,6 +326,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       // À l'arrêt, la tête reste calée sur le point d'entrée.
       if (!_isPreviewing) _playhead = _offset;
     });
+    _rememberOffset();
     widget.onChanged(clamped);
   }
 
@@ -380,6 +509,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
     setState(() {
       _isDragging = false;
       _isScrubbingPlayhead = false;
+      _dragMoved = false;
       _activePointer = null;
     });
   }
@@ -410,28 +540,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    if (_loading) {
-      // Placeholder à la forme de la waveform pendant l'extraction ; la barre
-      // de contrôles est déjà là (désactivée) pour que rien ne « saute » à
-      // l'arrivée de la source. La bande du repère de temps est réservée aussi :
-      // sans elle, waveform et contrôles descendent de sa hauteur au chargement.
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: _kTagStripHeight),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: _kTrackInset),
-            child: Skeleton(
-              child: SkeletonBox(height: _waveHeight, intensity: 0.85),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _buildControls(context),
-        ],
-      );
-    }
-
-    if (_loadFailed || _duration <= Duration.zero) {
+    if (!_loading && (_loadFailed || _duration <= Duration.zero)) {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -461,19 +570,10 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
       );
     }
 
-    final bars = decodeWaveformBars(widget.waveform);
-    final fraction = _fractionOf(_offsetMs);
-    final playheadFraction = _fractionOf(_playhead.inMilliseconds);
-    final tag = _tagData(scheme);
-    // Trait fantôme : seulement quand le pointeur ne tient aucun élément.
-    final ghostActive =
-        _pointerFraction != null &&
-        _hover == null &&
-        !_isDragging &&
-        !_isScrubbingPlayhead;
-    final showFocusRing =
-        _focused &&
-        FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
+    // Chargement : la barre de contrôles est déjà là (désactivée) et la bande
+    // du repère de temps est réservée, pour que rien ne « saute » à l'arrivée
+    // de la source.
+    final tag = _loading ? null : _tagData(scheme);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -492,94 +592,137 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
                   ),
                 ),
         ),
-        Semantics(
-          label: 'Point d\'entrée',
-          value: _fmt(_offset),
-          increasedValue: _fmt(_offset + _nudgeStep),
-          decreasedValue: _fmt(_offset - _nudgeStep),
-          onIncrease: () => _nudge(_nudgeStep.inMilliseconds),
-          onDecrease: () => _nudge(-_nudgeStep.inMilliseconds),
-          child: Focus(
-            focusNode: _focusNode,
-            onKeyEvent: _onKey,
-            onFocusChange: (focused) => setState(() => _focused = focused),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
+        // Inerte tant que le son charge : la piste est déjà là (même hauteur,
+        // aucun saut), avec l'enveloppe du son précédent.
+        IgnorePointer(ignoring: _loading, child: _buildTrack(scheme)),
+        const SizedBox(height: 8),
+        _buildControls(context),
+      ],
+    );
+  }
 
-                double fractionAt(double dx) => _fractionAtDx(dx, width);
+  /// Position (0→1) animée vers [target] : d'un son à l'autre elle glisse, un
+  /// geste en cours ([live]) la suit sans retard.
+  Widget _glide({
+    required double target,
+    required bool live,
+    required Widget Function(BuildContext context, double value) builder,
+  }) => TweenAnimationBuilder<double>(
+    tween: Tween(end: target),
+    duration: _glideFor(live: live),
+    curve: Curves.easeOutCubic,
+    builder: (context, value, _) => builder(context, value),
+  );
 
-                void seekTo(double dx) {
-                  _setOffsetMs(
-                    (fractionAt(dx) * _duration.inMilliseconds).round(),
-                  );
-                }
+  /// Piste interactive : waveform, poignée, tête de lecture, clavier.
+  Widget _buildTrack(ColorScheme scheme) {
+    // Pendant le chargement, repères au point d'entrée du son précédent : au
+    // chargement ils glissent de là jusqu'à leur place.
+    final previous = widget.memory?.offsetFraction ?? 0.0;
+    final offsetTarget = _loading ? previous : _fractionOf(_offsetMs);
+    final playheadTarget = _loading
+        ? previous
+        : _fractionOf(_playhead.inMilliseconds);
+    final tag = _tagData(scheme);
+    // Trait fantôme : seulement quand le pointeur ne tient aucun élément.
+    final ghostActive =
+        _pointerFraction != null &&
+        _hover == null &&
+        !_isDragging &&
+        !_isScrubbingPlayhead;
 
-                void dragTo(double dx) => _isScrubbingPlayhead
-                    ? _scrubPlayheadTo(fractionAt(dx))
-                    : seekTo(dx);
+    return Semantics(
+      label: 'Point d\'entrée',
+      value: _fmt(_offset),
+      increasedValue: _fmt(_offset + _nudgeStep),
+      decreasedValue: _fmt(_offset - _nudgeStep),
+      onIncrease: () => _nudge(_nudgeStep.inMilliseconds),
+      onDecrease: () => _nudge(-_nudgeStep.inMilliseconds),
+      child: Focus(
+        focusNode: _focusNode,
+        onKeyEvent: _onKey,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
 
-                final cursor = _waveformCursor();
+            double fractionAt(double dx) => _fractionAtDx(dx, width);
 
-                return AnnotatedRegion<MouseCursor>(
-                  value: cursor,
-                  child: MouseRegion(
-                    cursor: cursor,
-                    onHover: (event) =>
-                        _updateHover(event.localPosition, width),
-                    onExit: (_) {
-                      if (_activePointer != null) return;
-                      if (_hover != null || _pointerFraction != null) {
-                        setState(() {
-                          _hover = null;
-                          _pointerFraction = null;
-                        });
-                      }
-                    },
-                    child: Listener(
-                      behavior: HitTestBehavior.opaque,
-                      onPointerDown: (event) {
-                        _focusNode.requestFocus();
-                        final scrub =
-                            _grabTarget(event.localPosition, width) ==
-                            _Grab.playhead;
-                        setState(() {
-                          _activePointer = event.pointer;
-                          _isScrubbingPlayhead = scrub;
-                          _isDragging = !scrub;
-                        });
-                        dragTo(event.localPosition.dx);
-                      },
-                      onPointerMove: (event) {
-                        if (_activePointer != event.pointer) return;
-                        dragTo(event.localPosition.dx);
-                      },
-                      onPointerUp: (event) {
-                        if (_activePointer != event.pointer) return;
-                        if (_isScrubbingPlayhead) _commitPlayheadSeek();
-                        _endDrag();
-                      },
-                      onPointerCancel: (event) {
-                        if (_activePointer != event.pointer) return;
-                        _endDrag();
-                      },
-                      child: SizedBox(
-                        height: _waveHeight,
-                        child: DecoratedBox(
-                          position: DecorationPosition.foreground,
-                          decoration: BoxDecoration(
-                            borderRadius: AppRadius.radiusSm,
-                            border: showFocusRing
-                                ? Border.fromBorderSide(
-                                    AppElevation.borderStrong(scheme),
-                                  )
-                                : null,
-                          ),
+            void seekTo(double dx) {
+              _setOffsetMs((fractionAt(dx) * _duration.inMilliseconds).round());
+            }
+
+            void dragTo(double dx) => _isScrubbingPlayhead
+                ? _scrubPlayheadTo(fractionAt(dx))
+                : seekTo(dx);
+
+            final cursor = _waveformCursor();
+
+            return AnnotatedRegion<MouseCursor>(
+              value: cursor,
+              child: MouseRegion(
+                cursor: cursor,
+                onHover: (event) => _updateHover(event.localPosition, width),
+                onExit: (_) {
+                  if (_activePointer != null) return;
+                  if (_hover != null || _pointerFraction != null) {
+                    setState(() {
+                      _hover = null;
+                      _pointerFraction = null;
+                    });
+                  }
+                },
+                child: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (event) {
+                    _focusNode.requestFocus();
+                    final scrub =
+                        _grabTarget(event.localPosition, width) ==
+                        _Grab.playhead;
+                    setState(() {
+                      _activePointer = event.pointer;
+                      _isScrubbingPlayhead = scrub;
+                      _isDragging = !scrub;
+                    });
+                    dragTo(event.localPosition.dx);
+                  },
+                  onPointerMove: (event) {
+                    if (_activePointer != event.pointer) return;
+                    _dragMoved = true;
+                    dragTo(event.localPosition.dx);
+                  },
+                  onPointerUp: (event) {
+                    if (_activePointer != event.pointer) return;
+                    if (_isScrubbingPlayhead) _commitPlayheadSeek();
+                    _endDrag();
+                  },
+                  onPointerCancel: (event) {
+                    if (_activePointer != event.pointer) return;
+                    _endDrag();
+                  },
+                  // Sans son précédent, poignée, tête et couleur apparaissent
+                  // une fois le son chargé (`settled`). Avec, tout reste tel
+                  // quel (inerte) puis se déplace vers le nouveau son.
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(end: _loading && !_hasPrevious ? 0.0 : 1.0),
+                    duration: _reduceMotion ? Duration.zero : _settleDuration,
+                    builder: (context, settled, _) => _glide(
+                      target: offsetTarget,
+                      live: _dragMoved && _isDragging,
+                      builder: (context, offsetFraction) => _glide(
+                        target: playheadTarget,
+                        // En lecture la tête suit l'audio image par image ;
+                        // glisser la retarderait.
+                        live:
+                            _isPreviewing ||
+                            (_dragMoved && _isScrubbingPlayhead),
+                        builder: (context, playheadFraction) => SizedBox(
+                          height: _waveHeight,
                           child: CustomPaint(
                             painter: _OffsetWaveformPainter(
-                              bars: bars,
-                              volume: widget.volume,
-                              offsetFraction: fraction,
+                              bars: _bars,
+                              fromBars: _morphFrom,
+                              volume: widget.displayVolume,
+                              offsetFraction: offsetFraction,
                               playheadFraction: playheadFraction,
                               skippedColor: scheme.onSurfaceVariant.withValues(
                                 alpha: 0.28,
@@ -594,20 +737,21 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
                                   ? _pointerFraction
                                   : null,
                               ghostColor: tag?.color ?? scheme.primary,
+                              settled: settled,
+                              reveal: _reveal,
+                              pulse: _pulse,
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-          ),
+                ),
+              ),
+            );
+          },
         ),
-        const SizedBox(height: 8),
-        _buildControls(context),
-      ],
+      ),
     );
   }
 
@@ -755,7 +899,9 @@ class _NudgeButton extends StatelessWidget {
 /// préserver les crêtes.
 class _OffsetWaveformPainter extends CustomPainter {
   final List<double> bars;
-  final double volume;
+
+  /// Échelle de l'enveloppe (volume montré), écoutée comme `reveal` et `pulse`.
+  final ValueListenable<double> volume;
   final double offsetFraction;
   final double playheadFraction;
   final Color skippedColor;
@@ -770,8 +916,21 @@ class _OffsetWaveformPainter extends CustomPainter {
   final double? ghostFraction;
   final Color ghostColor;
 
+  /// Enveloppe d'où part la transformation (vide = depuis l'axe médian), et
+  /// apparition des repères / de la couleur (0 = son en chargement → 1).
+  final List<double> fromBars;
+  final double settled;
+
+  /// Transformation `fromBars` → `bars` (0 → 1) et pulsation de la ligne
+  /// médiane tant que l'enveloppe est attendue. Écoutées directement :
+  /// l'animation ne reconstruit pas le widget.
+  final Animation<double> reveal;
+  final Animation<double> pulse;
+
   _OffsetWaveformPainter({
     required this.bars,
+    required this.fromBars,
+    required this.settled,
     required this.volume,
     required this.offsetFraction,
     required this.playheadFraction,
@@ -783,7 +942,9 @@ class _OffsetWaveformPainter extends CustomPainter {
     this.handleHitHalfWidth = _kHandleHitHalfWidthDesktop,
     this.ghostFraction,
     required this.ghostColor,
-  });
+    required this.reveal,
+    required this.pulse,
+  }) : super(repaint: Listenable.merge([reveal, pulse, volume]));
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -801,15 +962,36 @@ class _OffsetWaveformPainter extends CustomPainter {
     canvas.save();
     canvas.translate(_kTrackInset, 0);
 
-    if (bars.isNotEmpty) {
+    // Avant que le son soit chargé, la partie « gardée » est grise ; elle
+    // prend sa couleur en même temps que la poignée apparaît.
+    final kept = Color.lerp(skippedColor, keptColor, settled) ?? keptColor;
+    final progress = reveal.value;
+    // Une enveloppe qui se résorbe vers rien (son sans waveform) reste dessinée
+    // le temps de la transformation, puis laisse place à la ligne médiane.
+    final fading = fromBars.isNotEmpty && progress < 1;
+    if (bars.isNotEmpty || fading) {
       final count = WaveformEnvelope.pointCountFor(track);
       if (count > 0) {
         // L'enveloppe stockée est normalisée au pic : on la met à l'échelle du
         // volume pour montrer le niveau réellement restitué.
+        final to = bars.isEmpty ? null : WaveformEnvelope.resample(bars, count);
+        final from = fromBars.isEmpty
+            ? null
+            : WaveformEnvelope.resample(fromBars, count);
+        // Transformation en balayage gauche → droite : chaque point démarre un
+        // peu après son voisin de gauche (à 1, tout est à son niveau final ; à
+        // 0, c'est l'enveloppe précédente, ou le plancher d'une fine bande
+        // médiane s'il n'y en a pas).
         final amps = [
-          for (final amp in WaveformEnvelope.resample(bars, count))
-            amp * volume,
-        ];
+          for (var i = 0; i < count; i++)
+            (from?[i] ?? 0.0) +
+                ((to?[i] ?? 0.0) - (from?[i] ?? 0.0)) *
+                    Curves.easeOutCubic.transform(
+                      (progress * _kRevealSweep -
+                              i / count * (_kRevealSweep - 1))
+                          .clamp(0.0, 1.0),
+                    ),
+        ].map((amp) => amp * volume.value).toList();
         final path = WaveformEnvelope.buildPath(amps, trackSize);
         // Même enveloppe remplie deux fois, découpée au point d'entrée : grisée
         // avant (sautée à la lecture), colorée après.
@@ -820,19 +1002,21 @@ class _OffsetWaveformPainter extends CustomPainter {
 
         canvas.save();
         canvas.clipRect(Rect.fromLTRB(trackOffsetX, 0, track, size.height));
-        canvas.drawPath(path, Paint()..color = keptColor);
+        canvas.drawPath(path, Paint()..color = kept);
         canvas.restore();
       }
     } else {
       // Pas de waveform : ligne médiane, grisée avant le point d'entrée.
+      // `pulse` vaut 0 hors attente : la ligne garde alors son opacité pleine.
+      final dim = 1 - 0.5 * pulse.value;
       final baseline = Paint()..strokeWidth = 2;
-      baseline.color = skippedColor;
+      baseline.color = skippedColor.withValues(alpha: skippedColor.a * dim);
       canvas.drawLine(
         Offset(0, centerY),
         Offset(trackOffsetX, centerY),
         baseline,
       );
-      baseline.color = keptColor;
+      baseline.color = kept.withValues(alpha: kept.a * dim);
       canvas.drawLine(
         Offset(trackOffsetX, centerY),
         Offset(track, centerY),
@@ -840,6 +1024,16 @@ class _OffsetWaveformPainter extends CustomPainter {
       );
     }
     canvas.restore();
+
+    // Repères (fantôme, poignée, tête) : absents tant que le son charge, puis
+    // fondus avec `settled`.
+    if (settled <= 0) return;
+    if (settled < 1) {
+      canvas.saveLayer(
+        Offset.zero & size,
+        Paint()..color = Color.fromRGBO(0, 0, 0, settled),
+      );
+    }
 
     // Trait fantôme sous le pointeur, sous la poignée et la tête.
     final ghost = ghostFraction;
@@ -897,6 +1091,7 @@ class _OffsetWaveformPainter extends CustomPainter {
         ..close(),
       playheadPaint,
     );
+    if (settled < 1) canvas.restore();
   }
 
   @override
@@ -904,9 +1099,13 @@ class _OffsetWaveformPainter extends CustomPainter {
       old.offsetFraction != offsetFraction ||
       old.playheadFraction != playheadFraction ||
       old.bars != bars ||
+      old.fromBars != fromBars ||
+      old.settled != settled ||
       old.volume != volume ||
       old.keptColor != keptColor ||
       old.handleHovered != handleHovered ||
       old.ghostFraction != ghostFraction ||
-      old.ghostColor != ghostColor;
+      old.ghostColor != ghostColor ||
+      old.reveal != reveal ||
+      old.pulse != pulse;
 }

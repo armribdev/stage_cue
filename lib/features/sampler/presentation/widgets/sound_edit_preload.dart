@@ -74,11 +74,24 @@ class SoundEditPreload {
   }
 }
 
-/// Ce que la section « Tags » du formulaire affiché laisse au suivant, pour
-/// qu'elle ne soit pas une rupture d'un son à l'autre : sa hauteur (la section
-/// suivante part de celle-ci et s'anime vers la sienne) et ses suggestions (les
-/// pastilles qui n'ont plus lieu d'être se referment, les nouvelles s'ouvrent).
-class TagsSectionMemory {
+/// Durée de la transition d'un son à l'autre : la waveform qui se transforme et
+/// le curseur de volume qui glisse partent ensemble et durent pareil, pour
+/// arriver ensemble.
+const kSoundSwitchDuration = Duration(milliseconds: 500);
+
+/// Ce que le formulaire affiché laisse au suivant, pour qu'il ne soit pas une
+/// rupture d'un son à l'autre :
+/// - section « Tags » : sa hauteur (la section suivante part de celle-ci et
+///   s'anime vers la sienne) et ses suggestions (les pastilles qui n'ont plus
+///   lieu d'être se referment, les nouvelles s'ouvrent) ;
+/// - [waveformBars] et [offsetFraction] : l'enveloppe et la position (0→1) du
+///   point d'entrée du son précédent, d'où la waveform du suivant se transforme
+///   et sa poignée glisse au lieu de repartir d'une piste vide ;
+/// - [volume] : celui du son précédent, d'où le curseur du suivant glisse.
+class SoundFormMemory {
   double? value;
   final suggestions = PillMemory();
+  List<double> waveformBars = const [];
+  double? offsetFraction;
+  double? volume;
 }

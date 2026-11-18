@@ -80,7 +80,7 @@ void main() {
     AutoTagAnalysis? autoTag,
     List<TagCategoryWithTags> tagCatalog = const [],
     SoundEditPreload? preload,
-    TagsSectionMemory? sectionMemory,
+    SoundFormMemory? sectionMemory,
   }) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -312,7 +312,7 @@ void main() {
     testWidgets('la section part de la hauteur précédente puis s’anime vers '
         'la sienne, qu’elle mémorise', (tester) async {
       final preload = await preloadOf(tester);
-      final memory = TagsSectionMemory()..value = 400;
+      final memory = SoundFormMemory()..value = 400;
 
       await pumpForm(
         tester,

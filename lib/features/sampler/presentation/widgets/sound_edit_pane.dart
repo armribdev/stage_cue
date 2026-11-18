@@ -14,7 +14,7 @@ typedef SoundEditPaneBuilder =
       BuildContext context,
       Sound sound,
       SoundEditPreload? preload,
-      TagsSectionMemory memory,
+      SoundFormMemory memory,
     );
 
 /// Volet d'édition du son sélectionné : lit d'abord ce que la section « Tags »
@@ -24,7 +24,7 @@ typedef SoundEditPaneBuilder =
 /// cette étape, la nouvelle section démarrerait vide avant de se remplir. Ici,
 /// le formulaire précédent reste affiché les quelques millisecondes de la
 /// lecture, et son successeur arrive déjà rempli, en partant de la hauteur de
-/// la section précédente ([TagsSectionMemory]).
+/// la section précédente ([SoundFormMemory]).
 ///
 /// Ce volet, lui, n'est pas recréé d'un son à l'autre : c'est lui qui porte la
 /// continuité.
@@ -51,7 +51,7 @@ class SoundEditPane extends StatefulWidget {
 }
 
 class _SoundEditPaneState extends State<SoundEditPane> {
-  final _memory = TagsSectionMemory();
+  final _memory = SoundFormMemory();
 
   Object? _shownIdentity;
   Sound? _shownSound;
