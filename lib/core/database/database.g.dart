@@ -1723,6 +1723,17 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     requiredDuringInsert: false,
     defaultValue: const Constant(1.0),
   );
+  static const VerificationMeta _loudnessGainMeta = const VerificationMeta(
+    'loudnessGain',
+  );
+  @override
+  late final GeneratedColumn<double> loudnessGain = GeneratedColumn<double>(
+    'loudness_gain',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1914,6 +1925,7 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     type,
     color,
     volume,
+    loudnessGain,
     createdAt,
     libraryId,
     relativePath,
@@ -1982,6 +1994,15 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
       context.handle(
         _volumeMeta,
         volume.isAcceptableOrUnknown(data['volume']!, _volumeMeta),
+      );
+    }
+    if (data.containsKey('loudness_gain')) {
+      context.handle(
+        _loudnessGainMeta,
+        loudnessGain.isAcceptableOrUnknown(
+          data['loudness_gain']!,
+          _loudnessGainMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -2140,6 +2161,10 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.double,
         data['${effectivePrefix}volume'],
       )!,
+      loudnessGain: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}loudness_gain'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2222,6 +2247,13 @@ class Sound extends DataClass implements Insertable<Sound> {
   final SoundType? type;
   final int? color;
   final double volume;
+
+  /// Gain de sonie du volume « auto » (décisions 0036 et 0044) : facteur
+  /// linéaire (≥ 0, peut dépasser 1.0) appliqué **une seule fois** à la lecture,
+  /// en plus de [volume] (réglage de l'utilisateur, 0–1). `null` = pas de
+  /// mesure = facteur 1.0. Propriété de contenu comme [volume] : voyage dans le
+  /// snapshot de dossier ; un appareil antérieur à v49 l'ignore.
+  final double? loudnessGain;
   final DateTime createdAt;
   final int? libraryId;
   final String? relativePath;
@@ -2286,6 +2318,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     this.type,
     this.color,
     required this.volume,
+    this.loudnessGain,
     required this.createdAt,
     this.libraryId,
     this.relativePath,
@@ -2316,6 +2349,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       map['color'] = Variable<int>(color);
     }
     map['volume'] = Variable<double>(volume);
+    if (!nullToAbsent || loudnessGain != null) {
+      map['loudness_gain'] = Variable<double>(loudnessGain);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || libraryId != null) {
       map['library_id'] = Variable<int>(libraryId);
@@ -2367,6 +2403,9 @@ class Sound extends DataClass implements Insertable<Sound> {
           ? const Value.absent()
           : Value(color),
       volume: Value(volume),
+      loudnessGain: loudnessGain == null && nullToAbsent
+          ? const Value.absent()
+          : Value(loudnessGain),
       createdAt: Value(createdAt),
       libraryId: libraryId == null && nullToAbsent
           ? const Value.absent()
@@ -2422,6 +2461,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       ),
       color: serializer.fromJson<int?>(json['color']),
       volume: serializer.fromJson<double>(json['volume']),
+      loudnessGain: serializer.fromJson<double?>(json['loudnessGain']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       libraryId: serializer.fromJson<int?>(json['libraryId']),
       relativePath: serializer.fromJson<String?>(json['relativePath']),
@@ -2454,6 +2494,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       ),
       'color': serializer.toJson<int?>(color),
       'volume': serializer.toJson<double>(volume),
+      'loudnessGain': serializer.toJson<double?>(loudnessGain),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'libraryId': serializer.toJson<int?>(libraryId),
       'relativePath': serializer.toJson<String?>(relativePath),
@@ -2482,6 +2523,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     Value<SoundType?> type = const Value.absent(),
     Value<int?> color = const Value.absent(),
     double? volume,
+    Value<double?> loudnessGain = const Value.absent(),
     DateTime? createdAt,
     Value<int?> libraryId = const Value.absent(),
     Value<String?> relativePath = const Value.absent(),
@@ -2505,6 +2547,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     type: type.present ? type.value : this.type,
     color: color.present ? color.value : this.color,
     volume: volume ?? this.volume,
+    loudnessGain: loudnessGain.present ? loudnessGain.value : this.loudnessGain,
     createdAt: createdAt ?? this.createdAt,
     libraryId: libraryId.present ? libraryId.value : this.libraryId,
     relativePath: relativePath.present ? relativePath.value : this.relativePath,
@@ -2536,6 +2579,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       type: data.type.present ? data.type.value : this.type,
       color: data.color.present ? data.color.value : this.color,
       volume: data.volume.present ? data.volume.value : this.volume,
+      loudnessGain: data.loudnessGain.present
+          ? data.loudnessGain.value
+          : this.loudnessGain,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       libraryId: data.libraryId.present ? data.libraryId.value : this.libraryId,
       relativePath: data.relativePath.present
@@ -2584,6 +2630,7 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('type: $type, ')
           ..write('color: $color, ')
           ..write('volume: $volume, ')
+          ..write('loudnessGain: $loudnessGain, ')
           ..write('createdAt: $createdAt, ')
           ..write('libraryId: $libraryId, ')
           ..write('relativePath: $relativePath, ')
@@ -2612,6 +2659,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     type,
     color,
     volume,
+    loudnessGain,
     createdAt,
     libraryId,
     relativePath,
@@ -2639,6 +2687,7 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.type == this.type &&
           other.color == this.color &&
           other.volume == this.volume &&
+          other.loudnessGain == this.loudnessGain &&
           other.createdAt == this.createdAt &&
           other.libraryId == this.libraryId &&
           other.relativePath == this.relativePath &&
@@ -2664,6 +2713,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<SoundType?> type;
   final Value<int?> color;
   final Value<double> volume;
+  final Value<double?> loudnessGain;
   final Value<DateTime> createdAt;
   final Value<int?> libraryId;
   final Value<String?> relativePath;
@@ -2687,6 +2737,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.type = const Value.absent(),
     this.color = const Value.absent(),
     this.volume = const Value.absent(),
+    this.loudnessGain = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.libraryId = const Value.absent(),
     this.relativePath = const Value.absent(),
@@ -2711,6 +2762,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.type = const Value.absent(),
     this.color = const Value.absent(),
     this.volume = const Value.absent(),
+    this.loudnessGain = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.libraryId = const Value.absent(),
     this.relativePath = const Value.absent(),
@@ -2737,6 +2789,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<int>? type,
     Expression<int>? color,
     Expression<double>? volume,
+    Expression<double>? loudnessGain,
     Expression<DateTime>? createdAt,
     Expression<int>? libraryId,
     Expression<String>? relativePath,
@@ -2761,6 +2814,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (type != null) 'type': type,
       if (color != null) 'color': color,
       if (volume != null) 'volume': volume,
+      if (loudnessGain != null) 'loudness_gain': loudnessGain,
       if (createdAt != null) 'created_at': createdAt,
       if (libraryId != null) 'library_id': libraryId,
       if (relativePath != null) 'relative_path': relativePath,
@@ -2788,6 +2842,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<SoundType?>? type,
     Value<int?>? color,
     Value<double>? volume,
+    Value<double?>? loudnessGain,
     Value<DateTime>? createdAt,
     Value<int?>? libraryId,
     Value<String?>? relativePath,
@@ -2812,6 +2867,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       type: type ?? this.type,
       color: color ?? this.color,
       volume: volume ?? this.volume,
+      loudnessGain: loudnessGain ?? this.loudnessGain,
       createdAt: createdAt ?? this.createdAt,
       libraryId: libraryId ?? this.libraryId,
       relativePath: relativePath ?? this.relativePath,
@@ -2856,6 +2912,9 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     }
     if (volume.present) {
       map['volume'] = Variable<double>(volume.value);
+    }
+    if (loudnessGain.present) {
+      map['loudness_gain'] = Variable<double>(loudnessGain.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -2917,6 +2976,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('type: $type, ')
           ..write('color: $color, ')
           ..write('volume: $volume, ')
+          ..write('loudnessGain: $loudnessGain, ')
           ..write('createdAt: $createdAt, ')
           ..write('libraryId: $libraryId, ')
           ..write('relativePath: $relativePath, ')
@@ -8252,6 +8312,7 @@ typedef $$SoundsTableCreateCompanionBuilder =
       Value<SoundType?> type,
       Value<int?> color,
       Value<double> volume,
+      Value<double?> loudnessGain,
       Value<DateTime> createdAt,
       Value<int?> libraryId,
       Value<String?> relativePath,
@@ -8277,6 +8338,7 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<SoundType?> type,
       Value<int?> color,
       Value<double> volume,
+      Value<double?> loudnessGain,
       Value<DateTime> createdAt,
       Value<int?> libraryId,
       Value<String?> relativePath,
@@ -8431,6 +8493,11 @@ class $$SoundsTableFilterComposer
 
   ColumnFilters<double> get volume => $composableBuilder(
     column: $table.volume,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get loudnessGain => $composableBuilder(
+    column: $table.loudnessGain,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8665,6 +8732,11 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get loudnessGain => $composableBuilder(
+    column: $table.loudnessGain,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -8808,6 +8880,11 @@ class $$SoundsTableAnnotationComposer
 
   GeneratedColumn<double> get volume =>
       $composableBuilder(column: $table.volume, builder: (column) => column);
+
+  GeneratedColumn<double> get loudnessGain => $composableBuilder(
+    column: $table.loudnessGain,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -9031,6 +9108,7 @@ class $$SoundsTableTableManager
                 Value<SoundType?> type = const Value.absent(),
                 Value<int?> color = const Value.absent(),
                 Value<double> volume = const Value.absent(),
+                Value<double?> loudnessGain = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> libraryId = const Value.absent(),
                 Value<String?> relativePath = const Value.absent(),
@@ -9054,6 +9132,7 @@ class $$SoundsTableTableManager
                 type: type,
                 color: color,
                 volume: volume,
+                loudnessGain: loudnessGain,
                 createdAt: createdAt,
                 libraryId: libraryId,
                 relativePath: relativePath,
@@ -9079,6 +9158,7 @@ class $$SoundsTableTableManager
                 Value<SoundType?> type = const Value.absent(),
                 Value<int?> color = const Value.absent(),
                 Value<double> volume = const Value.absent(),
+                Value<double?> loudnessGain = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> libraryId = const Value.absent(),
                 Value<String?> relativePath = const Value.absent(),
@@ -9102,6 +9182,7 @@ class $$SoundsTableTableManager
                 type: type,
                 color: color,
                 volume: volume,
+                loudnessGain: loudnessGain,
                 createdAt: createdAt,
                 libraryId: libraryId,
                 relativePath: relativePath,

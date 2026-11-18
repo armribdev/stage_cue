@@ -30,6 +30,9 @@ class FakeAudioPlayerService implements AudioPlayerService {
   void dispose() => _controller.close();
 
   @override
+  void setLoudnessGain(double gain) {}
+
+  @override
   Future<void> play() async {}
 
   @override

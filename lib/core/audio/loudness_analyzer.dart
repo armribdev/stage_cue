@@ -10,17 +10,32 @@ import '../autotag/pcm_decoder.dart' show readLeftChannelWindow;
 import 'audio_load_log.dart';
 import 'soloud_file_loader.dart' show enqueueSoLoudFileTask;
 
-/// Volume plancher du mode auto : évite qu'un fichier masterisé très fort ne
+/// Gain plancher du mode auto : évite qu'un fichier masterisé très fort ne
 /// devienne quasi inaudible, ce qui trahirait plutôt une mesure aberrante.
 const double kAutoVolumeMin = 0.05;
 
+/// Pic d'échantillon maximal visé après relèvement, en dBFS. Franchement sous
+/// 0 dBFS : le mixage de SoLoud écrête net la somme des voix (arrondi doux
+/// désactivé), donc un son relevé jusqu'à 0 dBFS saturerait dès qu'il joue par
+/// dessus une musique ([décision 0044]).
+const double kPeakCeilingDb = -3;
+
+/// Marge de pic supplémentaire, en dB, quand le fichier n'a été mesuré que par
+/// morceaux (> 60 s) : le vrai pic a pu passer entre deux morceaux.
+const double kSampledPeakMarginDb = 3;
+
+/// Relèvement maximal du gain de sonie, en dB : borne une cible aberrante
+/// (fichier quasi silencieux) et reste dans ce que le lecteur du casque sait
+/// rendre (`volume-max` de mpv, voir `cue_audio_service.dart`).
+const double kMaxBoostDb = 12;
+
 /// Ce que le volume « auto » cherche à égaliser selon le type de son
-/// ([décision 0036]).
+/// ([décision 0036], amendée par [décision 0044]).
 ///
-/// Le volume par son est plafonné à 1.0 : on ne peut qu'atténuer. Les cibles
-/// sont donc posées assez bas pour que la plupart des fichiers soient au-dessus
-/// (donc ramenés à la cible) ; un fichier plus doux garde 1.0 et reste en
-/// dessous. Ce sont des valeurs de départ, à ajuster à l'oreille.
+/// Le gain de sonie peut relever un son jusqu'à [kMaxBoostDb], sans jamais
+/// dépasser le plafond de pic [kPeakCeilingDb] : un fichier plus doux que sa
+/// cible est relevé, un fichier plus fort est atténué. Ce sont des valeurs de
+/// départ, à ajuster à l'oreille.
 enum LoudnessProfile {
   /// Morceau : sonie intégrée (BS.1770, sur la durée).
   music(targetLufs: -20, momentaryMax: false),
@@ -196,27 +211,79 @@ double? loudnessLufs(List<double> energies, {required bool momentaryMax}) {
   return _lufs(_mean(kept));
 }
 
-/// Volume (0–1) qui ramène une sonie de [lufs] à la cible de [profile].
-double autoVolumeForLoudness(double lufs, LoudnessProfile profile) {
-  final gain = math.pow(10, (profile.targetLufs - lufs) / 20).toDouble();
-  return gain.clamp(kAutoVolumeMin, 1.0);
+/// Ce qu'une mesure du fichier a relevé : sonie et pic, et si le pic vaut pour
+/// tout le fichier.
+class LoudnessMeasurement {
+  const LoudnessMeasurement({
+    required this.lufs,
+    required this.peak,
+    required this.wholeFile,
+  });
+
+  /// Sonie (LUFS) selon le profil de mesure (intégrée ou maximum court terme).
+  final double lufs;
+
+  /// Pic d'échantillon, en valeur absolue (1.0 = 0 dBFS), **du canal gauche
+  /// seul** : le décodeur d'analyse ne lit pas l'autre (voir
+  /// `readLeftChannelWindow`). Le plafond de [kPeakCeilingDb] sert de marge.
+  final double peak;
+
+  /// Vrai si tout le fichier a été lu ; faux s'il n'a été lu que par morceaux,
+  /// auquel cas le vrai pic peut être plus haut que [peak].
+  final bool wholeFile;
 }
 
-/// Volume « auto » de [file] selon [profile], ou `null` s'il ne peut pas être
-/// mesuré (format non décodable, audio silencieux) : l'appelant garde alors le
-/// volume par défaut.
+/// Gain linéaire (le « gain de sonie » stocké dans `sounds.loudness_gain`) qui
+/// ramène [m] à la cible de [profile] ([décision 0044]).
+///
+/// Vers le bas (son plus fort que la cible) : le gain de la cible, jamais sous
+/// [kAutoVolumeMin] — le pic n'intervient pas, il ne force jamais une
+/// atténuation. Vers le haut : le gain de la cible, borné par le plafond de pic
+/// ([kPeakCeilingDb], plus [kSampledPeakMarginDb] si le fichier est échantillonné)
+/// et par [kMaxBoostDb] ; un pic déjà au-dessus du plafond laisse le son à 1.0
+/// plutôt que de l'atténuer.
+double autoLoudnessGain(LoudnessMeasurement m, LoudnessProfile profile) {
+  final wanted = math.pow(10, (profile.targetLufs - m.lufs) / 20).toDouble();
+  if (wanted <= 1.0) return wanted.clamp(kAutoVolumeMin, 1.0);
+  final peakDb = 20 * math.log(m.peak) / math.ln10;
+  final margin = m.wholeFile ? 0.0 : kSampledPeakMarginDb;
+  final headroom = math.pow(10, (kPeakCeilingDb - margin - peakDb) / 20);
+  final ceiling = math.pow(10, kMaxBoostDb / 20);
+  return math
+      .max(1.0, math.min(wanted, math.min(headroom, ceiling)))
+      .toDouble();
+}
+
+/// Plus grand écart à zéro de [pcm] (pic d'échantillon, 0 si vide).
+@visibleForTesting
+double samplePeak(Float32List pcm) {
+  var peak = 0.0;
+  for (final v in pcm) {
+    final a = v.abs();
+    if (a > peak) peak = a;
+  }
+  return peak;
+}
+
+/// Mesure de [file] (sonie selon [profile], pic), ou `null` si elle ne peut pas
+/// être faite (format non décodable, audio silencieux) : l'appelant garde alors
+/// le réglage par défaut. [autoLoudnessGain] en tire le gain à stocker.
 ///
 /// Mesure le canal gauche, par morceaux de 10 s lus avec le décodeur d'analyse
 /// ([readLeftChannelWindow] : tampons libérés, contrairement à l'API Dart de
 /// flutter_soloud, [décision 0029]) et sérialisés sur la file de décodage
 /// natif ([décision 0001]).
-Future<double?> measureAutoVolume(File file, LoudnessProfile profile) async {
+Future<LoudnessMeasurement?> measureAutoVolume(
+  File file,
+  LoudnessProfile profile,
+) async {
   try {
     final info = await probeAudioStreamInfo(file);
     final path = file.path;
     final rate = info.sampleRate;
     final duration = info.durationSeconds;
     final energies = <double>[];
+    var peak = 0.0;
     for (final start in loudnessChunkStarts(duration)) {
       final length = math.min(_chunkSeconds.toDouble(), duration - start);
       final frames = (length * rate).floor();
@@ -231,16 +298,24 @@ Future<double?> measureAutoVolume(File file, LoudnessProfile profile) async {
           ),
         ),
       );
-      energies.addAll(
-        await Isolate.run(() => kWeightedBlockEnergies(raw, rate)),
+      final chunk = await Isolate.run(
+        () => (kWeightedBlockEnergies(raw, rate), samplePeak(raw)),
       );
+      energies.addAll(chunk.$1);
+      peak = math.max(peak, chunk.$2);
     }
     final lufs = loudnessLufs(energies, momentaryMax: profile.momentaryMax);
     if (lufs == null) {
       AudioLoadLog.trace('measureAutoVolume: audio silencieux ($path).');
       return null;
     }
-    return autoVolumeForLoudness(lufs, profile);
+    final wholeFile = (duration / _chunkSeconds).ceil() <= _maxChunks;
+    AudioLoadLog.trace(
+      'measureAutoVolume: ${lufs.toStringAsFixed(1)} LUFS, pic '
+      '${peak.toStringAsFixed(3)}, ${wholeFile ? 'fichier entier' : 'échantillonné'} '
+      '($path).',
+    );
+    return LoudnessMeasurement(lufs: lufs, peak: peak, wholeFile: wholeFile);
   } on AudioNotAnalyzable catch (e) {
     AudioLoadLog.warnOnce(
       'loudness:${e.reason}',

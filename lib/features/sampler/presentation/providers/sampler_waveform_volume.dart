@@ -93,18 +93,20 @@ extension SamplerWaveformVolume on SamplerNotifier {
     return waveform;
   }
 
-  /// Volume « auto » d'un son : mesure sa sonie selon son type (sonie intégrée
-  /// pour musique et ambiance, maximum court terme pour un bruitage) et renvoie
-  /// le volume qui la ramène à la cible du type (normalisation). Un son sans
-  /// type connu est traité comme de la musique. Ne persiste rien — l'appelant
-  /// applique la valeur au formulaire, enregistrée au « Enregistrer » habituel.
-  /// `null` si le fichier ne peut pas être mesuré (format non décodable, audio
-  /// silencieux).
+  /// Gain de sonie « auto » d'un son : mesure sa sonie et son pic selon son type
+  /// (sonie intégrée pour musique et ambiance, maximum court terme pour un
+  /// bruitage) et renvoie le facteur qui la ramène à la cible du type, relevé au
+  /// plus jusqu'au plafond de pic (décision 0044). Un son sans type connu est
+  /// traité comme de la musique. Ne persiste rien — l'appelant garde la valeur
+  /// dans le formulaire, enregistrée au « Enregistrer » habituel. `null` si le
+  /// fichier ne peut pas être mesuré (format non décodable, audio silencieux).
   ///
   /// Peut lever [SoundNotAvailableLocallyException] ou [StateError] si le
   /// fichier est introuvable/hors ligne — laissé à l'appelant pour affichage.
-  Future<double?> computeAutoVolume(Sound sound) async {
+  Future<double?> computeAutoLoudnessGain(Sound sound) async {
     final path = await _resolvePlayablePath(sound, downloadIfNeeded: true);
-    return measureAutoVolume(File(path), loudnessProfileOf(sound.type));
+    final profile = loudnessProfileOf(sound.type);
+    final measurement = await measureAutoVolume(File(path), profile);
+    return measurement == null ? null : autoLoudnessGain(measurement, profile);
   }
 }

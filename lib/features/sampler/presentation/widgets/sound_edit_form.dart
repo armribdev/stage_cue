@@ -143,6 +143,12 @@ class _SoundEditFormState extends State<SoundEditForm>
   late String _baseDisplayName;
   late int? _baseColorValue;
   late double _baseVolume;
+
+  /// Gain de sonie du volume « auto » (décision 0044) : facteur séparé du
+  /// curseur, que « Auto » fixe et que « Enregistrer » écrit. `null` = pas de
+  /// mesure (facteur 1.0).
+  late double? _loudnessGain;
+  late double? _baseLoudnessGain;
   late int _baseStartOffsetMs;
   late SoundType? _baseType;
   Set<int> _baseTagIds = <int>{};
@@ -193,6 +199,7 @@ class _SoundEditFormState extends State<SoundEditForm>
     _nameController = TextEditingController(text: _displayName);
     _colorValue = _baseColorValue = sound.colorValue;
     _volume = _baseVolume = sound.volume.clamp(0.0, 1.0);
+    _loudnessGain = _baseLoudnessGain = sound.loudnessGain;
     final volumeFrom = widget.sectionMemory?.volume;
     widget.sectionMemory?.volume = _volume;
     // Le curseur et la waveform partent du volume du formulaire précédent et
@@ -361,6 +368,7 @@ class _SoundEditFormState extends State<SoundEditForm>
       _displayName.trim() != _baseDisplayName.trim() ||
       _colorValue != _baseColorValue ||
       _volume != _baseVolume ||
+      _loudnessGain != _baseLoudnessGain ||
       _startOffsetMs != _baseStartOffsetMs ||
       _type != _baseType ||
       _tagIds.length != _baseTagIds.length ||
@@ -407,6 +415,7 @@ class _SoundEditFormState extends State<SoundEditForm>
         displayName: name,
         updateDisplayName: true,
         volume: _volume,
+        loudnessGain: _loudnessGain != _baseLoudnessGain ? _loudnessGain : null,
         startOffsetMs: _startOffsetMs,
         isProcessed: true,
       );
@@ -427,6 +436,7 @@ class _SoundEditFormState extends State<SoundEditForm>
         _baseDisplayName = name;
         _baseColorValue = _colorValue;
         _baseVolume = _volume;
+        _baseLoudnessGain = _loudnessGain;
         _baseStartOffsetMs = _startOffsetMs;
         _baseType = _type;
         _baseTagIds = {..._tagIds};
@@ -630,8 +640,10 @@ class _SoundEditFormState extends State<SoundEditForm>
     widget.notifier?.setLibraryPreviewVolume(widget.sound.id, volume);
   }
 
-  /// Volume « auto » : mesure la sonie du fichier et règle le curseur pour la
-  /// ramener à la sonie cible. N'enregistre rien — passe par `_update`, donc le
+  /// Volume « auto » : mesure la sonie et le pic du fichier, mémorise le gain de
+  /// sonie qui la ramène à la cible (relevé ou atténué, décision 0044) et remet
+  /// le curseur à 100 % : le gain est un facteur séparé, le curseur reste le
+  /// réglage de l'opérateur. N'enregistre rien — passe par `_update`, donc le
   /// formulaire devient « modifié » et l'opérateur peut ajuster avant de valider.
   Future<void> _applyAutoVolume() async {
     if (_isMeasuringVolume) return;
@@ -639,16 +651,19 @@ class _SoundEditFormState extends State<SoundEditForm>
     if (notifier == null) return;
     setState(() => _isMeasuringVolume = true);
     try {
-      final volume = await notifier.computeAutoVolume(widget.sound);
+      final gain = await notifier.computeAutoLoudnessGain(widget.sound);
       if (!mounted) return;
-      if (volume == null) {
+      if (gain == null) {
         showCopyableSnackBar(
           context,
           'Mesure impossible (audio silencieux ou format non pris en charge).',
         );
         return;
       }
-      _setVolume(volume, glide: true);
+      _update(() => _loudnessGain = gain);
+      // Le gain d'abord : `_setVolume` rafraîchit ensuite les voix de l'aperçu.
+      notifier.setLibraryPreviewLoudnessGain(widget.sound.id, gain);
+      _setVolume(1.0, glide: true);
     } catch (error) {
       if (!mounted) return;
       showCopyableSnackBar(context, 'Échec de la mesure : $error');
@@ -884,6 +899,7 @@ class _SoundEditFormState extends State<SoundEditForm>
       memory: widget.sectionMemory,
       initialOffsetMs: _startOffsetMs,
       volume: _volume,
+      loudnessGain: _loudnessGain,
       displayVolume: _volumeGlide,
       autoPlay: widget.autoPlayEntryPoint,
       onChanged: (ms) => _update(() => _startOffsetMs = ms),

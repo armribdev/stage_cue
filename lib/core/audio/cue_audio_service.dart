@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
@@ -7,6 +8,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'audio_load_log.dart';
 import 'audio_player_service.dart';
+import 'loudness_analyzer.dart' show kMaxBoostDb;
 import 'preview_playback.dart';
 
 /// Un périphérique de sortie disponible pour la pré-écoute (cue).
@@ -265,6 +267,47 @@ class CuePreviewPlayer implements PreviewPlayback {
   final Duration _duration;
   bool _paused = false;
 
+  /// Gain de sonie du son (décision 0044), multiplié au volume de l'appelant :
+  /// le casque doit sonner comme la salle (décision 0027), relèvement compris.
+  double _loudnessGain = 1.0;
+
+  @override
+  void setLoudnessGain(double gain) {
+    _loudnessGain = gain < 0 ? 0 : gain;
+  }
+
+  /// Volume envoyé à mpv (0–100 au volume nominal, davantage au-delà) : volume
+  /// 0–1 de l'appelant × gain de sonie. Le plafond de 1.0 ne vaut que pour le
+  /// volume de l'utilisateur.
+  double _mpvVolume(double volume) =>
+      volume.clamp(0.0, 1.0) * _loudnessGain * 100;
+
+  /// Relève `volume-max` de mpv (130 par défaut, soit +2,3 dB) au relèvement
+  /// maximal du gain de sonie : au-delà, mpv écrête le volume en silence et le
+  /// casque sonnerait plus bas que la salle. Best-effort mais **journalisé** :
+  /// un échec laisse le casque borné à 130 %.
+  static Future<void> _allowLoudnessBoost(Player player) async {
+    final platform = player.platform;
+    if (platform is! NativePlayer) {
+      AudioLoadLog.warnOnce(
+        'cue-volume-max',
+        'Cue : volume-max non réglé (moteur ${platform.runtimeType}) — le '
+            'relèvement de sonie sera borné au casque.',
+      );
+      return;
+    }
+    final maxPercent = (100 * math.pow(10, kMaxBoostDb / 20)).ceil();
+    try {
+      await platform.setProperty('volume-max', '$maxPercent');
+    } catch (e) {
+      AudioLoadLog.warnOnce(
+        'cue-volume-max',
+        'Cue : volume-max non réglé ($e) — le relèvement de sonie sera borné '
+            'au casque.',
+      );
+    }
+  }
+
   CuePreviewPlayer._(this._player, this._duration)
     : _stateController = StreamController<bool>.broadcast() {
     // `playing` reflète l'état audible : true à la lecture, false à l'arrêt,
@@ -281,6 +324,7 @@ class CuePreviewPlayer implements PreviewPlayback {
   }) async {
     final player = Player();
     try {
+      await _allowLoudnessBoost(player);
       // Sans cette vérification, un device débranché ou introuvable est
       // accepté par mpv qui joue alors sur le défaut système (la salle).
       final available = await CueAudioService._awaitAudioDevices(player);
@@ -343,8 +387,9 @@ class CuePreviewPlayer implements PreviewPlayback {
     double volume = 1.0,
   }) async {
     try {
-      // media_kit : volume sur 0–100 ; le volume applicatif est 0.0–1.0.
-      await _player.setVolume(volume.clamp(0.0, 1.0) * 100);
+      // media_kit : volume sur 0–100 (au-delà : relèvement, cf. volume-max) ;
+      // le volume applicatif est 0.0–1.0.
+      await _player.setVolume(_mpvVolume(volume));
       await _player.seek(position);
       await _player.play();
       _paused = false;
@@ -358,7 +403,7 @@ class CuePreviewPlayer implements PreviewPlayback {
 
   @override
   void setVolume(double volume) {
-    unawaited(_player.setVolume(volume.clamp(0.0, 1.0) * 100));
+    unawaited(_player.setVolume(_mpvVolume(volume)));
   }
 
   @override

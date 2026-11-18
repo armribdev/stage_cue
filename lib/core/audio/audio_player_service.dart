@@ -51,6 +51,21 @@ class AudioPlayerService implements PreviewPlayback {
   /// l'échec avec son contexte (id, libellé) à partir de cette raison.
   String? lastStartFailure;
 
+  /// Gain de sonie du son (décision 0044), multiplié au volume de l'appelant à
+  /// chaque démarrage de voix, réglage et fondu : les appelants ne manipulent
+  /// que le volume 0–1, le relèvement reste ici, à la frontière de lecture.
+  double _loudnessGain = 1.0;
+
+  @override
+  void setLoudnessGain(double gain) {
+    _loudnessGain = gain < 0 ? 0 : gain;
+  }
+
+  /// Volume envoyé au moteur : volume 0–1 de l'appelant × gain de sonie. Seul
+  /// endroit où le gain s'applique, donc jamais deux fois ; le plafond de 1.0
+  /// ne vaut que pour le volume de l'utilisateur, pas pour le produit.
+  double _engineVolume(double volume) => volume.clamp(0.0, 1.0) * _loudnessGain;
+
   AudioPlayerService._(this._source) {
     _soundEventsSubscription = _source.soundEvents.listen((event) {
       if (event.event == SoundEventType.handleIsNoMoreValid) {
@@ -137,7 +152,7 @@ class AudioPlayerService implements PreviewPlayback {
     if (!SoLoud.instance.getIsValidVoiceHandle(handle)) {
       return null;
     }
-    SoLoud.instance.setVolume(handle, volume.clamp(0.0, 1.0));
+    SoLoud.instance.setVolume(handle, _engineVolume(volume));
     if (position > Duration.zero) {
       SoLoud.instance.seek(handle, position);
     }
@@ -270,13 +285,14 @@ class AudioPlayerService implements PreviewPlayback {
     }
   }
 
-  /// Définit le volume (0.0 -> 1.0) sur toutes les voix actives.
+  /// Définit le volume (0.0 -> 1.0, gain de sonie en plus) sur toutes les voix
+  /// actives.
   @override
   void setVolume(double volume) {
-    final clamped = volume.clamp(0.0, 1.0);
+    final engineVolume = _engineVolume(volume);
     for (final handle in _handles) {
       if (SoLoud.instance.getIsValidVoiceHandle(handle)) {
-        SoLoud.instance.setVolume(handle, clamped);
+        SoLoud.instance.setVolume(handle, engineVolume);
       }
     }
   }
@@ -315,7 +331,7 @@ class AudioPlayerService implements PreviewPlayback {
   /// Fond le volume vers [to] sur [duration] (SoLoud gère l'interpolation).
   void fadeVolumeTo(double to, Duration duration) {
     if (!_hasActiveHandle) return;
-    SoLoud.instance.fadeVolume(_currentHandle!, to.clamp(0.0, 1.0), duration);
+    SoLoud.instance.fadeVolume(_currentHandle!, _engineVolume(to), duration);
   }
 
   /// Fondu manuel de la voix courante suivant une enveloppe non-linéaire, à la

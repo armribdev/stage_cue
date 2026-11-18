@@ -56,7 +56,7 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0033](0033-toast-global-au-dessus-du-navigator.md) | Notifications en toast global au-dessus du Navigator, plus de `SnackBar` | acceptée |
 | [0034](0034-icones-lucide-via-appicons.md) | Icônes Lucide à trait fin, centralisées dans `AppIcons` | acceptée (rendu remplacé par 0038) |
 | [0035](0035-suppression-d-un-son-par-la-corbeille-drive.md) | Supprimer un son = le mettre à la corbeille Drive, avant de toucher à la base | acceptée |
-| [0036](0036-volume-auto-par-sonie-lufs-selon-le-type.md) | Volume « auto » : sonie LUFS pondérée K, cible selon le type de son | acceptée |
+| [0036](0036-volume-auto-par-sonie-lufs-selon-le-type.md) | Volume « auto » : sonie LUFS pondérée K, cible selon le type de son | acceptée (plafond à 1.0 levé par 0044) |
 | [0037](0037-mode-reseau-binaire-spectacle-masque-les-pads.md) | Mode réseau binaire : c'est le Mode Spectacle qui masque les pads injouables | acceptée |
 | [0037](0037-mise-a-jour-par-fermeture-de-l-app-sans-appmutex.md) | Mise à jour : l'app se ferme d'elle-même, l'installeur n'a plus d'AppMutex | acceptée |
 | [0038](0038-icones-lucide-en-traces-vectoriels.md) | Icônes Lucide dessinées en tracés vectoriels (`StrokeIcon`), plus en police | acceptée |
@@ -65,5 +65,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0041](0041-tags-deduits-du-titre-calcules-a-la-volee.md) | Tags déduits du titre : calculés à la volée (mots entiers sur les alias), jamais stockés ni synchronisés | acceptée |
 | [0042](0042-suggestions-de-l-ia-sans-pourcentage.md) | Suggestions de l'IA : classées par score, sans pourcentage affiché | acceptée |
 | [0043](0043-catalogue-de-tags-reconcilie-apres-chaque-import.md) | Le catalogue de tags (retraits, fusions) se réconcilie après chaque import de snapshot, une seule déclaration | acceptée |
+| [0044](0044-volume-auto-releve-plafonne-par-le-pic.md) | Volume « auto » : gain relevé au-delà de 1.0, plafonné par le pic mesuré | acceptée (amende 0036) |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

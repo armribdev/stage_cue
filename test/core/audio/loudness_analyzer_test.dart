@@ -97,33 +97,119 @@ void main() {
     });
   });
 
-  group('autoVolumeForLoudness', () {
+  group('samplePeak', () {
+    test('plus grand écart à zéro, signe ignoré', () {
+      // Float32 : 0.7 n'est pas exactement représentable.
+      expect(
+        samplePeak(Float32List.fromList([0.1, -0.7, 0.3])),
+        closeTo(0.7, 1e-6),
+      );
+      expect(samplePeak(Float32List(0)), 0.0);
+    });
+  });
+
+  group('autoLoudnessGain (décision 0044)', () {
+    double db(double gain) => 20 * math.log(gain) / math.ln10;
+
+    /// Mesure de musique : cible −20 LUFS, donc l'écart voulu = −20 − [lufs].
+    LoudnessMeasurement measure(
+      double lufs, {
+      double peakDb = -30,
+      bool wholeFile = true,
+    }) => LoudnessMeasurement(
+      lufs: lufs,
+      peak: math.pow(10, peakDb / 20).toDouble(),
+      wholeFile: wholeFile,
+    );
+
     test('atténue un son plus fort que la cible', () {
       expect(
-        autoVolumeForLoudness(-14, LoudnessProfile.music),
+        autoLoudnessGain(measure(-14), LoudnessProfile.music),
         closeTo(math.pow(10, -6 / 20), 1e-9),
       );
     });
 
-    test('ne dépasse jamais 1.0 pour un son doux', () {
-      expect(autoVolumeForLoudness(-40, LoudnessProfile.music), 1.0);
+    test("le pic ne cause jamais d'atténuation : fort et proche de 0 dBFS", () {
+      // Pic à −0,5 dBFS, bien au-dessus du plafond : sans effet vers le bas.
+      expect(
+        autoLoudnessGain(measure(-14, peakDb: -0.5), LoudnessProfile.music),
+        closeTo(math.pow(10, -6 / 20), 1e-9),
+      );
     });
 
-    test('respecte le plancher', () {
-      expect(autoVolumeForLoudness(10, LoudnessProfile.music), kAutoVolumeMin);
+    test("respecte le plancher d'atténuation", () {
+      expect(
+        autoLoudnessGain(measure(10), LoudnessProfile.music),
+        kAutoVolumeMin,
+      );
     });
 
-    test('l\'ambiance reste sous la musique, le bruitage au-dessus', () {
-      const lufs = -12.0;
-      final music = autoVolumeForLoudness(lufs, LoudnessProfile.music);
+    test("un son doux au pic bas est relevé jusqu'à la cible", () {
+      // −26 LUFS → +6 dB voulus ; pic à −20 dBFS laisse 17 dB de marge.
+      final gain = autoLoudnessGain(
+        measure(-26, peakDb: -20),
+        LoudnessProfile.music,
+      );
+      expect(db(gain), closeTo(6, 1e-9));
+    });
+
+    test("un son doux est relevé jusqu'au plafond de pic, pas au-delà", () {
+      // +6 dB voulus, mais pic à −6 dBFS : seulement 3 dB avant −3 dBFS.
+      final gain = autoLoudnessGain(
+        measure(-26, peakDb: -6),
+        LoudnessProfile.music,
+      );
+      expect(db(gain), closeTo(kPeakCeilingDb - -6, 1e-9));
+    });
+
+    test('un son doux dont le pic dépasse le plafond reste à 1.0', () {
+      // Pic à −1 dBFS : pas de marge, mais jamais d'atténuation pour autant.
       expect(
-        autoVolumeForLoudness(lufs, LoudnessProfile.ambiance),
-        lessThan(music),
+        autoLoudnessGain(measure(-26, peakDb: -1), LoudnessProfile.music),
+        1.0,
       );
       expect(
-        autoVolumeForLoudness(lufs, LoudnessProfile.effect),
-        greaterThan(music),
+        autoLoudnessGain(measure(-26, peakDb: 0), LoudnessProfile.music),
+        1.0,
       );
+    });
+
+    test('fichier échantillonné : marge supplémentaire de 3 dB', () {
+      final whole = autoLoudnessGain(
+        measure(-26, peakDb: -6),
+        LoudnessProfile.music,
+      );
+      final sampled = autoLoudnessGain(
+        measure(-26, peakDb: -6, wholeFile: false),
+        LoudnessProfile.music,
+      );
+      expect(db(whole) - db(sampled), closeTo(kSampledPeakMarginDb, 1e-9));
+      // Une marge de pic confortable n'est pas rognée : la cible reste atteinte.
+      expect(
+        db(
+          autoLoudnessGain(
+            measure(-26, peakDb: -20, wholeFile: false),
+            LoudnessProfile.music,
+          ),
+        ),
+        closeTo(6, 1e-9),
+      );
+    });
+
+    test('le relèvement est plafonné à +12 dB', () {
+      // −50 LUFS → +30 dB voulus, pic très bas : seule la borne agit.
+      final gain = autoLoudnessGain(
+        measure(-50, peakDb: -60),
+        LoudnessProfile.music,
+      );
+      expect(db(gain), closeTo(kMaxBoostDb, 1e-9));
+    });
+
+    test("l'ambiance reste sous la musique, le bruitage au-dessus", () {
+      final m = measure(-12);
+      final music = autoLoudnessGain(m, LoudnessProfile.music);
+      expect(autoLoudnessGain(m, LoudnessProfile.ambiance), lessThan(music));
+      expect(autoLoudnessGain(m, LoudnessProfile.effect), greaterThan(music));
     });
   });
 
@@ -163,24 +249,39 @@ void main() {
       () async {
         // 1 kHz à 0,5 : ≈ −9 LUFS, donc 11 LU au-dessus de la cible musique.
         final file = wav('tone.wav', sine(1000, 0.5, 44100, 12), 44100);
-        final volume = await measureAutoVolume(file, LoudnessProfile.music);
-        expect(volume, isNotNull);
-        expect(volume!, closeTo(math.pow(10, (-20 + 9.03) / 20), 0.02));
+        final measure = await measureAutoVolume(file, LoudnessProfile.music);
+        expect(measure, isNotNull);
+        expect(measure!.lufs, closeTo(-9.03, 0.15));
+        expect(measure.peak, closeTo(0.5, 0.01));
+        expect(measure.wholeFile, isTrue);
+        final gain = autoLoudnessGain(measure, LoudnessProfile.music);
+        expect(gain, closeTo(math.pow(10, (-20 + 9.03) / 20), 0.02));
 
         final ambiance = await measureAutoVolume(
           file,
           LoudnessProfile.ambiance,
         );
-        expect(ambiance!, lessThan(volume));
+        expect(
+          autoLoudnessGain(ambiance!, LoudnessProfile.ambiance),
+          lessThan(gain),
+        );
       },
       skip: skip,
     );
 
     test('un clic de 60 ms est mesurable', () async {
       final file = wav('click.wav', sine(1000, 0.8, 44100, 0.06), 44100);
-      final volume = await measureAutoVolume(file, LoudnessProfile.effect);
-      expect(volume, isNotNull);
-      expect(volume!, lessThan(1.0));
+      final measure = await measureAutoVolume(file, LoudnessProfile.effect);
+      expect(measure, isNotNull);
+      expect(measure!.peak, closeTo(0.8, 0.02));
+      expect(autoLoudnessGain(measure, LoudnessProfile.effect), lessThan(1.0));
+    }, skip: skip);
+
+    test("un fichier de plus de 60 s n'est lu que par morceaux", () async {
+      final file = wav('long.wav', sine(1000, 0.1, 8000, 75), 8000);
+      final measure = await measureAutoVolume(file, LoudnessProfile.music);
+      expect(measure, isNotNull);
+      expect(measure!.wholeFile, isFalse);
     }, skip: skip);
 
     test('un fichier silencieux ou illisible donne null', () async {

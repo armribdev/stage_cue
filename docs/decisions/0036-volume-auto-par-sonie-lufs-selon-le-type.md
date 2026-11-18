@@ -1,6 +1,6 @@
 # 0036 — Volume « auto » : sonie LUFS pondérée K, cible selon le type
 
-**Statut :** acceptée
+**Statut :** acceptée — amendée par [0044](0044-volume-auto-releve-plafonne-par-le-pic.md) (plus de plafond à 1.0 : le gain de sonie est un facteur séparé, qui peut relever un son sous un plafond de pic ; les cibles ci-dessous sont inchangées)
 **Date :** 2026-11-11
 
 ## Contexte

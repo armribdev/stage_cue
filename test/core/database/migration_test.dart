@@ -1044,6 +1044,36 @@ void main() {
     await database.close();
   });
 
+  test('une base v48 gagne loudness_gain, null pour les sons existants, '
+      'volume réglé conservé', () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    await database.customStatement(
+      "INSERT INTO sounds (title, file_path, display_name, volume) "
+      "VALUES ('s', '/s.wav', 's', 0.4)",
+    );
+    await database.customStatement(
+      'ALTER TABLE sounds DROP COLUMN loudness_gain',
+    );
+    await database.customStatement('PRAGMA user_version = 48');
+    await database.close();
+
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    final sound = await database.select(database.sounds).getSingle();
+    expect(sound.title, 's', reason: 'les données doivent survivre');
+    expect(sound.volume, 0.4, reason: 'aucun son ne change de niveau seul');
+    // Null = pas de mesure = facteur 1.0 : comportement d'avant la v49.
+    expect(sound.loudnessGain, isNull);
+
+    // La colonne doit être écrivable, et une valeur > 1.0 faire l'aller-retour.
+    await (database.update(database.sounds)
+          ..where((s) => s.id.equals(sound.id)))
+        .write(const db.SoundsCompanion(loudnessGain: Value(3.2)));
+    final updated = await database.select(database.sounds).getSingle();
+    expect(updated.loudnessGain, 3.2);
+
+    await database.close();
+  });
+
   test('la migration est idempotente : une base à jour rembobinée en v35 '
       'passe sans erreur', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));

@@ -117,6 +117,13 @@ class Sounds extends Table {
   IntColumn get type => intEnum<SoundType>().nullable()();
   IntColumn get color => integer().nullable()(); // Couleur personnalisée (ARGB)
   RealColumn get volume => real().withDefault(const Constant(1.0))();
+
+  /// Gain de sonie du volume « auto » (décisions 0036 et 0044) : facteur
+  /// linéaire (≥ 0, peut dépasser 1.0) appliqué **une seule fois** à la lecture,
+  /// en plus de [volume] (réglage de l'utilisateur, 0–1). `null` = pas de
+  /// mesure = facteur 1.0. Propriété de contenu comme [volume] : voyage dans le
+  /// snapshot de dossier ; un appareil antérieur à v49 l'ignore.
+  RealColumn get loudnessGain => real().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   // ── Portabilité (bibliothèques synchronisables) ──────────────────────────
   // Bibliothèque d'appartenance ; null = son purement local (legacy).

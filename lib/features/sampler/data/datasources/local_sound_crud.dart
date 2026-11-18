@@ -27,8 +27,10 @@ extension LocalSoundCrud on LocalSoundDataSource {
     )..where((s) => s.id.equals(id))).go();
   }
 
-  /// Met à jour les réglages d'un son (couleur, volume, point d'entrée) ;
-  /// [isProcessed] marque le son comme traité (`null` = inchangé).
+  /// Met à jour les réglages d'un son (couleur, volume, gain de sonie, point
+  /// d'entrée) ; [isProcessed] marque le son comme traité (`null` = inchangé).
+  /// [loudnessGain] ne sait pas remettre le gain à `null` : un recalcul écrit
+  /// une nouvelle valeur, il n'efface pas la mesure.
   Future<void> updateSoundSettings({
     required int id,
     int? colorValue,
@@ -36,6 +38,7 @@ extension LocalSoundCrud on LocalSoundDataSource {
     String? displayName,
     bool updateDisplayName = false,
     double? volume,
+    double? loudnessGain,
     int? startOffsetMs,
     bool? isProcessed,
   }) async {
@@ -54,6 +57,9 @@ extension LocalSoundCrud on LocalSoundDataSource {
           ? Value(resolvedName)
           : const Value.absent(),
       volume: volume != null ? Value(volume) : const Value.absent(),
+      loudnessGain: loudnessGain != null
+          ? Value(loudnessGain)
+          : const Value.absent(),
       startOffsetMs: startOffsetMs != null
           ? Value(startOffsetMs)
           : const Value.absent(),

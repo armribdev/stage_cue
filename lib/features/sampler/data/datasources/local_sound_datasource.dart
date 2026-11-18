@@ -61,14 +61,15 @@ class LocalSoundDataSource {
   /// La waveform est calculée pour tous les types (régie musique, éditeur du
   /// point d'entrée des bruitages et ambiances). Le volume « auto » (gain de
   /// normalisation, selon le type) est `null` si non mesurable, auquel cas le
-  /// son garde le volume par défaut.
+  /// son garde le facteur par défaut (1.0). Il s'écrit dans `loudness_gain`, le
+  /// `volume` de l'utilisateur restant à 1.0 (décision 0044).
   Future<
     ({
       db_sounds.SoundType? type,
       String? contentHash,
       Uint8List? waveform,
       int? waveformProbeGeneration,
-      double? volume,
+      double? loudnessGain,
     })
   >
   _resolveMetadataForFile(File file) async {
@@ -78,7 +79,7 @@ class LocalSoundDataSource {
         contentHash: null,
         waveform: null,
         waveformProbeGeneration: null,
-        volume: null,
+        loudnessGain: null,
       );
     }
     final probeType = await _probeSoundTypeFromDuration(file);
@@ -89,10 +90,21 @@ class LocalSoundDataSource {
       contentHash: contentHash,
       waveform: probe?.waveformValue,
       waveformProbeGeneration: probe?.generationValue,
-      volume: probeType != null
-          ? await measureAutoVolume(file, _loudnessProfile(probeType))
+      loudnessGain: probeType != null
+          ? await _measureLoudnessGain(file, probeType)
           : null,
     );
+  }
+
+  /// Gain de sonie de [file] d'après le profil de [type], ou `null` si la
+  /// mesure n'a pas abouti.
+  Future<double?> _measureLoudnessGain(
+    File file,
+    db_sounds.SoundType type,
+  ) async {
+    final profile = _loudnessProfile(type);
+    final measurement = await measureAutoVolume(file, profile);
+    return measurement == null ? null : autoLoudnessGain(measurement, profile);
   }
 
   LoudnessProfile _loudnessProfile(db_sounds.SoundType type) => switch (type) {
@@ -101,10 +113,10 @@ class LocalSoundDataSource {
     db_sounds.SoundType.soundEffect => LoudnessProfile.effect,
   };
 
-  /// Volume « auto » à écrire à la création : absent (donc défaut de la colonne,
-  /// 1.0) quand la mesure n'a pas abouti.
-  Value<double> _autoVolume(double? volume) =>
-      volume == null ? const Value.absent() : Value(volume);
+  /// Gain de sonie à écrire à la création : absent (donc `null`, facteur 1.0)
+  /// quand la mesure n'a pas abouti.
+  Value<double> _autoGain(double? gain) =>
+      gain == null ? const Value.absent() : Value(gain);
 
   /// Probe de type par durée SoLoud. Retourne null si le fichier est invalide
   /// ou si SoLoud ne peut pas le lire.

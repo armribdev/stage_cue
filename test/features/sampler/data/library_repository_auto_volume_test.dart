@@ -48,8 +48,9 @@ class _FakeAuthenticator implements DriveAuthenticator {
   DriveAccountProfile? get accountProfile => null;
 }
 
-/// Recalcul en masse du volume « auto » (décision 0036) : ne mesure que ce qui
-/// est déjà sur l'appareil, écrit au fil de l'eau, s'arrête proprement.
+/// Recalcul en masse du volume « auto » (décisions 0036 et 0044) : ne mesure que
+/// ce qui est déjà sur l'appareil, écrit le gain de sonie au fil de l'eau (et
+/// remet le volume à 1.0), s'arrête proprement.
 void main() {
   final skip = soloudNativeSkipReason();
   late db.AppDatabase database;
@@ -122,6 +123,10 @@ void main() {
     database.sounds,
   )..where((s) => s.id.equals(id))).getSingle()).volume;
 
+  Future<double?> gainOf(int id) async => (await (database.select(
+    database.sounds,
+  )..where((s) => s.id.equals(id))).getSingle()).loudnessGain;
+
   test('le plan sépare les sons présents des absents et compte les volumes '
       'déjà réglés', () async {
     await insertSound('a.wav', volume: 0.8, present: true);
@@ -135,38 +140,72 @@ void main() {
     expect(plan.customized, 1);
   });
 
-  test(
-    'écrit le volume mesuré selon le type, sans toucher aux absents',
-    () async {
-      final music = await insertSound('m.wav', volume: 0.8, present: true);
-      final ambiance = await insertSound(
-        'amb.wav',
-        volume: 1.0,
-        present: true,
-        type: db_sounds.SoundType.ambiance,
-      );
-      final absent = await insertSound('x.wav', volume: 0.3, present: false);
+  test('écrit le gain mesuré selon le type et remet le volume à 1.0, sans '
+      'toucher aux absents', () async {
+    final music = await insertSound('m.wav', volume: 0.8, present: true);
+    final ambiance = await insertSound(
+      'amb.wav',
+      volume: 1.0,
+      present: true,
+      type: db_sounds.SoundType.ambiance,
+    );
+    final absent = await insertSound('x.wav', volume: 0.3, present: false);
 
-      final plan = await repository.planAutoVolumeRecompute();
-      final progress = <(int, int)>[];
-      final result = await repository.recomputeAutoVolumes(
-        plan,
-        onProgress: (done, total) => progress.add((done, total)),
-      );
+    final plan = await repository.planAutoVolumeRecompute();
+    final progress = <(int, int)>[];
+    final result = await repository.recomputeAutoVolumes(
+      plan,
+      onProgress: (done, total) => progress.add((done, total)),
+    );
 
-      expect(result.updated, 2);
-      expect(result.cancelled, isFalse);
-      expect(progress.last, (2, 2));
-      // ≈ −9 LUFS : musique ramenée vers −20, ambiance vers −26 (donc plus bas).
-      expect(
-        await volumeOf(music),
-        closeTo(math.pow(10, (-20 + 9.03) / 20), 0.03),
-      );
-      expect(await volumeOf(ambiance), lessThan(await volumeOf(music)));
-      expect(await volumeOf(absent), 0.3);
-    },
-    skip: skip,
-  );
+    expect(result.updated, 2);
+    expect(result.cancelled, isFalse);
+    expect(progress.last, (2, 2));
+    // ≈ −9 LUFS : musique ramenée vers −20, ambiance vers −26 (donc plus bas).
+    expect(await gainOf(music), closeTo(math.pow(10, (-20 + 9.03) / 20), 0.03));
+    expect((await gainOf(ambiance))!, lessThan((await gainOf(music))!));
+    // Le volume réglé encodait l'ancienne atténuation : il repasse à 1.0.
+    expect(await volumeOf(music), 1.0);
+    expect(await volumeOf(ambiance), 1.0);
+    expect(await volumeOf(absent), 0.3);
+    expect(await gainOf(absent), isNull);
+  }, skip: skip);
+
+  test('relève un son doux au pic bas au-delà de 1.0, sans jamais dépasser le '
+      'plafond de pic', () async {
+    // 1 kHz à 0,05 : ≈ −29 LUFS, pic −26 dBFS ; cible musique −20 → +9 dB
+    // voulus, et la marge de pic (23 dB) ne les limite pas.
+    const rate = 44100;
+    final samples = [
+      for (var i = 0; i < rate * 3; i++)
+        (0.05 * math.sin(2 * math.pi * 1000 * i / rate) * 32767).round(),
+    ];
+    File(p.join(cacheRoot.path, 'soft.wav'))
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(wavBytes(sampleRate: rate, left: samples));
+    final id = await database
+        .into(database.sounds)
+        .insert(
+          db.SoundsCompanion.insert(
+            title: 'soft',
+            displayName: 'soft',
+            filePath: p.join(cacheRoot.path, 'soft.wav'),
+            libraryId: Value(libraryId),
+            relativePath: const Value('soft.wav'),
+            type: const Value(db_sounds.SoundType.music),
+          ),
+        );
+
+    final plan = await repository.planAutoVolumeRecompute();
+    await repository.recomputeAutoVolumes(plan);
+
+    final gain = (await gainOf(id))!;
+    expect(gain, greaterThan(1.0));
+    expect(gain, closeTo(math.pow(10, 9 / 20), 0.15));
+    // Après relèvement, le pic reste sous le plafond de −3 dBFS.
+    expect(0.05 * gain, lessThanOrEqualTo(math.pow(10, -3 / 20)));
+    expect(await volumeOf(id), 1.0);
+  }, skip: skip);
 
   test('annulée : s\'arrête sans rien écrire de plus', () async {
     final id = await insertSound('m.wav', volume: 0.8, present: true);
@@ -180,6 +219,7 @@ void main() {
     expect(result.cancelled, isTrue);
     expect(result.updated, 0);
     expect(await volumeOf(id), 0.8);
+    expect(await gainOf(id), isNull);
   }, skip: skip);
 
   test('un fichier illisible garde son volume et est compté', () async {
@@ -196,5 +236,6 @@ void main() {
     // échoue (non mesurable) : dans les deux cas il est compté, jamais écrit.
     expect(result.unmeasurable + result.skipped, 1);
     expect(await volumeOf(id), 0.6);
+    expect(await gainOf(id), isNull);
   }, skip: skip);
 }

@@ -26,6 +26,13 @@ abstract interface class PreviewPlayback {
   /// Retourne false si la voix n'a pas pu démarrer.
   Future<bool> playFromPosition(Duration position, {double volume});
 
+  /// Fixe le gain de sonie du son (facteur linéaire ≥ 0, peut dépasser 1.0 :
+  /// [décision 0044]). Il se multiplie au volume (0.0 → 1.0) de chaque appel
+  /// suivant à [playFromPosition] et [setVolume], une seule fois et de la même
+  /// façon en salle et au casque. Défaut 1.0 ; sans effet sur une voix déjà
+  /// démarrée tant qu'un [setVolume] ne la rafraîchit pas.
+  void setLoudnessGain(double gain);
+
   /// Change le volume (0.0 → 1.0) de la lecture en cours, sans la relancer —
   /// y compris en pause. Sans effet si rien n'est chargé.
   void setVolume(double volume);

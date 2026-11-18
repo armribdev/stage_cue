@@ -115,6 +115,7 @@ class SoundRepository {
     String? displayName,
     bool updateDisplayName = false,
     double? volume,
+    double? loudnessGain,
     int? startOffsetMs,
     bool? isProcessed,
   }) async {
@@ -125,6 +126,7 @@ class SoundRepository {
       displayName: displayName,
       updateDisplayName: updateDisplayName,
       volume: volume,
+      loudnessGain: loudnessGain,
       startOffsetMs: startOffsetMs,
       isProcessed: isProcessed,
     );

@@ -307,8 +307,8 @@ class LibrarySnapshotStore {
       await _database.customStatement('''
         CREATE TABLE snap.sounds AS
         SELECT id, title, display_name, file_path, type, color, volume,
-               created_at, library_id, relative_path, content_hash,
-               drive_file_id
+               loudness_gain, created_at, library_id, relative_path,
+               content_hash, drive_file_id
         FROM sounds WHERE folder_id = $folderId
       ''');
 
@@ -452,6 +452,10 @@ class LibrarySnapshotStore {
   }) async {
     _soundIdMap.clear();
 
+    // Gain de sonie (décision 0044) : absent des snapshots publiés par un
+    // appareil antérieur à v49 — le son y joue au volume seul, donc `null`
+    // (facteur 1.0), sans erreur ni log : un appareil en retard est normal.
+    final hasLoudnessGain = await _snapColumnExists('sounds', 'loudness_gain');
     final snapRows = await _database
         .customSelect('SELECT * FROM snap.sounds ORDER BY id')
         .get();
@@ -474,6 +478,9 @@ class LibrarySnapshotStore {
       final driveFileId = row.read<String?>('drive_file_id');
       final contentHash = row.read<String?>('content_hash');
       final rawType = row.read<int?>('type');
+      final loudnessGain = hasLoudnessGain
+          ? row.read<double?>('loudness_gain')
+          : null;
       if (driveFileId != null) seenDriveIds.add(driveFileId);
 
       db.Sound? existing;
@@ -506,6 +513,7 @@ class LibrarySnapshotStore {
             type: Value(rawType != null ? SoundType.values[rawType] : null),
             color: Value(row.read<int?>('color')),
             volume: Value(row.read<double>('volume')),
+            loudnessGain: Value(loudnessGain),
             relativePath: Value(normalized),
             contentHash: Value(contentHash),
             driveFileId: Value(driveFileId),
@@ -527,6 +535,7 @@ class LibrarySnapshotStore {
                 displayName: _displayNameOf(row),
                 color: Value(row.read<int?>('color')),
                 volume: Value(row.read<double>('volume')),
+                loudnessGain: Value(loudnessGain),
                 createdAt: Value(row.read<DateTime>('created_at')),
                 libraryId: Value(libraryId),
                 relativePath: Value(normalized),

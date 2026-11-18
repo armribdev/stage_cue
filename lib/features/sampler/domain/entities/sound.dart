@@ -10,6 +10,11 @@ class Sound {
   final SoundType? type;
   final int? colorValue;
   final double volume;
+
+  /// Gain de sonie du volume « auto » (décision 0044) : facteur linéaire
+  /// séparé de [volume], appliqué une seule fois à la lecture. `null` = pas de
+  /// mesure (facteur 1.0, cf. [loudnessFactor]).
+  final double? loudnessGain;
   final DateTime createdAt;
 
   /// Bibliothèque d'appartenance ; `null` = son purement local (legacy).
@@ -57,6 +62,7 @@ class Sound {
     this.type,
     this.colorValue,
     this.volume = 1.0,
+    this.loudnessGain,
     required this.createdAt,
     this.libraryId,
     this.relativePath,
@@ -69,6 +75,9 @@ class Sound {
     this.startOffsetMs = 0,
     this.isProcessed = false,
   }) : displayName = displayName ?? title;
+
+  /// Facteur de sonie à appliquer à la lecture : 1.0 sans mesure.
+  double get loudnessFactor => loudnessGain ?? 1.0;
 
   /// Dossier source du son : le dossier de PREMIER niveau de sa bibliothèque
   /// (les sous-dossiers se rattachent à lui), `''` pour un fichier à la racine.
@@ -91,6 +100,7 @@ class Sound {
     SoundType? type,
     int? colorValue,
     double? volume,
+    double? loudnessGain,
     bool? isFavorite,
     DateTime? lastPlayedAt,
     int? startOffsetMs,
@@ -104,6 +114,7 @@ class Sound {
       type: type ?? this.type,
       colorValue: colorValue ?? this.colorValue,
       volume: volume ?? this.volume,
+      loudnessGain: loudnessGain ?? this.loudnessGain,
       createdAt: createdAt,
       libraryId: libraryId,
       relativePath: relativePath,

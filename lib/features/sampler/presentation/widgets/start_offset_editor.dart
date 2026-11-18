@@ -99,6 +99,10 @@ class StartOffsetEditor extends StatefulWidget {
   /// cours.
   final bool autoPlay;
 
+  /// Gain de sonie réglé dans le formulaire (pas encore enregistré) ; `null` =
+  /// celui du son.
+  final double? loudnessGain;
+
   const StartOffsetEditor({
     super.key,
     required this.soundId,
@@ -108,6 +112,7 @@ class StartOffsetEditor extends StatefulWidget {
     this.memory,
     required this.initialOffsetMs,
     required this.volume,
+    this.loudnessGain,
     required this.displayVolume,
     required this.onChanged,
     this.autoPlay = false,
@@ -381,6 +386,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor>
       widget.soundId,
       from: _playhead,
       volume: widget.volume,
+      loudnessGain: widget.loudnessGain,
     );
     if (ok || !reportFailure || !mounted) return;
     // Refus de pré-écoute au casque (jamais avalé) ou son indisponible.

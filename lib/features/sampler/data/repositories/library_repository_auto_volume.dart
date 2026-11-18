@@ -23,7 +23,8 @@ typedef AutoVolumeResult = ({
   bool cancelled,
 });
 
-/// Recalcul en masse du volume « auto » ([décision 0036]).
+/// Recalcul en masse du volume « auto » ([décision 0036], amendée par
+/// [décision 0044]) : écrit le gain de sonie et remet le volume à 1.0.
 /// Méthodes de [LibraryRepository] extraites via extension dans le même `part`.
 extension LibraryRepositoryAutoVolume on LibraryRepository {
   /// Dresse le plan d'un recalcul : sons disponibles localement et sons ignorés.
@@ -41,7 +42,8 @@ extension LibraryRepositoryAutoVolume on LibraryRepository {
     );
   }
 
-  /// Mesure chaque son de [plan] et écrit son volume « auto ».
+  /// Mesure chaque son de [plan] et écrit son gain de sonie « auto » (le volume
+  /// réglé repasse à 1.0 : il encodait l'ancienne atténuation).
   ///
   /// Séquentiel, sur la file de décodage native partagée avec le chargement des
   /// pads ([décision 0001]). Chaque volume est écrit dès qu'il est mesuré :
@@ -54,7 +56,7 @@ extension LibraryRepositoryAutoVolume on LibraryRepository {
     void Function(int done, int total)? onProgress,
     bool Function()? isCancelled,
   }) async {
-    var updated = 0, unmeasurable = 0, skipped = 0;
+    var updated = 0, unmeasurable = 0, skipped = 0, boosted = 0;
     var cancelled = false;
     final total = plan.sounds.length;
     for (var i = 0; i < total; i++) {
@@ -65,18 +67,19 @@ extension LibraryRepositoryAutoVolume on LibraryRepository {
       final sound = plan.sounds[i];
       try {
         final path = await resolvePlayablePath(sound, downloadIfNeeded: false);
-        final volume = await measureAutoVolume(
-          File(path),
-          loudnessProfileOf(sound.type),
-        );
-        if (volume == null) {
+        final profile = loudnessProfileOf(sound.type);
+        final measurement = await measureAutoVolume(File(path), profile);
+        if (measurement == null) {
           unmeasurable++;
         } else {
+          final gain = autoLoudnessGain(measurement, profile);
           await _soundDataSource.updateSoundSettings(
             id: sound.id,
-            volume: volume,
+            volume: 1.0,
+            loudnessGain: gain,
           );
           updated++;
+          if (gain > 1.0) boosted++;
         }
       } on SoundNotAvailableLocallyException {
         // Fichier disparu du cache, ou rejeté par la validation d'en-tête.
@@ -88,7 +91,8 @@ extension LibraryRepositoryAutoVolume on LibraryRepository {
       onProgress?.call(i + 1, total);
     }
     AudioLoadLog.info(
-      'Volume auto en masse : $updated mis à jour, $unmeasurable non '
+      'Volume auto en masse : $updated mis à jour ($boosted relevés), '
+      '$unmeasurable non '
       'mesurables, $skipped fichiers indisponibles, ${plan.unavailable} sans '
       'fichier local${cancelled ? ', annulé' : ''}.',
     );

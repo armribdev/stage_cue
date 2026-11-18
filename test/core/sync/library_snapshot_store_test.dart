@@ -284,6 +284,114 @@ void main() {
       },
     );
 
+    group('gain de sonie (décision 0044)', () {
+      late int folderA;
+      late int folderB;
+      late db.AppDatabase dbB;
+
+      /// Son `gain.mp3` du nœud A (appareil source) avec le gain donné.
+      Future<void> insertSourceSound(double? gain) => database
+          .into(database.sounds)
+          .insert(
+            db.SoundsCompanion.insert(
+              title: 'gain',
+              displayName: 'gain',
+              filePath: '/A/cache/gain.mp3',
+              relativePath: const Value('gain.mp3'),
+              driveFileId: const Value('FG'),
+              folderId: Value(folderA),
+              loudnessGain: Value(gain),
+            ),
+          );
+
+      Future<double?> targetGain() async => (await (dbB.select(
+        dbB.sounds,
+      )..where((s) => s.folderId.equals(folderB))).getSingle()).loudnessGain;
+
+      setUp(() async {
+        final libA = await database
+            .into(database.libraries)
+            .insert(
+              db.LibrariesCompanion.insert(
+                name: 'A',
+                localRootPath: '/A/cache',
+              ),
+            );
+        folderA = await database
+            .into(database.libraryFolders)
+            .insert(
+              db.LibraryFoldersCompanion.insert(
+                libraryId: libA,
+                driveFolderId: 'FOLDER_G',
+                relativePath: const Value(''),
+              ),
+            );
+        dbB = db.AppDatabase.forTesting(NativeDatabase.memory());
+        final libB = await dbB
+            .into(dbB.libraries)
+            .insert(
+              db.LibrariesCompanion.insert(
+                name: 'B',
+                localRootPath: '/B/cache',
+              ),
+            );
+        folderB = await dbB
+            .into(dbB.libraryFolders)
+            .insert(
+              db.LibraryFoldersCompanion.insert(
+                libraryId: libB,
+                driveFolderId: 'FOLDER_G',
+                relativePath: const Value(''),
+              ),
+            );
+      });
+
+      tearDown(() => dbB.close());
+
+      test('un gain (relevé ou atténué) fait l\'aller-retour, à l\'insertion '
+          'comme à la mise à jour', () async {
+        await insertSourceSound(2.5);
+        final path = p.join(tempDir.path, 'gain.db');
+        await store.exportFolderSnapshot(folderA, path);
+        await LibrarySnapshotStore(dbB).mergeFolderSnapshot(folderB, path);
+        expect(await targetGain(), 2.5);
+
+        await (database.update(
+          database.sounds,
+        )).write(const db.SoundsCompanion(loudnessGain: Value(0.4)));
+        await store.exportFolderSnapshot(folderA, path);
+        await LibrarySnapshotStore(dbB).mergeFolderSnapshot(folderB, path);
+        expect(await targetGain(), 0.4);
+      });
+
+      test('un son sans mesure reste sans mesure', () async {
+        await insertSourceSound(null);
+        final path = p.join(tempDir.path, 'gain.db');
+        await store.exportFolderSnapshot(folderA, path);
+        await LibrarySnapshotStore(dbB).mergeFolderSnapshot(folderB, path);
+        expect(await targetGain(), isNull);
+      });
+
+      test('un snapshot sans la colonne (appareil en v48) s\'importe avec '
+          'un gain nul, sans erreur', () async {
+        await insertSourceSound(2.5);
+        final path = p.join(tempDir.path, 'gain.db');
+        await store.exportFolderSnapshot(folderA, path);
+        final snap = NativeDatabase(File(path));
+        await snap.ensureOpen(_NoopUser());
+        await snap.runCustom('ALTER TABLE sounds DROP COLUMN loudness_gain');
+        await snap.close();
+
+        await LibrarySnapshotStore(dbB).mergeFolderSnapshot(folderB, path);
+
+        final sound = await (dbB.select(
+          dbB.sounds,
+        )..where((s) => s.folderId.equals(folderB))).getSingle();
+        expect(sound.driveFileId, 'FG', reason: 'le son est bien importé');
+        expect(sound.loudnessGain, isNull);
+      });
+    });
+
     group('suggestions de l’IA (décisions 0030 et 0031)', () {
       late int lib;
       late int folder;

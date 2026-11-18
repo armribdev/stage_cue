@@ -434,6 +434,16 @@ extension _AppDatabaseMigrations on AppDatabase {
       // Les deux appels ci-dessus sont `reconcileTagCatalog`, coupé en deux par
       // `_ensureExtraTags` qui doit passer entre.
     }
+    if (from < 49) {
+      // Gain de sonie du volume « auto », séparé de `volume` (décision 0044).
+      // Null pour tous : aucun son existant ne change de niveau tout seul (null
+      // = facteur 1.0) ; le recalcul en masse le renseigne. Même garde que plus
+      // haut : un upgrade depuis < 40 passe par `alterTable`, qui recrée
+      // `sounds` au schéma courant — colonne déjà présente.
+      if (!await _columnExists('sounds', 'loudness_gain')) {
+        await m.addColumn(sounds, sounds.loudnessGain);
+      }
+    }
   }
 
   /// Vrai si la colonne [column] existe déjà sur la table [table] (PRAGMA).

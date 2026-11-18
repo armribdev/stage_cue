@@ -29,7 +29,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
               type: Value(metadata.type),
               contentHash: Value(metadata.contentHash),
               waveform: Value(metadata.waveform),
-              volume: _autoVolume(metadata.volume),
+              loudnessGain: _autoGain(metadata.loudnessGain),
               waveformProbeGeneration: Value(metadata.waveformProbeGeneration),
             ),
           );
@@ -74,7 +74,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
             waveform: Value(metadata.waveform),
-            volume: _autoVolume(metadata.volume),
+            loudnessGain: _autoGain(metadata.loudnessGain),
           ),
         );
     return true;
@@ -107,12 +107,14 @@ extension LocalSoundIndexing on LocalSoundDataSource {
           waveform: Value(probe?.waveformValue),
           waveformProbeGeneration: Value(probe?.generationValue),
           // Premier fichier réel d'un son Drive : même gain auto qu'à la
-          // création locale. Seulement si le volume est encore au défaut (1.0) —
-          // un snapshot (autre appareil) ou l'opérateur a pu le fixer avant.
-          volume: existing.volume == 1.0 && probeType != null
-              ? _autoVolume(
-                  await measureAutoVolume(file, _loudnessProfile(probeType)),
-                )
+          // création locale. Seulement si le son n'a encore ni gain ni volume
+          // réglé — un snapshot (autre appareil) ou l'opérateur a pu les fixer
+          // avant.
+          loudnessGain:
+              existing.loudnessGain == null &&
+                  existing.volume == 1.0 &&
+                  probeType != null
+              ? _autoGain(await _measureLoudnessGain(file, probeType))
               : const Value.absent(),
         ),
       );
@@ -395,7 +397,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
             relativePath: Value(entry.relativePath),
             contentHash: Value(metadata.contentHash),
             waveform: Value(metadata.waveform),
-            volume: _autoVolume(metadata.volume),
+            loudnessGain: _autoGain(metadata.loudnessGain),
             driveFileId: Value(entry.driveFileId),
             driveMd5: Value(entry.driveMd5),
             folderId: Value(entry.folderId),
@@ -486,7 +488,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
                   type: Value(metadata.type),
                   contentHash: Value(metadata.contentHash),
                   waveform: Value(metadata.waveform),
-                  volume: _autoVolume(metadata.volume),
+                  loudnessGain: _autoGain(metadata.loudnessGain),
                   waveformProbeGeneration: Value(
                     metadata.waveformProbeGeneration,
                   ),

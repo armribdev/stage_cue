@@ -284,6 +284,12 @@ class SamplerNotifier extends ChangeNotifier {
     final sounds = List<Sound>.from(padItem.pad.sounds);
     sounds[index] = updated;
     padItem.pad = padItem.pad.copyWith(sounds: sounds);
+    // Gain de sonie (décision 0044) : appliqué à la frontière de lecture, donc
+    // posé sur le lecteur — à la création du slot comme après un « Enregistrer »
+    // de la fiche. Une voix déjà lancée ne bouge pas avant son prochain volume.
+    if (index < padItem.slots.length) {
+      padItem.slots[index].player?.setLoudnessGain(updated.loudnessFactor);
+    }
   }
 
   bool _padSoundsChanged(PadItem existing, Pad updated) {
