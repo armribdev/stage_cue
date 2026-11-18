@@ -6,6 +6,7 @@ import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../widgets/app_modal.dart';
+import '../widgets/color_swatch_picker.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
@@ -52,17 +53,6 @@ class PadDetailsScreen extends StatefulWidget {
 }
 
 class _PadDetailsScreenState extends State<PadDetailsScreen> {
-  static const List<Color> _colorChoices = <Color>[
-    Colors.blue,
-    Colors.green,
-    Colors.orange,
-    Colors.purple,
-    Colors.red,
-    Colors.teal,
-    Colors.brown,
-    Colors.grey,
-  ];
-
   late int? _selectedColorValue;
   late PadPlayMode _playMode;
   late final TextEditingController _displayNameController;
@@ -190,13 +180,9 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _buildDefaultColorOption(context),
-              for (final c in _colorChoices) _buildColorDot(context, c),
-            ],
+          ColorSwatchPicker(
+            value: _selectedColorValue,
+            onChanged: _updateColor,
           ),
           if (sounds.length > 1) ...[
             const SizedBox(height: 16),
@@ -352,79 +338,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
       ),
     );
   }
-
-  Widget _buildDefaultColorOption(BuildContext context) {
-    final isSelected = _selectedColorValue == null;
-    final scheme = Theme.of(context).colorScheme;
-    final borderColor = isSelected ? scheme.primary : scheme.outlineVariant;
-    final onSurface = scheme.onSurfaceVariant;
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () => _updateColor(null),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 40,
-        height: 40,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: scheme.surfaceContainerHighest,
-          border: Border.all(color: borderColor, width: isSelected ? 3 : 1),
-          boxShadow: [
-            if (isSelected)
-              BoxShadow(
-                color: scheme.primary.withValues(alpha: 0.25),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-          ],
-        ),
-        child: isSelected
-            ? StrokeIcon(AppIcons.check, color: onSurface, size: 20)
-            : Text(
-                'D',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: onSurface,
-                ),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildColorDot(BuildContext context, Color color) {
-    final isSelected = _selectedColorValue == color.toARGB32();
-    final scheme = Theme.of(context).colorScheme;
-    final borderColor = isSelected ? scheme.primary : scheme.outlineVariant;
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () => _updateColor(color.toARGB32()),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color,
-          border: Border.all(color: borderColor, width: isSelected ? 3 : 1),
-          boxShadow: [
-            if (isSelected)
-              BoxShadow(
-                color: scheme.primary.withValues(alpha: 0.25),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-          ],
-        ),
-        child: isSelected
-            ? StrokeIcon(AppIcons.check, color: _checkColor(color), size: 20)
-            : null,
-      ),
-    );
-  }
-
-  Color _checkColor(Color color) =>
-      color.computeLuminance() > 0.6 ? Colors.black : Colors.white;
 }
 
 // ── Sélecteur de mode de lecture ──────────────────────────────────────────

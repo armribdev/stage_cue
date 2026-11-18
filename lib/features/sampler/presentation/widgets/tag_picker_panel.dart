@@ -9,6 +9,8 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../utils/tag_category_ui.dart';
 import 'boxed_icon_button.dart';
+import 'color_dot.dart';
+import 'key_cap.dart';
 import '../../../../core/theme/stroke_icon.dart';
 
 // ── Bouton d'ajout ────────────────────────────────────────────────────────────
@@ -269,7 +271,7 @@ class _TagPickerPanelState extends State<TagPickerPanel> {
                       ),
                     ),
                     if (showEnterHint && query.isNotEmpty) ...[
-                      const _Kbd('↵'),
+                      const KeyCap('↵', compact: true),
                       const SizedBox(width: 4),
                     ],
                     BoxedIconButton(
@@ -352,15 +354,15 @@ class _TagPickerPanelState extends State<TagPickerPanel> {
                   ),
                   child: Row(
                     children: [
-                      const _Kbd('↑↓'),
+                      const KeyCap('↑↓', compact: true),
                       const SizedBox(width: 6),
                       _hint(scheme, 'naviguer'),
                       const SizedBox(width: 14),
-                      const _Kbd('↵'),
+                      const KeyCap('↵', compact: true),
                       const SizedBox(width: 6),
                       _hint(scheme, 'ajouter'),
                       const SizedBox(width: 14),
-                      const _Kbd('Échap'),
+                      const KeyCap('Échap', compact: true),
                       const SizedBox(width: 6),
                       _hint(scheme, 'fermer'),
                     ],
@@ -451,14 +453,7 @@ class _TagRowState extends State<_TagRow> {
           ),
           child: Row(
             children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.color ?? scheme.outlineVariant,
-                ),
-              ),
+              ColorDot(color: widget.color ?? scheme.outlineVariant),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -473,7 +468,7 @@ class _TagRowState extends State<_TagRow> {
                   ),
                 ),
               ),
-              if (widget.active) const _Kbd('↵'),
+              if (widget.active) const KeyCap('↵', compact: true),
             ],
           ),
         ),
@@ -559,28 +554,3 @@ class _CategoryChip extends StatelessWidget {
 // ── Touche ────────────────────────────────────────────────────────────────────
 
 /// Pastille de raccourci clavier (« ↵ », « Échap »).
-class _Kbd extends StatelessWidget {
-  final String label;
-
-  const _Kbd(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: AppRadius.radiusXs,
-        border: Border.fromBorderSide(AppElevation.borderStrong(scheme)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-        child: Text(
-          label,
-          style: AppFonts.monoStyle(
-            TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
-          ),
-        ),
-      ),
-    );
-  }
-}

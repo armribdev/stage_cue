@@ -4,9 +4,9 @@ import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/stroke_icon.dart';
 
-/// Pastilles de choix de la couleur par défaut d'un son. `null` = « D » (pas de
-/// couleur propre, on retombe sur celle du type).
-class SoundColorPicker extends StatelessWidget {
+/// Pastilles de choix d'une couleur (son, pad). `null` = « D » (pas de couleur
+/// propre, on retombe sur celle du type ou du son).
+class ColorSwatchPicker extends StatelessWidget {
   static const List<Color> _choices = <Color>[
     Colors.blue,
     Colors.green,
@@ -21,7 +21,7 @@ class SoundColorPicker extends StatelessWidget {
   final int? value;
   final ValueChanged<int?> onChanged;
 
-  const SoundColorPicker({
+  const ColorSwatchPicker({
     super.key,
     required this.value,
     required this.onChanged,

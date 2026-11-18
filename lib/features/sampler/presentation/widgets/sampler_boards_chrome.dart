@@ -415,11 +415,7 @@ class BoardTitleLabel extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor),
-          ),
+          ColorDot(color: dotColor, size: 7),
           const SizedBox(width: AppSpacing.sm),
           Flexible(
             child: Text(

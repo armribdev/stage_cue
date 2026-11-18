@@ -12,6 +12,7 @@ import '../../domain/entities/sound_board.dart';
 import '../providers/sampler_provider.dart';
 import 'audio_vu_meter.dart';
 import 'boxed_icon_button.dart';
+import 'color_dot.dart';
 import 'hover_icon_button.dart';
 import 'waveform_mark_button.dart';
 import '../../../../core/theme/stroke_icon.dart';

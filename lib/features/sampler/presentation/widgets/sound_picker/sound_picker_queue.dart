@@ -183,11 +183,7 @@ extension _SoundPickerQueue on _SoundPickerOverlayState {
       ),
       child: Row(
         children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
-          ),
+          ColorDot(color: accent),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

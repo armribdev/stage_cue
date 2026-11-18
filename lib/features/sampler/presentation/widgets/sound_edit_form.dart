@@ -17,7 +17,7 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/title_tag_proposals.dart';
 import 'app_form_dialog.dart';
-import 'sound_color_picker.dart';
+import 'color_swatch_picker.dart';
 import 'sound_tags_section.dart';
 import 'sound_type_selector.dart';
 import 'sound_volume_field.dart';
@@ -626,7 +626,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                     const SizedBox(height: 20),
                     _section(
                       'Couleur par défaut',
-                      SoundColorPicker(
+                      ColorSwatchPicker(
                         value: _colorValue,
                         onChanged: (v) => _update(() => _colorValue = v),
                       ),

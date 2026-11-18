@@ -26,7 +26,7 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (keys.isNotEmpty) ...[
-                  _KeyCap(keys),
+                  KeyCap(keys),
                   const SizedBox(width: AppSpacing.xs + 2),
                 ],
                 Text(label, style: labelStyle),
@@ -142,27 +142,3 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
 
 /// Touche de clavier d'un pied d'aide : hairline, mono, discrète — une touche
 /// se lit comme une touche, pas comme du texte courant.
-class _KeyCap extends StatelessWidget {
-  const _KeyCap(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: AppRadius.radiusXs,
-        border: Border.fromBorderSide(AppElevation.borderStrong(scheme)),
-      ),
-      child: Text(
-        label,
-        style: AppFonts.monoStyle(
-          TextStyle(fontSize: 12, color: scheme.onSurface),
-        ),
-      ),
-    );
-  }
-}
