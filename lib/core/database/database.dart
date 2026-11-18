@@ -62,6 +62,21 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// Applique au catalogue de tags local tout ce qu'il a retiré depuis : catégories
+  /// dissoutes, tags fusionnés dans leur famille, tags élagués inutilisés
+  /// (`retiredTagCategories`, `mergedTags`, `prunedTags`). Usages, suggestions et
+  /// alias suivent. Idempotent et sans effet quand le catalogue est à jour.
+  ///
+  /// Appelée par la migration v48 **et** à la fin de chaque import de snapshot :
+  /// un appareil pas encore à jour (ou un snapshot publié avant la migration)
+  /// recrée sinon le tag retiré à chaque pull (décision 0043). Les tags d'accueil
+  /// doivent exister (`_ensureExtraTags`) ; sans eux, la fusion est journalisée
+  /// et ignorée.
+  Future<void> reconcileTagCatalog() async {
+    await _dissolveRetiredTagCategories();
+    await _withdrawSpecificTags();
+  }
+
   /// Émule les `onDelete: cascade` des tables dépendantes, que SQLite n'exécute
   /// pas sans `PRAGMA foreign_keys` (volontairement désactivé : un import de
   /// snapshot pose transitoirement des lignes qui référencent des absents).

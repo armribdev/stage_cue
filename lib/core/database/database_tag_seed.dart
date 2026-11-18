@@ -1,8 +1,14 @@
 part of 'database.dart';
 
+// Évolution du catalogue de tags : [retiredTagCategories], [mergedTags] et
+// [prunedTags] sont les SEULS endroits où l'on déclare qu'un tag ou une
+// catégorie disparaît. `reconcileTagCatalog` les applique, à la migration comme
+// après chaque import de snapshot (décision 0043) : ne rien ajouter d'autre
+// dans l'import. Publiques pour `test/core/database/tag_catalog_test.dart`, qui
+// vérifie chaque entrée.
+
 /// Catégories de tags retirées → catégorie qui reçoit leurs tags (décision
-/// 0040). Publique : l'import d'un snapshot d'un appareil pas encore à jour
-/// y lit le nom d'une catégorie retirée, qu'il recréerait sinon.
+/// 0040).
 const Map<String, String> retiredTagCategories = {'MUSIQUE': 'EMOTION_STYLE'};
 
 /// Tags ajoutés après le seed initial : catégorie → (nom du tag → alias de
@@ -346,8 +352,9 @@ const Map<String, Map<String, List<String>>> _extraTagCatalog = {
 /// Tags trop précis absorbés par leur famille en v48 (décision 0040) :
 /// (catégorie, tag) → (catégorie, tag d'accueil). Usages, suggestions et alias
 /// suivent, même si le tag est posé sur des sons. Leur nom reste cherchable : il
-/// figure comme alias du tag d'accueil dans [_extraTagCatalog].
-const List<(String, String, String, String)> _mergedTags = [
+/// figure comme alias du tag d'accueil dans [_extraTagCatalog] (obligatoire :
+/// le tag d'accueil doit exister dans le catalogue).
+const List<(String, String, String, String)> mergedTags = [
   ('OBJET', 'Chaise', 'OBJET', 'Meuble'),
   ('OBJET', 'Table', 'OBJET', 'Meuble'),
   ('OBJET', 'Lit', 'OBJET', 'Meuble'),
@@ -385,7 +392,7 @@ const List<(String, String, String, String)> _mergedTags = [
 
 /// Tags retirés sans famille d'accueil (catégorie, tag) : supprimés
 /// **seulement** s'ils ne sont posés ni suggérés sur aucun son, sinon conservés.
-const List<(String, String)> _prunedTags = [
+const List<(String, String)> prunedTags = [
   ('OBJET', 'Livre'),
   ('OBJET', 'Fenêtre'),
   ('OBJET', 'Clés'),
@@ -864,14 +871,14 @@ extension _AppDatabaseTagSeed on AppDatabase {
   }
 
   /// Retire les tags trop précis (v48, décision 0040) : fusionne ceux de
-  /// [_mergedTags] dans leur famille, supprime ceux de [_prunedTags] qu'aucun
+  /// [mergedTags] dans leur famille, supprime ceux de [prunedTags] qu'aucun
   /// son n'utilise. À appeler **après** [_ensureExtraTags], qui crée les tags
   /// d'accueil. Idempotent.
   Future<void> _withdrawSpecificTags() async {
     await transaction(() async {
       var merged = 0;
       var pruned = 0;
-      for (final (category, tag, intoCategory, into) in _mergedTags) {
+      for (final (category, tag, intoCategory, into) in mergedTags) {
         final fromId = await _tagIdIn(category, tag);
         if (fromId == null) continue;
         final intoId = await _tagIdIn(intoCategory, into);
@@ -884,7 +891,7 @@ extension _AppDatabaseTagSeed on AppDatabase {
         await _mergeTagInto(from: fromId, into: intoId);
         merged++;
       }
-      for (final (category, tag) in _prunedTags) {
+      for (final (category, tag) in prunedTags) {
         final id = await _tagIdIn(category, tag);
         if (id == null) continue;
         final used = await customSelect(
@@ -897,10 +904,13 @@ extension _AppDatabaseTagSeed on AppDatabase {
         await customStatement('DELETE FROM tags WHERE id = ?', [id]);
         pruned++;
       }
-      AppLog.info(
-        'Tags trop précis retirés : $merged fusionné(s), $pruned supprimé(s) '
-        '(ceux déjà posés sur un son sont conservés).',
-      );
+      // Rejoué après chaque import de snapshot : muet quand il n'y a rien à faire.
+      if (merged + pruned > 0) {
+        AppLog.info(
+          'Tags trop précis retirés : $merged fusionné(s), $pruned supprimé(s) '
+          '(ceux déjà posés sur un son sont conservés).',
+        );
+      }
     });
   }
 

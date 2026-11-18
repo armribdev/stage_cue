@@ -68,8 +68,11 @@ Triste, Angoisse, Tension…). Les animaux, eux, ont un seul tag générique
 - Seed initial et migrations de données : `lib/core/database/database_tag_seed.dart`
   (`_seedDefaultTagsIfEmpty`, `_extraTagCatalog` et `_ensureExtraTags`). Il n'existe pas de création
   de tag ou de catégorie depuis l'interface : tout nouveau tag passe par une
-  migration de données. Une catégorie retirée va dans `retiredTagCategories`
-  (migration + remappage à l'import d'un snapshot).
+  migration de données. Retirer un tag ou une catégorie se déclare **une fois**,
+  dans `retiredTagCategories`, `mergedTags` ou `prunedTags` :
+  `AppDatabase.reconcileTagCatalog` les applique à la migration et après chaque
+  import de snapshot ([0043](decisions/0043-catalogue-de-tags-reconcilie-apres-chaque-import.md)).
+  Sans cela, un appareil en retard recrée le tag retiré à chaque synchro.
 - Libellés affichés : `TagCategoryUi.displayLabel`
   (`lib/features/sampler/presentation/utils/tag_category_ui.dart`). Une clé non
   listée retombe sur son nom en casse de phrase ; toute nouvelle catégorie doit

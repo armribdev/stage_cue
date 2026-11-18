@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:stage_cue/core/database/database.dart' as db;
 import 'package:stage_cue/core/sync/library_snapshot_store.dart';
+import 'package:stage_cue/core/utils/string_utils.dart';
 
 void main() {
   late Directory tempDir;
@@ -528,6 +529,115 @@ void main() {
         );
       },
     );
+
+    test('un snapshot d\'un appareil en retard ne recrée aucun tag retiré du '
+        'catalogue (0043)', () async {
+      final lib = await database
+          .into(database.libraries)
+          .insert(
+            db.LibrariesCompanion.insert(name: 'A', localRootPath: '/cache'),
+          );
+      final folder = await database
+          .into(database.libraryFolders)
+          .insert(
+            db.LibraryFoldersCompanion.insert(
+              libraryId: lib,
+              driveFolderId: 'F',
+              relativePath: const Value(''),
+            ),
+          );
+      await database
+          .into(database.sounds)
+          .insert(
+            db.SoundsCompanion.insert(
+              title: 'a',
+              displayName: 'a',
+              filePath: '/cache/a.mp3',
+              libraryId: Value(lib),
+              relativePath: const Value('a.mp3'),
+              driveFileId: const Value('id-a'),
+              folderId: Value(folder),
+            ),
+          );
+
+      final path = p.join(tempDir.path, 'late-device.db');
+      await store.exportFolderSnapshot(folder, path);
+      // Rejoue un appareil qui n'a pas la dernière version du catalogue : il
+      // publie chaque tag retiré, posé ET suggéré sur le son. Piloté par les
+      // listes du catalogue, donc couvre toute entrée ajoutée plus tard.
+      final snap = NativeDatabase(File(path));
+      await snap.ensureOpen(_NoopUser());
+      // L'export ne publie que les tags utilisés : catégories et tags sont donc
+      // à créer dans le snapshot, comme les aurait publiés l'appareil en retard.
+      final retired = [
+        for (final (category, tag, _, _) in db.mergedTags) (category, tag),
+        ...db.prunedTags,
+      ];
+      final categories = {for (final (category, _) in retired) category};
+      var snapId = 9000;
+      final categoryIds = {for (final name in categories) name: ++snapId};
+      for (final entry in categoryIds.entries) {
+        await snap.runCustom(
+          'INSERT INTO tag_categories (id, name, color, sort_order) '
+          'VALUES (?, ?, 0, 0)',
+          [entry.value, entry.key],
+        );
+      }
+      for (final (category, tag) in retired) {
+        final id = ++snapId;
+        await snap.runCustom(
+          'INSERT INTO tag_items (id, category_id, name, normalized_name) '
+          'VALUES (?, ?, ?, ?)',
+          [id, categoryIds[category], tag, normalizeForSearch(tag)],
+        );
+        await snap.runCustom(
+          'INSERT INTO sound_tags (sound_id, tag_id, added_at) '
+          'SELECT id, ?, 0 FROM sounds LIMIT 1',
+          [id],
+        );
+        await snap.runCustom(
+          'INSERT INTO sound_auto_tags (sound_id, tag_id, score, updated_at) '
+          'SELECT id, ?, 0.5, 0 FROM sounds LIMIT 1',
+          [id],
+        );
+      }
+      await snap.close();
+
+      await store.mergeFolderSnapshot(folder, path);
+
+      final names = {
+        for (final row
+            in await database
+                .customSelect(
+                  'SELECT t.id AS id, t.name AS name, c.name AS category '
+                  'FROM tags t JOIN tag_categories c ON c.id = t.category_id',
+                )
+                .get())
+          row.read<int>('id'): (
+            row.read<String>('category'),
+            row.read<String>('name'),
+          ),
+      };
+      for (final (category, tag, hostCategory, host) in db.mergedTags) {
+        expect(
+          names.values,
+          isNot(contains((category, tag))),
+          reason: '« $tag » fusionné dans « $host », pas recréé',
+        );
+        expect(names.values, contains((hostCategory, host)));
+      }
+      // Usages et suggestions ont suivi vers un tag qui existe encore.
+      for (final row in await database.select(database.soundTags).get()) {
+        expect(names, contains(row.tagId));
+      }
+      for (final row in await database.select(database.soundAutoTags).get()) {
+        expect(names, contains(row.tagId));
+      }
+      // Un tag élagué mais posé sur un son est conservé : aucune donnée perdue.
+      for (final (category, tag) in db.prunedTags) {
+        expect(names.values, contains((category, tag)));
+      }
+    });
 
     test('upsert préserve l\'id du son (liens pad intacts)', () async {
       final lib = await database

@@ -427,6 +427,9 @@ class LibrarySnapshotStore {
             );
           }
         }
+        // Après tous les imports de tags : un snapshot d'un appareil en retard
+        // peut avoir recréé un tag que le catalogue a retiré depuis (0043).
+        await _database.reconcileTagCatalog();
       });
     } finally {
       await _detachSnapshot();
@@ -567,10 +570,10 @@ class LibrarySnapshotStore {
 
       for (final row in categoryRows) {
         final snapCategoryId = row.read<int>('id');
-        // Un appareil pas encore à jour publie encore une catégorie retirée
-        // (0040) : ses tags vont dans la catégorie d'accueil, sans la recréer.
-        final snapName = row.read<String>('name');
-        final name = db.retiredTagCategories[snapName] ?? snapName;
+        // Importé tel que publié : un tag ou une catégorie que le catalogue a
+        // retirés depuis sont résorbés par `reconcileTagCatalog`, appelé à la
+        // fin de la fusion (0043), pas ici.
+        final name = row.read<String>('name');
 
         final existing = await (_database.select(
           _database.tagCategories,

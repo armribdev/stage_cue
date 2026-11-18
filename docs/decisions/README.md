@@ -64,5 +64,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0040](0040-tags-generiques-et-dissolution-de-la-categorie-musique.md) | Tags génériques (les noms précis en alias), et catégorie MUSIQUE dissoute dans EMOTION_STYLE | acceptée |
 | [0041](0041-tags-deduits-du-titre-calcules-a-la-volee.md) | Tags déduits du titre : calculés à la volée (mots entiers sur les alias), jamais stockés ni synchronisés | acceptée |
 | [0042](0042-suggestions-de-l-ia-sans-pourcentage.md) | Suggestions de l'IA : classées par score, sans pourcentage affiché | acceptée |
+| [0043](0043-catalogue-de-tags-reconcilie-apres-chaque-import.md) | Le catalogue de tags (retraits, fusions) se réconcilie après chaque import de snapshot, une seule déclaration | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

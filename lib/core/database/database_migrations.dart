@@ -431,6 +431,8 @@ extension _AppDatabaseMigrations on AppDatabase {
       await _ensureExtraTags();
       // Après le catalogue : les tags d'accueil (Meuble, Véhicule…) existent.
       await _withdrawSpecificTags();
+      // Les deux appels ci-dessus sont `reconcileTagCatalog`, coupé en deux par
+      // `_ensureExtraTags` qui doit passer entre.
     }
   }
 
