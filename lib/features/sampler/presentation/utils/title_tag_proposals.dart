@@ -1,5 +1,6 @@
 import '../../../../core/utils/title_tag_matcher.dart';
 import '../../domain/entities/sound.dart';
+import '../../domain/entities/tag_category.dart';
 import '../../domain/entities/tag_item.dart';
 
 /// Tags que le titre d'un son désigne, hors [excluded] (tags déjà posés).
@@ -8,6 +9,10 @@ import '../../domain/entities/tag_item.dart';
 /// diffèrent : l'utilisateur a pu renommer le son sans que le fichier change,
 /// et l'un comme l'autre porte le mot qui décide du tag. Chaque texte est
 /// apparié séparément pour qu'aucune expression ne se forme à cheval dessus.
+///
+/// Ne propose que les catégories qui vont avec le type du son (bruitage,
+/// musique, ambiance : `kTagCategorySoundTypes`) ; sans type connu, tout se
+/// propose.
 List<TitleTagMatch> titleTagMatchesFor(
   Sound sound,
   TitleTagMatcher matcher, {
@@ -20,6 +25,8 @@ List<TitleTagMatch> titleTagMatchesFor(
       text,
       excluded: excluded,
       limit: kMaxTitleTagSuggestions,
+      acceptsCategory: (category) =>
+          tagCategoryFitsSoundType(category, sound.type),
     )) {
       found.putIfAbsent(match.tagId, () => match);
     }

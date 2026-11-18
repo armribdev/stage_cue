@@ -121,6 +121,37 @@ void main() {
       expect(proposals, isEmpty);
     });
 
+    test('suivent l’affinité de catégorie avec le type du son', () {
+      Sound typed(SoundType? type) => Sound(
+        id: 1,
+        title: 'Pluie porte joyeux',
+        filePath: '/cache/x.wav',
+        createdAt: DateTime(2026, 11, 18),
+        type: type,
+      );
+      Future<List<String>> names(SoundType? type) async {
+        final byId = {
+          for (final row in await database.select(database.tagItems).get())
+            row.id: row.name,
+        };
+        return [
+          for (final m in titleTagMatchesFor(typed(type), matcher))
+            byId[m.tagId]!,
+        ];
+      }
+
+      return Future(() async {
+        expect(await names(SoundType.soundEffect), ['Porte']);
+        expect(
+          await names(SoundType.ambiance),
+          containsAll(['Pluie', 'Joyeux']),
+        );
+        expect(await names(SoundType.ambiance), isNot(contains('Porte')));
+        expect(await names(SoundType.music), ['Pluie', 'Joyeux']);
+        expect(await names(null), containsAll(['Porte', 'Pluie', 'Joyeux']));
+      });
+    });
+
     test('cherchent aussi dans le titre du fichier si le nom a changé', () {
       final renamed = Sound(
         id: 1,

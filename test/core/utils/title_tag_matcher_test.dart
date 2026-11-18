@@ -165,4 +165,40 @@ void main() {
       expect(TitleTagMatcher(const []).suggest('porte'), isEmpty);
     });
   });
+
+  group('filtre par catégorie', () {
+    final matcher = TitleTagMatcher(const [
+      TagVocabularyEntry(tagId: 1, phrases: ['Porte'], category: 'OBJET'),
+      TagVocabularyEntry(tagId: 2, phrases: ['Pluie'], category: 'AMBIANCE'),
+      TagVocabularyEntry(
+        tagId: 3,
+        phrases: ['Chant'],
+        category: 'EMOTION_STYLE',
+      ),
+      TagVocabularyEntry(tagId: 4, phrases: ['Cuisine']),
+    ]);
+    const title = 'porte pluie chant cuisine';
+
+    List<int> ids(bool Function(String)? accepts) => matcher
+        .suggest(title, acceptsCategory: accepts)
+        .map((m) => m.tagId)
+        .toList();
+
+    test('sans filtre, tout se propose', () {
+      expect(ids(null), [1, 2, 3, 4]);
+    });
+
+    test('écarte les catégories refusées, garde celles sans catégorie', () {
+      expect(ids((c) => c == 'OBJET'), [1, 4]);
+    });
+
+    test('un tag refusé ne prend pas la place d’un autre dans la limite', () {
+      final found = matcher.suggest(
+        title,
+        limit: 2,
+        acceptsCategory: (c) => c != 'OBJET',
+      );
+      expect(found.map((m) => m.tagId), [2, 3]);
+    });
+  });
 }

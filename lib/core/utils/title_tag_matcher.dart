@@ -8,7 +8,15 @@ class TagVocabularyEntry {
   final int tagId;
   final List<String> phrases;
 
-  const TagVocabularyEntry({required this.tagId, required this.phrases});
+  /// Nom de la catégorie du tag, pour filtrer les suggestions (voir
+  /// [TitleTagMatcher.suggest]).
+  final String? category;
+
+  const TagVocabularyEntry({
+    required this.tagId,
+    required this.phrases,
+    this.category,
+  });
 }
 
 /// Un tag trouvé dans un titre, avec les mots du titre qui l'ont désigné
@@ -46,6 +54,7 @@ const Set<String> kAmbiguousTitlePhrases = {'pas', 'theme', 'mix', 'hit'};
 ///   isolés, et chaque mot du titre ne sert qu'une fois.
 class TitleTagMatcher {
   final Map<String, List<int>> _tagIdsByPhrase = {};
+  final Map<int, String> _categoryByTag = {};
   int _maxWords = 1;
 
   TitleTagMatcher(
@@ -56,6 +65,8 @@ class TitleTagMatcher {
       for (final phrase in ambiguousPhrases) _key(_words(phrase)),
     };
     for (final entry in vocabulary) {
+      final category = entry.category;
+      if (category != null) _categoryByTag[entry.tagId] = category;
       for (final phrase in entry.phrases) {
         final words = _words(phrase);
         final key = _key(words);
@@ -69,10 +80,15 @@ class TitleTagMatcher {
 
   /// Tags désignés par [title], dans l'ordre d'apparition, sans doublon, hors
   /// [excluded] (tags déjà posés). Au plus [limit].
+  ///
+  /// [acceptsCategory], s'il est fourni, écarte les tags dont la catégorie est
+  /// refusée **avant** la limite (un tag refusé ne prend pas la place d'un
+  /// autre). Un tag sans catégorie connue est toujours accepté.
   List<TitleTagMatch> suggest(
     String title, {
     Set<int> excluded = const {},
     int limit = kMaxTitleTagSuggestions,
+    bool Function(String category)? acceptsCategory,
   }) {
     final words = _words(title);
     final found = <int, String>{};
@@ -84,7 +100,14 @@ class TitleTagMatcher {
         if (tagIds == null) continue;
         final text = title.substring(words[i].start, words[i + n - 1].end);
         for (final id in tagIds) {
-          if (!excluded.contains(id)) found.putIfAbsent(id, () => text);
+          if (excluded.contains(id)) continue;
+          final category = _categoryByTag[id];
+          if (acceptsCategory != null &&
+              category != null &&
+              !acceptsCategory(category)) {
+            continue;
+          }
+          found.putIfAbsent(id, () => text);
         }
         consumed = n;
         break;

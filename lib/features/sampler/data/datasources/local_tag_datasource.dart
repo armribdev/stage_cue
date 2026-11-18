@@ -172,7 +172,10 @@ class LocalTagDataSource {
   /// (décision 0041). Deux lectures du catalogue, jamais une requête par son.
   Future<List<TagVocabularyEntry>> getTagVocabulary() async {
     final tagRows = await _database
-        .customSelect('SELECT id, name FROM tags')
+        .customSelect(
+          'SELECT t.id, t.name, c.name AS category FROM tags t '
+          'LEFT JOIN tag_categories c ON c.id = t.category_id',
+        )
         .get();
     final aliasRows = await _database
         .customSelect('SELECT tag_id, alias FROM tag_aliases')
@@ -184,9 +187,17 @@ class LocalTagDataSource {
     for (final row in aliasRows) {
       phrasesByTag[row.read<int>('tag_id')]?.add(row.read<String>('alias'));
     }
+    final categoryByTag = {
+      for (final row in tagRows)
+        row.read<int>('id'): row.readNullable<String>('category'),
+    };
     return [
       for (final entry in phrasesByTag.entries)
-        TagVocabularyEntry(tagId: entry.key, phrases: entry.value),
+        TagVocabularyEntry(
+          tagId: entry.key,
+          phrases: entry.value,
+          category: categoryByTag[entry.key],
+        ),
     ];
   }
 
