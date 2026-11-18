@@ -27,6 +27,7 @@ import 'color_dot.dart';
 import 'key_cap.dart';
 import 'scrolling_text.dart';
 import 'sound_edit_form.dart';
+import 'sound_edit_pane.dart';
 import 'sound_picker/sound_picker_mode.dart';
 import 'tag_pill.dart';
 import 'title_tags_dialog.dart';

@@ -14,6 +14,8 @@ import 'package:stage_cue/features/sampler/data/repositories/sound_repository.da
 import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
 import 'package:stage_cue/features/sampler/domain/entities/tag_category_with_tags.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/sound_edit_form.dart';
+import 'package:stage_cue/features/sampler/presentation/widgets/sound_edit_preload.dart';
+import 'package:stage_cue/features/sampler/presentation/widgets/sound_tags_section.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/tag_pill.dart';
 
 /// Vue d'analyse factice : l'état est piloté par le test.
@@ -77,6 +79,8 @@ void main() {
     SoundEditFormController? controller,
     AutoTagAnalysis? autoTag,
     List<TagCategoryWithTags> tagCatalog = const [],
+    SoundEditPreload? preload,
+    TagsSectionMemory? sectionMemory,
   }) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -94,6 +98,8 @@ void main() {
             onMarkedUnprocessed: onMarkedUnprocessed,
             controller: controller,
             autoTag: autoTag,
+            preload: preload,
+            sectionMemory: sectionMemory,
           ),
         ),
       ),
@@ -260,6 +266,8 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 200)),
     );
     await tester.pump();
+    // La section des tags s'anime vers sa hauteur : on laisse l'animation finir.
+    await tester.pump(const Duration(milliseconds: 200));
   }
 
   Future<int> tagId(String name) async =>
@@ -274,6 +282,53 @@ void main() {
   Future<List<db.SoundTag>> userRows(WidgetTester tester) async =>
       await tester.runAsync(() => database.select(database.soundTags).get()) ??
       [];
+
+  group('préchargement de la section Tags', () {
+    Future<SoundEditPreload?> preloadOf(WidgetTester tester) => tester.runAsync(
+      () => SoundEditPreload.load(
+        sound: soundOf(processed: false),
+        repository: repository,
+      ),
+    );
+
+    testWidgets('tags et suggestions sont là dès la première image', (
+      tester,
+    ) async {
+      final id = await tagId('Porte');
+      final catalog = await tester.runAsync(repository.getTagCatalog);
+      final preload = await preloadOf(tester);
+
+      // Aucune attente de la base : le formulaire s'appuie sur le préchargé.
+      await pumpForm(
+        tester,
+        processed: false,
+        tagCatalog: catalog ?? const [],
+        preload: preload,
+      );
+
+      expect(find.byKey(ValueKey('title-tag-$id')), findsOneWidget);
+    });
+
+    testWidgets('la section part de la hauteur précédente puis s’anime vers '
+        'la sienne, qu’elle mémorise', (tester) async {
+      final preload = await preloadOf(tester);
+      final memory = TagsSectionMemory()..value = 400;
+
+      await pumpForm(
+        tester,
+        processed: false,
+        preload: preload,
+        sectionMemory: memory,
+      );
+      expect(tester.getSize(find.byType(SoundTagsSection)).height, 400);
+
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      final settled = tester.getSize(find.byType(SoundTagsSection)).height;
+      expect(settled, lessThan(400));
+      expect(memory.value, settled);
+    });
+  });
 
   group('tags déduits du titre (décision 0041)', () {
     // Le son de test s'appelle « porte » : le catalogue a un tag Porte.
@@ -292,7 +347,11 @@ void main() {
 
       await tester.tap(find.byKey(ValueKey('title-tag-$id')));
       await tester.pump();
+      // La suggestion se referme en s'animant avant de quitter l'arbre.
+      expect(find.byKey(ValueKey('title-tag-$id')), findsOneWidget);
+      await tester.pumpAndSettle();
       expect(find.byKey(ValueKey('title-tag-$id')), findsNothing);
+      expect(find.byKey(ValueKey('tag-$id')), findsOneWidget);
       expect(await userRows(tester), isEmpty, reason: 'pas encore enregistré');
 
       await tester.tap(button('Valider'));
@@ -310,7 +369,7 @@ void main() {
       expect(find.text('Suggestions'), findsOneWidget);
 
       await tester.tap(find.byKey(ValueKey('title-tag-$id')));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(find.text('Suggestions'), findsNothing);
     });
 
@@ -404,7 +463,7 @@ void main() {
       await loadTags(tester);
 
       await tester.tap(find.byKey(ValueKey('auto-tag-$id')));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(find.byKey(ValueKey('auto-tag-$id')), findsNothing);
       expect(await userRows(tester), isEmpty, reason: 'pas encore enregistré');
 
@@ -441,6 +500,7 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 200)),
       );
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
     }
 
     Future<FakeAutoTagAnalysis> pumpWith(

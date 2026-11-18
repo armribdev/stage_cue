@@ -413,10 +413,12 @@ class _StartOffsetEditorState extends State<StartOffsetEditor> {
     if (_loading) {
       // Placeholder à la forme de la waveform pendant l'extraction ; la barre
       // de contrôles est déjà là (désactivée) pour que rien ne « saute » à
-      // l'arrivée de la source.
+      // l'arrivée de la source. La bande du repère de temps est réservée aussi :
+      // sans elle, waveform et contrôles descendent de sa hauteur au chargement.
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const SizedBox(height: _kTagStripHeight),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: _kTrackInset),
             child: Skeleton(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/entities/sound_auto_tag.dart';
 import '../../domain/entities/tag_item.dart';
+import 'animated_pill_wrap.dart';
 import 'tag_pill.dart';
 
 /// Un tag que le titre du son désigne, avec les mots du titre qui l'ont désigné.
@@ -32,6 +33,11 @@ class AutoTagChips extends StatelessWidget {
   /// Ajoute le tag de la suggestion touchée aux tags du son.
   final ValueChanged<TagItem> onAdd;
 
+  /// Suggestions du formulaire précédent et animation du passage de l'une à
+  /// l'autre (voir [AnimatedPillWrap.memory]). `null` = pas de suite.
+  final PillMemory? memory;
+  final bool animateInitial;
+
   const AutoTagChips({
     super.key,
     required this.suggestions,
@@ -39,6 +45,8 @@ class AutoTagChips extends StatelessWidget {
     required this.colors,
     required this.acceptedTagIds,
     required this.onAdd,
+    this.memory,
+    this.animateInitial = false,
   });
 
   @override
@@ -51,30 +59,35 @@ class AutoTagChips extends StatelessWidget {
       for (final s in titleSuggestions)
         if (!acceptedTagIds.contains(s.tag.id)) s,
     ];
-    if (pending.isEmpty && pendingFromTitle.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
+    // Toujours rendu, même vide : une suggestion qui part (touchée, ou devenue
+    // tag) se referme en s'animant au lieu de disparaître d'un coup.
+    return AnimatedPillWrap(
+      memory: memory,
+      animateInitial: animateInitial,
+      entries: [
         for (final s in pending)
-          TagPill(
-            key: ValueKey('auto-tag-${s.tag.id}'),
-            label: s.tag.name,
-            color: colors[s.tag.id],
-            suggestion: true,
-            onTap: () => onAdd(s.tag),
-          ),
-        for (final s in pendingFromTitle)
-          Tooltip(
-            message: 'Trouvé dans le titre : « ${s.word} »',
-            child: TagPill(
-              key: ValueKey('title-tag-${s.tag.id}'),
+          PillEntry(
+            ValueKey('auto-tag-${s.tag.id}'),
+            TagPill(
+              key: ValueKey('auto-tag-${s.tag.id}'),
               label: s.tag.name,
               color: colors[s.tag.id],
               suggestion: true,
               onTap: () => onAdd(s.tag),
+            ),
+          ),
+        for (final s in pendingFromTitle)
+          PillEntry(
+            ValueKey('title-tag-${s.tag.id}'),
+            Tooltip(
+              message: 'Trouvé dans le titre : « ${s.word} »',
+              child: TagPill(
+                key: ValueKey('title-tag-${s.tag.id}'),
+                label: s.tag.name,
+                color: colors[s.tag.id],
+                suggestion: true,
+                onTap: () => onAdd(s.tag),
+              ),
             ),
           ),
       ],

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
+import 'animated_pill_wrap.dart';
 import 'tag_picker_panel.dart';
 import 'tag_pill.dart';
 
@@ -137,19 +138,23 @@ class _TagChipsEditorState extends State<TagChipsEditor> {
           overlayChildBuilder: (_) => _buildPanel(width, availableTags),
           child: CompositedTransformTarget(
             link: _link,
-            child: Wrap(
+            // La clé globale est celle du `Wrap` interne (seul objet de rendu de
+            // ce widget) : elle sert à placer le panneau.
+            child: AnimatedPillWrap(
               key: _targetKey,
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final tag in selectedTags) _buildSelectedChip(tag),
+              entries: [
+                for (final tag in selectedTags)
+                  PillEntry(ValueKey('tag-${tag.id}'), _buildSelectedChip(tag)),
                 if (availableTags.isNotEmpty)
-                  TapRegion(
-                    groupId: _tapGroup,
-                    child: TagAddButton(
-                      open: _isPickerOpen,
-                      verbose: selectedTags.isEmpty,
-                      onPressed: _togglePicker,
+                  PillEntry(
+                    const ValueKey('add-tag'),
+                    TapRegion(
+                      groupId: _tapGroup,
+                      child: TagAddButton(
+                        open: _isPickerOpen,
+                        verbose: selectedTags.isEmpty,
+                        onPressed: _togglePicker,
+                      ),
                     ),
                   ),
               ],

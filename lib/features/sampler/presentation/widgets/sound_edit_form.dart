@@ -15,9 +15,9 @@ import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_auto_tag.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
-import '../utils/title_tag_proposals.dart';
 import 'app_form_dialog.dart';
 import 'color_swatch_picker.dart';
+import 'sound_edit_preload.dart';
 import 'sound_tags_section.dart';
 import 'sound_type_selector.dart';
 import 'sound_volume_field.dart';
@@ -72,6 +72,15 @@ class SoundEditForm extends StatefulWidget {
   /// (mobile) : la zone d'état n'est pas affichée.
   final AutoTagAnalysis? autoTag;
 
+  /// Ce que la section « Tags » affiche, déjà lu par l'appelant
+  /// ([SoundEditPane]) : le formulaire est complet dès sa première image. `null`
+  /// = le lire ici, la section se remplit à l'arrivée des données.
+  final SoundEditPreload? preload;
+
+  /// Hauteur de la section « Tags » du formulaire précédent, pour qu'elle
+  /// s'anime d'un son à l'autre (voir [SoundEditPane]). `null` = pas de suite.
+  final TagsSectionMemory? sectionMemory;
+
   const SoundEditForm({
     super.key,
     required this.sound,
@@ -79,6 +88,8 @@ class SoundEditForm extends StatefulWidget {
     required this.repository,
     this.notifier,
     this.autoTag,
+    this.preload,
+    this.sectionMemory,
     this.onSaved,
     this.onDirtyChanged,
     this.onMarkedUnprocessed,
@@ -139,6 +150,9 @@ class _SoundEditFormState extends State<SoundEditForm> {
   /// Où en est l'analyse IA de ce son (`null` = inconnu ou fonction absente).
   SoundAnalysisStatus? _analysisStatus;
 
+  int _analysisRefreshSeq = 0;
+  bool _suggestionsReloadPending = false;
+
   /// L'utilisateur a cliqué « Analyser » et le passage n'est pas fini : le son
   /// s'affiche « en attente » même si le passage n'a pas encore bâti sa file.
   bool _analysisRequested = false;
@@ -175,14 +189,24 @@ class _SoundEditFormState extends State<SoundEditForm> {
     _type = _baseType = sound.type;
     _waveform = sound.waveform;
     if (_waveform == null) unawaited(_loadMissingWaveform());
-    _loadTags();
+    final preload = widget.preload;
+    if (preload != null) {
+      _tagIds = {...preload.tagIds};
+      _baseTagIds = {...preload.tagIds};
+      _autoTags = preload.autoTags;
+      _titleMatches = preload.titleMatches;
+      _analysisStatus = preload.analysisStatus;
+      _tagsLoaded = true;
+    } else {
+      unawaited(_loadTags());
+    }
     final autoTag = widget.autoTag;
     if (autoTag != null) {
       final activity = autoTag.activity.value;
       _lastRunning = activity.running;
       _lastLiveStatus = activity.liveStatusOf(sound.id);
       autoTag.activity.addListener(_onAnalysisActivity);
-      unawaited(_refreshAnalysis());
+      if (preload == null) unawaited(_refreshAnalysis());
     }
   }
 
@@ -212,12 +236,19 @@ class _SoundEditFormState extends State<SoundEditForm> {
   Future<void> _refreshAnalysis({bool reloadSuggestions = false}) async {
     final autoTag = widget.autoTag;
     if (autoTag == null) return;
+    // Seule la dernière lecture compte : `statusOf` peut rendre tout de suite
+    // (passage en cours) ou après une lecture en base, et une réponse plus
+    // ancienne qui arriverait après ferait osciller la rangée d'état. La
+    // relecture des suggestions demandée par une lecture écartée est reportée.
+    final seq = ++_analysisRefreshSeq;
+    if (reloadSuggestions) _suggestionsReloadPending = true;
     try {
       final status = await autoTag.statusOf(widget.sound.id);
-      final suggestions = reloadSuggestions
+      final suggestions = _suggestionsReloadPending
           ? await widget.repository.getAutoTagsForSound(widget.sound.id)
           : null;
-      if (!mounted) return;
+      if (!mounted || seq != _analysisRefreshSeq) return;
+      _suggestionsReloadPending = false;
       final finishedRequest =
           _analysisRequested && !autoTag.activity.value.running;
       setState(() {
@@ -275,46 +306,26 @@ class _SoundEditFormState extends State<SoundEditForm> {
 
   Future<void> _loadTags() async {
     try {
-      final tags = await widget.repository.getTagsForSound(widget.sound.id);
-      if (!mounted) return;
-      // Les tags de l’IA sont facultatifs : un échec de lecture ne bloque rien.
-      var auto = const <SoundAutoTag>[];
-      try {
-        auto = await widget.repository.getAutoTagsForSound(widget.sound.id);
-      } catch (error) {
-        AppLog.warn(
-          'Tags de l’IA illisibles (son ${widget.sound.id}) : $error',
-        );
-      }
-      // Ceux du titre (décision 0041) sont facultatifs eux aussi.
-      var fromTitle = const <TitleTagMatch>[];
-      try {
-        final matcher = TitleTagMatcher(
-          await widget.repository.getTagVocabulary(),
-        );
-        fromTitle = titleTagMatchesFor(
-          widget.sound,
-          matcher,
-          excluded: {for (final tag in tags) tag.id},
-        );
-      } catch (error) {
-        AppLog.warn(
-          'Tags du titre indisponibles (son ${widget.sound.id}) : $error',
-        );
-      }
+      final data = await SoundEditPreload.load(
+        sound: widget.sound,
+        repository: widget.repository,
+      );
       if (!mounted) return;
       setState(() {
-        _tagIds = tags.map((t) => t.id).toSet();
-        _baseTagIds = {..._tagIds};
-        _autoTags = auto;
-        _titleMatches = fromTitle;
+        _tagIds = {...data.tagIds};
+        _baseTagIds = {...data.tagIds};
+        _autoTags = data.autoTags;
+        _titleMatches = data.titleMatches;
         _tagsLoaded = true;
       });
     } catch (error) {
       if (!mounted) return;
       // Formulaire utilisable sans tags plutôt que bloqué : enregistrer ne
       // touche aux tags que si le chargement a abouti (voir `_save`).
-      setState(() => _tagsFailed = true);
+      setState(() {
+        _tagsFailed = true;
+        _tagsLoaded = false;
+      });
       showCopyableSnackBar(context, 'Impossible de charger les tags : $error');
     }
   }
@@ -651,6 +662,7 @@ class _SoundEditFormState extends State<SoundEditForm> {
                         autoTags: _autoTags,
                         titleMatches: _titleMatches,
                         tagsLoaded: _tagsLoaded,
+                        memory: widget.sectionMemory,
                         tagsFailed: _tagsFailed,
                         hasAnalysis: widget.autoTag != null,
                         analysisStatus: _analysisStatus,

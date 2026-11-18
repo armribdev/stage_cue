@@ -51,41 +51,53 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
         ),
       );
     }
-    return SoundEditForm(
-      // isProcessed dans la clé : la validation en masse doit recréer le
-      // formulaire ouvert, mais un enregistrement normal (l'état local passe
-      // à « traité » sans toucher à `sound`) ne doit pas le réinitialiser.
-      key: ValueKey('${sound.id}-${sound.isProcessed}'),
+    // isProcessed dans l'identité : la validation en masse doit recréer le
+    // formulaire ouvert, mais un enregistrement normal (l'état local passe à
+    // « traité » sans toucher à `sound`) ne doit pas le réinitialiser.
+    return SoundEditPane(
+      identity: '${sound.id}-${sound.isProcessed}',
       sound: sound,
-      tagCatalog: _tagCatalog,
       repository: mode.repository,
-      notifier: widget.notifier,
       autoTag: widget.notifier.autoTagAnalysis,
-      controller: _editController,
-      isQueueMode: _unprocessedOnly,
-      // Trier à l'oreille : l'éditeur joue lui-même depuis le point d'entrée.
-      // Jamais en salle pendant un spectacle (comme le ▶ de la liste).
-      autoPlayEntryPoint:
-          _unprocessedOnly &&
-          _autoPreview &&
-          !widget.notifier.isRoomPreviewBlockedInLive,
-      onSkip: _unprocessedOnly && shown.length > 1
-          ? () => _skipToNext(shown)
-          : null,
-      onDirtyChanged: (dirty) => setState(() => _editDirty = dirty),
-      onMarkedUnprocessed: () => unawaited(_adoptRefreshedSnapshot()),
-      // Le favori est déjà en base et dans l'instantané en mémoire : on met à
-      // jour le son édité (sinon une recréation du formulaire relirait l'ancien
-      // état) et la liste (filtre « favoris », tri).
-      onFavoriteChanged: (isFavorite) {
-        setState(() => _editingSound = sound.copyWith(isFavorite: isFavorite));
-        unawaited(_adoptRefreshedSnapshot(refresh: false));
-      },
-      // Nom, type ou tags ont pu changer : on reconstruit l'index plutôt que
-      // de recharger la seule liste des sons. En file de traitement, on
-      // enchaîne ensuite sur le son suivant.
-      onSaved: () => unawaited(_afterPaneSave(sound)),
-      onDeleted: () => unawaited(_afterPaneDelete(sound)),
+      // Le volet garde le formulaire précédent le temps de lire ce que le
+      // suivant affiche : `edited` est le son réellement à l'écran.
+      builder: (context, edited, preload, sectionMemory) => SoundEditForm(
+        key: ValueKey('${edited.id}-${edited.isProcessed}'),
+        sound: edited,
+        tagCatalog: _tagCatalog,
+        repository: mode.repository,
+        notifier: widget.notifier,
+        autoTag: widget.notifier.autoTagAnalysis,
+        preload: preload,
+        sectionMemory: sectionMemory,
+        controller: _editController,
+        isQueueMode: _unprocessedOnly,
+        // Trier à l'oreille : l'éditeur joue lui-même depuis le point d'entrée.
+        // Jamais en salle pendant un spectacle (comme le ▶ de la liste).
+        autoPlayEntryPoint:
+            _unprocessedOnly &&
+            _autoPreview &&
+            !widget.notifier.isRoomPreviewBlockedInLive,
+        onSkip: _unprocessedOnly && shown.length > 1
+            ? () => _skipToNext(shown)
+            : null,
+        onDirtyChanged: (dirty) => setState(() => _editDirty = dirty),
+        onMarkedUnprocessed: () => unawaited(_adoptRefreshedSnapshot()),
+        // Le favori est déjà en base et dans l'instantané en mémoire : on met à
+        // jour le son édité (sinon une recréation du formulaire relirait
+        // l'ancien état) et la liste (filtre « favoris », tri).
+        onFavoriteChanged: (isFavorite) {
+          setState(
+            () => _editingSound = edited.copyWith(isFavorite: isFavorite),
+          );
+          unawaited(_adoptRefreshedSnapshot(refresh: false));
+        },
+        // Nom, type ou tags ont pu changer : on reconstruit l'index plutôt que
+        // de recharger la seule liste des sons. En file de traitement, on
+        // enchaîne ensuite sur le son suivant.
+        onSaved: () => unawaited(_afterPaneSave(edited)),
+        onDeleted: () => unawaited(_afterPaneDelete(edited)),
+      ),
     );
   }
 
