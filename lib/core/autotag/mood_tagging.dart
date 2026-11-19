@@ -19,6 +19,12 @@ class Mood {
 /// Catégorie des tags posés par l'analyse d'ambiance.
 const String kMoodTagCategory = 'EMOTION_STYLE';
 
+/// Vrai si le tag [tag] de la catégorie [category] est visé par une ambiance de
+/// [kMoods] : le renommer, le fusionner ailleurs ou le supprimer coupe
+/// l'analyse automatique de ses suggestions (elle retrouve ses tags par nom).
+bool isMoodTag({required String category, required String tag}) =>
+    category == kMoodTagCategory && kMoods.any((m) => m.tagName == tag);
+
 /// Ambiances, **dans l'ordre des lignes de `assets/autotag/text_latents.f32`**.
 /// Merveilleux, Dramatique et Sensuel n'ont pas de tag propre : alias de
 /// Magie, Drame et Romantique.

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/theme/app_dialog.dart';
@@ -33,6 +34,7 @@ import '../../../../core/utils/layout_utils.dart';
 import '../widgets/app_form_dialog.dart';
 import '../widgets/app_modal.dart';
 import '../widgets/drive_folder_picker.dart';
+import '../../data/datasources/local_tag_editing_datasource.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../data/models/indexing_progress.dart';
@@ -46,6 +48,7 @@ import '../widgets/settings_indexed_folders_section.dart';
 import '../widgets/settings_layout.dart';
 import '../widgets/settings_loading_view.dart';
 import 'sound_library_screen.dart';
+import 'tag_catalog_editor_screen.dart';
 
 part 'settings/settings_data.dart';
 part 'settings/settings_diagnostic.dart';

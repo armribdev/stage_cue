@@ -33,6 +33,8 @@ extension _SamplerScreenNavigation on _SamplerScreenState {
       scrollToDriveSection: scrollToDriveSection,
     );
     if (!mounted) return;
+    // L'éditeur de catalogue de tags (debug) a pu changer tags et alias.
+    _notifier.invalidateSearchIndex();
     await _notifier.loadSounds();
   }
 

@@ -1,6 +1,6 @@
 # 0046 — Le catalogue de tags fait foi : la base s'y aligne à chaque ouverture
 
-**Statut :** acceptée (amende 0040 et 0043)
+**Statut :** acceptée (amende 0040 et 0043 ; précisée par 0047 : un éditeur debug existe, il produit le code du catalogue)
 **Date :** 2026-11-19
 
 ## Contexte

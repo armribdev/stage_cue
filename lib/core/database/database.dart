@@ -66,9 +66,11 @@ class AppDatabase extends _$AppDatabase {
   /// Aligne les tags de la base sur le catalogue courant : catégories
   /// dissoutes, tags du catalogue créés (`_extraTagCatalog`), tags fusionnés dans
   /// leur famille, tags retirés supprimés (`retiredTagCategories`,
-  /// `mergedTags`, `prunedTags`). Usages, suggestions et alias suivent. Il n'y a
-  /// ni création ni suppression de tag dans l'interface : le catalogue fait foi,
-  /// une base ne garde aucun tag qu'il ne porte plus (décision 0046).
+  /// `mergedTags`, `prunedTags`). Usages, suggestions et alias suivent. Les
+  /// utilisateurs ne créent ni ne suppriment de tag : le catalogue fait foi, une
+  /// base ne garde aucun tag qu'il ne porte plus (décision 0046). Seul l'éditeur
+  /// de développement (debug, décision 0047) modifie la base, et il produit en
+  /// retour la déclaration à ajouter au catalogue.
   ///
   /// Idempotente. Appelée à **chaque ouverture** (`beforeOpen`, y compris après
   /// la migration v48) et à la fin de chaque import de snapshot : une
@@ -80,6 +82,13 @@ class AppDatabase extends _$AppDatabase {
     // Avant le retrait : les tags d'accueil (Meuble, Véhicule…) doivent exister.
     await _ensureExtraTags();
     await _withdrawSpecificTags();
+  }
+
+  /// Fusionne le tag [from] dans [into] (usages, suggestions et alias reportés,
+  /// puis [from] supprimé). Le moteur de `mergedTags`, exposé à l'éditeur de
+  /// catalogue de développement (décision 0047).
+  Future<void> mergeTagInto({required int from, required int into}) {
+    return transaction(() => _mergeTagInto(from: from, into: into));
   }
 
   /// Émule les `onDelete: cascade` des tables dépendantes, que SQLite n'exécute

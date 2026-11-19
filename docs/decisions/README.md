@@ -68,5 +68,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0044](0044-volume-auto-releve-plafonne-par-le-pic.md) | Volume « auto » : gain relevé au-delà de 1.0, plafonné par le pic mesuré | acceptée (amende 0036 ; le gain de sonie devient le gain unique du son, 0045) |
 | [0045](0045-gain-unique-par-son-sans-volume.md) | Un seul niveau par son : le gain, réglé dans la bibliothèque (plus de volume par son ni par pad) | acceptée (amende 0044) |
 | [0046](0046-le-catalogue-de-tags-fait-foi-a-chaque-ouverture.md) | Le catalogue de tags fait foi : la base s'y aligne à chaque ouverture, tags retirés supprimés même posés | acceptée (amende 0040 et 0043) |
+| [0047](0047-editeur-de-catalogue-de-tags-debug-qui-produit-le-code.md) | Éditeur de catalogue de tags réservé au développeur (debug) : il modifie la base locale et produit la déclaration du code | acceptée (précise 0046) |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

@@ -348,12 +348,42 @@ extension _SettingsSections on _SettingsScreenState {
                         child: Divider(height: 1),
                       ),
                       _buildDiagnosticRows(),
+                      if (kDebugMode) ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: AppSpacing.sm,
+                          ),
+                          child: Divider(height: 1),
+                        ),
+                        _buildTagCatalogRow(),
+                      ],
                     ],
                   ),
                 )
               : const SizedBox(width: double.infinity),
         ),
       ],
+    );
+  }
+
+  /// Éditeur du catalogue de tags, **build debug seulement** (décision 0047) :
+  /// absent d'un build release, il n'existe pas pour les utilisateurs.
+  Widget _buildTagCatalogRow() {
+    return SettingsRow(
+      title: 'Catalogue de tags (développement)',
+      description:
+          'Créer, renommer, fusionner ou supprimer des tags, et obtenir la '
+          'déclaration à ajouter au catalogue du code.',
+      trailing: SettingsButton(
+        label: 'Ouvrir',
+        icon: AppIcons.edit,
+        onPressed: () => unawaited(
+          TagCatalogEditorScreen.open(
+            context,
+            editor: LocalTagEditingDataSource(widget.database),
+          ),
+        ),
+      ),
     );
   }
 
