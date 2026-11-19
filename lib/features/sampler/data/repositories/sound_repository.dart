@@ -89,8 +89,13 @@ class SoundRepository {
 
   /// Persiste l'issue d'une extraction waveform (enveloppe réussie ou marqueur
   /// de génération d'échec pour ne pas re-sonder en boucle un format refusé).
-  Future<void> persistWaveformProbe(int id, WaveformProbe probe) async {
-    await _soundDataSource.persistWaveformProbe(id, probe);
+  /// Une première enveloppe écrit aussi le gain « auto » mesuré sur [file].
+  Future<void> persistWaveformProbe(
+    int id,
+    WaveformProbe probe, {
+    required File file,
+  }) async {
+    await _soundDataSource.persistWaveformProbe(id, probe, file: file);
   }
 
   Future<void> setSoundFavorite(int id, bool isFavorite) async {

@@ -1,5 +1,7 @@
 // `isNull`/`isNotNull` de drift entrent en collision avec les matchers de test :
 // on masque les noms top-level (les méthodes `.isNotNull()` sur colonnes restent).
+import 'dart:io';
+
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -587,6 +589,7 @@ void main() {
       await dataSource.persistWaveformProbe(
         id,
         WaveformProbe.success(Uint8List.fromList([9, 8, 7])),
+        file: File('/cache/loop.mp3'),
       );
 
       final sound = await reload(id);
@@ -600,11 +603,37 @@ void main() {
       await dataSource.persistWaveformProbe(
         id,
         WaveformProbe.success(Uint8List.fromList([9, 8, 7])),
+        file: File('/cache/loop.mp3'),
       );
 
       final sound = await reload(id);
       expect(sound.waveform, [9, 8, 7]);
       expect(sound.waveformProbeGeneration, kWaveformProbeGeneration);
+    });
+
+    test('régénération : le gain déjà réglé n\'est jamais remesuré', () async {
+      final id = await database
+          .into(database.sounds)
+          .insert(
+            db.SoundsCompanion.insert(
+              title: 'loop',
+              displayName: 'loop',
+              filePath: '/cache/loop.mp3',
+              type: const Value(SoundType.music),
+              waveform: Value(Uint8List.fromList([1, 2, 3])),
+              gain: const Value(2.0),
+            ),
+          );
+
+      await dataSource.persistWaveformProbe(
+        id,
+        WaveformProbe.success(Uint8List.fromList([9, 8, 7])),
+        file: File('/cache/loop.mp3'),
+      );
+
+      final sound = await reload(id);
+      expect(sound.waveform, [9, 8, 7]);
+      expect(sound.gain, 2.0);
     });
 
     test('unsupported : n\'efface jamais une enveloppe existante', () async {
@@ -613,6 +642,7 @@ void main() {
       await dataSource.persistWaveformProbe(
         id,
         const WaveformProbe.unsupported(),
+        file: File('/cache/loop.mp3'),
       );
 
       final sound = await reload(id);
@@ -626,6 +656,7 @@ void main() {
       await dataSource.persistWaveformProbe(
         id,
         const WaveformProbe.transient(),
+        file: File('/cache/loop.mp3'),
       );
 
       final sound = await reload(id);

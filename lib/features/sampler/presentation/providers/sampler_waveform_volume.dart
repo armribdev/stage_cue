@@ -36,7 +36,11 @@ extension SamplerWaveformVolume on SamplerNotifier {
 
     try {
       // Persiste soit l'enveloppe (succès), soit le marqueur d'échec (unsupported).
-      await _repository.persistWaveformProbe(sound.id, probe);
+      await _repository.persistWaveformProbe(
+        sound.id,
+        probe,
+        file: File(filePath),
+      );
     } catch (e) {
       AudioLoadLog.warn('Persistance waveform échouée (${sound.title}): $e');
       return;
@@ -86,7 +90,7 @@ extension SamplerWaveformVolume on SamplerNotifier {
       }
       final probe = await extractWaveform(path);
       if (probe.status == WaveformProbeStatus.transient) return null;
-      await _repository.persistWaveformProbe(sound.id, probe);
+      await _repository.persistWaveformProbe(sound.id, probe, file: File(path));
       waveform = probe.waveformValue;
     }
     if (waveform != null) await refreshSoundMetadata(soundId);

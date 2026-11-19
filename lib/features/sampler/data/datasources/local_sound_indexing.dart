@@ -132,6 +132,9 @@ extension LocalSoundIndexing on LocalSoundDataSource {
     // Un échec transitoire (moteur non prêt) ne doit rien écrire : on retentera.
     final persistProbe =
         probe != null && probe.status != WaveformProbeStatus.transient;
+    final gain = persistProbe && probe.status == WaveformProbeStatus.success
+        ? await _autoGainForFirstWaveform(row: existing, file: file)
+        : const Value<double>.absent();
     await (_database.update(
       _database.sounds,
     )..where((s) => s.id.equals(soundId))).write(
@@ -145,6 +148,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
         waveformProbeGeneration: persistProbe
             ? Value(probe.generationValue)
             : const Value.absent(),
+        gain: gain,
       ),
     );
   }

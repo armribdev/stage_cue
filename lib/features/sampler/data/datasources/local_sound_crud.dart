@@ -92,16 +92,32 @@ extension LocalSoundCrud on LocalSoundDataSource {
   /// existante : un re-sondage (rafraîchissement, régénération) qui échoue ne
   /// doit pas détruire une waveform valable. Un échec `transient` (moteur non
   /// prêt) n'écrit rien — on retentera.
-  Future<void> persistWaveformProbe(int id, WaveformProbe probe) async {
+  ///
+  /// À la **première** enveloppe d'un son (jamais une régénération), le gain
+  /// « auto » est mesuré sur [file] et écrit avec elle, comme à la création
+  /// (`_autoGainForFirstWaveform`).
+  Future<void> persistWaveformProbe(
+    int id,
+    WaveformProbe probe, {
+    required File file,
+  }) async {
     if (probe.status == WaveformProbeStatus.transient) return;
+    final success = probe.status == WaveformProbeStatus.success;
+    final row = success
+        ? await (_database.select(
+            _database.sounds,
+          )..where((s) => s.id.equals(id))).getSingleOrNull()
+        : null;
+    final gain = row == null
+        ? const Value<double>.absent()
+        : await _autoGainForFirstWaveform(row: row, file: file);
     await (_database.update(
       _database.sounds,
     )..where((s) => s.id.equals(id))).write(
       db.SoundsCompanion(
-        waveform: probe.status == WaveformProbeStatus.success
-            ? Value(probe.waveformValue)
-            : const Value.absent(),
+        waveform: success ? Value(probe.waveformValue) : const Value.absent(),
         waveformProbeGeneration: Value(probe.generationValue),
+        gain: gain,
       ),
     );
   }

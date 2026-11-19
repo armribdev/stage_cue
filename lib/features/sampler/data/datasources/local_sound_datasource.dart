@@ -112,6 +112,22 @@ class LocalSoundDataSource {
   Value<double> _autoGain(double? gain) =>
       gain == null ? const Value.absent() : Value(gain);
 
+  /// Gain « auto » à écrire en même temps que la **première** waveform d'un son
+  /// de type connu : la mesure de sonie accompagne l'extraction, comme à la
+  /// création. Absent (gain intact) si le son avait déjà une enveloppe
+  /// (simple régénération), si son gain n'est plus le défaut (1.0 : snapshot
+  /// d'un autre appareil ou réglage de l'opérateur) ou si la mesure échoue.
+  Future<Value<double>> _autoGainForFirstWaveform({
+    required db.Sound row,
+    required File file,
+  }) async {
+    final type = row.type;
+    if (row.waveform != null || row.gain != 1.0 || type == null) {
+      return const Value.absent();
+    }
+    return _autoGain(await _measureAutoGain(file, type));
+  }
+
   /// Probe de type par durée SoLoud. Retourne null si le fichier est invalide
   /// ou si SoLoud ne peut pas le lire.
   Future<db_sounds.SoundType?> _probeSoundTypeFromDuration(File file) async {
