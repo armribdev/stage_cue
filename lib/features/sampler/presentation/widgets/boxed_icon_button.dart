@@ -38,6 +38,10 @@ class BoxedIconButton extends StatefulWidget {
   /// rangée qui ne doit pas grandir (ex. à côté d'un titre).
   final double size;
 
+  /// Taille du glyphe de [icon] (16 par défaut) — à augmenter pour une cible
+  /// tactile, où l'icône fine d'une barre desktop serait trop discrète.
+  final double iconSize;
+
   const BoxedIconButton({
     super.key,
     this.icon,
@@ -48,6 +52,7 @@ class BoxedIconButton extends StatefulWidget {
     this.framed = true,
     this.compact = false,
     this.size = 32,
+    this.iconSize = 16,
   }) : assert(
          (icon == null) != (child == null),
          'Fournir soit icon, soit child — jamais les deux, jamais aucun.',
@@ -93,7 +98,11 @@ class _BoxedIconButtonState extends State<BoxedIconButton> {
             // [child] hérite de la couleur via l'[IconTheme] : un glyphe sans
             // couleur propre (ex. [TransportIcon]) suit donc le survol.
             child: switch ((widget.icon, widget.child)) {
-              (final icon?, _) => StrokeIcon(icon, size: 16, color: iconColor),
+              (final icon?, _) => StrokeIcon(
+                icon,
+                size: widget.iconSize,
+                color: iconColor,
+              ),
               (_, final child?) => IconTheme.merge(
                 data: IconThemeData(color: iconColor),
                 child: child,

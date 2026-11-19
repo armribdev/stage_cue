@@ -48,15 +48,18 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
       // cède la place à un bouton de sortie direct (un clic). Hors session, le
       // hamburger ouvre le tiroir (mode live / bibliothèque / paramètres).
       // `Center` : le `leading` d'une AppBar impose largeur ET hauteur serrées,
-      // qui étiraient le cadre en rectangle 48×56. Centré, il garde ses 32×32
-      // (cercle parfait) avec de l'air de chaque côté.
+      // qui étireraient la zone de clic en rectangle 56×56. Centrée, elle garde
+      // son carré de 44 px. Hamburger sans cadre et à grande icône : c'est la
+      // cible tactile principale de la barre, pas une action secondaire.
       leading: Center(
         child: isPerformanceMode
             ? LiveExitButton(onExit: onTogglePerformanceMode)
             : BoxedIconButton(
                 icon: AppIcons.menu,
                 tooltip: 'Menu',
-                circular: true,
+                framed: false,
+                size: 44,
+                iconSize: 26,
                 onPressed: onOpenMenu,
               ),
       ),
