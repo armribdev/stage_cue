@@ -99,15 +99,18 @@ class SoundGainField extends StatelessWidget {
                       value: shown.clamp(kGainMinDb, kGainMaxDb),
                       min: kGainMinDb,
                       max: kGainMaxDb,
-                      divisions: ((kGainMaxDb - kGainMinDb) * 2).round(),
                       label: text,
-                      onChanged: onChanged,
+                      // Pas de `divisions` : elles dessinent un trait par pas.
+                      // Le pas de 0,5 dB est appliqué ici.
+                      onChanged: (db) => onChanged((db * 2).round() / 2),
                     ),
                   ),
                   SizedBox(
-                    width: 64,
+                    width: 76,
                     child: Text(
                       text,
+                      maxLines: 1,
+                      softWrap: false,
                       textAlign: TextAlign.end,
                       style: AppFonts.monoStyle(const TextStyle(fontSize: 13)),
                     ),
