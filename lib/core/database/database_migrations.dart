@@ -441,6 +441,15 @@ extension _AppDatabaseMigrations on AppDatabase {
         await customStatement('ALTER TABLE pad_sounds DROP COLUMN volume');
       }
     }
+    if (from < 51) {
+      // Marque de mesure du gain auto (décision 0048). Null pour tous : aucun
+      // son existant n'a de mesure tracée, et aucun ne change de niveau. Même
+      // garde que v43/v44 : un upgrade depuis < 40 recrée `sounds` au schéma
+      // courant, colonne déjà présente.
+      if (!await _columnExists('sounds', 'gain_measure_generation')) {
+        await m.addColumn(sounds, sounds.gainMeasureGeneration);
+      }
+    }
   }
 
   /// `TableMigration` de `sounds` pour une étape ancienne qui la recrée (v23,

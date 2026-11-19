@@ -120,6 +120,7 @@ class SoundRepository {
     String? displayName,
     bool updateDisplayName = false,
     double? gain,
+    bool gainMeasured = false,
     int? startOffsetMs,
     bool? isProcessed,
   }) async {
@@ -130,6 +131,7 @@ class SoundRepository {
       displayName: displayName,
       updateDisplayName: updateDisplayName,
       gain: gain,
+      gainMeasured: gainMeasured,
       startOffsetMs: startOffsetMs,
       isProcessed: isProcessed,
     );

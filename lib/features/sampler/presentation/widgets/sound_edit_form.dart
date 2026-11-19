@@ -176,6 +176,10 @@ class _SoundEditFormState extends State<SoundEditForm>
   bool _isSaving = false;
   bool _isDeleting = false;
   bool _isMeasuringGain = false;
+
+  /// `_gain` vient de « Auto » et n'a pas été retouché au curseur : à
+  /// l'enregistrement, le son est marqué « gain mesuré » (`gainMeasureGeneration`).
+  bool _gainMeasured = false;
   bool _wasDirty = false;
 
   /// Reflète `Sound.isProcessed`, passé à `true` dès le premier enregistrement
@@ -412,6 +416,7 @@ class _SoundEditFormState extends State<SoundEditForm>
         displayName: name,
         updateDisplayName: true,
         gain: _gain,
+        gainMeasured: _gainMeasured,
         startOffsetMs: _startOffsetMs,
         isProcessed: true,
       );
@@ -432,6 +437,7 @@ class _SoundEditFormState extends State<SoundEditForm>
         _baseDisplayName = name;
         _baseColorValue = _colorValue;
         _baseGain = _gain;
+        _gainMeasured = false;
         _baseStartOffsetMs = _startOffsetMs;
         _baseType = _type;
         _baseTagIds = {..._tagIds};
@@ -636,7 +642,10 @@ class _SoundEditFormState extends State<SoundEditForm>
   }
 
   /// Geste sur le curseur : [db] est l'échelle du curseur, `_gain` le facteur.
-  void _onGainSlider(double db) => _setGain(dbToGain(db));
+  void _onGainSlider(double db) {
+    _gainMeasured = false;
+    _setGain(dbToGain(db));
+  }
 
   /// Gain « auto » : mesure la sonie et le pic du fichier, et fixe le gain qui la
   /// ramène à la cible (relevé ou atténué, décision 0044). N'enregistre rien —
@@ -657,6 +666,7 @@ class _SoundEditFormState extends State<SoundEditForm>
         );
         return;
       }
+      _gainMeasured = true;
       _setGain(gain, glide: true);
     } catch (error) {
       if (!mounted) return;

@@ -69,5 +69,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0045](0045-gain-unique-par-son-sans-volume.md) | Un seul niveau par son : le gain, réglé dans la bibliothèque (plus de volume par son ni par pad) | acceptée (amende 0044) |
 | [0046](0046-le-catalogue-de-tags-fait-foi-a-chaque-ouverture.md) | Le catalogue de tags fait foi : la base s'y aligne à chaque ouverture, tags retirés supprimés même posés | acceptée (amende 0040 et 0043) |
 | [0047](0047-editeur-de-catalogue-de-tags-debug-qui-produit-le-code.md) | Éditeur de catalogue de tags réservé au développeur (debug) : il modifie la base locale et produit la déclaration du code | acceptée (précise 0046) |
+| [0048](0048-marque-de-mesure-du-gain-auto-et-rattrapage-explicite.md) | Marque de mesure du gain auto (`gain_measure_generation`, v51) : les sons anciens se rattrapent à la demande, jamais en silence | acceptée (précise 0044) |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

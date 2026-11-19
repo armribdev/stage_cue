@@ -112,6 +112,12 @@ class LocalSoundDataSource {
   Value<double> _autoGain(double? gain) =>
       gain == null ? const Value.absent() : Value(gain);
 
+  /// Génération de mesure à écrire **avec** un gain mesuré ([gain] issu de
+  /// [_autoGain] ou de `_autoGainForFirstWaveform`) : absente quand aucun gain
+  /// n'est écrit, pour ne jamais marquer « mesuré » un son qui ne l'est pas.
+  Value<int> _measuredGeneration(Value<double> gain) =>
+      gain.present ? const Value(kGainMeasureGeneration) : const Value.absent();
+
   /// Gain « auto » à écrire en même temps que la **première** waveform d'un son
   /// de type connu : la mesure de sonie accompagne l'extraction, comme à la
   /// création. Absent (gain intact) si le son avait déjà une enveloppe

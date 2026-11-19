@@ -202,6 +202,17 @@ class Sounds extends Table {
   /// recalcule sans ré-analyser le son. Annotation locale comme [autoTaggedAt] :
   /// absente de l'export du snapshot dossier.
   BlobColumn get autoEmbedding => blob().nullable()();
+
+  /// Génération de la mesure « auto » (`kGainMeasureGeneration`, décisions 0036
+  /// et 0044) dont [gain] est issu : écrite avec chaque gain mesuré par l'app
+  /// (création, premier fichier, « Auto » de la fiche, recalcul en masse).
+  /// `null` = jamais mesuré : gain par défaut, réglé à la main, ou hérité d'avant
+  /// la v51. Un gain à 1.0 **et** `null` est un son que l'app n'a jamais mesuré,
+  /// ce qu'un 1.0 seul ne dit pas (0 dB voulu ou son intact). Annotation locale
+  /// comme [autoTaggedAt] : absente de l'export du snapshot dossier ; un appareil
+  /// qui importe un gain ≠ 1.0 n'en a pas besoin, et un 1.0 reçu se remesure au
+  /// pire une fois.
+  IntColumn get gainMeasureGeneration => integer().nullable()();
 }
 
 class SoundBoards extends Table {

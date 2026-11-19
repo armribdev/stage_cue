@@ -9,11 +9,35 @@ class AutoVolumePlan {
   /// Sons ignorés faute de fichier local (un recalcul ne télécharge rien).
   final int unavailable;
 
-  const AutoVolumePlan({required this.sounds, required this.unavailable});
+  /// Identités des sons dont l'app n'a jamais mesuré le gain (au gain par
+  /// défaut, sans génération de mesure) : ceux qu'un recalcul « sans toucher aux
+  /// réglages » peut mesurer.
+  final Set<int> _unmeasuredIds;
+
+  const AutoVolumePlan({
+    required this.sounds,
+    required this.unavailable,
+    Set<int> unmeasuredIds = const {},
+  }) : _unmeasuredIds = unmeasuredIds;
 
   /// Sons dont le gain a déjà été réglé (≠ 1.0, à la main ou par un « Auto »
   /// précédent) : le recalcul le remplace.
   int get customized => sounds.where((s) => s.gain != 1.0).length;
+
+  /// Sons disponibles dont le gain n'a jamais été mesuré.
+  int get unmeasured =>
+      sounds.where((s) => _unmeasuredIds.contains(s.id)).length;
+
+  /// Le même plan restreint aux sons jamais mesurés : aucun gain réglé n'y est
+  /// remplacé.
+  AutoVolumePlan onlyUnmeasured() => AutoVolumePlan(
+    sounds: [
+      for (final sound in sounds)
+        if (_unmeasuredIds.contains(sound.id)) sound,
+    ],
+    unavailable: unavailable,
+    unmeasuredIds: _unmeasuredIds,
+  );
 }
 
 /// Bilan d'un recalcul en masse.
@@ -40,6 +64,7 @@ extension LibraryRepositoryAutoVolume on LibraryRepository {
     return AutoVolumePlan(
       sounds: local,
       unavailable: all.length - local.length,
+      unmeasuredIds: await _soundDataSource.getUnmeasuredGainSoundIds(),
     );
   }
 
@@ -72,7 +97,11 @@ extension LibraryRepositoryAutoVolume on LibraryRepository {
           unmeasurable++;
         } else {
           final gain = autoLoudnessGain(measurement, profile);
-          await _soundDataSource.updateSoundSettings(id: sound.id, gain: gain);
+          await _soundDataSource.updateSoundSettings(
+            id: sound.id,
+            gain: gain,
+            gainMeasured: true,
+          );
           updated++;
           if (gain > 1.0) boosted++;
         }

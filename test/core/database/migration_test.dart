@@ -1193,6 +1193,38 @@ void main() {
     await database.close();
   });
 
+  test('une base v50 gagne gain_measure_generation à null, sans changer aucun '
+      'gain', () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    await database.customStatement(
+      "INSERT INTO sounds (title, file_path, display_name, gain) "
+      "VALUES ('réglé', '/a.wav', 'réglé', 0.4), "
+      "('intact', '/b.wav', 'intact', 1.0)",
+    );
+    await database.customStatement(
+      'ALTER TABLE sounds DROP COLUMN gain_measure_generation',
+    );
+    await database.customStatement('PRAGMA user_version = 50');
+    await database.close();
+
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    expect(
+      await columnsOf(database, 'sounds'),
+      contains('gain_measure_generation'),
+    );
+    final sounds = {
+      for (final s in await database.select(database.sounds).get()) s.title: s,
+    };
+    expect(sounds['réglé']!.gain, 0.4);
+    expect(sounds['intact']!.gain, 1.0);
+    expect(
+      sounds.values.map((s) => s.gainMeasureGeneration),
+      everyElement(isNull),
+      reason: 'aucun son existant n\'est marqué mesuré',
+    );
+    await database.close();
+  });
+
   test('une base v39 garde le volume de ses sons en gain à travers la '
       'recréation de sounds (v40)', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));

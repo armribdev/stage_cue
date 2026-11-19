@@ -18,6 +18,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
       // Extraire le nom du fichier sans extension pour le titre
       final title = p.basenameWithoutExtension(file.path);
       final metadata = await _resolveMetadataForFile(file);
+      final gain = _autoGain(metadata.gain);
 
       await _database
           .into(_database.sounds)
@@ -29,7 +30,8 @@ extension LocalSoundIndexing on LocalSoundDataSource {
               type: Value(metadata.type),
               contentHash: Value(metadata.contentHash),
               waveform: Value(metadata.waveform),
-              gain: _autoGain(metadata.gain),
+              gain: gain,
+              gainMeasureGeneration: _measuredGeneration(gain),
               waveformProbeGeneration: Value(metadata.waveformProbeGeneration),
             ),
           );
@@ -61,6 +63,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
 
     final title = p.basenameWithoutExtension(file.path);
     final metadata = await _resolveMetadataForFile(file);
+    final gain = _autoGain(metadata.gain);
 
     await _database
         .into(_database.sounds)
@@ -74,7 +77,8 @@ extension LocalSoundIndexing on LocalSoundDataSource {
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
             waveform: Value(metadata.waveform),
-            gain: _autoGain(metadata.gain),
+            gain: gain,
+            gainMeasureGeneration: _measuredGeneration(gain),
           ),
         );
     return true;
@@ -98,6 +102,14 @@ extension LocalSoundIndexing on LocalSoundDataSource {
           ? await computeQuickHash(file)
           : existing.contentHash;
       final probe = probeType != null ? await extractWaveform(file.path) : null;
+      // Premier fichier réel d'un son Drive : même gain auto qu'à la création
+      // locale. Seulement si le gain est encore celui par défaut (1.0) — un
+      // snapshot (autre appareil) ou l'opérateur a pu le fixer avant. Un gain
+      // réglé exactement à 0 dB est indiscernable d'un gain jamais touché : il
+      // est remesuré ici, une seule fois (le type devient connu juste après).
+      final gain = existing.gain == 1.0 && probeType != null
+          ? _autoGain(await _measureAutoGain(file, probeType))
+          : const Value<double>.absent();
       await (_database.update(
         _database.sounds,
       )..where((s) => s.id.equals(soundId))).write(
@@ -106,15 +118,8 @@ extension LocalSoundIndexing on LocalSoundDataSource {
           contentHash: Value(contentHash),
           waveform: Value(probe?.waveformValue),
           waveformProbeGeneration: Value(probe?.generationValue),
-          // Premier fichier réel d'un son Drive : même gain auto qu'à la
-          // création locale. Seulement si le gain est encore celui par défaut
-          // (1.0) — un snapshot (autre appareil) ou l'opérateur a pu le fixer
-          // avant. Un gain réglé exactement à 0 dB est indiscernable d'un gain
-          // jamais touché : il est remesuré ici, une seule fois (le type devient
-          // connu juste après).
-          gain: existing.gain == 1.0 && probeType != null
-              ? _autoGain(await _measureAutoGain(file, probeType))
-              : const Value.absent(),
+          gain: gain,
+          gainMeasureGeneration: _measuredGeneration(gain),
         ),
       );
       return;
@@ -149,6 +154,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
             ? Value(probe.generationValue)
             : const Value.absent(),
         gain: gain,
+        gainMeasureGeneration: _measuredGeneration(gain),
       ),
     );
   }
@@ -389,6 +395,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
         final entry = creations[i];
         final metadata = creationMetadata[i];
         final title = p.basenameWithoutExtension(entry.relativePath);
+        final gain = _autoGain(metadata.gain);
         batch.insert(
           _database.sounds,
           db.SoundsCompanion.insert(
@@ -400,7 +407,8 @@ extension LocalSoundIndexing on LocalSoundDataSource {
             relativePath: Value(entry.relativePath),
             contentHash: Value(metadata.contentHash),
             waveform: Value(metadata.waveform),
-            gain: _autoGain(metadata.gain),
+            gain: gain,
+            gainMeasureGeneration: _measuredGeneration(gain),
             driveFileId: Value(entry.driveFileId),
             driveMd5: Value(entry.driveMd5),
             folderId: Value(entry.folderId),
@@ -480,6 +488,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
           // Extraire le nom du fichier sans extension pour le titre
           final title = p.basenameWithoutExtension(file.path);
           final metadata = await _resolveMetadataForFile(file);
+          final gain = _autoGain(metadata.gain);
 
           await _database
               .into(_database.sounds)
@@ -491,7 +500,8 @@ extension LocalSoundIndexing on LocalSoundDataSource {
                   type: Value(metadata.type),
                   contentHash: Value(metadata.contentHash),
                   waveform: Value(metadata.waveform),
-                  gain: _autoGain(metadata.gain),
+                  gain: gain,
+                  gainMeasureGeneration: _measuredGeneration(gain),
                   waveformProbeGeneration: Value(
                     metadata.waveformProbeGeneration,
                   ),

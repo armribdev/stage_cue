@@ -83,35 +83,46 @@ extension _SettingsVolumes on _SettingsScreenState {
     }
 
     final customized = plan.customized;
+    final unmeasured = plan.unmeasured;
     final lines = [
-      '${plan.sounds.length} sons téléchargés vont être mesurés.',
+      '${plan.sounds.length} sons téléchargés peuvent être mesurés.',
+      if (unmeasured > 0)
+        '$unmeasured n\'ont jamais été mesurés (gain par défaut) : les mesurer '
+            'ne touche à aucun gain réglé.',
       customized > 0
-          ? '$customized ont déjà un gain réglé : il sera remplacé.'
+          ? '$customized ont déjà un gain réglé : « Tout recalculer » le '
+                'remplace.'
           : 'Aucun n\'a de gain réglé.',
       if (plan.unavailable > 0)
         '${plan.unavailable} sons non téléchargés sont ignorés.',
       'L\'opération peut prendre plusieurs minutes. Elle peut être annulée : '
           'ce qui est déjà mesuré est conservé.',
     ];
-    final confirmed = await showAppDialog<bool>(
+    // `true` : tout recalculer ; `false` : seulement les jamais mesurés.
+    final scope = await showAppDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Recalculer les gains ?'),
         content: Text(lines.join('\n\n')),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Annuler'),
           ),
+          if (unmeasured > 0 && customized > 0)
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Non mesurés seulement'),
+            ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Recalculer'),
+            child: Text(customized > 0 ? 'Tout recalculer' : 'Recalculer'),
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
-    await _runRecomputeAutoVolumes(plan);
+    if (scope == null || !mounted) return;
+    await _runRecomputeAutoVolumes(scope ? plan : plan.onlyUnmeasured());
   }
 
   Future<void> _runRecomputeAutoVolumes(AutoVolumePlan plan) async {

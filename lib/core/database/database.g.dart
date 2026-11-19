@@ -1905,6 +1905,16 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         type: DriftSqlType.blob,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _gainMeasureGenerationMeta =
+      const VerificationMeta('gainMeasureGeneration');
+  @override
+  late final GeneratedColumn<int> gainMeasureGeneration = GeneratedColumn<int>(
+    'gain_measure_generation',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1929,6 +1939,7 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     isProcessed,
     autoTaggedAt,
     autoEmbedding,
+    gainMeasureGeneration,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2101,6 +2112,15 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         ),
       );
     }
+    if (data.containsKey('gain_measure_generation')) {
+      context.handle(
+        _gainMeasureGenerationMeta,
+        gainMeasureGeneration.isAcceptableOrUnknown(
+          data['gain_measure_generation']!,
+          _gainMeasureGenerationMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2200,6 +2220,10 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.blob,
         data['${effectivePrefix}auto_embedding'],
       ),
+      gainMeasureGeneration: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}gain_measure_generation'],
+      ),
     );
   }
 
@@ -2285,6 +2309,17 @@ class Sound extends DataClass implements Insertable<Sound> {
   /// recalcule sans ré-analyser le son. Annotation locale comme [autoTaggedAt] :
   /// absente de l'export du snapshot dossier.
   final Uint8List? autoEmbedding;
+
+  /// Génération de la mesure « auto » (`kGainMeasureGeneration`, décisions 0036
+  /// et 0044) dont [gain] est issu : écrite avec chaque gain mesuré par l'app
+  /// (création, premier fichier, « Auto » de la fiche, recalcul en masse).
+  /// `null` = jamais mesuré : gain par défaut, réglé à la main, ou hérité d'avant
+  /// la v51. Un gain à 1.0 **et** `null` est un son que l'app n'a jamais mesuré,
+  /// ce qu'un 1.0 seul ne dit pas (0 dB voulu ou son intact). Annotation locale
+  /// comme [autoTaggedAt] : absente de l'export du snapshot dossier ; un appareil
+  /// qui importe un gain ≠ 1.0 n'en a pas besoin, et un 1.0 reçu se remesure au
+  /// pire une fois.
+  final int? gainMeasureGeneration;
   const Sound({
     required this.id,
     required this.title,
@@ -2308,6 +2343,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     required this.isProcessed,
     this.autoTaggedAt,
     this.autoEmbedding,
+    this.gainMeasureGeneration,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2360,6 +2396,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     if (!nullToAbsent || autoEmbedding != null) {
       map['auto_embedding'] = Variable<Uint8List>(autoEmbedding);
     }
+    if (!nullToAbsent || gainMeasureGeneration != null) {
+      map['gain_measure_generation'] = Variable<int>(gainMeasureGeneration);
+    }
     return map;
   }
 
@@ -2411,6 +2450,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       autoEmbedding: autoEmbedding == null && nullToAbsent
           ? const Value.absent()
           : Value(autoEmbedding),
+      gainMeasureGeneration: gainMeasureGeneration == null && nullToAbsent
+          ? const Value.absent()
+          : Value(gainMeasureGeneration),
     );
   }
 
@@ -2446,6 +2488,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       isProcessed: serializer.fromJson<bool>(json['isProcessed']),
       autoTaggedAt: serializer.fromJson<DateTime?>(json['autoTaggedAt']),
       autoEmbedding: serializer.fromJson<Uint8List?>(json['autoEmbedding']),
+      gainMeasureGeneration: serializer.fromJson<int?>(
+        json['gainMeasureGeneration'],
+      ),
     );
   }
   @override
@@ -2478,6 +2523,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       'isProcessed': serializer.toJson<bool>(isProcessed),
       'autoTaggedAt': serializer.toJson<DateTime?>(autoTaggedAt),
       'autoEmbedding': serializer.toJson<Uint8List?>(autoEmbedding),
+      'gainMeasureGeneration': serializer.toJson<int?>(gainMeasureGeneration),
     };
   }
 
@@ -2504,6 +2550,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     bool? isProcessed,
     Value<DateTime?> autoTaggedAt = const Value.absent(),
     Value<Uint8List?> autoEmbedding = const Value.absent(),
+    Value<int?> gainMeasureGeneration = const Value.absent(),
   }) => Sound(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -2531,6 +2578,9 @@ class Sound extends DataClass implements Insertable<Sound> {
     autoEmbedding: autoEmbedding.present
         ? autoEmbedding.value
         : this.autoEmbedding,
+    gainMeasureGeneration: gainMeasureGeneration.present
+        ? gainMeasureGeneration.value
+        : this.gainMeasureGeneration,
   );
   Sound copyWithCompanion(SoundsCompanion data) {
     return Sound(
@@ -2578,6 +2628,9 @@ class Sound extends DataClass implements Insertable<Sound> {
       autoEmbedding: data.autoEmbedding.present
           ? data.autoEmbedding.value
           : this.autoEmbedding,
+      gainMeasureGeneration: data.gainMeasureGeneration.present
+          ? data.gainMeasureGeneration.value
+          : this.gainMeasureGeneration,
     );
   }
 
@@ -2605,7 +2658,8 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('startOffsetMs: $startOffsetMs, ')
           ..write('isProcessed: $isProcessed, ')
           ..write('autoTaggedAt: $autoTaggedAt, ')
-          ..write('autoEmbedding: $autoEmbedding')
+          ..write('autoEmbedding: $autoEmbedding, ')
+          ..write('gainMeasureGeneration: $gainMeasureGeneration')
           ..write(')'))
         .toString();
   }
@@ -2634,6 +2688,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     isProcessed,
     autoTaggedAt,
     $driftBlobEquality.hash(autoEmbedding),
+    gainMeasureGeneration,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -2660,7 +2715,8 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.startOffsetMs == this.startOffsetMs &&
           other.isProcessed == this.isProcessed &&
           other.autoTaggedAt == this.autoTaggedAt &&
-          $driftBlobEquality.equals(other.autoEmbedding, this.autoEmbedding));
+          $driftBlobEquality.equals(other.autoEmbedding, this.autoEmbedding) &&
+          other.gainMeasureGeneration == this.gainMeasureGeneration);
 }
 
 class SoundsCompanion extends UpdateCompanion<Sound> {
@@ -2686,6 +2742,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<bool> isProcessed;
   final Value<DateTime?> autoTaggedAt;
   final Value<Uint8List?> autoEmbedding;
+  final Value<int?> gainMeasureGeneration;
   const SoundsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -2709,6 +2766,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.isProcessed = const Value.absent(),
     this.autoTaggedAt = const Value.absent(),
     this.autoEmbedding = const Value.absent(),
+    this.gainMeasureGeneration = const Value.absent(),
   });
   SoundsCompanion.insert({
     this.id = const Value.absent(),
@@ -2733,6 +2791,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.isProcessed = const Value.absent(),
     this.autoTaggedAt = const Value.absent(),
     this.autoEmbedding = const Value.absent(),
+    this.gainMeasureGeneration = const Value.absent(),
   }) : title = Value(title),
        displayName = Value(displayName),
        filePath = Value(filePath);
@@ -2759,6 +2818,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<bool>? isProcessed,
     Expression<DateTime>? autoTaggedAt,
     Expression<Uint8List>? autoEmbedding,
+    Expression<int>? gainMeasureGeneration,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2784,6 +2844,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (isProcessed != null) 'is_processed': isProcessed,
       if (autoTaggedAt != null) 'auto_tagged_at': autoTaggedAt,
       if (autoEmbedding != null) 'auto_embedding': autoEmbedding,
+      if (gainMeasureGeneration != null)
+        'gain_measure_generation': gainMeasureGeneration,
     });
   }
 
@@ -2810,6 +2872,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<bool>? isProcessed,
     Value<DateTime?>? autoTaggedAt,
     Value<Uint8List?>? autoEmbedding,
+    Value<int?>? gainMeasureGeneration,
   }) {
     return SoundsCompanion(
       id: id ?? this.id,
@@ -2835,6 +2898,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       isProcessed: isProcessed ?? this.isProcessed,
       autoTaggedAt: autoTaggedAt ?? this.autoTaggedAt,
       autoEmbedding: autoEmbedding ?? this.autoEmbedding,
+      gainMeasureGeneration:
+          gainMeasureGeneration ?? this.gainMeasureGeneration,
     );
   }
 
@@ -2911,6 +2976,11 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     if (autoEmbedding.present) {
       map['auto_embedding'] = Variable<Uint8List>(autoEmbedding.value);
     }
+    if (gainMeasureGeneration.present) {
+      map['gain_measure_generation'] = Variable<int>(
+        gainMeasureGeneration.value,
+      );
+    }
     return map;
   }
 
@@ -2938,7 +3008,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('startOffsetMs: $startOffsetMs, ')
           ..write('isProcessed: $isProcessed, ')
           ..write('autoTaggedAt: $autoTaggedAt, ')
-          ..write('autoEmbedding: $autoEmbedding')
+          ..write('autoEmbedding: $autoEmbedding, ')
+          ..write('gainMeasureGeneration: $gainMeasureGeneration')
           ..write(')'))
         .toString();
   }
@@ -8220,6 +8291,7 @@ typedef $$SoundsTableCreateCompanionBuilder =
       Value<bool> isProcessed,
       Value<DateTime?> autoTaggedAt,
       Value<Uint8List?> autoEmbedding,
+      Value<int?> gainMeasureGeneration,
     });
 typedef $$SoundsTableUpdateCompanionBuilder =
     SoundsCompanion Function({
@@ -8245,6 +8317,7 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<bool> isProcessed,
       Value<DateTime?> autoTaggedAt,
       Value<Uint8List?> autoEmbedding,
+      Value<int?> gainMeasureGeneration,
     });
 
 final class $$SoundsTableReferences
@@ -8449,6 +8522,11 @@ class $$SoundsTableFilterComposer
 
   ColumnFilters<Uint8List> get autoEmbedding => $composableBuilder(
     column: $table.autoEmbedding,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get gainMeasureGeneration => $composableBuilder(
+    column: $table.gainMeasureGeneration,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8683,6 +8761,11 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get gainMeasureGeneration => $composableBuilder(
+    column: $table.gainMeasureGeneration,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LibrariesTableOrderingComposer get libraryId {
     final $$LibrariesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -8818,6 +8901,11 @@ class $$SoundsTableAnnotationComposer
 
   GeneratedColumn<Uint8List> get autoEmbedding => $composableBuilder(
     column: $table.autoEmbedding,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get gainMeasureGeneration => $composableBuilder(
+    column: $table.gainMeasureGeneration,
     builder: (column) => column,
   );
 
@@ -8999,6 +9087,7 @@ class $$SoundsTableTableManager
                 Value<bool> isProcessed = const Value.absent(),
                 Value<DateTime?> autoTaggedAt = const Value.absent(),
                 Value<Uint8List?> autoEmbedding = const Value.absent(),
+                Value<int?> gainMeasureGeneration = const Value.absent(),
               }) => SoundsCompanion(
                 id: id,
                 title: title,
@@ -9022,6 +9111,7 @@ class $$SoundsTableTableManager
                 isProcessed: isProcessed,
                 autoTaggedAt: autoTaggedAt,
                 autoEmbedding: autoEmbedding,
+                gainMeasureGeneration: gainMeasureGeneration,
               ),
           createCompanionCallback:
               ({
@@ -9047,6 +9137,7 @@ class $$SoundsTableTableManager
                 Value<bool> isProcessed = const Value.absent(),
                 Value<DateTime?> autoTaggedAt = const Value.absent(),
                 Value<Uint8List?> autoEmbedding = const Value.absent(),
+                Value<int?> gainMeasureGeneration = const Value.absent(),
               }) => SoundsCompanion.insert(
                 id: id,
                 title: title,
@@ -9070,6 +9161,7 @@ class $$SoundsTableTableManager
                 isProcessed: isProcessed,
                 autoTaggedAt: autoTaggedAt,
                 autoEmbedding: autoEmbedding,
+                gainMeasureGeneration: gainMeasureGeneration,
               ),
           withReferenceMapper: (p0) => p0
               .map(

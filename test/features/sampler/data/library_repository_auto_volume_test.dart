@@ -6,6 +6,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as p;
+import 'package:stage_cue/core/audio/loudness_analyzer.dart'
+    show kGainMeasureGeneration;
 import 'package:stage_cue/core/database/database.dart' as db;
 import 'package:stage_cue/core/database/sounds.dart' as db_sounds;
 import 'package:stage_cue/core/sync/audio_cache_manager.dart';
@@ -195,6 +197,55 @@ void main() {
     expect(gain, closeTo(math.pow(10, 9 / 20), 0.15));
     // Après relèvement, le pic reste sous le plafond de −3 dBFS.
     expect(0.05 * gain, lessThanOrEqualTo(math.pow(10, -3 / 20)));
+  }, skip: skip);
+
+  Future<int?> generationOf(int id) async => (await (database.select(
+    database.sounds,
+  )..where((s) => s.id.equals(id))).getSingle()).gainMeasureGeneration;
+
+  test('le plan distingue les jamais mesurés des gains réglés, et '
+      'onlyUnmeasured ne touche pas à ces derniers', () async {
+    final untouched = await insertSound('u.wav', gain: 1.0, present: true);
+    await insertSound('t.wav', gain: 0.8, present: true);
+    // 1.0 déjà mesuré : ne compte plus comme « jamais mesuré ».
+    final measured = await insertSound('m.wav', gain: 1.0, present: true);
+    await (database.update(
+      database.sounds,
+    )..where((s) => s.id.equals(measured))).write(
+      const db.SoundsCompanion(
+        gainMeasureGeneration: Value(kGainMeasureGeneration),
+      ),
+    );
+
+    final plan = await repository.planAutoVolumeRecompute();
+
+    expect(plan.sounds, hasLength(3));
+    expect(plan.unmeasured, 1);
+    final restricted = plan.onlyUnmeasured();
+    expect(restricted.sounds.map((s) => s.id), [untouched]);
+    expect(restricted.customized, 0);
+  });
+
+  test('le recalcul marque chaque son mesuré, et un son qui échoue reste non '
+      'mesuré', () async {
+    final id = await insertSound('m.wav', gain: 1.0, present: true);
+    final junk = await insertSound('junk.wav', gain: 1.0, present: false);
+    File(
+      p.join(cacheRoot.path, 'junk.wav'),
+    ).writeAsBytesSync(List.filled(64, 7));
+    expect(await generationOf(id), isNull);
+
+    final plan = await repository.planAutoVolumeRecompute();
+    await repository.recomputeAutoVolumes(plan.onlyUnmeasured());
+
+    expect(await generationOf(id), kGainMeasureGeneration);
+    expect(await generationOf(junk), isNull);
+    final after = await repository.planAutoVolumeRecompute();
+    expect(
+      after.onlyUnmeasured().sounds.map((s) => s.id),
+      isNot(contains(id)),
+      reason: 'le son mesuré n\'est plus proposé',
+    );
   }, skip: skip);
 
   test('annulée : s\'arrête sans rien écrire de plus', () async {

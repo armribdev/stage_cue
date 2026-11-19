@@ -32,6 +32,13 @@ const double kSampledPeakMarginDb = 3;
 /// de ce que le lecteur du casque sait rendre.
 const double kMaxBoostDb = kGainMaxDb;
 
+/// Génération de la mesure du gain « auto » (cibles de [LoudnessProfile] et
+/// formule d'[autoLoudnessGain]), persistée dans `sounds.gainMeasureGeneration`
+/// avec chaque gain mesuré. À incrémenter quand une cible ou la formule change
+/// au point que les gains déjà écrits seraient à refaire : « Recalculer » (les
+/// non mesurés, ou tous) rattrape alors les sons de génération antérieure.
+const int kGainMeasureGeneration = 1;
+
 /// Ce que le volume « auto » cherche à égaliser selon le type de son
 /// ([décision 0036], amendée par [décision 0044]).
 ///

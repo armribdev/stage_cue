@@ -29,6 +29,10 @@ extension LocalSoundCrud on LocalSoundDataSource {
 
   /// Met à jour les réglages d'un son (couleur, gain, point d'entrée) ;
   /// [isProcessed] marque le son comme traité (`null` = inchangé).
+  ///
+  /// [gainMeasured] : [gain] vient de la mesure « auto » (recalcul, « Auto » de
+  /// la fiche), pas d'un réglage à la main — le son est alors marqué mesuré
+  /// (`gainMeasureGeneration`). Sans effet si [gain] est `null`.
   Future<void> updateSoundSettings({
     required int id,
     int? colorValue,
@@ -36,6 +40,7 @@ extension LocalSoundCrud on LocalSoundDataSource {
     String? displayName,
     bool updateDisplayName = false,
     double? gain,
+    bool gainMeasured = false,
     int? startOffsetMs,
     bool? isProcessed,
   }) async {
@@ -54,6 +59,9 @@ extension LocalSoundCrud on LocalSoundDataSource {
           ? Value(resolvedName)
           : const Value.absent(),
       gain: gain != null ? Value(gain) : const Value.absent(),
+      gainMeasureGeneration: gain != null && gainMeasured
+          ? const Value(kGainMeasureGeneration)
+          : const Value.absent(),
       startOffsetMs: startOffsetMs != null
           ? Value(startOffsetMs)
           : const Value.absent(),
@@ -64,6 +72,21 @@ extension LocalSoundCrud on LocalSoundDataSource {
     await (_database.update(
       _database.sounds,
     )..where((s) => s.id.equals(id))).write(companion);
+  }
+
+  /// Sons dont l'app n'a jamais mesuré le gain : au gain par défaut (1.0) et sans
+  /// génération de mesure. Un gain déjà réglé (≠ 1.0, à la main ou hérité d'un
+  /// autre appareil) n'en fait pas partie : y toucher serait le remplacer.
+  Future<Set<int>> getUnmeasuredGainSoundIds() async {
+    final rows =
+        await (_database.selectOnly(_database.sounds)
+              ..addColumns([_database.sounds.id])
+              ..where(
+                _database.sounds.gainMeasureGeneration.isNull() &
+                    _database.sounds.gain.equals(1.0),
+              ))
+            .get();
+    return {for (final row in rows) row.read(_database.sounds.id)!};
   }
 
   /// Marque une liste de sons comme traités en une seule requête (validation
@@ -118,6 +141,7 @@ extension LocalSoundCrud on LocalSoundDataSource {
         waveform: success ? Value(probe.waveformValue) : const Value.absent(),
         waveformProbeGeneration: Value(probe.generationValue),
         gain: gain,
+        gainMeasureGeneration: _measuredGeneration(gain),
       ),
     );
   }
