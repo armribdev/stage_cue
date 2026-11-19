@@ -14,10 +14,8 @@ extension _SamplerScreenKeyboard on _SamplerScreenState {
       ? widget.services.appPreferences.boardView
       : BoardView.grid;
 
-  void _toggleBoardView() {
-    final next = _boardView == BoardView.grid
-        ? BoardView.keyboard
-        : BoardView.grid;
+  void _setBoardView(BoardView next) {
+    if (next == _boardView) return;
     // `setBoardView` met à jour la valeur en mémoire avant son premier `await`.
     unawaited(widget.services.appPreferences.setBoardView(next));
     setState(() {

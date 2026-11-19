@@ -263,10 +263,10 @@ class SamplerDesktopAppBar extends StatelessWidget
   final Widget stopAllButton;
   final VoidCallback? onQuitApp;
 
-  /// Vue affichée et bascule vers l'autre. `null` : pas de bouton (les
+  /// Vue affichée et choix d'une vue. `null` : pas de sélecteur (les
   /// raccourcis clavier n'existent pas hors poste desktop natif).
   final BoardView boardView;
-  final VoidCallback? onToggleBoardView;
+  final ValueChanged<BoardView>? onBoardViewChanged;
 
   const SamplerDesktopAppBar({
     super.key,
@@ -283,7 +283,7 @@ class SamplerDesktopAppBar extends StatelessWidget
     required this.onQuickSearch,
     required this.stopAllButton,
     required this.boardView,
-    this.onToggleBoardView,
+    this.onBoardViewChanged,
     this.onQuitApp,
   });
 
@@ -322,17 +322,41 @@ class SamplerDesktopAppBar extends StatelessWidget
             onBoardContextMenu: onBoardContextMenu,
           ),
           // Vue du board, à côté du nom de la scène : c'est une façon de voir
-          // cette scène. Le bouton montre la vue où il mène, pas celle où l'on
-          // est.
-          if (onToggleBoardView != null)
-            BoxedIconButton(
-              icon: boardView == BoardView.grid
-                  ? AppIcons.keyboard
-                  : AppIcons.viewGrid,
-              tooltip: boardView == BoardView.grid
-                  ? 'Vue clavier'
-                  : 'Vue grille',
-              onPressed: onToggleBoardView,
+          // cette scène. Les deux vues restent visibles, comme le sélecteur
+          // de type de son de la bibliothèque.
+          if (onBoardViewChanged != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: SegmentedButton<BoardView>(
+                showSelectedIcon: false,
+                // Icônes seules, resserrées : le sélecteur ne doit pas
+                // concurrencer le nom de la scène.
+                style: SegmentedButton.styleFrom(
+                  visualDensity: const VisualDensity(
+                    horizontal: -3,
+                    vertical: -3,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  // Sélection neutre (blanc translucide) plutôt que l'accent.
+                  selectedBackgroundColor: AppColors.borderStrong,
+                  selectedForegroundColor: AppColors.text,
+                ),
+                segments: [
+                  ButtonSegment(
+                    value: BoardView.grid,
+                    icon: StrokeIcon(AppIcons.viewGrid, size: 14),
+                    tooltip: 'Vue grille',
+                  ),
+                  ButtonSegment(
+                    value: BoardView.keyboard,
+                    icon: StrokeIcon(AppIcons.keyboard, size: 14),
+                    tooltip: 'Vue clavier',
+                  ),
+                ],
+                selected: {boardView},
+                onSelectionChanged: (selection) =>
+                    onBoardViewChanged?.call(selection.first),
+              ),
             ),
         ],
       ),

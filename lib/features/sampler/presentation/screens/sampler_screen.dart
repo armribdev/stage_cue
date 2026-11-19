@@ -311,8 +311,8 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onQuickSearch: () => unawaited(_openQuickSearch()),
                     stopAllButton: StopAllButton(notifier: _notifier),
                     boardView: _boardView,
-                    onToggleBoardView: isNativeDesktopPlatform()
-                        ? _toggleBoardView
+                    onBoardViewChanged: isNativeDesktopPlatform()
+                        ? _setBoardView
                         : null,
                     onQuitApp: widget.onQuitApp,
                   )
