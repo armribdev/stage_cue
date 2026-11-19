@@ -46,6 +46,20 @@ extension ConnectivityModeUi on ConnectivityMode {
   };
 }
 
+/// Façon d'afficher les pads d'un board. Un board reste le même quelle que soit
+/// la vue : elle ne change que la présentation, jamais les données.
+enum BoardView {
+  /// Grille de pads en rangées (la vue d'origine, éditable par glisser-déposer).
+  grid,
+
+  /// Pads posés sur le clavier, chacun sur la touche qui le déclenche.
+  keyboard;
+
+  /// `null` ou valeur inconnue : la grille.
+  static BoardView fromStorageKey(String? raw) =>
+      BoardView.values.asNameMap()[raw] ?? BoardView.grid;
+}
+
 /// Préférences applicatives persistées hors Drift (réglages sampler, etc.).
 class AppPreferences extends ChangeNotifier {
   static const _subdir = '.stagecue';
@@ -58,6 +72,7 @@ class AppPreferences extends ChangeNotifier {
   static const _keyWindowsFullScreen = 'windows_full_screen';
   static const _keyLastUpdateCheckAt = 'last_update_check_at';
   static const _keyPadHotkeys = 'pad_hotkeys';
+  static const _keyBoardView = 'board_view';
 
   bool _autoDownloadPadSounds = true;
   bool _autoDownloadDriveByDefault = true;
@@ -72,6 +87,9 @@ class AppPreferences extends ChangeNotifier {
   // devient alors orpheline silencieusement (jamais retrouvée, jamais
   // fautive), à réassigner. Pas de nettoyage automatique en v1.
   Map<int, int> _padHotkeys = {};
+  // Vue choisie, commune à tous les boards de cet appareil (local-only comme
+  // les raccourcis : un goût d'affichage n'a rien à faire dans le snapshot Drive).
+  BoardView _boardView = BoardView.grid;
   bool _loaded = false;
 
   /// Télécharge automatiquement les sons ajoutés à un pad (si Drive connecté).
@@ -105,6 +123,9 @@ class AppPreferences extends ChangeNotifier {
   /// `LogicalKeyboardKey.keyId` assigné à [padId], ou `null` si aucune touche.
   int? hotkeyForPad(int padId) => _padHotkeys[padId];
 
+  /// Vue choisie pour afficher un board.
+  BoardView get boardView => _boardView;
+
   /// Synchro Drive automatique (push débouncé, pull au lancement).
   bool get allowsNetworkSync => _connectivityMode == ConnectivityMode.connected;
 
@@ -134,6 +155,7 @@ class AppPreferences extends ChangeNotifier {
         _lastUpdateCheckAt = lastUpdateCheckRaw == null
             ? null
             : DateTime.tryParse(lastUpdateCheckRaw);
+        _boardView = BoardView.fromStorageKey(data[_keyBoardView] as String?);
         final hotkeysRaw = data[_keyPadHotkeys] as Map<String, dynamic>?;
         if (hotkeysRaw != null) {
           _padHotkeys = {
@@ -186,14 +208,33 @@ class AppPreferences extends ChangeNotifier {
     await _save();
   }
 
+  /// Choisit la vue d'affichage des boards.
+  Future<void> setBoardView(BoardView value) async {
+    if (_boardView == value) return;
+    _boardView = value;
+    notifyListeners();
+    await _save();
+  }
+
   /// Assigne (ou efface si [keyId] est `null`) la touche déclenchant [padId].
-  Future<void> setPadHotkey(int padId, int? keyId) async {
-    if (keyId == null) {
-      if (_padHotkeys.remove(padId) == null) return;
-    } else {
-      if (_padHotkeys[padId] == keyId) return;
-      _padHotkeys = {..._padHotkeys, padId: keyId};
+  Future<void> setPadHotkey(int padId, int? keyId) =>
+      setPadHotkeys({padId: keyId});
+
+  /// Applique plusieurs assignations d'un coup (échange de touches entre deux
+  /// pads) : une seule notification et une seule écriture, jamais un état
+  /// intermédiaire où deux pads auraient la même touche. `null` retire la touche.
+  Future<void> setPadHotkeys(Map<int, int?> changes) async {
+    final next = {..._padHotkeys};
+    for (final entry in changes.entries) {
+      final keyId = entry.value;
+      if (keyId == null) {
+        next.remove(entry.key);
+      } else {
+        next[entry.key] = keyId;
+      }
     }
+    if (mapEquals(next, _padHotkeys)) return;
+    _padHotkeys = next;
     notifyListeners();
     await _save();
   }
@@ -243,6 +284,7 @@ class AppPreferences extends ChangeNotifier {
         _keyCueOutputDeviceId: _cueOutputDeviceId,
         _keyWindowsFullScreen: _isWindowsFullScreen,
         _keyLastUpdateCheckAt: _lastUpdateCheckAt?.toIso8601String(),
+        _keyBoardView: _boardView.name,
         _keyPadHotkeys: {
           for (final entry in _padHotkeys.entries)
             entry.key.toString(): entry.value,

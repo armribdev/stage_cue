@@ -48,6 +48,8 @@ abstract final class AppIcons {
   static const StrokeIconData text = StrokeIconData(LucidePaths.type);
   static const StrokeIconData lock = StrokeIconData(LucidePaths.lock);
   static const StrokeIconData keyboard = StrokeIconData(LucidePaths.keyboard);
+  // Vue « grille » d'un board — même tracé que `allSounds`, un autre concept.
+  static const StrokeIconData viewGrid = StrokeIconData(LucidePaths.layoutGrid);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   static const StrokeIconData back = StrokeIconData(LucidePaths.arrowLeft);

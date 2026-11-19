@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/settings/app_preferences.dart' show BoardView;
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/transport_icon.dart';
 import '../../../../core/theme/app_tokens.dart';
@@ -262,6 +263,11 @@ class SamplerDesktopAppBar extends StatelessWidget
   final Widget stopAllButton;
   final VoidCallback? onQuitApp;
 
+  /// Vue affichée et bascule vers l'autre. `null` : pas de bouton (les
+  /// raccourcis clavier n'existent pas hors poste desktop natif).
+  final BoardView boardView;
+  final VoidCallback? onToggleBoardView;
+
   const SamplerDesktopAppBar({
     super.key,
     required this.selectedBoard,
@@ -276,6 +282,8 @@ class SamplerDesktopAppBar extends StatelessWidget
     required this.onOpenSettings,
     required this.onQuickSearch,
     required this.stopAllButton,
+    required this.boardView,
+    this.onToggleBoardView,
     this.onQuitApp,
   });
 
@@ -302,13 +310,31 @@ class SamplerDesktopAppBar extends StatelessWidget
           onQuitApp: onQuitApp,
         ),
       ),
-      title: BoardSceneSelector(
-        boards: boards,
-        selectedBoard: selectedBoard,
-        isBoardsLoading: isBoardsLoading,
-        onSelectBoard: onSelectBoard,
-        onCreateBoard: onCreateBoard,
-        onBoardContextMenu: onBoardContextMenu,
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          BoardSceneSelector(
+            boards: boards,
+            selectedBoard: selectedBoard,
+            isBoardsLoading: isBoardsLoading,
+            onSelectBoard: onSelectBoard,
+            onCreateBoard: onCreateBoard,
+            onBoardContextMenu: onBoardContextMenu,
+          ),
+          // Vue du board, à côté du nom de la scène : c'est une façon de voir
+          // cette scène. Le bouton montre la vue où il mène, pas celle où l'on
+          // est.
+          if (onToggleBoardView != null)
+            BoxedIconButton(
+              icon: boardView == BoardView.grid
+                  ? AppIcons.keyboard
+                  : AppIcons.viewGrid,
+              tooltip: boardView == BoardView.grid
+                  ? 'Vue clavier'
+                  : 'Vue grille',
+              onPressed: onToggleBoardView,
+            ),
+        ],
       ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),

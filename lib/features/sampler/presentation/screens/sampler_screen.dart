@@ -9,6 +9,7 @@ import '../providers/sampler_provider.dart';
 import '../../data/repositories/library_repository.dart'
     show LibraryRepositoryDriveSession;
 import '../widgets/pad_item.dart' show PadCard;
+import '../widgets/keyboard_pads_view.dart';
 import '../widgets/dashed_slot_frame.dart';
 import '../widgets/threshold_draggable.dart';
 import '../widgets/music_preview_panel.dart';
@@ -26,6 +27,7 @@ import '../../../../core/app/app_services.dart';
 import '../../../../core/audio/cue_audio_service.dart' show CueAudioService;
 import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/logging/app_log.dart';
+import '../../../../core/settings/app_preferences.dart' show BoardView;
 import '../../../../core/sync/google_oauth_config.dart';
 import '../../../../core/sync/google_oauth_setup_dialog.dart';
 import '../../../../core/utils/app_snackbar.dart';
@@ -41,6 +43,7 @@ part 'sampler_screen/sampler_screen_boards.dart';
 part 'sampler_screen/sampler_screen_navigation.dart';
 part 'sampler_screen/sampler_screen_pad_layout.dart';
 part 'sampler_screen/sampler_screen_grid.dart';
+part 'sampler_screen/sampler_screen_keyboard.dart';
 part 'sampler_screen/sampler_screen_pad_actions.dart';
 part 'sampler_screen/sampler_screen_content.dart';
 
@@ -307,6 +310,10 @@ class _SamplerScreenState extends State<SamplerScreen> {
                     onOpenSettings: _openSettings,
                     onQuickSearch: () => unawaited(_openQuickSearch()),
                     stopAllButton: StopAllButton(notifier: _notifier),
+                    boardView: _boardView,
+                    onToggleBoardView: isNativeDesktopPlatform()
+                        ? _toggleBoardView
+                        : null,
                     onQuitApp: widget.onQuitApp,
                   )
                 : SamplerAppBar(

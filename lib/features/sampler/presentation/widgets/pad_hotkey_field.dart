@@ -7,6 +7,7 @@ import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/theme/stroke_icon.dart';
+import '../models/keyboard_layout.dart' show hotkeyKeycapLabel;
 import '../providers/sampler_provider.dart';
 import 'dashed_slot_frame.dart';
 
@@ -106,28 +107,6 @@ class _PadHotkeyFieldState extends State<PadHotkeyField> {
     unawaited(widget.appPreferences.setPadHotkey(widget.padId, keyId));
     setState(() => _isCapturingHotkey = false);
     return KeyEventResult.handled;
-  }
-
-  /// Étiquette courte affichée sur la touche (symbole pour les non-imprimables
-  /// les plus courants, sinon `keyLabel` — `FittedBox` en aval absorbe le
-  /// reste, ex. "Page Up").
-  static String _keycapLabel(LogicalKeyboardKey key) {
-    final symbols = <LogicalKeyboardKey, String>{
-      LogicalKeyboardKey.space: '␣',
-      LogicalKeyboardKey.tab: '⇥',
-      LogicalKeyboardKey.enter: '⏎',
-      LogicalKeyboardKey.numpadEnter: '⏎',
-      LogicalKeyboardKey.backspace: '⌫',
-      LogicalKeyboardKey.delete: 'Del',
-      LogicalKeyboardKey.arrowUp: '↑',
-      LogicalKeyboardKey.arrowDown: '↓',
-      LogicalKeyboardKey.arrowLeft: '←',
-      LogicalKeyboardKey.arrowRight: '→',
-    };
-    final symbol = symbols[key];
-    if (symbol != null) return symbol;
-    final raw = key.keyLabel;
-    return raw.length <= 3 ? raw.toUpperCase() : raw;
   }
 
   Widget _buildHotkeyKeycap(
@@ -243,9 +222,7 @@ class _PadHotkeyFieldState extends State<PadHotkeyField> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final keyId = widget.appPreferences.hotkeyForPad(widget.padId);
-    final label = keyId != null
-        ? _keycapLabel(LogicalKeyboardKey(keyId))
-        : null;
+    final label = keyId != null ? hotkeyKeycapLabel(keyId) : null;
     final showClearBadge = label != null && !_isCapturingHotkey;
     // Une collision reste permise à l'assignation (voir
     // `_handleHotkeyCaptureKey`) — signalée ici en continu plutôt qu'une

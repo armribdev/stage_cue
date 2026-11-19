@@ -122,7 +122,16 @@ extension _SamplerScreenContent on _SamplerScreenState {
                     ? _buildPrepareBanner(context, state, downloadableCount)
                     : const SizedBox.shrink(),
               ),
-              Expanded(child: _buildPadsGrid(context, state, selectedBoard)),
+              Expanded(
+                child: switch (_boardView) {
+                  BoardView.grid => _buildPadsGrid(
+                    context,
+                    state,
+                    selectedBoard,
+                  ),
+                  BoardView.keyboard => _buildKeyboardView(context, state),
+                },
+              ),
             ],
           );
         },
