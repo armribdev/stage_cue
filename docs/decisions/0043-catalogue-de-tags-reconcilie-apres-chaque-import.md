@@ -1,6 +1,6 @@
 # 0043 — Le catalogue de tags se réconcilie après chaque import de snapshot
 
-**Statut :** acceptée
+**Statut :** acceptée — amendée par [0046](0046-le-catalogue-de-tags-fait-foi-a-chaque-ouverture.md) (réconciliation aussi à chaque ouverture ; un tag élagué est supprimé même posé sur un son)
 **Date :** 2026-11-18
 
 ## Contexte
@@ -21,6 +21,6 @@ Retirer, fusionner ou élaguer un tag ou une catégorie se déclare **une seule 
 
 - Ajouter un tag à une de ces trois listes suffit : le test `un snapshot d'un appareil en retard ne recrée aucun tag retiré du catalogue` (`library_snapshot_store_test.dart`) est piloté par les listes et couvre l'entrée sans qu'on y touche. Ne rien ajouter d'autre dans `LibrarySnapshotStore._importTags`.
 - Le tag d'accueil d'une fusion doit exister dans le catalogue (`_extraTagCatalog`) ; sinon la fusion est journalisée (`AppLog.warn`) et ignorée.
-- Les noms de ces listes sont **réservés** : un tag que l'utilisateur recréerait sous un nom fusionné serait refondu dans sa famille au prochain pull, et un tag élagué inutilisé serait supprimé. Un tag élagué déjà posé sur un son est conservé.
+- Les noms de ces listes sont **réservés** : un tag que l'utilisateur recréerait sous un nom fusionné serait refondu dans sa famille au prochain pull, et un tag élagué inutilisé serait supprimé. ~~Un tag élagué déjà posé sur un son est conservé.~~ Remplacé par 0046 : il est supprimé avec ses usages.
 - La fusion d'un tag emporte ses usages (`sound_tags`), ses suggestions (`sound_auto_tags`) et ses alias.
 - Remplace le remappage de l'import décrit en conséquence de [0040](0040-tags-generiques-et-dissolution-de-la-categorie-musique.md).

@@ -541,14 +541,14 @@ void main() {
       1,
     );
     expect(await aliasTarget('slow'), 'Lent');
-    expect(await count('SELECT COUNT(*) AS c FROM sound_tags'), 3);
+    expect(await count('SELECT COUNT(*) AS c FROM sound_tags'), 2);
     expect(
       await count(
         "SELECT COUNT(*) AS c FROM tags WHERE normalized_name = "
         "'musique d''ambiance'",
       ),
-      1,
-      reason: 'posé sur un son : conservé, dans EMOTION_STYLE',
+      0,
+      reason: 'retiré du catalogue (0046), même posé sur un son',
     );
     // Catalogue générique : familles en tag, noms précis en alias.
     expect(await aliasTarget('train'), 'Véhicule');
@@ -556,7 +556,7 @@ void main() {
     expect(await aliasTarget('cheesy'), 'Kitsch');
     // Alias tirés des titres (analyse des mots) : anglais, fautes courantes.
     expect(await aliasTarget('tristesse'), 'Triste');
-    expect(await aliasTarget('rain'), 'Pluie');
+    expect(await aliasTarget('rain'), 'Météo');
     expect(await aliasTarget('sonette'), 'Sonnerie');
     expect(await aliasTarget('cochon'), 'Animal');
     expect(await aliasTarget('ost'), 'BO');
@@ -640,10 +640,10 @@ void main() {
     expect(alias.read<String>('name'), 'Véhicule');
     // Doublon OBJET/MATIERE : il ne reste qu'un « Verre ».
     expect(await tags('Verre'), 1);
-    // Sans famille : supprimé si inutilisé, conservé s'il est posé sur un son.
+    // Sans famille : supprimé, même posé sur un son (0046), usage compris.
     expect(await tags('Livre'), 0);
-    expect(await tags('Clés'), 1);
-    expect(await count('SELECT COUNT(*) AS c FROM sound_tags'), 2);
+    expect(await tags('Clés'), 0);
+    expect(await count('SELECT COUNT(*) AS c FROM sound_tags'), 1);
 
     await database.close();
   });
@@ -756,18 +756,14 @@ void main() {
     ]) {
       expect(await tags(name), 0, reason: '$name doit disparaître');
     }
-    expect(await tags('Verser'), 1, reason: 'posé sur un son : conservé');
+    expect(await tags('Verser'), 0, reason: 'retiré même posé sur un son');
     final used = await database
         .customSelect(
           'SELECT t.name AS name FROM sound_tags st JOIN tags t '
           'ON t.id = st.tag_id ORDER BY t.name',
         )
         .get();
-    expect(used.map((r) => r.read<String>('name')), [
-      'Nature',
-      'Verser',
-      'Voix',
-    ]);
+    expect(used.map((r) => r.read<String>('name')), ['Nature', 'Voix']);
 
     Future<String> aliasTarget(String alias) async =>
         (await database
@@ -787,6 +783,91 @@ void main() {
     expect(await aliasTarget('foret'), 'Nature');
     expect(await aliasTarget('foule'), 'Public');
 
+    await database.close();
+  });
+
+  test('chaque ouverture aligne les tags sur le catalogue, sans migration : '
+      'tag retiré supprimé avec ses usages, tag fusionné remplacé', () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    Future<int> count(String sql) async =>
+        (await database.customSelect(sql).getSingle()).read<int>('c');
+    // Une base déjà au schéma courant, dont les tags dépassent le catalogue :
+    // une migration de données ne repasse pas, seul `beforeOpen` les rattrape.
+    for (final (category, tag) in [
+      ('ACTION', 'Verser'), // élagué
+      ('ACTION', 'Rire'), // fusionné dans Voix
+      ('AMBIANCE', 'Forêt'), // fusionné dans Nature
+      ('AMBIANCE', 'Orage'), // fusionné dans Météo
+      ('AMBIANCE', 'Pluie'), // fusionné dans Météo
+      ('AMBIANCE', 'Mer'), // fusionné dans Nature
+      ('AMBIANCE', 'Silence'), // élagué
+    ]) {
+      await database.customStatement(
+        'INSERT INTO tags (category_id, name, normalized_name) VALUES '
+        '((SELECT id FROM tag_categories WHERE name = ?), ?, ?)',
+        [category, tag, tag.toLowerCase().replaceAll('ê', 'e')],
+      );
+    }
+    await database.customStatement(
+      "INSERT INTO sounds (title, file_path, display_name) "
+      "VALUES ('s', '/s.wav', 's')",
+    );
+    await database.customStatement(
+      'INSERT INTO sound_tags (sound_id, tag_id) '
+      "SELECT (SELECT id FROM sounds LIMIT 1), id FROM tags WHERE name IN "
+      "('Verser', 'Rire', 'Orage', 'Pluie')",
+    );
+    await database.customStatement(
+      'INSERT INTO sound_auto_tags (sound_id, tag_id, score, updated_at) '
+      "SELECT (SELECT id FROM sounds LIMIT 1), id, 0.5, 0 FROM tags "
+      "WHERE name IN ('Verser', 'Forêt')",
+    );
+    // Un tag du catalogue qui manque (ajouté depuis par une version de l'app).
+    await database.customStatement(
+      "DELETE FROM tag_aliases WHERE tag_id IN "
+      "(SELECT id FROM tags WHERE name = 'Voix')",
+    );
+    await database.customStatement("DELETE FROM tags WHERE name = 'Voix'");
+    await database.close();
+
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    Future<int> tags(String name) =>
+        count("SELECT COUNT(*) AS c FROM tags WHERE name = '$name'");
+
+    expect(await tags('Verser'), 0);
+    expect(await tags('Rire'), 0);
+    expect(await tags('Forêt'), 0);
+    expect(await tags('Orage'), 0);
+    expect(await tags('Pluie'), 0);
+    expect(await tags('Mer'), 0);
+    expect(await tags('Silence'), 0);
+    expect(await tags('Voix'), 1, reason: 'tag du catalogue recréé');
+    expect(
+      await count(
+        'SELECT COUNT(*) AS c FROM sound_tags st JOIN tags t '
+        "ON t.id = st.tag_id WHERE t.name = 'Voix'",
+      ),
+      1,
+      reason: 'l’usage du tag fusionné est passé à la famille',
+    );
+    expect(
+      await count(
+        'SELECT COUNT(*) AS c FROM sound_tags st JOIN tags t '
+        "ON t.id = st.tag_id WHERE t.name = 'Météo'",
+      ),
+      1,
+      reason: 'Orage et Pluie ne font plus qu’un usage, sur Météo',
+    );
+    expect(await count('SELECT COUNT(*) AS c FROM sound_tags'), 2);
+    expect(
+      await count(
+        'SELECT COUNT(*) AS c FROM sound_auto_tags a JOIN tags t '
+        "ON t.id = a.tag_id WHERE t.name = 'Nature'",
+      ),
+      1,
+      reason: 'la suggestion suit le tag fusionné',
+    );
+    expect(await count('SELECT COUNT(*) AS c FROM sound_auto_tags'), 1);
     await database.close();
   });
 

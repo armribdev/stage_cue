@@ -245,11 +245,25 @@ const Map<String, Map<String, List<String>>> _extraTagCatalog = {
     'Végétal': ['feuilles', 'herbe', 'branches', 'buisson'],
   },
   'AMBIANCE': {
-    'Orage': ['tempête', 'thunder', 'storm'],
-    'Pluie': ['rain'],
+    // Tout le temps qu'il fait : un seul tag, les phénomènes en alias (0046).
+    'Météo': [
+      'pluie',
+      'rain',
+      'orage',
+      'tempête',
+      'thunder',
+      'storm',
+      'tonnerre',
+      'vent',
+      'wind',
+      'brouillard',
+      'fog',
+      'grêle',
+      'hail',
+      'blizzard',
+    ],
     'Nuit': ['night', 'crépuscule', 'soir', 'coucher de soleil'],
     'Jour': ['aube', 'lever du jour', 'matin'],
-    'Mer': ['waves', 'ocean', 'sea'],
     'Médiéval': ['bardcore'],
     'Fantastique': ['fantôme'],
     'Public': ['café', 'banquet', 'bar', 'restaurant', 'foule', 'crowd'],
@@ -289,6 +303,10 @@ const Map<String, Map<String, List<String>>> _extraTagCatalog = {
       'rural',
       'montagne',
       'désert',
+      'mer',
+      'waves',
+      'ocean',
+      'sea',
     ],
     'Horreur': ['horror', 'scary', 'creepy'],
     'Années 90': ['nineties', '90s'],
@@ -388,16 +406,25 @@ const List<(String, String, String, String)> mergedTags = [
   ('AMBIANCE', 'Crépuscule', 'AMBIANCE', 'Nuit'),
   ('AMBIANCE', 'Foule', 'AMBIANCE', 'Public'),
   ('AMBIANCE', 'Post-apocalyptique', 'AMBIANCE', 'Futuriste'),
+  // Météo : un seul tag pour le temps qu'il fait ; les noms restent des alias.
+  ('AMBIANCE', 'Pluie', 'AMBIANCE', 'Météo'),
+  ('AMBIANCE', 'Orage', 'AMBIANCE', 'Météo'),
+  ('AMBIANCE', 'Mer', 'AMBIANCE', 'Nature'),
 ];
 
-/// Tags retirés sans famille d'accueil (catégorie, tag) : supprimés
-/// **seulement** s'ils ne sont posés ni suggérés sur aucun son, sinon conservés.
+/// Tags retirés sans famille d'accueil (catégorie, tag) : supprimés de la base
+/// de chaque utilisateur, **même posés ou suggérés sur des sons** (usages,
+/// suggestions et alias partent avec). Le catalogue est la seule source de
+/// vérité : aucun tag qu'il ne porte plus ne survit à `reconcileTagCatalog`
+/// (décision 0046).
 const List<(String, String)> prunedTags = [
   ('OBJET', 'Livre'),
   ('OBJET', 'Fenêtre'),
   ('OBJET', 'Clés'),
   // Redondant avec `SoundType` (voie musique / ambiance).
   ('EMOTION_STYLE', "Musique d'ambiance"),
+  // Ne décrit pas un contenu sonore : la voie ambiance gère déjà les silences.
+  ('AMBIANCE', 'Silence'),
   // Gestes trop précis, sans famille : le titre les porte (ne sont plus créés).
   ('ACTION', 'Verser'),
   ('ACTION', 'Secouer'),
@@ -530,10 +557,6 @@ extension _AppDatabaseTagSeed on AppDatabase {
       await insertTag('Futuriste', 'AMBIANCE');
       await insertTag('Intérieur', 'AMBIANCE');
       await insertTag('Extérieur', 'AMBIANCE');
-      await insertTag('Silence', 'AMBIANCE');
-      await insertTag('Pluie', 'AMBIANCE');
-      await insertTag('Orage', 'AMBIANCE');
-      await insertTag('Mer', 'AMBIANCE');
       await insertTag('Nuit', 'AMBIANCE');
       await insertTag('Jour', 'AMBIANCE');
       // EMOTION_STYLE
@@ -575,9 +598,6 @@ extension _AppDatabaseTagSeed on AppDatabase {
       await insertAlias('rue', 'Urbain');
       await insertAlias('extérieur', 'Extérieur');
       await insertAlias('intérieur', 'Intérieur');
-      await insertAlias('pluie', 'Pluie');
-      await insertAlias('orage', 'Orage');
-      await insertAlias('mer', 'Mer');
       await insertAlias('nuit', 'Nuit');
       await insertAlias('jour', 'Jour');
       await insertAlias('sf', 'Futuriste');
@@ -870,10 +890,10 @@ extension _AppDatabaseTagSeed on AppDatabase {
     return row?.read<int>('id');
   }
 
-  /// Retire les tags trop précis (v48, décision 0040) : fusionne ceux de
-  /// [mergedTags] dans leur famille, supprime ceux de [prunedTags] qu'aucun
-  /// son n'utilise. À appeler **après** [_ensureExtraTags], qui crée les tags
-  /// d'accueil. Idempotent.
+  /// Retire les tags que le catalogue ne porte plus : fusionne ceux de
+  /// [mergedTags] dans leur famille, supprime ceux de [prunedTags] avec leurs
+  /// usages, suggestions et alias (décisions 0040 et 0046). À appeler **après**
+  /// [_ensureExtraTags], qui crée les tags d'accueil. Idempotent.
   Future<void> _withdrawSpecificTags() async {
     await transaction(() async {
       var merged = 0;
@@ -894,12 +914,10 @@ extension _AppDatabaseTagSeed on AppDatabase {
       for (final (category, tag) in prunedTags) {
         final id = await _tagIdIn(category, tag);
         if (id == null) continue;
-        final used = await customSelect(
-          'SELECT (SELECT COUNT(*) FROM sound_tags WHERE tag_id = ?) + '
-          '(SELECT COUNT(*) FROM sound_auto_tags WHERE tag_id = ?) AS c',
-          variables: [Variable<int>(id), Variable<int>(id)],
-        ).getSingle();
-        if (used.read<int>('c') > 0) continue;
+        await customStatement('DELETE FROM sound_tags WHERE tag_id = ?', [id]);
+        await customStatement('DELETE FROM sound_auto_tags WHERE tag_id = ?', [
+          id,
+        ]);
         await customStatement('DELETE FROM tag_aliases WHERE tag_id = ?', [id]);
         await customStatement('DELETE FROM tags WHERE id = ?', [id]);
         pruned++;
@@ -907,8 +925,8 @@ extension _AppDatabaseTagSeed on AppDatabase {
       // Rejoué après chaque import de snapshot : muet quand il n'y a rien à faire.
       if (merged + pruned > 0) {
         AppLog.info(
-          'Tags trop précis retirés : $merged fusionné(s), $pruned supprimé(s) '
-          '(ceux déjà posés sur un son sont conservés).',
+          'Tags retirés du catalogue : $merged fusionné(s), $pruned '
+          'supprimé(s).',
         );
       }
     });

@@ -408,12 +408,7 @@ extension _AppDatabaseMigrations on AppDatabase {
       // étendu, tags trop précis absorbés par leur famille (décision 0040). Données seules, aucun changement de schéma.
       // Dissoudre d'abord : les tags existants gardent leur id, le catalogue
       // n'a plus qu'à ajouter les alias manquants.
-      await _dissolveRetiredTagCategories();
-      await _ensureExtraTags();
-      // Après le catalogue : les tags d'accueil (Meuble, Véhicule…) existent.
-      await _withdrawSpecificTags();
-      // Les deux appels ci-dessus sont `reconcileTagCatalog`, coupé en deux par
-      // `_ensureExtraTags` qui doit passer entre.
+      await reconcileTagCatalog();
     }
     // v49 ajoutait `sounds.loudness_gain` (décision 0044) : la v50 la fond dans
     // `gain`, donc un upgrade qui traverse les deux n'a rien à créer ici.

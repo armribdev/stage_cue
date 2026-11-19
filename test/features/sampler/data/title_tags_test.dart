@@ -77,7 +77,7 @@ void main() {
     test('un titre qui nomme des tags de la seed les déduit', () async {
       expect(
         await namesFor('Pluie sur la porte'),
-        containsAll(['Pluie', 'Porte']),
+        containsAll(['Météo', 'Porte']),
       );
     });
 
@@ -104,12 +104,12 @@ void main() {
     });
 
     test('excluent les tags déjà posés', () async {
-      final pluie = await tagId('Pluie');
+      final pluie = await tagId('Météo');
       final posed = TagItem(
         id: pluie,
         categoryId: 0,
-        name: 'Pluie',
-        normalizedName: 'pluie',
+        name: 'Météo',
+        normalizedName: 'meteo',
       );
       final proposals = proposeTitleTags(
         sounds: [soundOf(1, 'Pluie')],
@@ -144,11 +144,11 @@ void main() {
         expect(await names(SoundType.soundEffect), ['Porte']);
         expect(
           await names(SoundType.ambiance),
-          containsAll(['Pluie', 'Joyeux']),
+          containsAll(['Météo', 'Joyeux']),
         );
         expect(await names(SoundType.ambiance), isNot(contains('Porte')));
-        expect(await names(SoundType.music), ['Pluie', 'Joyeux']);
-        expect(await names(null), containsAll(['Porte', 'Pluie', 'Joyeux']));
+        expect(await names(SoundType.music), ['Météo', 'Joyeux']);
+        expect(await names(null), containsAll(['Porte', 'Météo', 'Joyeux']));
       });
     });
 
@@ -180,7 +180,7 @@ void main() {
     test('ajoute sans remplacer les tags existants', () async {
       final sound = await insertSound('Pluie');
       final porte = await tagId('Porte');
-      final pluie = await tagId('Pluie');
+      final pluie = await tagId('Météo');
       await dataSource.setTagsForSound(sound, [porte]);
 
       final result = await dataSource.addTagsToUnprocessedSounds({
@@ -193,7 +193,7 @@ void main() {
 
     test('est idempotent : un tag déjà posé n’est pas recompté', () async {
       final sound = await insertSound('Pluie');
-      final pluie = await tagId('Pluie');
+      final pluie = await tagId('Météo');
 
       await dataSource.addTagsToUnprocessedSounds({
         sound: {pluie},
@@ -209,7 +209,7 @@ void main() {
     test('ne touche jamais un son traité', () async {
       final fresh = await insertSound('Pluie');
       final frozen = await insertSound('Pluie 2', processed: true);
-      final pluie = await tagId('Pluie');
+      final pluie = await tagId('Météo');
 
       final result = await dataSource.addTagsToUnprocessedSounds({
         fresh: {pluie},
@@ -224,7 +224,7 @@ void main() {
     test('ne marque pas les sons traités', () async {
       final sound = await insertSound('Pluie');
       await dataSource.addTagsToUnprocessedSounds({
-        sound: {await tagId('Pluie')},
+        sound: {await tagId('Météo')},
       });
       final row = await (database.select(
         database.sounds,
@@ -235,7 +235,7 @@ void main() {
     test('n’écrit rien parmi les suggestions de l’IA', () async {
       final sound = await insertSound('Pluie');
       await dataSource.addTagsToUnprocessedSounds({
-        sound: {await tagId('Pluie')},
+        sound: {await tagId('Météo')},
       });
       expect(await database.select(database.soundAutoTags).get(), isEmpty);
     });

@@ -1,6 +1,6 @@
 # 0040 — Tags génériques, et dissolution de la catégorie MUSIQUE
 
-**Statut :** acceptée
+**Statut :** acceptée — la règle « élagué seulement s'il est inutilisé » est remplacée par [0046](0046-le-catalogue-de-tags-fait-foi-a-chaque-ouverture.md) : un tag élagué est supprimé même posé sur un son
 **Date :** 2026-11-18
 
 ## Contexte

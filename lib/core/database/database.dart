@@ -52,6 +52,7 @@ class AppDatabase extends _$AppDatabase {
         await _applyJournalPragmas();
         _logSlowOpen();
         await _createCascadeTriggers();
+        await reconcileTagCatalog();
 
         // Filet de sécurité pour les bases antérieures à v9 qui n'auraient pas
         // encore migré — sans effet sur les bases v10+ (table inexistante).
@@ -62,18 +63,22 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  /// Applique au catalogue de tags local tout ce qu'il a retiré depuis : catégories
-  /// dissoutes, tags fusionnés dans leur famille, tags élagués inutilisés
-  /// (`retiredTagCategories`, `mergedTags`, `prunedTags`). Usages, suggestions et
-  /// alias suivent. Idempotent et sans effet quand le catalogue est à jour.
+  /// Aligne les tags de la base sur le catalogue courant : catégories
+  /// dissoutes, tags du catalogue créés (`_extraTagCatalog`), tags fusionnés dans
+  /// leur famille, tags retirés supprimés (`retiredTagCategories`,
+  /// `mergedTags`, `prunedTags`). Usages, suggestions et alias suivent. Il n'y a
+  /// ni création ni suppression de tag dans l'interface : le catalogue fait foi,
+  /// une base ne garde aucun tag qu'il ne porte plus (décision 0046).
   ///
-  /// Appelée par la migration v48 **et** à la fin de chaque import de snapshot :
-  /// un appareil pas encore à jour (ou un snapshot publié avant la migration)
-  /// recrée sinon le tag retiré à chaque pull (décision 0043). Les tags d'accueil
-  /// doivent exister (`_ensureExtraTags`) ; sans eux, la fusion est journalisée
-  /// et ignorée.
+  /// Idempotente. Appelée à **chaque ouverture** (`beforeOpen`, y compris après
+  /// la migration v48) et à la fin de chaque import de snapshot : une
+  /// migration ne passe qu'une fois, donc un tag retiré après coup ne serait
+  /// jamais appliqué, et un appareil en retard recrée sinon le tag retiré à chaque
+  /// pull (décision 0043).
   Future<void> reconcileTagCatalog() async {
     await _dissolveRetiredTagCategories();
+    // Avant le retrait : les tags d'accueil (Meuble, Véhicule…) doivent exister.
+    await _ensureExtraTags();
     await _withdrawSpecificTags();
   }
 

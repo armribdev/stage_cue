@@ -64,8 +64,9 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0040](0040-tags-generiques-et-dissolution-de-la-categorie-musique.md) | Tags génériques (les noms précis en alias), et catégorie MUSIQUE dissoute dans EMOTION_STYLE | acceptée |
 | [0041](0041-tags-deduits-du-titre-calcules-a-la-volee.md) | Tags déduits du titre : calculés à la volée (mots entiers sur les alias), jamais stockés ni synchronisés | acceptée |
 | [0042](0042-suggestions-de-l-ia-sans-pourcentage.md) | Suggestions de l'IA : classées par score, sans pourcentage affiché | acceptée |
-| [0043](0043-catalogue-de-tags-reconcilie-apres-chaque-import.md) | Le catalogue de tags (retraits, fusions) se réconcilie après chaque import de snapshot, une seule déclaration | acceptée |
+| [0043](0043-catalogue-de-tags-reconcilie-apres-chaque-import.md) | Le catalogue de tags (retraits, fusions) se réconcilie après chaque import de snapshot, une seule déclaration | acceptée (amendée par 0046) |
 | [0044](0044-volume-auto-releve-plafonne-par-le-pic.md) | Volume « auto » : gain relevé au-delà de 1.0, plafonné par le pic mesuré | acceptée (amende 0036 ; le gain de sonie devient le gain unique du son, 0045) |
 | [0045](0045-gain-unique-par-son-sans-volume.md) | Un seul niveau par son : le gain, réglé dans la bibliothèque (plus de volume par son ni par pad) | acceptée (amende 0044) |
+| [0046](0046-le-catalogue-de-tags-fait-foi-a-chaque-ouverture.md) | Le catalogue de tags fait foi : la base s'y aligne à chaque ouverture, tags retirés supprimés même posés | acceptée (amende 0040 et 0043) |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

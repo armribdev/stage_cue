@@ -793,9 +793,13 @@ void main() {
       for (final row in await database.select(database.soundAutoTags).get()) {
         expect(names, contains(row.tagId));
       }
-      // Un tag élagué mais posé sur un son est conservé : aucune donnée perdue.
+      // Un tag élagué disparaît, même posé et suggéré sur un son (0046).
       for (final (category, tag) in db.prunedTags) {
-        expect(names.values, contains((category, tag)));
+        expect(
+          names.values,
+          isNot(contains((category, tag))),
+          reason: '« $tag » n’est plus au catalogue : pas recréé',
+        );
       }
     });
 

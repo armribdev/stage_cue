@@ -35,11 +35,11 @@ son vite, en direct, en tapant un ou deux mots dans le sélecteur de sons.
 | `ACTION` | Actions | Le geste joué sur scène, en familles pour la voix et le déplacement (le verbe précis est dans le titre) | Voix, Déplacement, Impact, Ouvrir/Fermer, Lancer |
 | `OBJET` | Objets | La famille d'accessoire utilisée ou évoquée | Porte, Arme, Véhicule, Machine, Sonnerie |
 | `MATIERE` | Matières | La texture sonore, quand l'objet précis manque | Bois, Métal, Feu, Glace, Végétal |
-| `AMBIANCE` | Ambiances | Le décor sonore : lieu, météo, moment, époque, genre, foule | Pluie, Nature, Nuit, Souterrain, Sacré, Western |
+| `AMBIANCE` | Ambiances | Le décor sonore : lieu, météo, moment, époque, genre, foule | Météo, Nature, Nuit, Souterrain, Sacré, Western |
 | `EMOTION_STYLE` | Émotion / style | L'ambiance d'une scène ou d'une musique : émotion, énergie, style, voix, tempo, statut | Tension, Joyeux, Combat, Chant, Lent, Remix, Kitsch, Célèbre |
 
 Les alias couvrent aussi l'anglais et les fautes courantes des titres
-(`rain` → Pluie, `sonette` → Sonnerie, `dog` → Animal) : les banques de sons
+(`rain` → Météo, `sonette` → Sonnerie, `dog` → Animal) : les banques de sons
 sont souvent nommées en anglais.
 
 ### AMBIANCE est large par choix
@@ -70,8 +70,11 @@ Triste, Angoisse, Tension…). Les animaux, eux, ont un seul tag générique
   de tag ou de catégorie depuis l'interface : tout nouveau tag passe par une
   migration de données. Retirer un tag ou une catégorie se déclare **une fois**,
   dans `retiredTagCategories`, `mergedTags` ou `prunedTags` :
-  `AppDatabase.reconcileTagCatalog` les applique à la migration et après chaque
-  import de snapshot ([0043](decisions/0043-catalogue-de-tags-reconcilie-apres-chaque-import.md)).
+  `AppDatabase.reconcileTagCatalog` les applique à chaque ouverture de la base et
+  après chaque import de snapshot ([0043](decisions/0043-catalogue-de-tags-reconcilie-apres-chaque-import.md),
+  [0046](decisions/0046-le-catalogue-de-tags-fait-foi-a-chaque-ouverture.md)) : la base
+  de chaque utilisateur suit le catalogue, un tag élagué est supprimé même posé
+  sur des sons (pour garder ses usages, fusionner plutôt qu'élaguer).
   Sans cela, un appareil en retard recrée le tag retiré à chaque synchro.
 - Libellés affichés : `TagCategoryUi.displayLabel`
   (`lib/features/sampler/presentation/utils/tag_category_ui.dart`). Une clé non
