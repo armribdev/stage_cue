@@ -60,7 +60,7 @@ fichier courant `stage-cue.log` + 2 archives `.1.log`/`.2.log` (~1 Mo chacun,
 rotation au démarrage et au dépassement). Pour le récupérer : en **release**,
 **Paramètres → Assistance** → « Copier les logs » (les 500 dernières lignes, à
 envoyer au développeur en cas de bug) ; en **build debug**, **Paramètres →
-Maintenance** (section repliée : la déplier) **→ Diagnostic** → « Exporter les
+Maintenance** **→ Diagnostic** → « Exporter les
 logs » (un `.txt` daté, en-tête de session en tête), « Copier les 500 dernières
 lignes » ou « Ouvrir le dossier des logs ». Les traces `STAGE_CUE_SYNC_TRACE` / `STAGE_CUE_AUDIO_TRACE`
 y sont écrites aussi quand elles sont actives. Voir

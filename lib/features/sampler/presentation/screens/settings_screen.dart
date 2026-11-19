@@ -155,13 +155,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _appVersion;
   bool _isDiagnosticBusy = false;
 
-  /// Section « Maintenance » (build debug seulement : journal, outils de
-  /// développement) ouverte ; repliée par défaut, non mémorisée d'une ouverture
-  /// de l'écran à l'autre.
-  bool _maintenanceExpanded = false;
-
   /// Taille du journal sur disque (fichier courant + archives), lue à
-  /// l'ouverture de la maintenance ; `null` tant qu'elle n'est pas connue.
+  /// l'ouverture de l'écran (build debug) ; `null` tant qu'elle n'est pas connue.
   int? _logDiskBytes;
 
   /// Action dont le bouton affiche brièvement une coche de confirmation (voir
@@ -248,6 +243,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (Platform.isWindows) {
       unawaited(_loadAppVersion());
     }
+    if (kDebugMode) unawaited(_loadLogDiskSize());
   }
 
   @override

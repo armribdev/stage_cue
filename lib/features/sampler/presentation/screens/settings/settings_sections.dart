@@ -298,71 +298,25 @@ extension _SettingsSections on _SettingsScreenState {
     );
   }
 
-  /// Section « Maintenance », **build debug seulement**, repliée par défaut :
-  /// les outils de développement qu'on ouvre rarement ne chargent pas l'écran.
+  /// Section « Maintenance », **build debug seulement** : les outils de
+  /// développement, toujours affichés (pas de repli).
   Widget _buildMaintenanceSection() {
-    final scheme = Theme.of(context).colorScheme;
-    final expanded = _maintenanceExpanded;
-    // Replié, un export en cours reste signalé.
-    final busy = _isDiagnosticBusy;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Semantics(
-          button: true,
-          expanded: expanded,
-          child: InkWell(
-            borderRadius: AppRadius.radiusSm,
-            onTap: _toggleMaintenance,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-              child: SettingsSectionHeader(
-                icon: AppIcons.tune,
-                title: 'Maintenance',
-                trailing: [
-                  if (busy && !expanded) ...[
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 1.5),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                  ],
-                  StrokeIcon(
-                    expanded ? AppIcons.chevronUp : AppIcons.chevronDown,
-                    size: AppIconSize.sm,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ],
-              ),
-            ),
-          ),
+        const SettingsSectionHeader(icon: AppIcons.tune, title: 'Maintenance'),
+        const SizedBox(height: AppSpacing.md),
+        _buildDiagnosticRows(),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+          child: Divider(height: 1),
         ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 180),
-          alignment: Alignment.topCenter,
-          child: expanded
-              ? Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.md),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildDiagnosticRows(),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                        child: Divider(height: 1),
-                      ),
-                      _buildTagCatalogRow(),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                        child: Divider(height: 1),
-                      ),
-                      _buildRecomputeRow(),
-                    ],
-                  ),
-                )
-              : const SizedBox(width: double.infinity),
+        _buildTagCatalogRow(),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+          child: Divider(height: 1),
         ),
+        _buildRecomputeRow(),
       ],
     );
   }
@@ -414,13 +368,6 @@ extension _SettingsSections on _SettingsScreenState {
         ),
       ),
     );
-  }
-
-  void _toggleMaintenance() {
-    setState(() => _maintenanceExpanded = !_maintenanceExpanded);
-    // La taille du journal grossit pendant la session : relue à chaque
-    // ouverture, pas à chaque redessin.
-    if (_maintenanceExpanded) unawaited(_loadLogDiskSize());
   }
 
   /// Libellé muet + valeur : état de l'appareil, dialogue de la base,
