@@ -177,10 +177,10 @@ class _PadSoundRowState extends State<PadSoundRow> {
             SoundTypeAvatar(
               type: sound.type,
               colorValue: sound.colorValue,
-              radius: 12,
-              iconSize: 14,
+              radius: 14,
+              iconSize: 16,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 16),
             Expanded(
               child: MouseRegion(
                 onEnter: (_) => setState(() => _hovered = true),
@@ -223,13 +223,15 @@ class _PadSoundRowState extends State<PadSoundRow> {
           ],
         );
 
+        // Ligne plate à filet, comme celles du sélecteur de sons : pas de
+        // carte bordée par son.
         return Container(
-          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-          padding: const EdgeInsets.all(AppSpacing.sm + 2),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.xs,
+            vertical: AppSpacing.sm + 2,
+          ),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainer,
-            borderRadius: AppRadius.radiusMd,
-            border: Border.fromBorderSide(AppElevation.border(scheme)),
+            border: Border(bottom: AppElevation.border(scheme)),
           ),
           child: canDownload
               ? Material(
