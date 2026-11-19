@@ -34,7 +34,9 @@ import '../../../../core/utils/layout_utils.dart';
 import '../widgets/app_form_dialog.dart';
 import '../widgets/app_modal.dart';
 import '../widgets/drive_folder_picker.dart';
+import '../../data/datasources/local_autotag_datasource.dart';
 import '../../data/datasources/local_tag_editing_datasource.dart';
+import '../providers/maintenance_recompute_controller.dart';
 import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
 import '../../data/models/indexing_progress.dart';
@@ -47,6 +49,7 @@ import '../widgets/section_context_anchor.dart';
 import '../widgets/settings_indexed_folders_section.dart';
 import '../widgets/settings_layout.dart';
 import '../widgets/settings_loading_view.dart';
+import 'maintenance_recompute_screen.dart';
 import 'sound_library_screen.dart';
 import 'tag_catalog_editor_screen.dart';
 

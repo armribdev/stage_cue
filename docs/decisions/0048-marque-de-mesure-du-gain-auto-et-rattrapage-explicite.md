@@ -5,7 +5,7 @@
 
 ## Contexte
 
-Le gain auto est mesuré à la création d'un son, au premier fichier d'un son Drive et avec la première waveform ([0036](0036-volume-auto-par-sonie-lufs-selon-le-type.md), [0044](0044-volume-auto-releve-plafonne-par-le-pic.md)). Un son indexé avant ces mesures, ou dont la waveform a seulement été régénérée, garde `gain = 1.0` sans que rien ne le distingue d'un son réglé volontairement à 0 dB : l'app ne pouvait ni le signaler, ni le rattraper sans écraser un réglage. La waveform, elle, se rattrape seule par `kWaveformProbeGeneration` ; les suggestions de tags aussi (colonnes nulles = candidat).
+Le gain auto est mesuré à la création d'un son, au premier fichier d'un son Drive et avec la première waveform ([0036](0036-volume-auto-par-sonie-lufs-selon-le-type.md), [0044](0044-volume-auto-releve-plafonne-par-le-pic.md)). Un son indexé avant ces mesures, ou dont la waveform a seulement été régénérée, garde `gain = 1.0` sans que rien ne le distingue d'un son réglé volontairement à 0 dB : l'app ne pouvait ni le signaler, ni le rattraper sans écraser un réglage. La waveform, elle, se rattrape seule par `kWaveformProbeGeneration` ; les suggestions de tags aussi (colonnes nulles = candidat). *(Inexact pour la waveform : la génération ne fait que désigner les sons, rien ne les revisitait — corrigé par [0049](0049-rattrapage-des-waveforms-et-recalcul-de-maintenance-debug.md).)*
 
 ## Décision
 

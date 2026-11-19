@@ -11,6 +11,7 @@ import '../../../../core/audio/audio_file_validation.dart';
 import '../../../../core/audio/audio_load_log.dart';
 import '../../../../core/audio/local_sound_probe.dart';
 import '../../../../core/audio/loudness_analyzer.dart';
+import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/sync/audio_cache_manager.dart';
 import '../../../../core/sync/drive_account_profile.dart';
@@ -41,6 +42,7 @@ part 'library_repository_push_pull.dart';
 part 'library_repository_playback.dart';
 part 'library_repository_downloads.dart';
 part 'library_repository_auto_volume.dart';
+part 'library_repository_waveforms.dart';
 part 'library_repository_drive_changes.dart';
 part 'library_repository_sound_deletion.dart';
 part 'library_repository_drive_index.dart';
@@ -366,6 +368,13 @@ class LibraryRepository extends ChangeNotifier {
       await _cacheManager.cleanupPartialDownloads(library);
     }
   }
+
+  /// Rattrape les waveforms manquantes ou obsolètes des sons déjà téléchargés
+  /// (décision 0049) : voir `LibraryRepositoryWaveforms`. Méthode d'instance et
+  /// non d'extension, pour que le coordinateur se teste avec un faux repository.
+  Future<WaveformPassResult> backfillStaleWaveforms({
+    required String? Function() shouldStop,
+  }) => _backfillStaleWaveforms(shouldStop: shouldStop);
 
   Future<Library?> getLibraryById(int id) => _dataSource.getLibraryById(id);
 

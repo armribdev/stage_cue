@@ -47,6 +47,9 @@ void main() {
   late AutoSyncCoordinator coordinator;
   late List<String> events;
   late String? Function() lastStopReason;
+  late String? Function() backfillStopReason;
+  late WaveformPassResult backfillResult;
+  var backfillCalls = 0;
   var paused = false;
 
   setUpAll(() {
@@ -61,6 +64,13 @@ void main() {
     preferences = FakePreferences();
     events = [];
     paused = false;
+    backfillCalls = 0;
+    backfillResult = (
+      updated: 0,
+      unsupported: 0,
+      unavailable: 0,
+      cancelled: false,
+    );
 
     when(() => repository.cleanupPartialDownloads()).thenAnswer((_) async {});
     when(() => repository.markInitialSyncSettled()).thenReturn(null);
@@ -71,6 +81,16 @@ void main() {
       events.add('push');
     });
     when(() => syncController.isAutoSyncPaused).thenAnswer((_) => paused);
+    when(
+      () => repository.backfillStaleWaveforms(
+        shouldStop: any(named: 'shouldStop'),
+      ),
+    ).thenAnswer((invocation) async {
+      backfillStopReason =
+          invocation.namedArguments[#shouldStop] as String? Function();
+      backfillCalls++;
+      return backfillResult;
+    });
     when(
       () => autoTag.run(
         stopReason: any(named: 'stopReason'),
@@ -373,6 +393,132 @@ void main() {
       await afterDelay();
 
       expect(events, isEmpty);
+    });
+  });
+
+  // Rattrapage des waveforms (décision 0049) : mêmes garde-fous que l'analyse,
+  // et il passe avant elle (elles décodent la même file native).
+  group('rattrapage des waveforms', () {
+    test('une passe de synchro lance le rattrapage, puis l\'analyse', () async {
+      when(
+        () => repository.backfillStaleWaveforms(
+          shouldStop: any(named: 'shouldStop'),
+        ),
+      ).thenAnswer((_) async {
+        events.add('waveforms');
+        return backfillResult;
+      });
+
+      await coordinator.refreshNow();
+      await pump();
+
+      expect(events, ['waveforms', 'autotag']);
+    });
+
+    test('Mode Spectacle ou arrière-plan : aucun rattrapage', () async {
+      paused = true;
+      await coordinator.refreshNow();
+      await pump();
+      paused = false;
+      coordinator.onAppBackgrounded();
+      await coordinator.refreshNow();
+      await pump();
+
+      expect(backfillCalls, 0);
+    });
+
+    test(
+      'la raison d\'arrêt suit l\'état de l\'app pendant la passe',
+      () async {
+        await coordinator.refreshNow();
+        await pump();
+
+        expect(backfillStopReason(), isNull);
+        paused = true;
+        expect(backfillStopReason(), 'Mode Spectacle');
+        paused = false;
+        coordinator.onAppBackgrounded();
+        expect(backfillStopReason(), 'app en arrière-plan');
+      },
+    );
+
+    test('un rattrapage long ne retient pas « Actualiser » et ne se double '
+        'pas', () async {
+      final gate = Completer<WaveformPassResult>();
+      when(
+        () => repository.backfillStaleWaveforms(
+          shouldStop: any(named: 'shouldStop'),
+        ),
+      ).thenAnswer((_) {
+        backfillCalls++;
+        return gate.future;
+      });
+
+      await coordinator.refreshNow();
+      await pump();
+      await coordinator.refreshNow();
+      await pump();
+
+      expect(backfillCalls, 1, reason: 'une seule passe à la fois');
+      expect(events, isEmpty, reason: 'l\'analyse attend la fin du rattrapage');
+      gate.complete(backfillResult);
+      await pump();
+      expect(events, ['autotag']);
+    });
+
+    test('waveforms écrites : un push est planifié (les éditions ignorées '
+        'pendant la passe sont rattrapées)', () async {
+      final library = _library(1);
+      when(() => repository.getLibraries()).thenAnswer((_) async => [library]);
+      when(
+        () => repository.applyDriveChanges(library: any(named: 'library')),
+      ).thenAnswer(
+        (_) async => const DriveSyncApplied(upserted: 0, removed: 0),
+      );
+      when(() => syncController.pullForLaunch(any())).thenAnswer((_) async {});
+      backfillResult = (
+        updated: 40,
+        unsupported: 2,
+        unavailable: 0,
+        cancelled: false,
+      );
+
+      await coordinator.refreshNow();
+      await pump();
+
+      expect(events, ['push', 'autotag']);
+    });
+
+    test('rien d\'écrit : pas de push', () async {
+      final library = _library(1);
+      when(() => repository.getLibraries()).thenAnswer((_) async => [library]);
+      when(
+        () => repository.applyDriveChanges(library: any(named: 'library')),
+      ).thenAnswer(
+        (_) async => const DriveSyncApplied(upserted: 0, removed: 0),
+      );
+      when(() => syncController.pullForLaunch(any())).thenAnswer((_) async {});
+
+      await coordinator.refreshNow();
+      await pump();
+
+      expect(events, ['autotag']);
+    });
+
+    test('sans service d\'analyse (mobile) : le rattrapage tourne quand '
+        'même', () async {
+      final plain = AutoSyncCoordinator(
+        database,
+        repository,
+        syncController,
+        preferences,
+      );
+      addTearDown(plain.dispose);
+
+      await plain.refreshNow();
+      await pump();
+
+      expect(backfillCalls, 1);
     });
   });
 }

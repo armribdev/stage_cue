@@ -70,5 +70,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0046](0046-le-catalogue-de-tags-fait-foi-a-chaque-ouverture.md) | Le catalogue de tags fait foi : la base s'y aligne à chaque ouverture, tags retirés supprimés même posés | acceptée (amende 0040 et 0043) |
 | [0047](0047-editeur-de-catalogue-de-tags-debug-qui-produit-le-code.md) | Éditeur de catalogue de tags réservé au développeur (debug) : il modifie la base locale et produit la déclaration du code | acceptée (précise 0046) |
 | [0048](0048-marque-de-mesure-du-gain-auto-et-rattrapage-explicite.md) | Marque de mesure du gain auto (`gain_measure_generation`, v51) : les sons anciens se rattrapent à la demande, jamais en silence | acceptée (précise 0044) |
+| [0049](0049-rattrapage-des-waveforms-et-recalcul-de-maintenance-debug.md) | Rattrapage de fond des waveforms (sans jamais écrire de gain) et recalcul de maintenance au choix, réservé au debug | acceptée (corrige 0048 sur la waveform) |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

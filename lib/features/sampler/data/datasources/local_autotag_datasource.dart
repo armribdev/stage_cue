@@ -138,6 +138,64 @@ class LocalAutoTagDataSource {
       (_database.update(_database.sounds)..where((s) => s.id.equals(soundId)))
           .write(db.SoundsCompanion(autoTaggedAt: Value(when)));
 
+  /// Rouvre l'analyse de ceux de [soundIds] qui sont éligibles (musique non
+  /// traitée) — **maintenance, build debug** (décision 0049). Efface leurs
+  /// suggestions et leur marque de décision, ce qui les rend à nouveau candidats
+  /// au prochain passage ; avec [dropEmbeddings], efface aussi l'empreinte (le
+  /// passage ré-analyse alors l'audio). Sans, seuls les sons qui **ont** une
+  /// empreinte sont rouverts : on ne ré-décode pas les « écartés pour de bon ».
+  ///
+  /// Ne touche jamais `sound_tags` (ceux de l'utilisateur) ni un son traité.
+  /// Limite : la synchro fusionne `sound_auto_tags` par union sans jamais
+  /// supprimer, un autre appareil peut donc rendre d'anciennes suggestions.
+  /// Renvoie le nombre de sons rouverts.
+  Future<int> reopenAnalysis(
+    Iterable<int> soundIds, {
+    required bool dropEmbeddings,
+  }) {
+    const chunkSize = 500; // sous la limite de variables de SQLite
+    final ids = soundIds.toList();
+    return _database.transaction(() async {
+      var reopened = 0;
+      for (var start = 0; start < ids.length; start += chunkSize) {
+        final chunk = ids.sublist(
+          start,
+          start + chunkSize > ids.length ? ids.length : start + chunkSize,
+        );
+        final rows = await _database
+            .customSelect(
+              'SELECT id FROM sounds WHERE id IN (${_marks(chunk.length)}) '
+              'AND $_eligibleSql'
+              '${dropEmbeddings ? '' : ' AND auto_embedding IS NOT NULL'}',
+              variables: [for (final id in chunk) Variable<int>(id)],
+            )
+            .get();
+        final eligible = [for (final r in rows) r.read<int>('id')];
+        if (eligible.isEmpty) continue;
+        final variables = [for (final id in eligible) Variable<int>(id)];
+        final marks = _marks(eligible.length);
+        await _database.customUpdate(
+          'DELETE FROM sound_auto_tags WHERE sound_id IN ($marks)',
+          variables: variables,
+          updates: {_database.soundAutoTags},
+          updateKind: UpdateKind.delete,
+        );
+        await _database.customUpdate(
+          'UPDATE sounds SET auto_tagged_at = NULL'
+          '${dropEmbeddings ? ', auto_embedding = NULL' : ''} '
+          'WHERE id IN ($marks)',
+          variables: variables,
+          updates: {_database.sounds},
+          updateKind: UpdateKind.update,
+        );
+        reopened += eligible.length;
+      }
+      return reopened;
+    });
+  }
+
+  static String _marks(int count) => List.filled(count, '?').join(',');
+
   /// Applique les [decisions] en une transaction : revérifie l'éligibilité de
   /// chaque son (l'utilisateur a pu le traiter depuis l'analyse), enregistre ses
   /// suggestions dans `sound_auto_tags` (tags de [categoryName]), puis renseigne

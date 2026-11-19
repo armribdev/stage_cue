@@ -118,15 +118,18 @@ extension LocalSoundCrud on LocalSoundDataSource {
   ///
   /// À la **première** enveloppe d'un son (jamais une régénération), le gain
   /// « auto » est mesuré sur [file] et écrit avec elle, comme à la création
-  /// (`_autoGainForFirstWaveform`).
+  /// (`_autoGainForFirstWaveform`) — sauf si [measureGain] est faux : une passe
+  /// en masse (rattrapage, recalcul de maintenance) ne change jamais un niveau
+  /// sans qu'on l'ait demandé (décision 0048).
   Future<void> persistWaveformProbe(
     int id,
     WaveformProbe probe, {
     required File file,
+    bool measureGain = true,
   }) async {
     if (probe.status == WaveformProbeStatus.transient) return;
     final success = probe.status == WaveformProbeStatus.success;
-    final row = success
+    final row = success && measureGain
         ? await (_database.select(
             _database.sounds,
           )..where((s) => s.id.equals(id))).getSingleOrNull()

@@ -203,7 +203,14 @@ class AutoSyncCoordinator {
   /// d'analyse par son) sont des annotations locales, sans rien à publier. Drapeau
   /// distinct de [_ignoreUpdates] : une passe de synchro peut se chevaucher avec
   /// elle, et le premier à finir ne doit pas rabaisser celui de l'autre.
-  bool _autoTagWriting = false;
+  ///
+  /// Compteur et non booléen : l'analyse et le rattrapage des waveforms (mêmes
+  /// annotations locales) peuvent se chevaucher, et le premier à finir ne doit
+  /// pas rabaisser le drapeau de l'autre.
+  int _annotationWriters = 0;
+
+  /// Passe de rattrapage des waveforms en vol (décision 0049).
+  Future<void>? _waveformBackfillInFlight;
 
   /// Passage d'analyse en vol. Distinct de [_passInFlight] : l'analyse dure des
   /// minutes et ne doit jamais retenir un « Actualiser » manuel.
@@ -245,7 +252,7 @@ class AutoSyncCoordinator {
       _watchInterval,
       // Le tick relance aussi l'analyse : c'est ce qui la reprend après un Mode
       // Spectacle, qui n'a pas de signal de sortie à écouter.
-      (_) => unawaited(_runWatchPass().whenComplete(_scheduleAutoTag)),
+      (_) => unawaited(_runWatchPass().whenComplete(_scheduleBackgroundWork)),
     );
   }
 
@@ -283,10 +290,10 @@ class AutoSyncCoordinator {
     if (last != null &&
         DateTime.now().difference(last) < _watchResumeThrottle) {
       SyncLog.trace('veille : reprise trop rapprochée, sonde sautée');
-      _scheduleAutoTag();
+      _scheduleBackgroundWork();
       return;
     }
-    unawaited(_runWatchPass().whenComplete(_scheduleAutoTag));
+    unawaited(_runWatchPass().whenComplete(_scheduleBackgroundWork));
   }
 
   /// L'app passe en arrière-plan : la veille se tait jusqu'au retour.
@@ -300,7 +307,7 @@ class AutoSyncCoordinator {
 
   Future<void> _onTablesUpdated(Set<TableUpdate> updates) async {
     if (_ignoreUpdates ||
-        _autoTagWriting ||
+        _annotationWriters > 0 ||
         !_appPreferences.allowsNetworkSync) {
       return;
     }
@@ -395,8 +402,8 @@ class AutoSyncCoordinator {
           _passInFlight = null;
           // L'analyse vient APRÈS le pull : le pull remplace les tags d'un dossier
           // par ceux du distant, et publier des tags posés avant lui les ferait
-          // écraser (décision 0029).
-          _scheduleAutoTag();
+          // écraser (décision 0029). Les waveforms passent avant : plus légères.
+          _scheduleBackgroundWork();
         });
     _passInFlight = pass;
     return pass;
@@ -414,15 +421,65 @@ class AutoSyncCoordinator {
       ? null
       : AutoTagAnalysis(_autoTag, (id) => requestAutoTag(firstSoundId: id));
 
-  /// Raison de ne pas analyser (ou d'arrêter une analyse en cours), `null` si
-  /// rien ne s'y oppose. Même logique que la veille, en plus strict : l'analyse
-  /// charge le processeur, pas seulement le réseau.
-  String? _autoTagStopReason() {
+  /// Raison de ne pas travailler en fond (analyse des tags, rattrapage des
+  /// waveforms) ou de s'arrêter en cours, `null` si rien ne s'y oppose. Même
+  /// logique que la veille, en plus strict : ces passes chargent le processeur et
+  /// la file de décodage native, pas seulement le réseau.
+  String? _backgroundWorkStopReason() {
     if (_disposed) return 'application en cours d’arrêt';
     if (_isBackgrounded) return 'app en arrière-plan';
     if (_syncController.isAutoSyncPaused) return 'Mode Spectacle';
     if (_passInFlight != null) return 'synchronisation en cours';
     return null;
+  }
+
+  /// Travail de fond après une synchro ou un tick de veille : rattrape d'abord
+  /// les waveforms, puis l'analyse des tags (qui s'enchaîne à la fin du
+  /// rattrapage). Deux passes qui décodent la même file native n'ont rien à gagner
+  /// à tourner ensemble.
+  void _scheduleBackgroundWork() {
+    // Rattrapage en vol : l'analyse suivra sa fin (`whenComplete`).
+    if (_waveformBackfillInFlight != null) return;
+    if (!_scheduleWaveformBackfill()) _scheduleAutoTag();
+  }
+
+  /// Lance le rattrapage des waveforms si rien ne s'y oppose ; renvoie `true` si
+  /// une passe est partie (l'analyse des tags suivra alors sa fin). Idempotent.
+  bool _scheduleWaveformBackfill() {
+    if (_waveformBackfillInFlight != null) return false;
+    final blocked = _backgroundWorkStopReason();
+    if (blocked != null) {
+      SyncLog.trace('waveforms : rattrapage différé ($blocked)');
+      return false;
+    }
+    _waveformBackfillInFlight = _runWaveformBackfill().whenComplete(() {
+      _waveformBackfillInFlight = null;
+      _scheduleAutoTag();
+    });
+    return true;
+  }
+
+  Future<void> _runWaveformBackfill() async {
+    _annotationWriters++;
+    WaveformPassResult? result;
+    try {
+      result = await _repository.backfillStaleWaveforms(
+        shouldStop: _backgroundWorkStopReason,
+      );
+    } catch (e) {
+      // Le repository ne lève pas, mais l'enchaînement vers l'analyse des tags
+      // ne doit jamais dépendre de cette promesse.
+      SyncLog.warn('Waveforms : rattrapage abandonné — $e');
+    } finally {
+      _annotationWriters--;
+    }
+    // Les éditions de l'utilisateur faites pendant la passe ont été ignorées
+    // (drapeau) : un push les rattrape. Même raisonnement que l'analyse.
+    if (result != null &&
+        result.updated + result.unsupported > 0 &&
+        _appPreferences.allowsNetworkSync) {
+      await _schedulePushForConnectedLibraries();
+    }
   }
 
   /// Lance un passage d'analyse automatique si rien ne s'y oppose. Idempotent :
@@ -432,7 +489,7 @@ class AutoSyncCoordinator {
     final service = _autoTag;
     if (service == null) return 'analyse indisponible sur cet appareil';
     if (_autoTagInFlight != null) return 'une analyse est déjà en cours';
-    final blocked = _autoTagStopReason();
+    final blocked = _backgroundWorkStopReason();
     if (blocked != null) {
       SyncLog.trace('analyse auto : différée ($blocked)');
       return blocked;
@@ -445,15 +502,15 @@ class AutoSyncCoordinator {
   }
 
   Future<void> _runAutoTag(AutoTagService service, {int? firstSoundId}) async {
-    _autoTagWriting = true;
+    _annotationWriters++;
     final AutoTagReport report;
     try {
       report = await service.run(
-        stopReason: _autoTagStopReason,
+        stopReason: _backgroundWorkStopReason,
         firstSoundId: firstSoundId,
       );
     } finally {
-      _autoTagWriting = false;
+      _annotationWriters--;
     }
     if (report.tagsInserted > 0) onTagsAutoApplied?.call();
     // Publier : seuls les tags comptent, mais pendant le passage les éditions de

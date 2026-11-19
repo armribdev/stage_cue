@@ -1,15 +1,20 @@
 // `isNull`/`isNotNull` de drift entrent en collision avec les matchers de test :
 // on masque les noms top-level (les méthodes `.isNotNull()` sur colonnes restent).
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:stage_cue/core/audio/waveform_extractor.dart';
 import 'package:stage_cue/core/database/database.dart' as db;
 import 'package:stage_cue/core/database/sounds.dart' show SoundType;
 import 'package:stage_cue/features/sampler/data/datasources/local_library_datasource.dart';
 import 'package:stage_cue/features/sampler/data/datasources/local_sound_datasource.dart';
+
+import '../../../core/autotag/audio_stream_info_test.dart' show wavBytes;
+import '../../../core/autotag/native_libs.dart';
 
 /// Vérifie la déduplication par identité forte Drive (`driveFileId`) lors de
 /// l'indexation d'un dossier Drive — le correctif central contre les doublons.
@@ -662,6 +667,73 @@ void main() {
       final sound = await reload(id);
       expect(sound.waveform, [1, 2, 3]);
       expect(sound.waveformProbeGeneration, isNull);
+    });
+
+    group('première enveloppe d\'un son au gain par défaut', () {
+      late Directory dir;
+      late File file;
+
+      setUp(() async {
+        dir = await Directory.systemTemp.createTemp('stagecue_wavegain_test');
+        file = File(p.join(dir.path, 'tone.wav'))
+          ..writeAsBytesSync(
+            wavBytes(
+              sampleRate: 44100,
+              left: [
+                for (var i = 0; i < 44100 * 3; i++)
+                  (0.5 * math.sin(2 * math.pi * 1000 * i / 44100) * 32767)
+                      .round(),
+              ],
+            ),
+          );
+      });
+      tearDown(() => dir.delete(recursive: true));
+
+      Future<int> insertMusic() => database
+          .into(database.sounds)
+          .insert(
+            db.SoundsCompanion.insert(
+              title: 'tone',
+              displayName: 'tone',
+              filePath: file.path,
+              type: const Value(SoundType.music),
+            ),
+          );
+
+      test(
+        'par défaut : le gain auto est mesuré et marqué',
+        () async {
+          final id = await insertMusic();
+
+          await dataSource.persistWaveformProbe(
+            id,
+            WaveformProbe.success(Uint8List.fromList([9, 8, 7])),
+            file: file,
+          );
+
+          final sound = await reload(id);
+          expect(sound.gain, isNot(1.0));
+          expect(sound.gainMeasureGeneration, isNotNull);
+        },
+        skip: soloudNativeSkipReason(),
+      );
+
+      test('measureGain: false : une passe en masse n\'écrit aucun gain '
+          '(décision 0048)', () async {
+        final id = await insertMusic();
+
+        await dataSource.persistWaveformProbe(
+          id,
+          WaveformProbe.success(Uint8List.fromList([9, 8, 7])),
+          file: file,
+          measureGain: false,
+        );
+
+        final sound = await reload(id);
+        expect(sound.waveform, [9, 8, 7]);
+        expect(sound.gain, 1.0);
+        expect(sound.gainMeasureGeneration, isNull);
+      });
     });
   });
 }

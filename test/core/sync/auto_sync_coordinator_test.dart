@@ -79,6 +79,15 @@ void main() {
     when(() => repository.markInitialSyncSettled()).thenReturn(null);
     when(() => repository.reconnectSilently()).thenAnswer((_) async => true);
     when(() => repository.getLibraries()).thenAnswer((_) async => []);
+    // Rattrapage des waveforms (décision 0049), hors sujet ici : rien à faire.
+    when(
+      () => repository.backfillStaleWaveforms(
+        shouldStop: any(named: 'shouldStop'),
+      ),
+    ).thenAnswer(
+      (_) async =>
+          (updated: 0, unsupported: 0, unavailable: 0, cancelled: false),
+    );
     when(() => syncController.markOffline()).thenReturn(null);
     when(() => syncController.schedulePush(any())).thenReturn(null);
     when(() => syncController.isAutoSyncPaused).thenReturn(false);

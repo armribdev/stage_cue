@@ -356,6 +356,13 @@ extension _SettingsSections on _SettingsScreenState {
                           child: Divider(height: 1),
                         ),
                         _buildTagCatalogRow(),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: AppSpacing.sm,
+                          ),
+                          child: Divider(height: 1),
+                        ),
+                        _buildRecomputeRow(),
                       ],
                     ],
                   ),
@@ -381,6 +388,34 @@ extension _SettingsSections on _SettingsScreenState {
           TagCatalogEditorScreen.open(
             context,
             editor: LocalTagEditingDataSource(widget.database),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Recalcul de maintenance, **build debug seulement** (décision 0049) : on
+  /// coche waveforms, gains, suggestions de tags, empreintes audio.
+  Widget _buildRecomputeRow() {
+    return SettingsRow(
+      title: 'Recalcul (développement)',
+      description:
+          'Recalculer au choix waveforms, gains, suggestions de tags et '
+          'empreintes audio sur les sons téléchargés.',
+      trailing: SettingsButton(
+        label: 'Ouvrir',
+        icon: AppIcons.tune,
+        onPressed: () => unawaited(
+          MaintenanceRecomputeScreen.open(
+            context,
+            controller: MaintenanceRecomputeController(
+              repository: widget.libraryRepository,
+              autoTagData: LocalAutoTagDataSource(widget.database),
+              coordinator: widget.autoSyncCoordinator,
+              syncController: widget.syncController,
+            ),
+            packInstalled:
+                widget.autoTagPack?.status == AutoTagPackStatus.installed,
           ),
         ),
       ),
