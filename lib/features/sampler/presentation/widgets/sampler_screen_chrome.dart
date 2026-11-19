@@ -45,13 +45,18 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
     final scheme = Theme.of(context).colorScheme;
     return AppBar(
       automaticallyImplyLeading: false,
+      // Mêmes réglages que l'AppBar desktop : sans eux, le leading de 56 px et
+      // les 16 px de `titleSpacing` par défaut laissent un espace mort avant le
+      // nom de la scène.
+      leadingWidth: 52,
+      titleSpacing: 0,
       // En session live : la bascule étant la seule action du menu, le hamburger
       // cède la place à un bouton de sortie direct (un clic). Hors session, le
       // hamburger ouvre le tiroir (mode live / bibliothèque / paramètres).
       // `Center` : le `leading` d'une AppBar impose largeur ET hauteur serrées,
       // qui étireraient la zone de clic en rectangle 56×56. Centrée, elle garde
-      // son carré de 44 px. Hamburger sans cadre et à grande icône : c'est la
-      // cible tactile principale de la barre, pas une action secondaire.
+      // son carré de 44 px (zone de clic seulement : le glyphe garde la taille
+      // par défaut, comme les autres icônes de la barre).
       leading: Center(
         child: isPerformanceMode
             ? LiveExitButton(onExit: onTogglePerformanceMode)
@@ -60,11 +65,16 @@ class SamplerAppBar extends StatelessWidget implements PreferredSizeWidget {
                 tooltip: 'Menu',
                 framed: false,
                 size: 44,
-                iconSize: 26,
                 onPressed: onOpenMenu,
               ),
       ),
-      title: BoardTitleLabel(board: selectedBoard),
+      // Même rendu que le sélecteur desktop (sans cadre, nom en
+      // `onSurfaceVariant`), sans menu déroulant ni chevron.
+      title: BoardTitleLabel(
+        board: selectedBoard,
+        framed: false,
+        color: scheme.onSurfaceVariant,
+      ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(color: AppElevation.border(scheme).color, height: 1),
