@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'drag_proxy_decorator.dart';
+
 /// Durée commune des apparitions / disparitions de pastilles et de blocs.
 const _kRevealDuration = Duration(milliseconds: 180);
 
@@ -119,8 +121,8 @@ class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
   }
 }
 
-/// Une pastille de [AnimatedPillWrap] : sa clé identifie la pastille d'une
-/// version de la liste à l'autre.
+/// Une pastille de [AnimatedPillWrap] ou une ligne d'[AnimatedRevealColumn] :
+/// sa clé l'identifie d'une version de la liste à l'autre.
 class PillEntry {
   final Key key;
   final Widget child;
@@ -139,6 +141,37 @@ class _Slot {
   bool startOpen = false;
 
   _Slot(this.key, this.child, {required this.visible, required this.appear});
+}
+
+/// Nouvelle liste dans l'ordre demandé, plus les éléments partis qui finissent
+/// de se refermer, à la place qu'ils occupaient.
+List<_Slot> _mergeSlots(List<_Slot> current, List<PillEntry> entries) {
+  final byKey = {for (final s in current) s.key: s};
+  final incoming = {for (final e in entries) e.key};
+  final result = <_Slot>[
+    for (final e in entries)
+      if (byKey[e.key] case final slot?)
+        slot
+          ..child = e.child
+          ..visible = true
+      else
+        _Slot(e.key, e.child, visible: true, appear: true),
+  ];
+  for (var i = 0; i < current.length; i++) {
+    final gone = current[i];
+    if (incoming.contains(gone.key)) continue;
+    gone.visible = false;
+    var at = 0;
+    for (var j = i - 1; j >= 0; j--) {
+      final index = result.indexWhere((s) => s.key == current[j].key);
+      if (index >= 0) {
+        at = index + 1;
+        break;
+      }
+    }
+    result.insert(at, gone);
+  }
+  return result;
 }
 
 /// Les pastilles affichées par le dernier [AnimatedPillWrap] qui s'y est
@@ -196,7 +229,7 @@ class _AnimatedPillWrapState extends State<AnimatedPillWrap> {
       for (final e in widget.memory?.entries ?? const <PillEntry>[])
         _Slot(e.key, e.child, visible: true, appear: false),
     ];
-    final slots = _merge(previous, widget.entries);
+    final slots = _mergeSlots(previous, widget.entries);
     for (final slot in slots) {
       if (!slot.visible) slot.startOpen = true;
     }
@@ -219,39 +252,8 @@ class _AnimatedPillWrapState extends State<AnimatedPillWrap> {
   @override
   void didUpdateWidget(AnimatedPillWrap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _slots = _merge(_slots, widget.entries);
+    _slots = _mergeSlots(_slots, widget.entries);
     _remember();
-  }
-
-  /// Nouvelle liste dans l'ordre demandé, plus les pastilles parties qui
-  /// finissent de se refermer, à la place qu'elles occupaient.
-  static List<_Slot> _merge(List<_Slot> current, List<PillEntry> entries) {
-    final byKey = {for (final s in current) s.key: s};
-    final incoming = {for (final e in entries) e.key};
-    final result = <_Slot>[
-      for (final e in entries)
-        if (byKey[e.key] case final slot?)
-          slot
-            ..child = e.child
-            ..visible = true
-        else
-          _Slot(e.key, e.child, visible: true, appear: true),
-    ];
-    for (var i = 0; i < current.length; i++) {
-      final gone = current[i];
-      if (incoming.contains(gone.key)) continue;
-      gone.visible = false;
-      var at = 0;
-      for (var j = i - 1; j >= 0; j--) {
-        final index = result.indexWhere((s) => s.key == current[j].key);
-        if (index >= 0) {
-          at = index + 1;
-          break;
-        }
-      }
-      result.insert(at, gone);
-    }
-    return result;
   }
 
   void _drop(Key key) {
@@ -281,6 +283,107 @@ class _AnimatedPillWrapState extends State<AnimatedPillWrap> {
               ),
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// Colonne de lignes dont les ajouts et les retraits s'animent, avec la même
+/// mécanique que [AnimatedPillWrap] (fusion par clé, [Reveal]) : la ligne qui
+/// arrive s'ouvre en hauteur avec un fondu, celle qui part se referme avant de
+/// quitter l'arbre pendant que les suivantes glissent. Les lignes présentes à la
+/// première image ne s'animent pas.
+///
+/// Avec [onReorder], chaque ligne se déplace par glisser-déposer : au clic
+/// maintenu à la souris, après un appui long au toucher ([delayedDrag]). Les
+/// indices rendus sont ceux des lignes affichées (index final, comme
+/// `onReorderItem`) : une ligne en train de se refermer n'est jamais comptée.
+/// L'appelant réordonne ses [entries] en réponse.
+class AnimatedRevealColumn extends StatefulWidget {
+  final List<PillEntry> entries;
+  final void Function(int oldIndex, int newIndex)? onReorder;
+  final bool delayedDrag;
+
+  const AnimatedRevealColumn({
+    super.key,
+    required this.entries,
+    this.onReorder,
+    this.delayedDrag = false,
+  });
+
+  @override
+  State<AnimatedRevealColumn> createState() => _AnimatedRevealColumnState();
+}
+
+class _AnimatedRevealColumnState extends State<AnimatedRevealColumn> {
+  late List<_Slot> _slots = [
+    for (final e in widget.entries)
+      _Slot(e.key, e.child, visible: true, appear: false),
+  ];
+
+  @override
+  void didUpdateWidget(AnimatedRevealColumn oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _slots = _mergeSlots(_slots, widget.entries);
+  }
+
+  void _drop(Key key) {
+    if (!mounted) return;
+    setState(() => _slots.removeWhere((s) => s.key == key && !s.visible));
+  }
+
+  /// Traduit un déplacement de la liste complète (lignes en fermeture
+  /// comprises) en déplacement parmi les lignes affichées.
+  void _reorder(int oldIndex, int newIndex) {
+    final onReorder = widget.onReorder;
+    if (onReorder == null) return;
+    if (!_slots[oldIndex].visible) return;
+    final from = _slots.take(oldIndex).where((s) => s.visible).length;
+    final rest = [..._slots]..removeAt(oldIndex);
+    final to = rest.take(newIndex).where((s) => s.visible).length;
+    if (from != to) onReorder(from, to);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget reveal(_Slot slot) => Reveal(
+      key: ValueKey(slot.key),
+      visible: slot.visible,
+      appear: slot.appear,
+      onHidden: () => _drop(slot.key),
+      child: IgnorePointer(ignoring: !slot.visible, child: slot.child),
+    );
+
+    if (widget.onReorder == null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [for (final slot in _slots) reveal(slot)],
+      );
+    }
+
+    return ReorderableListView(
+      shrinkWrap: true,
+      primary: false,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      padding: EdgeInsets.zero,
+      proxyDecorator: dragProxyDecorator,
+      onReorderItem: _reorder,
+      children: [
+        for (var i = 0; i < _slots.length; i++)
+          widget.delayedDrag
+              ? ReorderableDelayedDragStartListener(
+                  key: ValueKey(_slots[i].key),
+                  index: i,
+                  enabled: _slots[i].visible,
+                  child: reveal(_slots[i]),
+                )
+              : ReorderableDragStartListener(
+                  key: ValueKey(_slots[i].key),
+                  index: i,
+                  enabled: _slots[i].visible,
+                  child: reveal(_slots[i]),
+                ),
       ],
     );
   }

@@ -195,6 +195,40 @@ class PadItem {
     }
   }
 
+  /// Déplace le son [from] à la position [to] (index final) : sons, emplacements
+  /// audio et tous les index qui les désignent suivent, pour que la lecture en
+  /// cours, la pause et le cycle aléatoire restent sur le même son.
+  void moveSound(int from, int to) {
+    final count = pad.sounds.length;
+    if (from == to || from < 0 || to < 0 || from >= count || to >= count) {
+      return;
+    }
+    int remap(int i) {
+      if (i == from) return to;
+      if (from < to && i > from && i <= to) return i - 1;
+      if (from > to && i >= to && i < from) return i + 1;
+      return i;
+    }
+
+    final sounds = List<Sound>.of(pad.sounds);
+    sounds.insert(to, sounds.removeAt(from));
+    pad = pad.copyWith(sounds: sounds);
+    if (from < slots.length && to < slots.length) {
+      slots.insert(to, slots.removeAt(from));
+    }
+    _nextSoundIndex = remap(_nextSoundIndex);
+    final current = _currentPlayerIndex;
+    if (current != null) _currentPlayerIndex = remap(current);
+    final paused = pausedPlayerIndex;
+    if (paused != null) pausedPlayerIndex = remap(paused);
+    final downloading = downloadingSlotIndex;
+    if (downloading != null) downloadingSlotIndex = remap(downloading);
+    final played = _playedSoundIndices.map(remap).toList();
+    _playedSoundIndices
+      ..clear()
+      ..addAll(played);
+  }
+
   /// Réinitialise le cycle aléatoire (tous les sons redeviennent éligibles).
   void resetRandomPlaySession() {
     _playedSoundIndices.clear();

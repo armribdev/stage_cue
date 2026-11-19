@@ -279,6 +279,10 @@ class SoundRepository {
     await _padDataSource.removeSoundFromPad(padId, soundId);
   }
 
+  Future<void> reorderPadSounds(int padId, List<int> soundIdsInOrder) async {
+    await _padDataSource.reorderPadSounds(padId, soundIdsInOrder);
+  }
+
   Future<void> reorderBoardPads(int boardId, List<int> padIdsInOrder) async {
     await _padDataSource.reorderBoardPads(boardId, padIdsInOrder);
   }

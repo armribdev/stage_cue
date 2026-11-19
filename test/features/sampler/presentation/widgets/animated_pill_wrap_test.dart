@@ -142,4 +142,92 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getSize(find.byType(Wrap)).height, 0);
   });
+
+  group('AnimatedRevealColumn', () {
+    Widget column(List<String> ids) => MaterialApp(
+      home: Scaffold(
+        body: Align(
+          alignment: Alignment.topLeft,
+          child: AnimatedRevealColumn(
+            entries: [
+              for (final id in ids)
+                PillEntry(
+                  ValueKey(id),
+                  SizedBox(key: ValueKey('row-$id'), height: 40),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    Finder row(String id) => find.byKey(ValueKey('row-$id'));
+    double height(WidgetTester tester) =>
+        tester.getSize(find.byType(AnimatedRevealColumn)).height;
+
+    testWidgets('présentes à la première image : pleines, sans animation', (
+      tester,
+    ) async {
+      await tester.pumpWidget(column(['a', 'b']));
+      expect(height(tester), 80);
+    });
+
+    testWidgets('un ajout s’ouvre en hauteur', (tester) async {
+      await tester.pumpWidget(column(['a']));
+      await tester.pumpWidget(column(['a', 'b']));
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(height(tester), allOf(greaterThan(40), lessThan(80)));
+
+      await tester.pumpAndSettle();
+      expect(height(tester), 80);
+    });
+
+    testWidgets('un retrait se referme puis quitte l’arbre', (tester) async {
+      await tester.pumpWidget(column(['a', 'b']));
+      await tester.pumpWidget(column(['b']));
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(row('a'), findsOneWidget);
+      expect(height(tester), allOf(greaterThan(40), lessThan(80)));
+
+      await tester.pumpAndSettle();
+      expect(row('a'), findsNothing);
+      expect(height(tester), 40);
+    });
+
+    testWidgets('glisser une ligne la déplace parmi les lignes affichées', (
+      tester,
+    ) async {
+      final moves = <(int, int)>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: AnimatedRevealColumn(
+                onReorder: (from, to) => moves.add((from, to)),
+                entries: [
+                  for (final id in ['a', 'b', 'c'])
+                    PillEntry(
+                      ValueKey(id),
+                      SizedBox(
+                        key: ValueKey('row-$id'),
+                        height: 40,
+                        width: 200,
+                        // Un contenu touchable, comme une vraie ligne.
+                        child: const ColoredBox(color: Colors.blueGrey),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.drag(row('a'), const Offset(0, 130));
+      await tester.pumpAndSettle();
+
+      expect(moves, [(0, 2)]);
+    });
+  });
 }

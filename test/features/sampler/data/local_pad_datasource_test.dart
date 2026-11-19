@@ -79,4 +79,33 @@ void main() {
       expect(pads.map((p) => p.id), [kept]);
     });
   });
+
+  test(
+    'reorderPadSounds réécrit l’ordre des sons et relit dans cet ordre',
+    () async {
+      final boardId = await database
+          .into(database.soundBoards)
+          .insert(db.SoundBoardsCompanion.insert(name: 'Scène'));
+      Future<int> sound(String name) => database
+          .into(database.sounds)
+          .insert(
+            db.SoundsCompanion.insert(
+              title: name,
+              displayName: name,
+              filePath: '/x/$name.mp3',
+            ),
+          );
+      final a = await sound('a');
+      final b = await sound('b');
+      final c = await sound('c');
+      final padId = await dataSource.createPad(boardId, a);
+      await dataSource.addSoundToPad(padId, b);
+      await dataSource.addSoundToPad(padId, c);
+
+      await dataSource.reorderPadSounds(padId, [c, a, b]);
+
+      final pads = await dataSource.getBoardPads(boardId);
+      expect(pads.single.sounds.map((s) => s.id), [c, a, b]);
+    },
+  );
 }

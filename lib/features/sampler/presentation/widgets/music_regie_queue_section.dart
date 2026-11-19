@@ -63,7 +63,7 @@ class _PassageQueueSection extends StatelessWidget {
             shrinkWrap: !stretchToFill,
             buildDefaultDragHandles: false,
             padding: EdgeInsets.zero,
-            proxyDecorator: _queueDragProxyDecorator,
+            proxyDecorator: dragProxyDecorator,
             itemCount: queue.length,
             onReorderItem: onReorder == null
                 ? null
@@ -249,34 +249,4 @@ class _PadColorChip extends StatelessWidget {
   Color _chipIconColor(Color bg, ColorScheme scheme) {
     return bg.computeLuminance() > 0.55 ? Colors.black87 : Colors.white;
   }
-}
-
-/// Apparence de l'élément pendant un appui long / glisser pour réordonner.
-/// Reprend la couleur de fond surélevée par défaut, sans ombre, avec coins arrondis.
-Widget _queueDragProxyDecorator(
-  Widget child,
-  int index,
-  Animation<double> animation,
-) {
-  return AnimatedBuilder(
-    animation: animation,
-    builder: (context, child) {
-      final theme = Theme.of(context);
-      final baseColor = theme.canvasColor;
-      // Pas d'élévation Material (surfaceTint neutralisé pour la direction
-      // "Console Linear") : le retour visuel du drag vient d'un éclaircissement
-      // plat de la surface plutôt que d'un glacis de tint.
-      final animValue = Curves.easeInOut.transform(animation.value);
-      return Material(
-        color: Color.lerp(baseColor, AppColors.surface2, animValue),
-        elevation: 0,
-        shadowColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        clipBehavior: Clip.antiAlias,
-        borderRadius: BorderRadius.circular(_queueDragBorderRadius),
-        child: child,
-      );
-    },
-    child: child,
-  );
 }

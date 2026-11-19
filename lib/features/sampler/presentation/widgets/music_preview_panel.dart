@@ -20,6 +20,7 @@ import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
 import '../utils/sound_type_ui.dart';
 import 'boxed_icon_button.dart';
+import 'drag_proxy_decorator.dart';
 import 'waveform_envelope.dart';
 
 part 'music_regie_drawer.dart';

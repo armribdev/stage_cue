@@ -279,6 +279,35 @@ extension SamplerPadEditing on SamplerNotifier {
     unawaited(downloadAndLoadPad(padItem).catchError((_) => false));
   }
 
+  /// Déplace un son d'un pad (index final [newIndex]) : l'ordre change tout de
+  /// suite à l'écran, puis s'écrit en base ; en cas d'échec, on recharge.
+  Future<void> reorderPadSounds(int padId, int oldIndex, int newIndex) async {
+    final padItem = findPadItemById(padId);
+    if (padItem == null) return;
+    final count = padItem.pad.sounds.length;
+    if (oldIndex == newIndex ||
+        oldIndex < 0 ||
+        newIndex < 0 ||
+        oldIndex >= count ||
+        newIndex >= count) {
+      return;
+    }
+
+    padItem.moveSound(oldIndex, newIndex);
+    _notifyPad(padItem);
+    _notify();
+
+    if (padItem.isDraft) return;
+    try {
+      await _repository.reorderPadSounds(padId, [
+        for (final sound in padItem.pad.sounds) sound.id,
+      ]);
+    } catch (e) {
+      AppLog.warn('Réorganisation des sons du pad échouée (rechargé) : $e');
+      await loadSounds();
+    }
+  }
+
   Future<void> removeSoundFromPad(int padId, int soundId) async {
     final padItem = findPadItemById(padId);
     if (padItem == null) return;

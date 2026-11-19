@@ -5,6 +5,7 @@ import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/layout_utils.dart';
+import '../widgets/animated_pill_wrap.dart';
 import '../widgets/app_modal.dart';
 import '../widgets/color_swatch_picker.dart';
 import '../../domain/entities/pad.dart';
@@ -235,14 +236,30 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
           ),
           const SizedBox(height: 12),
           if (sounds.isEmpty)
-            Text('Aucun son', style: Theme.of(context).textTheme.bodyMedium)
-          else
-            ListenableBuilder(
-              listenable: widget.notifier,
-              builder: (context, _) {
-                return Column(
-                  children: [
-                    for (var i = 0; i < sounds.length; i++)
+            Text('Aucun son', style: Theme.of(context).textTheme.bodyMedium),
+          // Toujours montée, même vide : le premier son ajouté s'ouvre comme
+          // les suivants au lieu de remplacer le texte d'un coup.
+          ListenableBuilder(
+            listenable: widget.notifier,
+            builder: (context, _) {
+              // Relue ici : un réordonnancement remplace la liste du pad sans
+              // reconstruire l'écran.
+              final sounds = widget.padItem.pad.sounds;
+              return AnimatedRevealColumn(
+                // Souris : clic maintenu puis glisser ; tactile : appui long,
+                // pour ne pas détourner le défilement de l'écran.
+                delayedDrag: !context.prefersDesktopUi,
+                onReorder: (oldIndex, newIndex) => unawaited(
+                  widget.notifier.reorderPadSounds(
+                    widget.padItem.pad.id,
+                    oldIndex,
+                    newIndex,
+                  ),
+                ),
+                entries: [
+                  for (var i = 0; i < sounds.length; i++)
+                    PillEntry(
+                      ValueKey(sounds[i].id),
                       PadSoundRow(
                         padItem: widget.padItem,
                         slotIndex: i,
@@ -253,10 +270,11 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                         notifier: widget.notifier,
                         onRemove: () => _removeSound(sounds[i].id),
                       ),
-                  ],
-                );
-              },
-            ),
+                    ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );

@@ -238,6 +238,21 @@ class LocalPadDataSource {
     await _touchBoardOfPad(padId);
   }
 
+  /// Réécrit `sort_order` des sons d'un pad d'après [soundIdsInOrder].
+  Future<void> reorderPadSounds(int padId, List<int> soundIdsInOrder) async {
+    await _database.transaction(() async {
+      for (var i = 0; i < soundIdsInOrder.length; i++) {
+        await (_database.update(_database.padSounds)..where(
+              (ps) =>
+                  ps.padId.equals(padId) &
+                  ps.soundId.equals(soundIdsInOrder[i]),
+            ))
+            .write(db.PadSoundsCompanion(sortOrder: Value(i)));
+      }
+    });
+    await _touchBoardOfPad(padId);
+  }
+
   Future<void> reorderBoardPads(int boardId, List<int> padIdsInOrder) async {
     await _database.transaction(() async {
       for (var i = 0; i < padIdsInOrder.length; i++) {
