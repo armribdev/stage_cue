@@ -56,6 +56,12 @@ les livre sans modificateur — celles que la capture de raccourci enregistre.
   intermédiaire en collision. L'assignation est verrouillée en Mode Spectacle ;
   la capture dans les détails du pad (appui long ou clic droit sur une touche
   pour les ouvrir) reste possible hors Mode Spectacle.
+- Hors Mode Spectacle, un panneau sous le clavier montre **tous** les pads du
+  board, rangés comme dans la grille (mêmes rangées, ordre et cartes
+  `PadCard`, même taille de cellule) : ceux déjà posés sur une touche y sont
+  estompés mais restent glissables. C'est la réserve d'où l'on assigne, et il
+  fait partie de la cible « lâcher hors d'une touche » (y reposer un pad lui
+  retire sa touche). Il disparaît en Mode Spectacle avec l'assignation.
 - Le sélecteur de vue se place à côté du nom de la scène dans la barre du haut :
   la vue est une façon de voir cette scène.
 - Une nouvelle vue = une valeur de `BoardView`, un widget, une branche du

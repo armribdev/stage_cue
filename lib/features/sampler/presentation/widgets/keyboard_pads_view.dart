@@ -33,6 +33,17 @@ class KeyboardPadsView extends StatefulWidget {
   final int? highlightedPadId;
   final EdgeInsets padding;
 
+  /// Carte d'un pad dans le panneau du bas, la même que celle de la grille.
+  /// Le panneau (tous les pads, ceux déjà sur une touche estompés) n'existe que
+  /// quand l'assignation est permise et que ce builder est fourni : il sert de
+  /// réserve d'où glisser les pads vers les touches.
+  final Widget Function(BuildContext context, PadItem padItem)? trayCardBuilder;
+
+  /// Largeur cible d'une carte et espacement du panneau : ceux de la grille,
+  /// pour que les cartes aient exactement la même taille et la même coupe.
+  final double trayItemWidth;
+  final double trayGap;
+
   const KeyboardPadsView({
     super.key,
     required this.pads,
@@ -42,6 +53,9 @@ class KeyboardPadsView extends StatefulWidget {
     this.onEdit,
     this.highlightedPadId,
     this.padding = const EdgeInsets.all(16),
+    this.trayCardBuilder,
+    this.trayItemWidth = 180,
+    this.trayGap = 14,
   });
 
   @override
@@ -52,6 +66,10 @@ class _KeyboardPadsViewState extends State<KeyboardPadsView> {
   /// Côté maximal d'une touche : au-delà, le clavier ne ressemblerait plus à un
   /// clavier. En dessous, la touche rétrécit avec la fenêtre.
   static const double _maxUnit = 72;
+
+  /// Part de la hauteur que le panneau de pads peut prendre avant de défiler :
+  /// le clavier garde de la place.
+  static const double _trayMaxHeightFraction = 0.45;
 
   /// Un pad est en cours de glisser. Notifier plutôt que `setState` : seule la
   /// rappel de dépôt en dépend, et reconstruire la vue au démarrage du
@@ -143,6 +161,7 @@ class _KeyboardPadsViewState extends State<KeyboardPadsView> {
   Widget build(BuildContext context) {
     _assignment = assignPadsToKeys(widget.pads, widget.hotkeyForPad);
     final padding = widget.padding;
+    final cardBuilder = widget.trayCardBuilder;
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = constraints.maxWidth - padding.horizontal;
@@ -150,36 +169,64 @@ class _KeyboardPadsViewState extends State<KeyboardPadsView> {
           0.0,
           math.min(_maxUnit, available / kAzertyWidthUnits),
         );
-        final keyboard = SingleChildScrollView(
-          padding: padding,
-          // Dans un défilement la hauteur n'est pas bornée : sans hauteur
-          // minimale, `Center` ne centrerait que horizontalement.
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: math.max(0, constraints.maxHeight - padding.vertical),
-            ),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [for (final row in kAzertyRows) _buildRow(row, unit)],
+        // Dans un défilement la hauteur n'est pas bornée : sans hauteur
+        // minimale, `Center` ne centrerait que horizontalement. La hauteur
+        // utile est celle de la zone du clavier, panneau de pads exclu.
+        Widget buildKeyboard() => LayoutBuilder(
+          builder: (context, area) => SingleChildScrollView(
+            padding: padding,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: math.max(0, area.maxHeight - padding.vertical),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final row in kAzertyRows) _buildRow(row, unit),
+                  ],
+                ),
               ),
             ),
           ),
         );
-        if (!_canAssign) return keyboard;
-        // Toute la zone est une cible : lâcher un pad ailleurs que sur une
-        // touche (les cibles des touches, plus profondes, passent avant) lui
-        // retire sa touche.
+        if (!_canAssign) return buildKeyboard();
+        final assignedIds = {
+          for (final item in _assignment.onKeys.values) item.pad.id,
+        };
+        // Toute la zone, panneau compris, est une cible : lâcher un pad
+        // ailleurs que sur une touche (les cibles des touches, plus profondes,
+        // passent avant) lui retire sa touche.
         return DragTarget<int>(
           onAcceptWithDetails: (details) => _dropPad(details.data, null),
-          builder: (context, candidates, _) => Stack(
+          builder: (context, candidates, _) => Column(
+            // Pleine largeur : sans cela le panneau se rétrécit à son contenu
+            // et se retrouve centré au lieu de partir du bord, comme la grille.
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              keyboard,
-              _UnassignHint(
-                isDragging: _isDragging,
-                isOver: candidates.isNotEmpty,
+              Expanded(
+                child: Stack(
+                  children: [
+                    buildKeyboard(),
+                    _UnassignHint(
+                      isDragging: _isDragging,
+                      isOver: candidates.isNotEmpty,
+                    ),
+                  ],
+                ),
               ),
+              if (cardBuilder != null && widget.pads.isNotEmpty)
+                _PadTray(
+                  pads: widget.pads,
+                  assignedIds: assignedIds,
+                  cardBuilder: cardBuilder,
+                  isDragging: _isDragging,
+                  itemWidth: widget.trayItemWidth,
+                  gap: widget.trayGap,
+                  padding: padding,
+                  maxHeight: constraints.maxHeight * _trayMaxHeightFraction,
+                ),
             ],
           ),
         );
@@ -280,6 +327,114 @@ class _UnassignHint extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Panneau du bas : tous les pads du board, rangés comme dans la grille (mêmes
+/// rangées, même ordre, mêmes cartes, même taille de cellule). Un pad déjà posé
+/// sur une touche y est estompé mais reste glissable (il se déplace ou
+/// s'échange). Le panneau fait partie de la cible « lâcher hors d'une touche » :
+/// y reposer un pad lui retire sa touche.
+class _PadTray extends StatelessWidget {
+  final List<PadItem> pads;
+  final Set<int> assignedIds;
+  final Widget Function(BuildContext context, PadItem padItem) cardBuilder;
+  final ValueNotifier<bool> isDragging;
+  final double itemWidth;
+  final double gap;
+  final EdgeInsets padding;
+  final double maxHeight;
+
+  const _PadTray({
+    required this.pads,
+    required this.assignedIds,
+    required this.cardBuilder,
+    required this.isDragging,
+    required this.itemWidth,
+    required this.gap,
+    required this.padding,
+    required this.maxHeight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final rows = <int, List<PadItem>>{};
+    for (final item in pads) {
+      rows.putIfAbsent(item.pad.rowIndex, () => []).add(item);
+    }
+    for (final row in rows.values) {
+      row.sort((a, b) => a.pad.sortOrder.compareTo(b.pad.sortOrder));
+    }
+    final rowIndices = rows.keys.toList()..sort();
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(top: AppElevation.border(scheme)),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Même calcul que la grille de pads.
+            final columns = math.max(
+              2,
+              (constraints.maxWidth / itemWidth).floor(),
+            );
+            final cellWidth =
+                (constraints.maxWidth -
+                    padding.horizontal -
+                    (columns - 1) * gap) /
+                columns;
+            final cellHeight = cellWidth / 1.4;
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                padding.left,
+                AppSpacing.md,
+                padding.right,
+                padding.bottom,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'PADS · GLISSEZ-LES SUR UNE TOUCHE',
+                    style: AppTextStyles.sectionLabel(context),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  for (var i = 0; i < rowIndices.length; i++) ...[
+                    if (i > 0) SizedBox(height: gap),
+                    Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final item in rows[rowIndices[i]]!)
+                          SizedBox(
+                            key: ValueKey<int>(item.pad.id),
+                            width: cellWidth,
+                            height: cellHeight,
+                            child: Opacity(
+                              opacity: assignedIds.contains(item.pad.id)
+                                  ? 0.35
+                                  : 1,
+                              child: _DraggablePad(
+                                padItem: item,
+                                enabled: true,
+                                isDragging: isDragging,
+                                child: cardBuilder(context, item),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
         ),
       ),
     );

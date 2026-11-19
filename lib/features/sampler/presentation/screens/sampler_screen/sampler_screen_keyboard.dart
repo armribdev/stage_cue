@@ -52,6 +52,13 @@ extension _SamplerScreenKeyboard on _SamplerScreenState {
             : null,
         highlightedPadId: _highlightedPadId,
         padding: _padsGridScrollPadding(context),
+        // Hors Mode Spectacle : réserve de pads sous le clavier, mêmes cartes
+        // que la grille (avec crayon et croix, comme elle).
+        trayCardBuilder: _isEditable
+            ? (context, padItem) => _buildPadWidget(context, state, padItem)
+            : null,
+        trayItemWidth: _itemWidth,
+        trayGap: _editRowGap,
       ),
     );
   }

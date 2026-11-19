@@ -20,6 +20,16 @@ PadItem _pad(int id, String name) => PadItem(
 
 int _key(String char) => char.runes.first;
 
+/// Carte factice du panneau : remplit sa cellule, pour mesurer sa position.
+class _CardProbe extends StatelessWidget {
+  final String label;
+
+  const _CardProbe(this.label);
+
+  @override
+  Widget build(BuildContext context) => Center(child: Text(label));
+}
+
 void main() {
   group('assignPadsToKeys', () {
     test('pose chaque pad sur sa touche, le reste dans loose', () {
@@ -288,6 +298,105 @@ void main() {
       await tester.tap(find.text('Orphelin').last);
       await tester.pumpAndSettle();
       expect(changes, {2: _key('z')});
+    });
+
+    group('panneau de pads', () {
+      Widget hostWithTray({
+        required List<PadItem> pads,
+        required Map<int, int> hotkeys,
+        Future<void> Function(Map<int, int?>)? onAssign,
+      }) {
+        return MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 1200,
+              height: 700,
+              child: KeyboardPadsView(
+                pads: pads,
+                hotkeyForPad: (id) => hotkeys[id],
+                onTap: (_) {},
+                onAssign: onAssign,
+                trayCardBuilder: (context, item) =>
+                    _CardProbe('carte ${item.displayName}'),
+              ),
+            ),
+          ),
+        );
+      }
+
+      testWidgets('liste tous les pads, ceux sur une touche estompés', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          hostWithTray(
+            pads: [_pad(1, 'Placé'), _pad(2, 'Libre')],
+            hotkeys: {1: _key('q')},
+            onAssign: (_) async {},
+          ),
+        );
+
+        double opacityOf(String name) => tester
+            .widget<Opacity>(
+              find
+                  .ancestor(
+                    of: find.text('carte $name'),
+                    matching: find.byType(Opacity),
+                  )
+                  .first,
+            )
+            .opacity;
+
+        expect(opacityOf('Placé'), lessThan(1));
+        expect(opacityOf('Libre'), 1);
+      });
+
+      testWidgets('les cartes partent du bord gauche, comme la grille', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          hostWithTray(
+            pads: [_pad(1, 'Libre')],
+            hotkeys: const {},
+            onAssign: (_) async {},
+          ),
+        );
+
+        // Marge de 16 px de la grille, pas un panneau centré.
+        expect(tester.getTopLeft(find.byType(_CardProbe)).dx, 16);
+      });
+
+      testWidgets('glisser une carte du panneau sur une touche vide', (
+        tester,
+      ) async {
+        Map<int, int?>? changes;
+        await tester.pumpWidget(
+          hostWithTray(
+            pads: [_pad(1, 'Libre')],
+            hotkeys: const {},
+            onAssign: (c) async => changes = c,
+          ),
+        );
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.text('carte Libre')),
+        );
+        await gesture.moveBy(const Offset(0, -40));
+        await tester.pump();
+        await gesture.moveTo(tester.getCenter(find.text('A')));
+        await tester.pump();
+        await gesture.up();
+        await tester.pump();
+
+        expect(changes, {1: _key('a')});
+      });
+
+      testWidgets('absent quand l’assignation est verrouillée', (tester) async {
+        await tester.pumpWidget(
+          hostWithTray(pads: [_pad(1, 'Libre')], hotkeys: const {}),
+        );
+
+        expect(find.text('carte Libre'), findsNothing);
+      });
     });
 
     testWidgets('assignation verrouillée : clic sur touche vide sans effet', (
