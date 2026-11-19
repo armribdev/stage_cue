@@ -26,6 +26,23 @@ Future<T> _enqueueLoadMemTask<T>(Future<T> Function() task) {
 Future<T> enqueueSoLoudFileTask<T>(Future<T> Function() task) =>
     _enqueueLoadMemTask(task);
 
+/// Chemin à donner au code natif de SoLoud (`readSamplesFromFile`).
+///
+/// Dart ouvre sans souci un chemin de 260 caractères ou plus sous Windows (il
+/// ajoute lui-même le préfixe `\\?\`), mais le décodeur natif non : le chemin
+/// d'un cache profond (bibliothèque + dossiers Drive + titre long) échoue alors
+/// avec `NoBackend`, et ni la waveform ni le gain auto ne se calculent. Le
+/// préfixe `\\?\` lève la limite ; il exige un chemin absolu, normalisé, en `\`.
+/// Hors Windows, le chemin est renvoyé tel quel.
+String nativeFilePath(String path) {
+  const prefix = r'\\?\';
+  if (!Platform.isWindows || path.startsWith(prefix)) return path;
+  final full = p.normalize(p.absolute(path));
+  return full.startsWith(r'\\')
+      ? '${prefix}UNC\\${full.substring(2)}'
+      : '$prefix$full';
+}
+
 /// Formats natifs de miniaudio (SoLoud) — AAC/M4A exclus.
 const Set<String> supportedAudioExtensions = {
   '.mp3',

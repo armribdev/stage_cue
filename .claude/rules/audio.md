@@ -2,6 +2,7 @@
 
 - Toujours preloader les sons avec `LoadMode.memory` avant la lecture (réduit la latence)
 - Ne jamais appeler `SoLoud.instance.loadMem` directement — passer par `loadAudioSourceFromFile` / `enqueueSoLoudFileTask`, qui sérialisent tout décodage natif sur une file unique globale (deux accès natifs concurrents plantent sous Windows) ([décision 0001](../../docs/decisions/0001-chargement-audio-soloud.md))
+- Tout chemin passé au code natif de SoLoud (`readSamplesFromFile`, `readLeftChannelWindow`) passe par `nativeFilePath` : sous Windows, le décodeur natif refuse un chemin de 260 caractères ou plus (cache profond + titre long) sans le préfixe `\\?\`, alors que Dart l'ouvre. Sans lui, waveform et gain auto échouent en silence pour ces sons
 - Les octets sont copiés en mémoire avant lecture : supprimer un fichier du cache disque ne coupe pas une lecture en cours — l'éviction LRU affecte la disponibilité future, pas le son en train de jouer ([décision 0001](../../docs/decisions/0001-chargement-audio-soloud.md))
 - Classifier le type **uniquement à l'insertion** via SoLoud (`getLength`) sur le fichier local ; sans fichier téléchargé → `type = null` (colonne nullable depuis v23) ; le type en base ne change jamais sauf via `updateSoundType`
 - Valider `soundHandle.isValid()` avant toute opération sur un handle (volume, stop)

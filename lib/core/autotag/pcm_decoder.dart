@@ -6,7 +6,8 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
-import '../audio/soloud_file_loader.dart' show enqueueSoLoudFileTask;
+import '../audio/soloud_file_loader.dart'
+    show enqueueSoLoudFileTask, nativeFilePath;
 import 'audio_stream_info.dart';
 import 'pcm_resampler.dart';
 
@@ -151,7 +152,7 @@ Float32List readLeftChannelWindow(
 }) {
   final read = _openSoLoudLibrary()
       .lookupFunction<_ReadSamplesNative, _ReadSamples>('readSamplesFromFile');
-  final cPath = path.toNativeUtf8();
+  final cPath = nativeFilePath(path).toNativeUtf8();
   final samples = calloc<ffi.Float>(frames);
   try {
     final error = read(

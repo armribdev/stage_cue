@@ -39,7 +39,10 @@ const int kWaveformOversample = 8;
 ///   RMS + réduction par pic ([kWaveformOversample]) ; les succès portent
 ///   désormais aussi leur génération. Re-tente tout fichier marqué en échec sous
 ///   une génération antérieure et rafraîchit toute enveloppe sans génération.
-const int kWaveformProbeGeneration = 2;
+/// - gén. 3 : chemin passé au décodeur natif avec le préfixe `\\?\`
+///   ([nativeFilePath]) ; re-tente les fichiers dont le chemin dépasse 259
+///   caractères sous Windows, marqués en échec à tort sous la gén. 2.
+const int kWaveformProbeGeneration = 3;
 
 /// true si une (nouvelle) extraction est justifiée : jamais tentée ou enveloppe
 /// héritée d'avant le marquage des succès (`generation == null`), ou résultat
@@ -114,7 +117,7 @@ Future<WaveformProbe> extractWaveform(
     final samples = await enqueueSoLoudFileTask(
       // ignore: experimental_member_use — API waveform de flutter_soloud (stable en pratique).
       () => SoLoud.instance.readSamplesFromFile(
-        filePath,
+        nativeFilePath(filePath),
         bars * kWaveformOversample,
         average: true,
       ),

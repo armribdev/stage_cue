@@ -64,6 +64,35 @@ void main() {
       }
     }, skip: skip);
 
+    test(
+      'chemin de plus de 259 caractères (Windows)',
+      () {
+        // Un cache profond (dossiers Drive + titre long) dépasse MAX_PATH : Dart
+        // l'écrit, mais le décodeur natif ne l'ouvre qu'avec le préfixe `\\?\`.
+        const rate = 8000;
+        final left = [for (var i = 0; i < 2 * rate; i++) (i * 3) % 20000];
+        var dir = tmp.path;
+        while (dir.length < 270) {
+          dir = p.join(dir, 'dossier_assez_long_pour_depasser_max_path');
+        }
+        Directory(dir).createSync(recursive: true);
+        final f = File(p.join(dir, 'long.wav'))
+          ..writeAsBytesSync(wavBytes(sampleRate: rate, left: left));
+        expect(f.path.length, greaterThan(259));
+
+        final out = readLeftChannelWindow(
+          f.path,
+          startSeconds: 0,
+          frames: rate,
+          endSeconds: 1.05,
+        );
+        for (var i = 0; i < rate; i += 97) {
+          expect(out[i], left[i] / 32768.0, reason: 'trame $i');
+        }
+      },
+      skip: skip ?? (Platform.isWindows ? null : 'limite propre à Windows'),
+    );
+
     test('pistes mono : le seul canal', () {
       const rate = 16000;
       final left = [for (var i = 0; i < 2 * rate; i++) (i * 7) % 20000];
