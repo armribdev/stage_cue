@@ -9,7 +9,7 @@ Faire évoluer le catalogue de tags (créer, renommer, gérer les alias, fusionn
 
 ## Décision
 
-Un éditeur **debug seulement** (`kDebugMode`, Réglages → Maintenance → « Catalogue de tags (développement) ») applique chaque modification à la base locale, pour en voir l'effet avec les vrais usages, **et** en déduit la déclaration Dart à coller dans le catalogue (`_extraTagCatalog`, `mergedTags`, `prunedTags`) : « Copier le code ». Le catalogue du code reste la seule source de vérité ; l'éditeur est un assistant d'écriture, pas un second catalogue.
+Un éditeur **debug seulement** (`kDebugMode`, Réglages → Maintenance → « Catalogue de tags ») applique chaque modification à la base locale, pour en voir l'effet avec les vrais usages, **et** en déduit la déclaration Dart à coller dans le catalogue (`_extraTagCatalog`, `mergedTags`, `prunedTags`) : « Copier le code ». Le catalogue du code reste la seule source de vérité ; l'éditeur est un assistant d'écriture, pas un second catalogue.
 
 ## Alternatives écartées
 

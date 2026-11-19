@@ -285,7 +285,12 @@ extension _SettingsSections on _SettingsScreenState {
                     if (CueAudioService.isSupported) _buildAudioSection(),
                     if (widget.autoTagPack != null)
                       _buildAutoTagSection(widget.autoTagPack!),
-                    _buildMaintenanceSection(),
+                    // Build debug : outils de développement ; sinon, de quoi
+                    // joindre le journal à un signalement de bug.
+                    if (kDebugMode)
+                      _buildMaintenanceSection()
+                    else
+                      _buildSupportSection(),
                   ]),
                 ),
               ),
@@ -293,13 +298,13 @@ extension _SettingsSections on _SettingsScreenState {
     );
   }
 
-  /// Section « Maintenance », repliée par défaut : les outils qu'on ouvre
-  /// rarement (recalcul du gain auto, journal) ne chargent pas l'écran.
+  /// Section « Maintenance », **build debug seulement**, repliée par défaut :
+  /// les outils de développement qu'on ouvre rarement ne chargent pas l'écran.
   Widget _buildMaintenanceSection() {
     final scheme = Theme.of(context).colorScheme;
     final expanded = _maintenanceExpanded;
-    // Replié, un travail long en cours (recalcul, export) reste signalé.
-    final busy = _isAutoVolumeBusy || _isDiagnosticBusy;
+    // Replié, un export en cours reste signalé.
+    final busy = _isDiagnosticBusy;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -342,28 +347,17 @@ extension _SettingsSections on _SettingsScreenState {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildVolumeRow(),
+                      _buildDiagnosticRows(),
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
                         child: Divider(height: 1),
                       ),
-                      _buildDiagnosticRows(),
-                      if (kDebugMode) ...[
-                        const Padding(
-                          padding: EdgeInsets.symmetric(
-                            vertical: AppSpacing.sm,
-                          ),
-                          child: Divider(height: 1),
-                        ),
-                        _buildTagCatalogRow(),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(
-                            vertical: AppSpacing.sm,
-                          ),
-                          child: Divider(height: 1),
-                        ),
-                        _buildRecomputeRow(),
-                      ],
+                      _buildTagCatalogRow(),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                        child: Divider(height: 1),
+                      ),
+                      _buildRecomputeRow(),
                     ],
                   ),
                 )
@@ -377,7 +371,7 @@ extension _SettingsSections on _SettingsScreenState {
   /// absent d'un build release, il n'existe pas pour les utilisateurs.
   Widget _buildTagCatalogRow() {
     return SettingsRow(
-      title: 'Catalogue de tags (développement)',
+      title: 'Catalogue de tags',
       description:
           'Créer, renommer, fusionner ou supprimer des tags, et obtenir la '
           'déclaration à ajouter au catalogue du code.',
@@ -398,7 +392,7 @@ extension _SettingsSections on _SettingsScreenState {
   /// coche waveforms, gains, suggestions de tags, empreintes audio.
   Widget _buildRecomputeRow() {
     return SettingsRow(
-      title: 'Recalcul (développement)',
+      title: 'Recalcul',
       description:
           'Recalculer au choix waveforms, gains, suggestions de tags et '
           'empreintes audio sur les sons téléchargés.',

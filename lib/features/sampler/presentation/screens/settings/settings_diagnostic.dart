@@ -4,8 +4,8 @@
 
 part of '../settings_screen.dart';
 
-/// Journal (maintenance) : export et copie du journal fichier persistant
-/// (cf. ADR 0025). Méthodes de [_SettingsScreenState] extraites via extension
+/// Journal : copie (tous les builds) et export (maintenance, build debug) du
+/// journal fichier persistant (cf. ADR 0025). Méthodes de [_SettingsScreenState] extraites via extension
 /// dans le même `part`.
 extension _SettingsDiagnostic on _SettingsScreenState {
   static const int _kClipboardLineCount = 500;
@@ -13,8 +13,30 @@ extension _SettingsDiagnostic on _SettingsScreenState {
   bool get _isDesktopPlatform =>
       Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
-  /// Diagnostic de la maintenance : explication, état (version, taille, dossier)
-  /// puis les trois actions.
+  /// Section des builds release : un seul bouton qui copie le journal, à
+  /// coller dans un message au développeur en cas de bug.
+  Widget _buildSupportSection() {
+    final copied = _confirmedAction == _kCopyLogsAction;
+    return SettingsSection(
+      icon: AppIcons.help,
+      title: 'Assistance',
+      child: SettingsRow(
+        title: 'Signaler un problème',
+        description:
+            'En cas de bug, copiez les logs puis envoyez-les au développeur '
+            'avec une description de ce qui s\'est passé.',
+        trailing: SettingsButton(
+          label: copied ? 'Copié' : 'Copier les logs',
+          icon: copied ? AppIcons.check : AppIcons.copy,
+          busy: _isDiagnosticBusy,
+          onPressed: _copyLogsToClipboard,
+        ),
+      ),
+    );
+  }
+
+  /// Diagnostic de la maintenance (build debug) : explication, état (version,
+  /// taille, dossier) puis les trois actions.
   Widget _buildDiagnosticRows() {
     final folder = LogSink.directory?.path;
     final lost = LogSink.lostLines;

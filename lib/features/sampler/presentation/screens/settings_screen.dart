@@ -62,7 +62,6 @@ part 'settings/settings_indexing.dart';
 part 'settings/settings_library_actions.dart';
 part 'settings/settings_labels.dart';
 part 'settings/settings_sections.dart';
-part 'settings/settings_volumes.dart';
 
 class SettingsScreen extends StatefulWidget {
   final db.AppDatabase database;
@@ -156,18 +155,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _appVersion;
   bool _isDiagnosticBusy = false;
 
-  /// Section « Maintenance » (gain auto, journal) ouverte ; repliée par
-  /// défaut, non mémorisée d'une ouverture de l'écran à l'autre.
+  /// Section « Maintenance » (build debug seulement : journal, outils de
+  /// développement) ouverte ; repliée par défaut, non mémorisée d'une ouverture
+  /// de l'écran à l'autre.
   bool _maintenanceExpanded = false;
 
   /// Taille du journal sur disque (fichier courant + archives), lue à
   /// l'ouverture de la maintenance ; `null` tant qu'elle n'est pas connue.
   int? _logDiskBytes;
-
-  /// Recalcul en masse du volume « auto » (voir `settings_volumes.dart`).
-  bool _isAutoVolumeBusy = false;
-  bool _autoVolumeCancelRequested = false;
-  ({int done, int total})? _autoVolumeProgress;
 
   /// Action dont le bouton affiche brièvement une coche de confirmation (voir
   /// [_flashConfirmation]) — remplace un toast pour un simple « c'est fait ».
