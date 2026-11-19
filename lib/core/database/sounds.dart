@@ -116,14 +116,14 @@ class Sounds extends Table {
   TextColumn get filePath => text()(); // Chemin local (legacy ou cache dérivé)
   IntColumn get type => intEnum<SoundType>().nullable()();
   IntColumn get color => integer().nullable()(); // Couleur personnalisée (ARGB)
-  RealColumn get volume => real().withDefault(const Constant(1.0))();
 
-  /// Gain de sonie du volume « auto » (décisions 0036 et 0044) : facteur
-  /// linéaire (≥ 0, peut dépasser 1.0) appliqué **une seule fois** à la lecture,
-  /// en plus de [volume] (réglage de l'utilisateur, 0–1). `null` = pas de
-  /// mesure = facteur 1.0. Propriété de contenu comme [volume] : voyage dans le
-  /// snapshot de dossier ; un appareil antérieur à v49 l'ignore.
-  RealColumn get loudnessGain => real().nullable()();
+  /// Gain du son (décision 0045) : facteur linéaire (≥ 0, peut dépasser 1.0),
+  /// le **seul** niveau propre à un son, appliqué **une fois** à la lecture.
+  /// 1.0 = le fichier tel quel. Réglé dans la fiche de la bibliothèque (en dB,
+  /// −24 à +12) ou par « Auto » (sonie mesurée, décisions 0036 et 0044) ; aucun
+  /// autre écran ne le change. Propriété de contenu : voyage dans le snapshot de
+  /// dossier. Remplace `volume` (0–1) et `loudness_gain` d'avant la v50.
+  RealColumn get gain => real().withDefault(const Constant(1.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   // ── Portabilité (bibliothèques synchronisables) ──────────────────────────
   // Bibliothèque d'appartenance ; null = son purement local (legacy).
@@ -264,10 +264,6 @@ class PadSounds extends Table {
   IntColumn get soundId =>
       integer().references(Sounds, #id, onDelete: KeyAction.cascade)();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
-
-  /// Override de volume PROPRE à ce son dans CE pad. null = suivre le volume
-  /// par défaut du son (`sounds.volume`). Remplace l'ancien volume par pad.
-  RealColumn get volume => real().nullable()();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override

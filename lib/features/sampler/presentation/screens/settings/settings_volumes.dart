@@ -4,11 +4,11 @@
 
 part of '../settings_screen.dart';
 
-/// Ligne « Volumes auto » : recalcul en masse du volume « auto » de tous les sons
-/// disponibles sur l'appareil (décision 0036). Méthodes de
+/// Ligne « Gain auto » : recalcul en masse du gain « auto » de tous les sons
+/// disponibles sur l'appareil (décisions 0036 et 0045). Méthodes de
 /// [_SettingsScreenState] extraites via extension dans le même `part`.
 extension _SettingsVolumes on _SettingsScreenState {
-  /// Ligne « Volumes auto » de la maintenance : un réglage (description +
+  /// Ligne « Gain auto » de la maintenance : un réglage (description +
   /// bouton), la progression se range dessous pendant le calcul.
   Widget _buildVolumeRow() {
     final progress = _autoVolumeProgress;
@@ -16,12 +16,11 @@ extension _SettingsVolumes on _SettingsScreenState {
     final running = progress != null;
 
     return SettingsRow(
-      title: 'Volumes auto',
+      title: 'Gain auto',
       description: inLiveMode && !running
           ? 'Indisponible en Mode Spectacle.'
-          : 'Mesure la sonie de chaque son téléchargé et règle son volume selon '
-                'son type (musique, ambiance, bruitage). Les volumes réglés '
-                'pad par pad ne changent pas.',
+          : 'Mesure la sonie de chaque son téléchargé et règle son gain selon '
+                'son type (musique, ambiance, bruitage).',
       trailing: running
           ? SettingsButton(
               label: _autoVolumeCancelRequested ? 'Annulation…' : 'Annuler',
@@ -87,8 +86,8 @@ extension _SettingsVolumes on _SettingsScreenState {
     final lines = [
       '${plan.sounds.length} sons téléchargés vont être mesurés.',
       customized > 0
-          ? '$customized ont déjà un volume réglé : il sera remplacé.'
-          : 'Aucun n\'a de volume réglé à la main.',
+          ? '$customized ont déjà un gain réglé : il sera remplacé.'
+          : 'Aucun n\'a de gain réglé.',
       if (plan.unavailable > 0)
         '${plan.unavailable} sons non téléchargés sont ignorés.',
       'L\'opération peut prendre plusieurs minutes. Elle peut être annulée : '
@@ -97,7 +96,7 @@ extension _SettingsVolumes on _SettingsScreenState {
     final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Recalculer les volumes ?'),
+        title: const Text('Recalculer les gains ?'),
         content: Text(lines.join('\n\n')),
         actions: [
           TextButton(
@@ -131,13 +130,13 @@ extension _SettingsVolumes on _SettingsScreenState {
             setState(() => _autoVolumeProgress = (done: done, total: total));
           }
         },
-        // Fermer l'écran interrompt la passe : chaque volume est déjà écrit.
+        // Fermer l'écran interrompt la passe : chaque gain est déjà écrit.
         isCancelled: () => _autoVolumeCancelRequested || !mounted,
       );
     } catch (e) {
       error = e;
     }
-    // Les boards chargés et l'index de recherche portent l'ancien volume.
+    // Les boards chargés et l'index de recherche portent l'ancien gain.
     widget.syncController.onLibraryMerged?.call();
     if (!mounted) return;
     setState(() {
@@ -154,11 +153,11 @@ extension _SettingsVolumes on _SettingsScreenState {
     final failed = r.unmeasurable + r.skipped;
     final prefix = r.cancelled ? 'Recalcul annulé : ' : '';
     final suffix = failed > 0
-        ? ', $failed sons non mesurables (volume conservé)'
+        ? ', $failed sons non mesurables (gain conservé)'
         : '';
     showCopyableSnackBar(
       context,
-      '$prefix${r.updated} volumes mis à jour$suffix.',
+      '$prefix${r.updated} gains mis à jour$suffix.',
     );
   }
 }

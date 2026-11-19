@@ -210,11 +210,9 @@ class SamplerNotifier extends ChangeNotifier {
   /// sur l'annotation @protected de ChangeNotifier.
   void _notify() => notifyListeners();
 
-  /// Volume effectif du son à [soundIndex] dans un pad (override du pad-son ou
-  /// volume par défaut du son) ; pads musique et ambiance soumis au volume
-  /// de leur voie.
-  double _effectiveVolume(PadItem padItem, {int? soundIndex}) =>
-      _music._effectiveVolume(padItem, soundIndex: soundIndex);
+  /// Volume (0–1) envoyé au lecteur d'un pad : celui de sa voie pour la musique
+  /// et l'ambiance, 1.0 sinon (le gain du son s'applique dans le lecteur).
+  double _busVolume(PadItem padItem) => _music._busVolume(padItem);
 
   /// Pad affiché sur le plateau en Mode Spectacle (au moins un son local).
   bool isPadVisibleInLiveSession(PadItem padItem) {
@@ -284,11 +282,11 @@ class SamplerNotifier extends ChangeNotifier {
     final sounds = List<Sound>.from(padItem.pad.sounds);
     sounds[index] = updated;
     padItem.pad = padItem.pad.copyWith(sounds: sounds);
-    // Gain de sonie (décision 0044) : appliqué à la frontière de lecture, donc
+    // Gain du son (décision 0045) : appliqué à la frontière de lecture, donc
     // posé sur le lecteur — à la création du slot comme après un « Enregistrer »
     // de la fiche. Une voix déjà lancée ne bouge pas avant son prochain volume.
     if (index < padItem.slots.length) {
-      padItem.slots[index].player?.setLoudnessGain(updated.loudnessFactor);
+      padItem.slots[index].player?.setGain(updated.gain);
     }
   }
 
@@ -371,7 +369,7 @@ class SamplerNotifier extends ChangeNotifier {
           if (soundsChanged) {
             padsToPreload.add(existing);
           } else if (existing.isPlaying) {
-            existing.currentPlayer?.setVolume(_effectiveVolume(existing));
+            existing.currentPlayer?.setVolume(_busVolume(existing));
           }
           continue;
         }

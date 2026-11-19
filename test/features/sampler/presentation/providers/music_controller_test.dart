@@ -20,7 +20,6 @@ Sound _sound(int id) => Sound(
   title: 'Son $id',
   filePath: '/tmp/son_$id.mp3',
   type: SoundType.music,
-  volume: 1.0,
   createdAt: DateTime(2026),
 );
 

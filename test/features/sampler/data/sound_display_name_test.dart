@@ -57,7 +57,7 @@ void main() {
   });
 
   test('sans updateDisplayName, le nom n\'est pas touché', () async {
-    await dataSource.updateSoundSettings(id: soundId, volume: 0.5);
+    await dataSource.updateSoundSettings(id: soundId, gain: 0.5);
     expect(await displayName(), 'Porte grinçante');
   });
 }

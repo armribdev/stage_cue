@@ -19,7 +19,6 @@ Sound _sound(int id, {SoundType type = SoundType.ambiance}) => Sound(
   title: 'Son $id',
   filePath: '/tmp/son_$id.mp3',
   type: type,
-  volume: 1.0,
   createdAt: DateTime(2026),
 );
 

@@ -147,7 +147,7 @@ class AmbianceController {
     }
 
     await _o._syncPadSoundMetadata(padItem, index);
-    final volume = _o._effectiveVolume(padItem, soundIndex: index);
+    final volume = _o._busVolume(padItem);
     final startOffset = _o._music._startOffsetOf(padItem, index, player);
 
     _transitionLockCount++;
@@ -155,7 +155,7 @@ class AmbianceController {
       if (previousPlaying &&
           previousPlayer != null &&
           crossfade > Duration.zero) {
-        final previousVolume = _o._effectiveVolume(previous);
+        final previousVolume = _o._busVolume(previous);
         await player.playAtVolume(0, startOffset: startOffset, looping: true);
         _setOnAir(padItem, index);
 
@@ -326,7 +326,7 @@ class AmbianceController {
     if (current == null || !current.isPlaying) return;
     final player = current.currentPlayer;
     if (player == null) return;
-    final volume = _o._effectiveVolume(current);
+    final volume = _o._busVolume(current);
     if (smooth) {
       player.fadeVolumeTo(volume, _sliderFadeDuration);
     } else {
@@ -450,7 +450,7 @@ class AmbianceController {
       _beginTransition(AmbianceTransitionKind.fadeOut, fade);
       try {
         await player.fadeEnvelope(
-          _o._effectiveVolume(padItem),
+          _o._busVolume(padItem),
           fade,
           fadeIn: false,
           curve: FadeCurve.cubic,

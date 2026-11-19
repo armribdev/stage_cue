@@ -14,8 +14,9 @@ import '../utils/sound_type_ui.dart';
 import 'scrolling_text.dart';
 import 'tag_pill.dart';
 
-/// Ligne d'un son dans l'écran de détails d'un pad : type, tags, volume propre
-/// au pad, retrait et téléchargement quand le son n'est pas local.
+/// Ligne d'un son dans l'écran de détails d'un pad : type, tags, retrait et
+/// téléchargement quand le son n'est pas local. Aucun niveau ici : le son joue au
+/// gain réglé dans la bibliothèque (décision 0045).
 class PadSoundRow extends StatefulWidget {
   final PadItem padItem;
   final int slotIndex;
@@ -47,24 +48,12 @@ class _PadSoundRowState extends State<PadSoundRow> {
 
   Set<int> _tagIds = {};
   bool _loaded = false;
-  late double _volume;
   bool _hovered = false;
 
   @override
   void initState() {
     super.initState();
-    _volume = _resolvedPadItem().pad.effectiveVolume(widget.slotIndex);
     _loadTags();
-  }
-
-  void _updateVolume(double value) {
-    final clamped = value.clamp(0.0, 1.0);
-    setState(() => _volume = clamped);
-    widget.notifier.updatePadSoundVolume(
-      _resolvedPadItem(),
-      widget.sound.id,
-      clamped,
-    );
   }
 
   Future<void> _loadTags() async {
@@ -217,22 +206,6 @@ class _PadSoundRowState extends State<PadSoundRow> {
                 ),
               ),
             ),
-            // Volume propre à ce son dans ce pad — barre compacte inline
-            // (plutôt qu'une rangée pleine largeur séparée) ; visible
-            // seulement quand le son est jouable localement.
-            if (isLocal) ...[
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 56,
-                child: Slider(
-                  value: _volume.clamp(0.0, 1.0),
-                  min: 0.0,
-                  max: 1.0,
-                  label: '${(_volume * 100).round()}%',
-                  onChanged: _updateVolume,
-                ),
-              ),
-            ],
             if (widget.canRemove) ...[
               const SizedBox(width: 2),
               IconButton(

@@ -8,11 +8,14 @@ import '../../features/sampler/domain/entities/sound.dart' show SoundType;
 import '../autotag/audio_stream_info.dart';
 import '../autotag/pcm_decoder.dart' show readLeftChannelWindow;
 import 'audio_load_log.dart';
+import 'gain.dart';
 import 'soloud_file_loader.dart' show enqueueSoLoudFileTask;
 
 /// Gain plancher du mode auto : évite qu'un fichier masterisé très fort ne
-/// devienne quasi inaudible, ce qui trahirait plutôt une mesure aberrante.
-const double kAutoVolumeMin = 0.05;
+/// devienne quasi inaudible, ce qui trahirait plutôt une mesure aberrante. C'est
+/// le bas de la plage du curseur de gain ([kGainMinDb]) : « Auto » ne pose
+/// jamais un gain que la fiche ne saurait afficher.
+final double kAutoVolumeMin = dbToGain(kGainMinDb);
 
 /// Pic d'échantillon maximal visé après relèvement, en dBFS. Franchement sous
 /// 0 dBFS : le mixage de SoLoud écrête net la somme des voix (arrondi doux
@@ -24,10 +27,10 @@ const double kPeakCeilingDb = -3;
 /// morceaux (> 60 s) : le vrai pic a pu passer entre deux morceaux.
 const double kSampledPeakMarginDb = 3;
 
-/// Relèvement maximal du gain de sonie, en dB : borne une cible aberrante
-/// (fichier quasi silencieux) et reste dans ce que le lecteur du casque sait
-/// rendre (`volume-max` de mpv, voir `cue_audio_service.dart`).
-const double kMaxBoostDb = 12;
+/// Relèvement maximal du gain auto, en dB : borne une cible aberrante (fichier
+/// quasi silencieux). Haut de la plage du curseur de gain ([kGainMaxDb]), donc
+/// de ce que le lecteur du casque sait rendre.
+const double kMaxBoostDb = kGainMaxDb;
 
 /// Ce que le volume « auto » cherche à égaliser selon le type de son
 /// ([décision 0036], amendée par [décision 0044]).
@@ -233,8 +236,8 @@ class LoudnessMeasurement {
   final bool wholeFile;
 }
 
-/// Gain linéaire (le « gain de sonie » stocké dans `sounds.loudness_gain`) qui
-/// ramène [m] à la cible de [profile] ([décision 0044]).
+/// Gain linéaire (celui de `sounds.gain`) qui ramène [m] à la cible de
+/// [profile] ([décision 0044]).
 ///
 /// Vers le bas (son plus fort que la cible) : le gain de la cible, jamais sous
 /// [kAutoVolumeMin] — le pic n'intervient pas, il ne force jamais une
@@ -319,14 +322,14 @@ Future<LoudnessMeasurement?> measureAutoVolume(
   } on AudioNotAnalyzable catch (e) {
     AudioLoadLog.warnOnce(
       'loudness:${e.reason}',
-      'Volume auto : mesure impossible (${e.reason}) — volume par défaut '
+      'Gain auto : mesure impossible (${e.reason}) — gain '
           'conservé.',
     );
     return null;
   } catch (e) {
     AudioLoadLog.warnOnce(
       'loudness:${e.runtimeType}',
-      'Volume auto : mesure en échec ($e) — volume par défaut conservé.',
+      'Gain auto : mesure en échec ($e) — gain conservé.',
     );
     return null;
   }

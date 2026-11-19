@@ -1,26 +1,29 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
+import '../../../../core/audio/gain.dart';
 import '../../../../core/theme/app_tokens.dart';
 import 'sound_edit_preload.dart';
 
-/// Volume tel qu'il est montré (curseur, pourcentage, hauteur de la waveform) :
-/// il suit le volume du formulaire, mais une valeur posée d'un coup — celui d'un
+/// Gain en dB tel qu'il est montré (curseur, valeur, hauteur de la waveform) :
+/// il suit le gain du formulaire, mais une valeur posée d'un coup — celle d'un
 /// autre son, le résultat d'« Auto » — est atteinte par un glissement, partagé
 /// par tout ce qui l'affiche pour que ça reste cohérent.
 ///
-/// Un geste sur le curseur, lui, passe par [jumpTo] : suivi sans retard.
-class VolumeGlide extends ValueNotifier<double> {
+/// Il glisse en dB (pas en facteur linéaire) : c'est l'échelle du curseur, la
+/// poignée avance donc à vitesse régulière. Un geste sur le curseur, lui, passe
+/// par [jumpTo] : suivi sans retard.
+class GainGlide extends ValueNotifier<double> {
   final AnimationController _controller;
   double _from = 0;
   double _to = 0;
 
-  VolumeGlide({required TickerProvider vsync, required double initial})
+  GainGlide({required TickerProvider vsync, required double initialDb})
     : _controller = AnimationController(
         vsync: vsync,
         duration: kSoundSwitchDuration,
       ),
-      super(initial) {
+      super(initialDb) {
     _controller.addListener(_tick);
   }
 
@@ -30,18 +33,19 @@ class VolumeGlide extends ValueNotifier<double> {
         (_to - _from) * Curves.easeOutCubic.transform(_controller.value);
   }
 
-  /// Glisse jusqu'à [target] ; d'emblée si [instant] (réduction des animations).
-  void glideTo(double target, {bool instant = false}) {
-    if (instant || value == target) return jumpTo(target);
+  /// Glisse jusqu'à [targetDb] ; d'emblée si [instant] (réduction des
+  /// animations).
+  void glideTo(double targetDb, {bool instant = false}) {
+    if (instant || value == targetDb) return jumpTo(targetDb);
     _from = value;
-    _to = target;
+    _to = targetDb;
     _controller.forward(from: 0);
   }
 
-  /// Pose [target] tout de suite, en interrompant un glissement en cours.
-  void jumpTo(double target) {
+  /// Pose [targetDb] tout de suite, en interrompant un glissement en cours.
+  void jumpTo(double targetDb) {
     _controller.stop();
-    value = target;
+    value = targetDb;
   }
 
   @override
@@ -51,21 +55,29 @@ class VolumeGlide extends ValueNotifier<double> {
   }
 }
 
-/// Curseur du volume par défaut d'un son, avec sa valeur en pourcentage et, si
-/// [onAuto] est fourni, le bouton « Auto » (normalisation par la sonie).
-/// Montre [volume] ([VolumeGlide]) ; [onChanged] reçoit les gestes sur le
+/// Gain en dB, signé, à la décimale : « +3,5 dB », « −6,0 dB », « 0 dB ».
+String formatGainDb(double db) {
+  final rounded = (db * 10).round() / 10;
+  if (rounded == 0) return '0 dB';
+  final sign = rounded > 0 ? '+' : '−';
+  return '$sign${rounded.abs().toStringAsFixed(1).replaceAll('.', ',')} dB';
+}
+
+/// Curseur du gain d'un son (−24 à +12 dB, par pas de 0,5 dB) avec sa valeur et,
+/// si [onAuto] est fourni, le bouton « Auto » (normalisation par la sonie).
+/// Montre [gainDb] ([GainGlide]) ; [onChanged] reçoit, en dB, les gestes sur le
 /// curseur.
-class SoundVolumeField extends StatelessWidget {
-  final ValueListenable<double> volume;
+class SoundGainField extends StatelessWidget {
+  final ValueListenable<double> gainDb;
   final ValueChanged<double> onChanged;
 
   /// `null` = pas de bouton « Auto » (aucun moteur audio pour mesurer).
   final VoidCallback? onAuto;
   final bool isMeasuring;
 
-  const SoundVolumeField({
+  const SoundGainField({
     super.key,
-    required this.volume,
+    required this.gainDb,
     required this.onChanged,
     this.onAuto,
     this.isMeasuring = false,
@@ -77,24 +89,25 @@ class SoundVolumeField extends StatelessWidget {
       children: [
         Expanded(
           child: ValueListenableBuilder<double>(
-            valueListenable: volume,
+            valueListenable: gainDb,
             builder: (context, shown, _) {
-              final percent = '${(shown * 100).round()}%';
+              final text = formatGainDb(shown);
               return Row(
                 children: [
                   Expanded(
                     child: Slider(
-                      value: shown.clamp(0.0, 1.0),
-                      min: 0.0,
-                      max: 1.0,
-                      label: percent,
+                      value: shown.clamp(kGainMinDb, kGainMaxDb),
+                      min: kGainMinDb,
+                      max: kGainMaxDb,
+                      divisions: ((kGainMaxDb - kGainMinDb) * 2).round(),
+                      label: text,
                       onChanged: onChanged,
                     ),
                   ),
                   SizedBox(
-                    width: 44,
+                    width: 64,
                     child: Text(
-                      percent,
+                      text,
                       textAlign: TextAlign.end,
                       style: AppFonts.monoStyle(const TextStyle(fontSize: 13)),
                     ),
@@ -108,7 +121,7 @@ class SoundVolumeField extends StatelessWidget {
           const SizedBox(width: 8),
           Tooltip(
             message:
-                'Mesure la sonie du fichier et règle le volume pour '
+                'Mesure la sonie du fichier et règle le gain pour '
                 'normaliser',
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(

@@ -294,7 +294,7 @@ extension _SettingsSections on _SettingsScreenState {
   }
 
   /// Section « Maintenance », repliée par défaut : les outils qu'on ouvre
-  /// rarement (recalcul des volumes auto, journal) ne chargent pas l'écran.
+  /// rarement (recalcul du gain auto, journal) ne chargent pas l'écran.
   Widget _buildMaintenanceSection() {
     final scheme = Theme.of(context).colorScheme;
     final expanded = _maintenanceExpanded;

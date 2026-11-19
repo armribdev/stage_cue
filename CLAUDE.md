@@ -6,7 +6,7 @@ Soundboard Flutter pour déclenchement audio en live (théâtre, streaming, JDR)
 
 - **Flutter** — multi-plateforme (iOS, Android, Windows, macOS, Linux), sans plateforme prioritaire déclarée
 - **Audio** — flutter_soloud (low-latency, preloading mémoire) ; media_kit en complément Windows-only pour le routage cue vers un device de sortie séparé (`lib/core/audio/cue_audio_service.dart`)
-- **DB** — Drift ORM sur SQLite, schéma v49, migrations incrémentales
+- **DB** — Drift ORM sur SQLite, schéma v50, migrations incrémentales
 - **State** — ChangeNotifier custom (`SamplerNotifier` + `SamplerState.copyWith()`) ; quelques drapeaux/compteurs de session (Mode Spectacle) vivent en champs privés mutables directs sur `SamplerNotifier`, hors `copyWith` (ex. `_isLiveSessionActive`, `_sessionPlayCounts`)
 - **Codegen** — drift_dev + build_runner (requis après tout changement de schéma)
 
@@ -82,7 +82,7 @@ L'état qui décide du prochain lancement est en base, donc inspectable à froid
 - Noms de fichiers : `snake_case.dart` — classes : `PascalCase`
 - Commentaires en français, identifiants de code en anglais
 - `const` partout où possible dans les widgets
-- Les overrides de pad (nom, couleur) vivent dans la table `pads`, le volume par son dans `pad_sounds.volume` — `board_sound_settings` et `board_sounds` n'existent plus depuis v10
+- Les overrides de pad (nom, couleur) vivent dans la table `pads`, le niveau d'un son est son **gain** (`sounds.gain`), réglé dans la fiche de la bibliothèque, sans volume par son ni par pad (0045) — `board_sound_settings` et `board_sounds` n'existent plus depuis v10
 - Les use cases sont intentionnellement minces — la logique reste dans le repository ou le domain
 
 ## Ce qu'il ne faut pas faire

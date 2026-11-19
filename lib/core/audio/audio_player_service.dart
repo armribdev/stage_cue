@@ -51,20 +51,21 @@ class AudioPlayerService implements PreviewPlayback {
   /// l'échec avec son contexte (id, libellé) à partir de cette raison.
   String? lastStartFailure;
 
-  /// Gain de sonie du son (décision 0044), multiplié au volume de l'appelant à
+  /// Gain du son (décisions 0044 et 0045), multiplié au volume de l'appelant à
   /// chaque démarrage de voix, réglage et fondu : les appelants ne manipulent
-  /// que le volume 0–1, le relèvement reste ici, à la frontière de lecture.
-  double _loudnessGain = 1.0;
+  /// que le volume 0–1 (fondus, voie), le gain reste ici, à la frontière de
+  /// lecture.
+  double _gain = 1.0;
 
   @override
-  void setLoudnessGain(double gain) {
-    _loudnessGain = gain < 0 ? 0 : gain;
+  void setGain(double gain) {
+    _gain = gain < 0 ? 0 : gain;
   }
 
-  /// Volume envoyé au moteur : volume 0–1 de l'appelant × gain de sonie. Seul
+  /// Volume envoyé au moteur : volume 0–1 de l'appelant × gain du son. Seul
   /// endroit où le gain s'applique, donc jamais deux fois ; le plafond de 1.0
-  /// ne vaut que pour le volume de l'utilisateur, pas pour le produit.
-  double _engineVolume(double volume) => volume.clamp(0.0, 1.0) * _loudnessGain;
+  /// ne vaut que pour le volume de l'appelant, pas pour le produit.
+  double _engineVolume(double volume) => volume.clamp(0.0, 1.0) * _gain;
 
   AudioPlayerService._(this._source) {
     _soundEventsSubscription = _source.soundEvents.listen((event) {

@@ -47,7 +47,7 @@ class LibrarySnapshotStore {
       // pas voyager (le picker interdit d'en placer dans un board Drive).
       await _database.customStatement('''
         CREATE TABLE snap.pad_sounds AS
-        SELECT ps.pad_id, ps.sort_order, ps.added_at, ps.volume,
+        SELECT ps.pad_id, ps.sort_order, ps.added_at,
                s.drive_file_id, s.relative_path
         FROM pad_sounds ps
         INNER JOIN pads p ON p.id = ps.pad_id
@@ -228,8 +228,8 @@ class LibrarySnapshotStore {
 
     if (!await _snapHasTable('pad_sounds')) return;
 
-    // Override de volume par son : absent des snapshots antérieurs à v29.
-    final hasVolume = await _snapColumnExists('pad_sounds', 'volume');
+    // Un snapshot antérieur à v50 porte encore un volume par son (`volume`) :
+    // il n'existe plus (décision 0045), la colonne est ignorée.
     final padSoundRows = await _database
         .customSelect('SELECT * FROM snap.pad_sounds')
         .get();
@@ -273,9 +273,6 @@ class LibrarySnapshotStore {
               padId: localPadId,
               soundId: sound.id,
               sortOrder: Value(row.read<int>('sort_order')),
-              volume: hasVolume
-                  ? Value(row.read<double?>('volume'))
-                  : const Value.absent(),
               addedAt: Value(row.read<DateTime>('added_at')),
             ),
           );
@@ -304,11 +301,17 @@ class LibrarySnapshotStore {
       // Colonnes explicites : `is_favorite` et `last_played_at` sont des
       // annotations locales qui ne voyagent pas (et `markPlayed` s'écrit sans
       // déclencher de push en conséquence). Pas de `SELECT *` ici.
+      //
+      // `volume` et `loudness_gain` n'existent plus (décision 0045) mais restent
+      // publiés pour les appareils en v49 ou avant : leur import lit `volume` sans
+      // garde et ferait échouer le pull du dossier. Un appareil en v49 joue
+      // `volume × loudness_gain`, donc `1.0` et le gain donnent exactement le
+      // niveau d'ici. À retirer quand plus aucun appareil n'est en v49.
       await _database.customStatement('''
         CREATE TABLE snap.sounds AS
-        SELECT id, title, display_name, file_path, type, color, volume,
-               loudness_gain, created_at, library_id, relative_path,
-               content_hash, drive_file_id
+        SELECT id, title, display_name, file_path, type, color, gain,
+               1.0 AS volume, gain AS loudness_gain, created_at, library_id,
+               relative_path, content_hash, drive_file_id
         FROM sounds WHERE folder_id = $folderId
       ''');
 
@@ -452,9 +455,11 @@ class LibrarySnapshotStore {
   }) async {
     _soundIdMap.clear();
 
-    // Gain de sonie (décision 0044) : absent des snapshots publiés par un
-    // appareil antérieur à v49 — le son y joue au volume seul, donc `null`
-    // (facteur 1.0), sans erreur ni log : un appareil en retard est normal.
+    // Gain (décision 0045) : absent des snapshots publiés par un appareil
+    // antérieur à v50, où le niveau d'un son est `volume` × `loudness_gain`
+    // (cette dernière absente avant v49) — sans erreur ni log : un appareil en
+    // retard est normal.
+    final hasGain = await _snapColumnExists('sounds', 'gain');
     final hasLoudnessGain = await _snapColumnExists('sounds', 'loudness_gain');
     final snapRows = await _database
         .customSelect('SELECT * FROM snap.sounds ORDER BY id')
@@ -478,9 +483,12 @@ class LibrarySnapshotStore {
       final driveFileId = row.read<String?>('drive_file_id');
       final contentHash = row.read<String?>('content_hash');
       final rawType = row.read<int?>('type');
-      final loudnessGain = hasLoudnessGain
-          ? row.read<double?>('loudness_gain')
-          : null;
+      final gain = hasGain
+          ? row.read<double>('gain')
+          : row.read<double>('volume') *
+                (hasLoudnessGain
+                    ? row.read<double?>('loudness_gain') ?? 1.0
+                    : 1.0);
       if (driveFileId != null) seenDriveIds.add(driveFileId);
 
       db.Sound? existing;
@@ -512,8 +520,7 @@ class LibrarySnapshotStore {
             filePath: Value(filePath),
             type: Value(rawType != null ? SoundType.values[rawType] : null),
             color: Value(row.read<int?>('color')),
-            volume: Value(row.read<double>('volume')),
-            loudnessGain: Value(loudnessGain),
+            gain: Value(gain),
             relativePath: Value(normalized),
             contentHash: Value(contentHash),
             driveFileId: Value(driveFileId),
@@ -534,8 +541,7 @@ class LibrarySnapshotStore {
                 type: Value(rawType != null ? SoundType.values[rawType] : null),
                 displayName: _displayNameOf(row),
                 color: Value(row.read<int?>('color')),
-                volume: Value(row.read<double>('volume')),
-                loudnessGain: Value(loudnessGain),
+                gain: Value(gain),
                 createdAt: Value(row.read<DateTime>('created_at')),
                 libraryId: Value(libraryId),
                 relativePath: Value(normalized),

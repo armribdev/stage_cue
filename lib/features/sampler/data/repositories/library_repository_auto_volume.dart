@@ -1,6 +1,6 @@
 part of 'library_repository.dart';
 
-/// Sons mesurables par un recalcul en masse du volume « auto », et ce que ce
+/// Sons mesurables par un recalcul en masse du gain « auto », et ce que ce
 /// recalcul écraserait : sert à demander confirmation avant d'écrire.
 class AutoVolumePlan {
   /// Sons dont le fichier est déjà présent sur cet appareil.
@@ -11,8 +11,9 @@ class AutoVolumePlan {
 
   const AutoVolumePlan({required this.sounds, required this.unavailable});
 
-  /// Sons dont le volume a déjà été réglé (≠ 1.0) : le recalcul le remplace.
-  int get customized => sounds.where((s) => s.volume != 1.0).length;
+  /// Sons dont le gain a déjà été réglé (≠ 1.0, à la main ou par un « Auto »
+  /// précédent) : le recalcul le remplace.
+  int get customized => sounds.where((s) => s.gain != 1.0).length;
 }
 
 /// Bilan d'un recalcul en masse.
@@ -23,8 +24,8 @@ typedef AutoVolumeResult = ({
   bool cancelled,
 });
 
-/// Recalcul en masse du volume « auto » ([décision 0036], amendée par
-/// [décision 0044]) : écrit le gain de sonie et remet le volume à 1.0.
+/// Recalcul en masse du gain « auto » ([décision 0036], amendée par
+/// [décision 0044]) : écrit le gain mesuré de chaque son ([décision 0045]).
 /// Méthodes de [LibraryRepository] extraites via extension dans le même `part`.
 extension LibraryRepositoryAutoVolume on LibraryRepository {
   /// Dresse le plan d'un recalcul : sons disponibles localement et sons ignorés.
@@ -42,15 +43,13 @@ extension LibraryRepositoryAutoVolume on LibraryRepository {
     );
   }
 
-  /// Mesure chaque son de [plan] et écrit son gain de sonie « auto » (le volume
-  /// réglé repasse à 1.0 : il encodait l'ancienne atténuation).
+  /// Mesure chaque son de [plan] et écrit son gain « auto ».
   ///
   /// Séquentiel, sur la file de décodage native partagée avec le chargement des
-  /// pads ([décision 0001]). Chaque volume est écrit dès qu'il est mesuré :
+  /// pads ([décision 0001]). Chaque gain est écrit dès qu'il est mesuré :
   /// annuler ([isCancelled]) ou fermer l'écran ne perd rien de ce qui est fait,
   /// et relancer reprend sans dommage. Un son illisible ou silencieux garde son
-  /// volume. Ne touche ni aux overrides par pad (`pad_sounds.volume`) ni au
-  /// téléchargement.
+  /// gain. Ne touche pas au téléchargement.
   Future<AutoVolumeResult> recomputeAutoVolumes(
     AutoVolumePlan plan, {
     void Function(int done, int total)? onProgress,
@@ -73,11 +72,7 @@ extension LibraryRepositoryAutoVolume on LibraryRepository {
           unmeasurable++;
         } else {
           final gain = autoLoudnessGain(measurement, profile);
-          await _soundDataSource.updateSoundSettings(
-            id: sound.id,
-            volume: 1.0,
-            loudnessGain: gain,
-          );
+          await _soundDataSource.updateSoundSettings(id: sound.id, gain: gain);
           updated++;
           if (gain > 1.0) boosted++;
         }
@@ -91,7 +86,7 @@ extension LibraryRepositoryAutoVolume on LibraryRepository {
       onProgress?.call(i + 1, total);
     }
     AudioLoadLog.info(
-      'Volume auto en masse : $updated mis à jour ($boosted relevés), '
+      'Gain auto en masse : $updated mis à jour ($boosted relevés), '
       '$unmeasurable non '
       'mesurables, $skipped fichiers indisponibles, ${plan.unavailable} sans '
       'fichier local${cancelled ? ', annulé' : ''}.',

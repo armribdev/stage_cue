@@ -1,6 +1,6 @@
 # 0044 — Volume « auto » : relèvement du gain, plafonné par le pic mesuré
 
-**Statut :** acceptée (amende [0036](0036-volume-auto-par-sonie-lufs-selon-le-type.md) : plus de plafond à 1.0 pour la sonie)
+**Statut :** acceptée (amende [0036](0036-volume-auto-par-sonie-lufs-selon-le-type.md) : plus de plafond à 1.0 pour la sonie) — amendée par [0045](0045-gain-unique-par-son-sans-volume.md) (le gain de sonie n'est plus un facteur séparé du volume : `sounds.gain` est le seul niveau d'un son, `volume` et `loudness_gain` n'existent plus)
 **Date :** 2026-11-19
 
 Le relèvement est voulu parce que l'appli doit rester correcte sur des bibliothèques que l'auteur n'a pas écoutées : un fichier mal normalisé ne doit pas rester inaudible sans recours. Les essais d'écoute ne sont donc pas un préalable ; ils serviront à régler les marges, pas à décider du principe.

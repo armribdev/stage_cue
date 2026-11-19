@@ -8,7 +8,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'audio_load_log.dart';
 import 'audio_player_service.dart';
-import 'loudness_analyzer.dart' show kMaxBoostDb;
+import 'gain.dart' show kGainMaxDb;
 import 'preview_playback.dart';
 
 /// Un périphérique de sortie disponible pour la pré-écoute (cue).
@@ -267,23 +267,22 @@ class CuePreviewPlayer implements PreviewPlayback {
   final Duration _duration;
   bool _paused = false;
 
-  /// Gain de sonie du son (décision 0044), multiplié au volume de l'appelant :
+  /// Gain du son (décisions 0044 et 0045), multiplié au volume de l'appelant :
   /// le casque doit sonner comme la salle (décision 0027), relèvement compris.
-  double _loudnessGain = 1.0;
+  double _gain = 1.0;
 
   @override
-  void setLoudnessGain(double gain) {
-    _loudnessGain = gain < 0 ? 0 : gain;
+  void setGain(double gain) {
+    _gain = gain < 0 ? 0 : gain;
   }
 
   /// Volume envoyé à mpv (0–100 au volume nominal, davantage au-delà) : volume
-  /// 0–1 de l'appelant × gain de sonie. Le plafond de 1.0 ne vaut que pour le
-  /// volume de l'utilisateur.
-  double _mpvVolume(double volume) =>
-      volume.clamp(0.0, 1.0) * _loudnessGain * 100;
+  /// 0–1 de l'appelant × gain du son. Le plafond de 1.0 ne vaut que pour le
+  /// volume de l'appelant.
+  double _mpvVolume(double volume) => volume.clamp(0.0, 1.0) * _gain * 100;
 
-  /// Relève `volume-max` de mpv (130 par défaut, soit +2,3 dB) au relèvement
-  /// maximal du gain de sonie : au-delà, mpv écrête le volume en silence et le
+  /// Relève `volume-max` de mpv (130 par défaut, soit +2,3 dB) au gain
+  /// maximal (`kGainMaxDb`) : au-delà, mpv écrête le volume en silence et le
   /// casque sonnerait plus bas que la salle. Best-effort mais **journalisé** :
   /// un échec laisse le casque borné à 130 %.
   static Future<void> _allowLoudnessBoost(Player player) async {
@@ -296,13 +295,13 @@ class CuePreviewPlayer implements PreviewPlayback {
       );
       return;
     }
-    final maxPercent = (100 * math.pow(10, kMaxBoostDb / 20)).ceil();
+    final maxPercent = (100 * math.pow(10, kGainMaxDb / 20)).ceil();
     try {
       await platform.setProperty('volume-max', '$maxPercent');
     } catch (e) {
       AudioLoadLog.warnOnce(
         'cue-volume-max',
-        'Cue : volume-max non réglé ($e) — le relèvement de sonie sera borné '
+        'Cue : volume-max non réglé ($e) — le relèvement du gain sera borné '
             'au casque.',
       );
     }

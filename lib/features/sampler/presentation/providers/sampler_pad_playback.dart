@@ -98,7 +98,7 @@ extension SamplerPadPlayback on SamplerNotifier {
     }
     final startOffset = Duration(milliseconds: startOffsetMs);
     final started = await player.playOverlapping(
-      volume: _effectiveVolume(resolved, soundIndex: soundIndex),
+      volume: _busVolume(resolved),
       startOffset: startOffset,
     );
     if (!started) {

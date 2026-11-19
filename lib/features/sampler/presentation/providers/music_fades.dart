@@ -18,7 +18,7 @@ extension MusicFades on MusicController {
     _musicAdvanceLockCount++;
     try {
       await player.fadeEnvelope(
-        _effectiveVolume(current),
+        _busVolume(current),
         duration,
         fadeIn: false,
         curve: FadeCurve.cubic,
@@ -61,7 +61,7 @@ extension MusicFades on MusicController {
       _setMusicLoadError(next);
       return;
     }
-    final targetVolume = _effectiveVolume(next, soundIndex: soundIndex);
+    final targetVolume = _busVolume(next);
 
     _musicAdvanceLockCount++;
     try {
@@ -81,7 +81,7 @@ extension MusicFades on MusicController {
       // creux au milieu (contrairement à un croisement cubique).
       await Future.wait([
         currentPlayer.fadeEnvelope(
-          _effectiveVolume(current),
+          _busVolume(current),
           duration,
           fadeIn: false,
           curve: FadeCurve.equalPower,
@@ -124,7 +124,7 @@ extension MusicFades on MusicController {
     _musicAdvanceLockCount++;
     try {
       await player.fadeEnvelope(
-        _effectiveVolume(padItem),
+        _busVolume(padItem),
         duration,
         fadeIn: false,
         curve: FadeCurve.cubic,
@@ -157,7 +157,7 @@ extension MusicFades on MusicController {
         _setMusicLoadError(next);
         return;
       }
-      final targetVolume = _effectiveVolume(next, soundIndex: soundIndex);
+      final targetVolume = _busVolume(next);
 
       await nextPlayer.playAtVolume(
         0,

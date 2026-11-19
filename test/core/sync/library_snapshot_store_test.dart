@@ -284,13 +284,13 @@ void main() {
       },
     );
 
-    group('gain de sonie (décision 0044)', () {
+    group('gain (décisions 0044 et 0045)', () {
       late int folderA;
       late int folderB;
       late db.AppDatabase dbB;
 
       /// Son `gain.mp3` du nœud A (appareil source) avec le gain donné.
-      Future<void> insertSourceSound(double? gain) => database
+      Future<void> insertSourceSound(double gain) => database
           .into(database.sounds)
           .insert(
             db.SoundsCompanion.insert(
@@ -300,13 +300,29 @@ void main() {
               relativePath: const Value('gain.mp3'),
               driveFileId: const Value('FG'),
               folderId: Value(folderA),
-              loudnessGain: Value(gain),
+              gain: Value(gain),
             ),
           );
 
-      Future<double?> targetGain() async => (await (dbB.select(
+      Future<double> targetGain() async => (await (dbB.select(
         dbB.sounds,
-      )..where((s) => s.folderId.equals(folderB))).getSingle()).loudnessGain;
+      )..where((s) => s.folderId.equals(folderB))).getSingle()).gain;
+
+      /// Importe le snapshot de [path] dans l'appareil B.
+      Future<void> importOnB(String path) =>
+          LibrarySnapshotStore(dbB).mergeFolderSnapshot(folderB, path);
+
+      /// Ouvre le snapshot de [path] pour le bricoler, comme le ferait un autre
+      /// appareil : [change] reçoit sa base, qui se referme ensuite.
+      Future<void> tamperSnapshot(
+        String path,
+        Future<void> Function(QueryExecutor snap) change,
+      ) async {
+        final snap = NativeDatabase(File(path));
+        await snap.ensureOpen(_NoopUser());
+        await change(snap);
+        await snap.close();
+      }
 
       setUp(() async {
         final libA = await database
@@ -358,37 +374,73 @@ void main() {
 
         await (database.update(
           database.sounds,
-        )).write(const db.SoundsCompanion(loudnessGain: Value(0.4)));
+        )).write(const db.SoundsCompanion(gain: Value(0.4)));
         await store.exportFolderSnapshot(folderA, path);
         await LibrarySnapshotStore(dbB).mergeFolderSnapshot(folderB, path);
         expect(await targetGain(), 0.4);
       });
 
-      test('un son sans mesure reste sans mesure', () async {
-        await insertSourceSound(null);
+      test('un son au gain par défaut reste à 1.0', () async {
+        await insertSourceSound(1.0);
         final path = p.join(tempDir.path, 'gain.db');
         await store.exportFolderSnapshot(folderA, path);
-        await LibrarySnapshotStore(dbB).mergeFolderSnapshot(folderB, path);
-        expect(await targetGain(), isNull);
+        await importOnB(path);
+        expect(await targetGain(), 1.0);
       });
 
-      test('un snapshot sans la colonne (appareil en v48) s\'importe avec '
-          'un gain nul, sans erreur', () async {
-        await insertSourceSound(2.5);
+      test(
+        'le snapshot publie encore volume et loudness_gain, que lit un '
+        'appareil en v49 : 1.0 et le gain, soit exactement ce niveau',
+        () async {
+          await insertSourceSound(2.5);
+          final path = p.join(tempDir.path, 'gain.db');
+          await store.exportFolderSnapshot(folderA, path);
+
+          late List<Map<String, Object?>> rows;
+          await tamperSnapshot(path, (snap) async {
+            rows = await snap.runSelect(
+              'SELECT gain, volume, loudness_gain FROM sounds',
+              const [],
+            );
+          });
+          expect(rows.single['gain'], 2.5);
+          expect(rows.single['volume'], 1.0);
+          expect(rows.single['loudness_gain'], 2.5);
+        },
+      );
+
+      test('un snapshot d\'un appareil en v49 (volume × loudness_gain) donne '
+          'le même niveau en gain', () async {
+        await insertSourceSound(9.9);
         final path = p.join(tempDir.path, 'gain.db');
         await store.exportFolderSnapshot(folderA, path);
-        final snap = NativeDatabase(File(path));
-        await snap.ensureOpen(_NoopUser());
-        await snap.runCustom('ALTER TABLE sounds DROP COLUMN loudness_gain');
-        await snap.close();
+        await tamperSnapshot(path, (snap) async {
+          await snap.runCustom('ALTER TABLE sounds DROP COLUMN gain');
+          await snap.runUpdate(
+            'UPDATE sounds SET volume = 0.5, loudness_gain = 3.0',
+            const [],
+          );
+        });
 
-        await LibrarySnapshotStore(dbB).mergeFolderSnapshot(folderB, path);
+        await importOnB(path);
 
-        final sound = await (dbB.select(
-          dbB.sounds,
-        )..where((s) => s.folderId.equals(folderB))).getSingle();
-        expect(sound.driveFileId, 'FG', reason: 'le son est bien importé');
-        expect(sound.loudnessGain, isNull);
+        expect(await targetGain(), 1.5);
+      });
+
+      test('un snapshot d\'un appareil en v48 (volume seul) donne le volume '
+          'pour gain, sans erreur', () async {
+        await insertSourceSound(9.9);
+        final path = p.join(tempDir.path, 'gain.db');
+        await store.exportFolderSnapshot(folderA, path);
+        await tamperSnapshot(path, (snap) async {
+          await snap.runCustom('ALTER TABLE sounds DROP COLUMN gain');
+          await snap.runCustom('ALTER TABLE sounds DROP COLUMN loudness_gain');
+          await snap.runUpdate('UPDATE sounds SET volume = 0.4', const []);
+        });
+
+        await importOnB(path);
+
+        expect(await targetGain(), 0.4);
       });
     });
 

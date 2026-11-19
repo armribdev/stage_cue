@@ -68,16 +68,15 @@ class MusicController {
     return Duration(milliseconds: ms);
   }
 
-  /// Volume effectif du son à [soundIndex] (défaut : le son courant du pad, ou
-  /// le premier). Base = override du pad-son ou volume par défaut du son ; les
-  /// pads musique et ambiance sont en plus soumis au volume de leur voie
-  /// (courbé, voir [_perceptualGain]).
-  double _effectiveVolume(PadItem padItem, {int? soundIndex}) {
-    final index = soundIndex ?? padItem.currentSoundIndex ?? 0;
-    final base = padItem.pad.effectiveVolume(index);
-    if (padItem.pad.isMusicPad) return base * _perceptualGain(_musicVolume);
-    if (padItem.pad.isAmbiancePad) return base * _o._ambiance._gain;
-    return base;
+  /// Volume (0–1) que les appelants envoient au lecteur d'un pad : celui de sa
+  /// voie (courbé, voir [_perceptualGain]) pour la musique et l'ambiance, 1.0
+  /// pour un bruitage. Le niveau propre du son n'y est pas : c'est son gain
+  /// (`Sound.gain`), que le lecteur applique lui-même à la frontière de lecture
+  /// (`PreviewPlayback.setGain`).
+  double _busVolume(PadItem padItem) {
+    if (padItem.pad.isMusicPad) return _perceptualGain(_musicVolume);
+    if (padItem.pad.isAmbiancePad) return _o._ambiance._gain;
+    return 1.0;
   }
 
   // ── File d'attente ────────────────────────────────────────────────────────
@@ -449,7 +448,7 @@ class MusicController {
 
     padItem.clearPausedPlayback();
 
-    final volume = _effectiveVolume(padItem, soundIndex: index);
+    final volume = _busVolume(padItem);
     final startPos = resumePosition != null && resumePosition > Duration.zero
         ? resumePosition
         : _startOffsetOf(padItem, index, player);
@@ -595,7 +594,7 @@ class MusicController {
   void _applyEffectiveVolumeToPlayer(PadItem padItem, {bool smooth = false}) {
     final player = padItem.currentPlayer;
     if (player == null) return;
-    final volume = _effectiveVolume(padItem);
+    final volume = _busVolume(padItem);
     if (smooth) {
       player.fadeVolumeTo(volume, _sliderFadeDuration);
     } else {

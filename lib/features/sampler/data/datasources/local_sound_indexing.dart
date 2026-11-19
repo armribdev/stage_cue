@@ -29,7 +29,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
               type: Value(metadata.type),
               contentHash: Value(metadata.contentHash),
               waveform: Value(metadata.waveform),
-              loudnessGain: _autoGain(metadata.loudnessGain),
+              gain: _autoGain(metadata.gain),
               waveformProbeGeneration: Value(metadata.waveformProbeGeneration),
             ),
           );
@@ -74,7 +74,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
             relativePath: Value(relativePath),
             contentHash: Value(metadata.contentHash),
             waveform: Value(metadata.waveform),
-            loudnessGain: _autoGain(metadata.loudnessGain),
+            gain: _autoGain(metadata.gain),
           ),
         );
     return true;
@@ -107,14 +107,13 @@ extension LocalSoundIndexing on LocalSoundDataSource {
           waveform: Value(probe?.waveformValue),
           waveformProbeGeneration: Value(probe?.generationValue),
           // Premier fichier réel d'un son Drive : même gain auto qu'à la
-          // création locale. Seulement si le son n'a encore ni gain ni volume
-          // réglé — un snapshot (autre appareil) ou l'opérateur a pu les fixer
-          // avant.
-          loudnessGain:
-              existing.loudnessGain == null &&
-                  existing.volume == 1.0 &&
-                  probeType != null
-              ? _autoGain(await _measureLoudnessGain(file, probeType))
+          // création locale. Seulement si le gain est encore celui par défaut
+          // (1.0) — un snapshot (autre appareil) ou l'opérateur a pu le fixer
+          // avant. Un gain réglé exactement à 0 dB est indiscernable d'un gain
+          // jamais touché : il est remesuré ici, une seule fois (le type devient
+          // connu juste après).
+          gain: existing.gain == 1.0 && probeType != null
+              ? _autoGain(await _measureAutoGain(file, probeType))
               : const Value.absent(),
         ),
       );
@@ -397,7 +396,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
             relativePath: Value(entry.relativePath),
             contentHash: Value(metadata.contentHash),
             waveform: Value(metadata.waveform),
-            loudnessGain: _autoGain(metadata.loudnessGain),
+            gain: _autoGain(metadata.gain),
             driveFileId: Value(entry.driveFileId),
             driveMd5: Value(entry.driveMd5),
             folderId: Value(entry.folderId),
@@ -488,7 +487,7 @@ extension LocalSoundIndexing on LocalSoundDataSource {
                   type: Value(metadata.type),
                   contentHash: Value(metadata.contentHash),
                   waveform: Value(metadata.waveform),
-                  loudnessGain: _autoGain(metadata.loudnessGain),
+                  gain: _autoGain(metadata.gain),
                   waveformProbeGeneration: Value(
                     metadata.waveformProbeGeneration,
                   ),

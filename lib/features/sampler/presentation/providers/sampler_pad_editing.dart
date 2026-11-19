@@ -52,43 +52,6 @@ extension SamplerPadEditing on SamplerNotifier {
     );
   }
 
-  /// Met à jour le volume d'un son DANS un pad (override propre à ce pad).
-  /// [volume] null = suivre le volume par défaut du son. Applique le volume au
-  /// lecteur en cours si ce son joue actuellement.
-  Future<void> updatePadSoundVolume(
-    PadItem padItem,
-    int soundId,
-    double? volume,
-  ) async {
-    final index = padItem.pad.sounds.indexWhere((s) => s.id == soundId);
-    if (index < 0) return;
-
-    final clamped = volume?.clamp(0.0, 1.0);
-    final nextVolumes = List<double?>.filled(padItem.pad.sounds.length, null);
-    for (var i = 0; i < nextVolumes.length; i++) {
-      nextVolumes[i] = i < padItem.pad.soundVolumes.length
-          ? padItem.pad.soundVolumes[i]
-          : null;
-    }
-    nextVolumes[index] = clamped;
-
-    padItem.pad = padItem.pad.copyWith(soundVolumes: nextVolumes);
-
-    // Applique en direct si ce son précis est en cours de lecture.
-    if (padItem.isPlaying && padItem.currentSoundIndex == index) {
-      padItem.currentPlayer?.setVolume(
-        _effectiveVolume(padItem, soundIndex: index),
-      );
-    }
-    _notify();
-
-    await _repository.updatePadSoundVolume(
-      padId: padItem.pad.id,
-      soundId: soundId,
-      volume: clamped,
-    );
-  }
-
   Future<void> updatePadRowIndex(int padId, int newRowIndex) async {
     await _repository.updatePadRowIndex(padId, newRowIndex);
     await loadSounds(silent: true);
@@ -217,12 +180,6 @@ extension SamplerPadEditing on SamplerNotifier {
         soundIds: snapshot.pad.sounds.map((s) => s.id).toList(),
         name: snapshot.pad.name,
         colorValue: snapshot.pad.colorValue,
-        soundVolumes: [
-          for (var i = 0; i < snapshot.pad.sounds.length; i++)
-            i < snapshot.pad.soundVolumes.length
-                ? snapshot.pad.soundVolumes[i]
-                : null,
-        ],
         playMode: snapshot.pad.playMode,
         sortOrder: snapshot.index,
       );

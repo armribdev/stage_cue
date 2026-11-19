@@ -1044,32 +1044,93 @@ void main() {
     await database.close();
   });
 
-  test('une base v48 gagne loudness_gain, null pour les sons existants, '
-      'volume réglé conservé', () async {
+  Future<Set<String>> columnsOf(db.AppDatabase database, String table) async {
+    final rows = await database.customSelect('PRAGMA table_info($table)').get();
+    return {for (final r in rows) r.read<String>('name')};
+  }
+
+  test('une base v49 fond volume et loudness_gain dans gain (produit), '
+      'et perd le volume par son dans les pads', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    // Rétrograde à l'état v49 : `volume` et `loudness_gain` à la place de `gain`.
+    await database.customStatement(
+      'ALTER TABLE sounds ADD COLUMN volume REAL NOT NULL DEFAULT 1.0',
+    );
+    await database.customStatement(
+      'ALTER TABLE sounds ADD COLUMN loudness_gain REAL',
+    );
+    await database.customStatement(
+      "INSERT INTO sounds (title, file_path, display_name, volume, loudness_gain) "
+      "VALUES ('relevé', '/a.wav', 'relevé', 0.4, 3.0), "
+      "('seul volume', '/b.wav', 'seul volume', 0.5, NULL), "
+      "('intact', '/c.wav', 'intact', 1.0, NULL), "
+      "('muet', '/d.wav', 'muet', 0.0, 2.0)",
+    );
+    await database.customStatement('ALTER TABLE sounds DROP COLUMN gain');
+    await database.customStatement(
+      'ALTER TABLE pad_sounds ADD COLUMN volume REAL',
+    );
+    await database.customStatement(
+      "INSERT INTO sound_boards (name) VALUES ('b')",
+    );
+    await database.customStatement('INSERT INTO pads (board_id) VALUES (1)');
+    await database.customStatement(
+      'INSERT INTO pad_sounds (pad_id, sound_id, volume) VALUES (1, 1, 0.3)',
+    );
+    await database.customStatement('PRAGMA user_version = 49');
+    await database.close();
+
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    final sounds = {
+      for (final s in await database.select(database.sounds).get())
+        s.title: s.gain,
+    };
+    // Chaque son garde exactement son niveau d'avant : volume × loudness_gain.
+    expect(sounds['relevé'], closeTo(1.2, 1e-9));
+    expect(sounds['seul volume'], 0.5);
+    expect(sounds['intact'], 1.0);
+    expect(sounds['muet'], 0.0, reason: 'un son muet le reste');
+
+    expect(await columnsOf(database, 'sounds'), isNot(contains('volume')));
+    expect(
+      await columnsOf(database, 'sounds'),
+      isNot(contains('loudness_gain')),
+    );
+    expect(await columnsOf(database, 'pad_sounds'), isNot(contains('volume')));
+    final padSounds = await database.select(database.padSounds).get();
+    expect(padSounds, hasLength(1), reason: 'le son reste dans son pad');
+
+    // Le gain doit être écrivable, et un relèvement (> 1.0) faire l'aller-retour.
+    await (database.update(database.sounds)
+          ..where((s) => s.title.equals('intact')))
+        .write(const db.SoundsCompanion(gain: Value(3.2)));
+    final updated = await (database.select(
+      database.sounds,
+    )..where((s) => s.title.equals('intact'))).getSingle();
+    expect(updated.gain, 3.2);
+
+    await database.close();
+  });
+
+  test('une base v39 garde le volume de ses sons en gain à travers la '
+      'recréation de sounds (v40)', () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    await database.customStatement(
+      'ALTER TABLE sounds ADD COLUMN volume REAL NOT NULL DEFAULT 1.0',
+    );
     await database.customStatement(
       "INSERT INTO sounds (title, file_path, display_name, volume) "
       "VALUES ('s', '/s.wav', 's', 0.4)",
     );
-    await database.customStatement(
-      'ALTER TABLE sounds DROP COLUMN loudness_gain',
-    );
-    await database.customStatement('PRAGMA user_version = 48');
+    await database.customStatement('ALTER TABLE sounds DROP COLUMN gain');
+    await database.customStatement('PRAGMA user_version = 39');
     await database.close();
 
     database = db.AppDatabase.forTesting(NativeDatabase(file));
     final sound = await database.select(database.sounds).getSingle();
     expect(sound.title, 's', reason: 'les données doivent survivre');
-    expect(sound.volume, 0.4, reason: 'aucun son ne change de niveau seul');
-    // Null = pas de mesure = facteur 1.0 : comportement d'avant la v49.
-    expect(sound.loudnessGain, isNull);
-
-    // La colonne doit être écrivable, et une valeur > 1.0 faire l'aller-retour.
-    await (database.update(database.sounds)
-          ..where((s) => s.id.equals(sound.id)))
-        .write(const db.SoundsCompanion(loudnessGain: Value(3.2)));
-    final updated = await database.select(database.sounds).getSingle();
-    expect(updated.loudnessGain, 3.2);
+    expect(sound.gain, 0.4, reason: 'aucun son ne change de niveau seul');
+    expect(await columnsOf(database, 'sounds'), isNot(contains('volume')));
 
     await database.close();
   });

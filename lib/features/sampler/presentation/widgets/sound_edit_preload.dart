@@ -75,7 +75,7 @@ class SoundEditPreload {
 }
 
 /// Durée de la transition d'un son à l'autre : la waveform qui se transforme et
-/// le curseur de volume qui glisse partent ensemble et durent pareil, pour
+/// le curseur de gain qui glisse partent ensemble et durent pareil, pour
 /// arriver ensemble.
 const kSoundSwitchDuration = Duration(milliseconds: 500);
 
@@ -87,11 +87,12 @@ const kSoundSwitchDuration = Duration(milliseconds: 500);
 /// - [waveformBars] et [offsetFraction] : l'enveloppe et la position (0→1) du
 ///   point d'entrée du son précédent, d'où la waveform du suivant se transforme
 ///   et sa poignée glisse au lieu de repartir d'une piste vide ;
-/// - [volume] : celui du son précédent, d'où le curseur du suivant glisse.
+/// - [gainDb] : le gain (en dB) du son précédent, d'où le curseur du suivant
+///   glisse.
 class SoundFormMemory {
   double? value;
   final suggestions = PillMemory();
   List<double> waveformBars = const [];
   double? offsetFraction;
-  double? volume;
+  double? gainDb;
 }

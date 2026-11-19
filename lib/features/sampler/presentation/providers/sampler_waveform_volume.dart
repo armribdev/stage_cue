@@ -1,6 +1,6 @@
 part of 'sampler_provider.dart';
 
-/// Waveform d'un son et volume « auto » (sonie).
+/// Waveform d'un son et gain « auto » (sonie).
 /// Méthodes de [SamplerNotifier] extraites via extension dans le même `part`.
 
 extension SamplerWaveformVolume on SamplerNotifier {
@@ -93,7 +93,7 @@ extension SamplerWaveformVolume on SamplerNotifier {
     return waveform;
   }
 
-  /// Gain de sonie « auto » d'un son : mesure sa sonie et son pic selon son type
+  /// Gain « auto » d'un son : mesure sa sonie et son pic selon son type
   /// (sonie intégrée pour musique et ambiance, maximum court terme pour un
   /// bruitage) et renvoie le facteur qui la ramène à la cible du type, relevé au
   /// plus jusqu'au plafond de pic (décision 0044). Un son sans type connu est
@@ -103,7 +103,7 @@ extension SamplerWaveformVolume on SamplerNotifier {
   ///
   /// Peut lever [SoundNotAvailableLocallyException] ou [StateError] si le
   /// fichier est introuvable/hors ligne — laissé à l'appelant pour affichage.
-  Future<double?> computeAutoLoudnessGain(Sound sound) async {
+  Future<double?> computeAutoGain(Sound sound) async {
     final path = await _resolvePlayablePath(sound, downloadIfNeeded: true);
     final profile = loudnessProfileOf(sound.type);
     final measurement = await measureAutoVolume(File(path), profile);

@@ -175,6 +175,37 @@ void main() {
     expect(isEnabled(tester, 'Enregistrer'), isFalse);
   });
 
+  testWidgets("gain : le curseur s'exprime en dB et « Enregistrer » écrit le "
+      'facteur linéaire', (tester) async {
+    await pumpForm(tester, processed: true);
+
+    // Un son sans réglage est à 0 dB, et la fiche n'a plus de « volume ».
+    expect(find.text('0 dB'), findsOneWidget);
+    expect(find.text('Volume par défaut'), findsNothing);
+    expect(find.byType(Slider), findsOneWidget);
+    expect(isEnabled(tester, 'Enregistrer'), isFalse);
+
+    // Tiré jusqu'au bout à droite : +12 dB, que la fiche signale modifiée.
+    await tester.drag(find.byType(Slider), const Offset(2000, 0));
+    await tester.pump();
+    expect(isEnabled(tester, 'Enregistrer'), isTrue);
+    expect(find.text('+12,0 dB'), findsOneWidget);
+
+    await tester.runAsync(() async {
+      await tester.tap(button('Enregistrer'));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+
+    final row = await tester.runAsync(
+      () => (database.select(
+        database.sounds,
+      )..where((s) => s.id.equals(soundId))).getSingle(),
+    );
+    // 10^(12/20) : l'écriture est le facteur linéaire, pas les dB.
+    expect(row?.gain, closeTo(3.981, 0.001));
+  });
+
   testWidgets('un son traité peut être remis à traiter', (tester) async {
     await tester.runAsync(() => repository.markSoundsProcessed([soundId]));
     var marked = 0;

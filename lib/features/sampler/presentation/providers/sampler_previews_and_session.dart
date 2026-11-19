@@ -112,7 +112,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
             ? _libraryPreviewPlayer?.duration
             : null;
       }
-      player.setLoudnessGain(sound.loudnessFactor);
+      player.setGain(sound.gain);
       _attachLibraryPreview(sound.id, player);
       return player.duration;
     } catch (e) {
@@ -124,13 +124,9 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
 
   /// Relance l'aperçu en cours de [soundId] depuis [position] (tête de lecture
   /// déplacée à la main). Sans effet si ce son n'est pas en train de jouer.
-  Future<void> seekLibraryPreview(
-    int soundId,
-    Duration position, {
-    required double volume,
-  }) async {
+  Future<void> seekLibraryPreview(int soundId, Duration position) async {
     if (!libraryPreviewIsPlaying(soundId)) return;
-    await _libraryPreviewPlayer?.playFromPosition(position, volume: volume);
+    await _libraryPreviewPlayer?.playFromPosition(position);
   }
 
   /// Bascule play/pause pour l'aperçu (lecteur unique, un son à la fois). C'est
@@ -140,16 +136,14 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
   /// [requireCue] : n'a de sens qu'au casque — échoue plutôt que de sortir sur
   /// la salle quand aucun casque n'est configuré.
   ///
-  /// [from] et [volume] : départ et niveau d'un nouvel aperçu, quand ils ne
-  /// sont pas ceux enregistrés (l'éditeur écoute ses réglages non validés).
-  /// Par défaut : point d'entrée et volume du son. [loudnessGain] : gain de
-  /// sonie non validé (décision 0044), par défaut celui du son.
+  /// [from] et [gain] : départ et gain d'un nouvel aperçu, quand ils ne sont pas
+  /// ceux enregistrés (l'éditeur écoute ses réglages non validés). Par défaut :
+  /// point d'entrée et gain du son (décision 0045).
   Future<bool> toggleLibraryPreview(
     int soundId, {
     bool requireCue = false,
     Duration? from,
-    double? volume,
-    double? loudnessGain,
+    double? gain,
   }) async {
     final player = _libraryPreviewPlayer;
     if (_libraryPreviewSoundId == soundId && player != null) {
@@ -172,8 +166,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       sound,
       requireCue: requireCue,
       from: from,
-      volume: volume,
-      loudnessGain: loudnessGain,
+      gain: gain,
     );
   }
 
@@ -200,20 +193,17 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     return true;
   }
 
-  /// Répercute en direct un changement de volume sur l'aperçu bibliothèque de
-  /// [soundId] (curseur du formulaire d'édition). Sans effet si ce son n'est
-  /// pas celui en aperçu.
-  void setLibraryPreviewVolume(int soundId, double volume) {
+  /// Répercute en direct un changement de gain (curseur ou « Auto » du
+  /// formulaire d'édition, pas encore enregistré) sur l'aperçu bibliothèque de
+  /// [soundId], voix en cours comprises. Sans effet si ce son n'est pas celui en
+  /// aperçu.
+  void setLibraryPreviewGain(int soundId, double gain) {
     if (_libraryPreviewSoundId != soundId) return;
-    _libraryPreviewPlayer?.setVolume(volume);
-  }
-
-  /// Répercute un nouveau gain de sonie (« Auto » du formulaire, pas encore
-  /// enregistré) sur l'aperçu de [soundId]. Il ne touche pas aux voix déjà
-  /// lancées : un [setLibraryPreviewVolume] derrière les rafraîchit.
-  void setLibraryPreviewLoudnessGain(int soundId, double gain) {
-    if (_libraryPreviewSoundId != soundId) return;
-    _libraryPreviewPlayer?.setLoudnessGain(gain);
+    final player = _libraryPreviewPlayer;
+    if (player == null) return;
+    player.setGain(gain);
+    // `setGain` ne touche pas aux voix déjà lancées : `setVolume` les rafraîchit.
+    player.setVolume(1.0);
   }
 
   void stopLibraryPreview({bool notify = true}) {
@@ -240,8 +230,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     Sound sound, {
     bool requireCue = false,
     Duration? from,
-    double? volume,
-    double? loudnessGain,
+    double? gain,
   }) async {
     try {
       // Un aperçu déjà chargé (et à l'arrêt) pour ce son est réutilisé, sauf
@@ -264,7 +253,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
       }
       // À chaque départ, même sur un lecteur réutilisé : le gain a pu changer
       // (« Auto » enregistré) depuis son chargement.
-      player.setLoudnessGain(loudnessGain ?? sound.loudnessFactor);
+      player.setGain(gain ?? sound.gain);
       var startMs =
           (from ?? Duration(milliseconds: sound.startOffsetMs)).inMilliseconds;
       final duration = player.duration;
@@ -274,10 +263,7 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
           startMs = (maxMs - 1).clamp(0, maxMs);
         }
       }
-      await player.playFromPosition(
-        Duration(milliseconds: startMs),
-        volume: volume ?? sound.volume,
-      );
+      await player.playFromPosition(Duration(milliseconds: startMs));
       _markPlayed(sound.id);
       _notify();
       return true;

@@ -150,7 +150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _appVersion;
   bool _isDiagnosticBusy = false;
 
-  /// Section « Maintenance » (volumes auto, journal) ouverte ; repliée par
+  /// Section « Maintenance » (gain auto, journal) ouverte ; repliée par
   /// défaut, non mémorisée d'une ouverture de l'écran à l'autre.
   bool _maintenanceExpanded = false;
 

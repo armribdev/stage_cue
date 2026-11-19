@@ -59,7 +59,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
   Timer? _displayNameDebounce;
   List<TagCategoryWithTags> _tagCatalog = [];
   bool _isTagsLoading = true;
-  bool _volumeControlsVisible = true;
 
   @override
   void initState() {
@@ -227,30 +226,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
                   style: AppTextStyles.sectionLabel(context),
                 ),
               ),
-              if (sounds.isNotEmpty)
-                Tooltip(
-                  message: _volumeControlsVisible
-                      ? 'Masquer les volumes'
-                      : 'Afficher les volumes',
-                  child: IconButton(
-                    icon: StrokeIcon(
-                      _volumeControlsVisible
-                          ? AppIcons.volumeOn
-                          : AppIcons.volumeOff,
-                      size: 20,
-                    ),
-                    onPressed: () {
-                      setState(
-                        () => _volumeControlsVisible = !_volumeControlsVisible,
-                      );
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                  ),
-                ),
               TextButton.icon(
                 onPressed: () => _addSound(context),
                 icon: const StrokeIcon(AppIcons.add, size: AppIconSize.sm),

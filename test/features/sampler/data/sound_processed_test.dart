@@ -50,7 +50,7 @@ void main() {
       id: ids[0],
       displayName: 'Porte grinçante',
       updateDisplayName: true,
-      volume: 0.4,
+      gain: 0.4,
     );
 
     await dataSource.markSoundsProcessed([ids[0]]);
@@ -59,7 +59,7 @@ void main() {
       database.sounds,
     )..where((s) => s.id.equals(ids[0]))).getSingle();
     expect(row.displayName, 'Porte grinçante');
-    expect(row.volume, 0.4);
+    expect(row.gain, 0.4);
     expect(row.isProcessed, isTrue);
   });
 
@@ -74,7 +74,7 @@ void main() {
     () async {
       await dataSource.markSoundsProcessed([ids[1]]);
 
-      await dataSource.updateSoundSettings(id: ids[1], volume: 0.7);
+      await dataSource.updateSoundSettings(id: ids[1], gain: 0.7);
 
       expect((await processedById())[ids[1]], isTrue);
     },

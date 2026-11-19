@@ -1713,26 +1713,15 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _volumeMeta = const VerificationMeta('volume');
+  static const VerificationMeta _gainMeta = const VerificationMeta('gain');
   @override
-  late final GeneratedColumn<double> volume = GeneratedColumn<double>(
-    'volume',
+  late final GeneratedColumn<double> gain = GeneratedColumn<double>(
+    'gain',
     aliasedName,
     false,
     type: DriftSqlType.double,
     requiredDuringInsert: false,
     defaultValue: const Constant(1.0),
-  );
-  static const VerificationMeta _loudnessGainMeta = const VerificationMeta(
-    'loudnessGain',
-  );
-  @override
-  late final GeneratedColumn<double> loudnessGain = GeneratedColumn<double>(
-    'loudness_gain',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -1924,8 +1913,7 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
     filePath,
     type,
     color,
-    volume,
-    loudnessGain,
+    gain,
     createdAt,
     libraryId,
     relativePath,
@@ -1990,19 +1978,10 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         color.isAcceptableOrUnknown(data['color']!, _colorMeta),
       );
     }
-    if (data.containsKey('volume')) {
+    if (data.containsKey('gain')) {
       context.handle(
-        _volumeMeta,
-        volume.isAcceptableOrUnknown(data['volume']!, _volumeMeta),
-      );
-    }
-    if (data.containsKey('loudness_gain')) {
-      context.handle(
-        _loudnessGainMeta,
-        loudnessGain.isAcceptableOrUnknown(
-          data['loudness_gain']!,
-          _loudnessGainMeta,
-        ),
+        _gainMeta,
+        gain.isAcceptableOrUnknown(data['gain']!, _gainMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -2157,14 +2136,10 @@ class $SoundsTable extends Sounds with TableInfo<$SoundsTable, Sound> {
         DriftSqlType.int,
         data['${effectivePrefix}color'],
       ),
-      volume: attachedDatabase.typeMapping.read(
+      gain: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
-        data['${effectivePrefix}volume'],
+        data['${effectivePrefix}gain'],
       )!,
-      loudnessGain: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}loudness_gain'],
-      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2246,14 +2221,14 @@ class Sound extends DataClass implements Insertable<Sound> {
   final String filePath;
   final SoundType? type;
   final int? color;
-  final double volume;
 
-  /// Gain de sonie du volume « auto » (décisions 0036 et 0044) : facteur
-  /// linéaire (≥ 0, peut dépasser 1.0) appliqué **une seule fois** à la lecture,
-  /// en plus de [volume] (réglage de l'utilisateur, 0–1). `null` = pas de
-  /// mesure = facteur 1.0. Propriété de contenu comme [volume] : voyage dans le
-  /// snapshot de dossier ; un appareil antérieur à v49 l'ignore.
-  final double? loudnessGain;
+  /// Gain du son (décision 0045) : facteur linéaire (≥ 0, peut dépasser 1.0),
+  /// le **seul** niveau propre à un son, appliqué **une fois** à la lecture.
+  /// 1.0 = le fichier tel quel. Réglé dans la fiche de la bibliothèque (en dB,
+  /// −24 à +12) ou par « Auto » (sonie mesurée, décisions 0036 et 0044) ; aucun
+  /// autre écran ne le change. Propriété de contenu : voyage dans le snapshot de
+  /// dossier. Remplace `volume` (0–1) et `loudness_gain` d'avant la v50.
+  final double gain;
   final DateTime createdAt;
   final int? libraryId;
   final String? relativePath;
@@ -2317,8 +2292,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     required this.filePath,
     this.type,
     this.color,
-    required this.volume,
-    this.loudnessGain,
+    required this.gain,
     required this.createdAt,
     this.libraryId,
     this.relativePath,
@@ -2348,10 +2322,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     if (!nullToAbsent || color != null) {
       map['color'] = Variable<int>(color);
     }
-    map['volume'] = Variable<double>(volume);
-    if (!nullToAbsent || loudnessGain != null) {
-      map['loudness_gain'] = Variable<double>(loudnessGain);
-    }
+    map['gain'] = Variable<double>(gain);
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || libraryId != null) {
       map['library_id'] = Variable<int>(libraryId);
@@ -2402,10 +2373,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       color: color == null && nullToAbsent
           ? const Value.absent()
           : Value(color),
-      volume: Value(volume),
-      loudnessGain: loudnessGain == null && nullToAbsent
-          ? const Value.absent()
-          : Value(loudnessGain),
+      gain: Value(gain),
       createdAt: Value(createdAt),
       libraryId: libraryId == null && nullToAbsent
           ? const Value.absent()
@@ -2460,8 +2428,7 @@ class Sound extends DataClass implements Insertable<Sound> {
         serializer.fromJson<int?>(json['type']),
       ),
       color: serializer.fromJson<int?>(json['color']),
-      volume: serializer.fromJson<double>(json['volume']),
-      loudnessGain: serializer.fromJson<double?>(json['loudnessGain']),
+      gain: serializer.fromJson<double>(json['gain']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       libraryId: serializer.fromJson<int?>(json['libraryId']),
       relativePath: serializer.fromJson<String?>(json['relativePath']),
@@ -2493,8 +2460,7 @@ class Sound extends DataClass implements Insertable<Sound> {
         $SoundsTable.$convertertypen.toJson(type),
       ),
       'color': serializer.toJson<int?>(color),
-      'volume': serializer.toJson<double>(volume),
-      'loudnessGain': serializer.toJson<double?>(loudnessGain),
+      'gain': serializer.toJson<double>(gain),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'libraryId': serializer.toJson<int?>(libraryId),
       'relativePath': serializer.toJson<String?>(relativePath),
@@ -2522,8 +2488,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     String? filePath,
     Value<SoundType?> type = const Value.absent(),
     Value<int?> color = const Value.absent(),
-    double? volume,
-    Value<double?> loudnessGain = const Value.absent(),
+    double? gain,
     DateTime? createdAt,
     Value<int?> libraryId = const Value.absent(),
     Value<String?> relativePath = const Value.absent(),
@@ -2546,8 +2511,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     filePath: filePath ?? this.filePath,
     type: type.present ? type.value : this.type,
     color: color.present ? color.value : this.color,
-    volume: volume ?? this.volume,
-    loudnessGain: loudnessGain.present ? loudnessGain.value : this.loudnessGain,
+    gain: gain ?? this.gain,
     createdAt: createdAt ?? this.createdAt,
     libraryId: libraryId.present ? libraryId.value : this.libraryId,
     relativePath: relativePath.present ? relativePath.value : this.relativePath,
@@ -2578,10 +2542,7 @@ class Sound extends DataClass implements Insertable<Sound> {
       filePath: data.filePath.present ? data.filePath.value : this.filePath,
       type: data.type.present ? data.type.value : this.type,
       color: data.color.present ? data.color.value : this.color,
-      volume: data.volume.present ? data.volume.value : this.volume,
-      loudnessGain: data.loudnessGain.present
-          ? data.loudnessGain.value
-          : this.loudnessGain,
+      gain: data.gain.present ? data.gain.value : this.gain,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       libraryId: data.libraryId.present ? data.libraryId.value : this.libraryId,
       relativePath: data.relativePath.present
@@ -2629,8 +2590,7 @@ class Sound extends DataClass implements Insertable<Sound> {
           ..write('filePath: $filePath, ')
           ..write('type: $type, ')
           ..write('color: $color, ')
-          ..write('volume: $volume, ')
-          ..write('loudnessGain: $loudnessGain, ')
+          ..write('gain: $gain, ')
           ..write('createdAt: $createdAt, ')
           ..write('libraryId: $libraryId, ')
           ..write('relativePath: $relativePath, ')
@@ -2658,8 +2618,7 @@ class Sound extends DataClass implements Insertable<Sound> {
     filePath,
     type,
     color,
-    volume,
-    loudnessGain,
+    gain,
     createdAt,
     libraryId,
     relativePath,
@@ -2686,8 +2645,7 @@ class Sound extends DataClass implements Insertable<Sound> {
           other.filePath == this.filePath &&
           other.type == this.type &&
           other.color == this.color &&
-          other.volume == this.volume &&
-          other.loudnessGain == this.loudnessGain &&
+          other.gain == this.gain &&
           other.createdAt == this.createdAt &&
           other.libraryId == this.libraryId &&
           other.relativePath == this.relativePath &&
@@ -2712,8 +2670,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
   final Value<String> filePath;
   final Value<SoundType?> type;
   final Value<int?> color;
-  final Value<double> volume;
-  final Value<double?> loudnessGain;
+  final Value<double> gain;
   final Value<DateTime> createdAt;
   final Value<int?> libraryId;
   final Value<String?> relativePath;
@@ -2736,8 +2693,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     this.filePath = const Value.absent(),
     this.type = const Value.absent(),
     this.color = const Value.absent(),
-    this.volume = const Value.absent(),
-    this.loudnessGain = const Value.absent(),
+    this.gain = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.libraryId = const Value.absent(),
     this.relativePath = const Value.absent(),
@@ -2761,8 +2717,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     required String filePath,
     this.type = const Value.absent(),
     this.color = const Value.absent(),
-    this.volume = const Value.absent(),
-    this.loudnessGain = const Value.absent(),
+    this.gain = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.libraryId = const Value.absent(),
     this.relativePath = const Value.absent(),
@@ -2788,8 +2743,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Expression<String>? filePath,
     Expression<int>? type,
     Expression<int>? color,
-    Expression<double>? volume,
-    Expression<double>? loudnessGain,
+    Expression<double>? gain,
     Expression<DateTime>? createdAt,
     Expression<int>? libraryId,
     Expression<String>? relativePath,
@@ -2813,8 +2767,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       if (filePath != null) 'file_path': filePath,
       if (type != null) 'type': type,
       if (color != null) 'color': color,
-      if (volume != null) 'volume': volume,
-      if (loudnessGain != null) 'loudness_gain': loudnessGain,
+      if (gain != null) 'gain': gain,
       if (createdAt != null) 'created_at': createdAt,
       if (libraryId != null) 'library_id': libraryId,
       if (relativePath != null) 'relative_path': relativePath,
@@ -2841,8 +2794,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     Value<String>? filePath,
     Value<SoundType?>? type,
     Value<int?>? color,
-    Value<double>? volume,
-    Value<double?>? loudnessGain,
+    Value<double>? gain,
     Value<DateTime>? createdAt,
     Value<int?>? libraryId,
     Value<String?>? relativePath,
@@ -2866,8 +2818,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
       filePath: filePath ?? this.filePath,
       type: type ?? this.type,
       color: color ?? this.color,
-      volume: volume ?? this.volume,
-      loudnessGain: loudnessGain ?? this.loudnessGain,
+      gain: gain ?? this.gain,
       createdAt: createdAt ?? this.createdAt,
       libraryId: libraryId ?? this.libraryId,
       relativePath: relativePath ?? this.relativePath,
@@ -2910,11 +2861,8 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
     if (color.present) {
       map['color'] = Variable<int>(color.value);
     }
-    if (volume.present) {
-      map['volume'] = Variable<double>(volume.value);
-    }
-    if (loudnessGain.present) {
-      map['loudness_gain'] = Variable<double>(loudnessGain.value);
+    if (gain.present) {
+      map['gain'] = Variable<double>(gain.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -2975,8 +2923,7 @@ class SoundsCompanion extends UpdateCompanion<Sound> {
           ..write('filePath: $filePath, ')
           ..write('type: $type, ')
           ..write('color: $color, ')
-          ..write('volume: $volume, ')
-          ..write('loudnessGain: $loudnessGain, ')
+          ..write('gain: $gain, ')
           ..write('createdAt: $createdAt, ')
           ..write('libraryId: $libraryId, ')
           ..write('relativePath: $relativePath, ')
@@ -4468,15 +4415,6 @@ class $PadSoundsTable extends PadSounds
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
-  static const VerificationMeta _volumeMeta = const VerificationMeta('volume');
-  @override
-  late final GeneratedColumn<double> volume = GeneratedColumn<double>(
-    'volume',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
   static const VerificationMeta _addedAtMeta = const VerificationMeta(
     'addedAt',
   );
@@ -4490,13 +4428,7 @@ class $PadSoundsTable extends PadSounds
     defaultValue: currentDateAndTime,
   );
   @override
-  List<GeneratedColumn> get $columns => [
-    padId,
-    soundId,
-    sortOrder,
-    volume,
-    addedAt,
-  ];
+  List<GeneratedColumn> get $columns => [padId, soundId, sortOrder, addedAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -4531,12 +4463,6 @@ class $PadSoundsTable extends PadSounds
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
       );
     }
-    if (data.containsKey('volume')) {
-      context.handle(
-        _volumeMeta,
-        volume.isAcceptableOrUnknown(data['volume']!, _volumeMeta),
-      );
-    }
     if (data.containsKey('added_at')) {
       context.handle(
         _addedAtMeta,
@@ -4564,10 +4490,6 @@ class $PadSoundsTable extends PadSounds
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
-      volume: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}volume'],
-      ),
       addedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}added_at'],
@@ -4585,16 +4507,11 @@ class PadSound extends DataClass implements Insertable<PadSound> {
   final int padId;
   final int soundId;
   final int sortOrder;
-
-  /// Override de volume PROPRE à ce son dans CE pad. null = suivre le volume
-  /// par défaut du son (`sounds.volume`). Remplace l'ancien volume par pad.
-  final double? volume;
   final DateTime addedAt;
   const PadSound({
     required this.padId,
     required this.soundId,
     required this.sortOrder,
-    this.volume,
     required this.addedAt,
   });
   @override
@@ -4603,9 +4520,6 @@ class PadSound extends DataClass implements Insertable<PadSound> {
     map['pad_id'] = Variable<int>(padId);
     map['sound_id'] = Variable<int>(soundId);
     map['sort_order'] = Variable<int>(sortOrder);
-    if (!nullToAbsent || volume != null) {
-      map['volume'] = Variable<double>(volume);
-    }
     map['added_at'] = Variable<DateTime>(addedAt);
     return map;
   }
@@ -4615,9 +4529,6 @@ class PadSound extends DataClass implements Insertable<PadSound> {
       padId: Value(padId),
       soundId: Value(soundId),
       sortOrder: Value(sortOrder),
-      volume: volume == null && nullToAbsent
-          ? const Value.absent()
-          : Value(volume),
       addedAt: Value(addedAt),
     );
   }
@@ -4631,7 +4542,6 @@ class PadSound extends DataClass implements Insertable<PadSound> {
       padId: serializer.fromJson<int>(json['padId']),
       soundId: serializer.fromJson<int>(json['soundId']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
-      volume: serializer.fromJson<double?>(json['volume']),
       addedAt: serializer.fromJson<DateTime>(json['addedAt']),
     );
   }
@@ -4642,7 +4552,6 @@ class PadSound extends DataClass implements Insertable<PadSound> {
       'padId': serializer.toJson<int>(padId),
       'soundId': serializer.toJson<int>(soundId),
       'sortOrder': serializer.toJson<int>(sortOrder),
-      'volume': serializer.toJson<double?>(volume),
       'addedAt': serializer.toJson<DateTime>(addedAt),
     };
   }
@@ -4651,13 +4560,11 @@ class PadSound extends DataClass implements Insertable<PadSound> {
     int? padId,
     int? soundId,
     int? sortOrder,
-    Value<double?> volume = const Value.absent(),
     DateTime? addedAt,
   }) => PadSound(
     padId: padId ?? this.padId,
     soundId: soundId ?? this.soundId,
     sortOrder: sortOrder ?? this.sortOrder,
-    volume: volume.present ? volume.value : this.volume,
     addedAt: addedAt ?? this.addedAt,
   );
   PadSound copyWithCompanion(PadSoundsCompanion data) {
@@ -4665,7 +4572,6 @@ class PadSound extends DataClass implements Insertable<PadSound> {
       padId: data.padId.present ? data.padId.value : this.padId,
       soundId: data.soundId.present ? data.soundId.value : this.soundId,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
-      volume: data.volume.present ? data.volume.value : this.volume,
       addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
     );
   }
@@ -4676,14 +4582,13 @@ class PadSound extends DataClass implements Insertable<PadSound> {
           ..write('padId: $padId, ')
           ..write('soundId: $soundId, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('volume: $volume, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(padId, soundId, sortOrder, volume, addedAt);
+  int get hashCode => Object.hash(padId, soundId, sortOrder, addedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4691,7 +4596,6 @@ class PadSound extends DataClass implements Insertable<PadSound> {
           other.padId == this.padId &&
           other.soundId == this.soundId &&
           other.sortOrder == this.sortOrder &&
-          other.volume == this.volume &&
           other.addedAt == this.addedAt);
 }
 
@@ -4699,14 +4603,12 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
   final Value<int> padId;
   final Value<int> soundId;
   final Value<int> sortOrder;
-  final Value<double?> volume;
   final Value<DateTime> addedAt;
   final Value<int> rowid;
   const PadSoundsCompanion({
     this.padId = const Value.absent(),
     this.soundId = const Value.absent(),
     this.sortOrder = const Value.absent(),
-    this.volume = const Value.absent(),
     this.addedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -4714,7 +4616,6 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
     required int padId,
     required int soundId,
     this.sortOrder = const Value.absent(),
-    this.volume = const Value.absent(),
     this.addedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : padId = Value(padId),
@@ -4723,7 +4624,6 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
     Expression<int>? padId,
     Expression<int>? soundId,
     Expression<int>? sortOrder,
-    Expression<double>? volume,
     Expression<DateTime>? addedAt,
     Expression<int>? rowid,
   }) {
@@ -4731,7 +4631,6 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
       if (padId != null) 'pad_id': padId,
       if (soundId != null) 'sound_id': soundId,
       if (sortOrder != null) 'sort_order': sortOrder,
-      if (volume != null) 'volume': volume,
       if (addedAt != null) 'added_at': addedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -4741,7 +4640,6 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
     Value<int>? padId,
     Value<int>? soundId,
     Value<int>? sortOrder,
-    Value<double?>? volume,
     Value<DateTime>? addedAt,
     Value<int>? rowid,
   }) {
@@ -4749,7 +4647,6 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
       padId: padId ?? this.padId,
       soundId: soundId ?? this.soundId,
       sortOrder: sortOrder ?? this.sortOrder,
-      volume: volume ?? this.volume,
       addedAt: addedAt ?? this.addedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -4767,9 +4664,6 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
-    if (volume.present) {
-      map['volume'] = Variable<double>(volume.value);
-    }
     if (addedAt.present) {
       map['added_at'] = Variable<DateTime>(addedAt.value);
     }
@@ -4785,7 +4679,6 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
           ..write('padId: $padId, ')
           ..write('soundId: $soundId, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('volume: $volume, ')
           ..write('addedAt: $addedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -8311,8 +8204,7 @@ typedef $$SoundsTableCreateCompanionBuilder =
       required String filePath,
       Value<SoundType?> type,
       Value<int?> color,
-      Value<double> volume,
-      Value<double?> loudnessGain,
+      Value<double> gain,
       Value<DateTime> createdAt,
       Value<int?> libraryId,
       Value<String?> relativePath,
@@ -8337,8 +8229,7 @@ typedef $$SoundsTableUpdateCompanionBuilder =
       Value<String> filePath,
       Value<SoundType?> type,
       Value<int?> color,
-      Value<double> volume,
-      Value<double?> loudnessGain,
+      Value<double> gain,
       Value<DateTime> createdAt,
       Value<int?> libraryId,
       Value<String?> relativePath,
@@ -8491,13 +8382,8 @@ class $$SoundsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get volume => $composableBuilder(
-    column: $table.volume,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get loudnessGain => $composableBuilder(
-    column: $table.loudnessGain,
+  ColumnFilters<double> get gain => $composableBuilder(
+    column: $table.gain,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8727,13 +8613,8 @@ class $$SoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get volume => $composableBuilder(
-    column: $table.volume,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get loudnessGain => $composableBuilder(
-    column: $table.loudnessGain,
+  ColumnOrderings<double> get gain => $composableBuilder(
+    column: $table.gain,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -8878,13 +8759,8 @@ class $$SoundsTableAnnotationComposer
   GeneratedColumn<int> get color =>
       $composableBuilder(column: $table.color, builder: (column) => column);
 
-  GeneratedColumn<double> get volume =>
-      $composableBuilder(column: $table.volume, builder: (column) => column);
-
-  GeneratedColumn<double> get loudnessGain => $composableBuilder(
-    column: $table.loudnessGain,
-    builder: (column) => column,
-  );
+  GeneratedColumn<double> get gain =>
+      $composableBuilder(column: $table.gain, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -9107,8 +8983,7 @@ class $$SoundsTableTableManager
                 Value<String> filePath = const Value.absent(),
                 Value<SoundType?> type = const Value.absent(),
                 Value<int?> color = const Value.absent(),
-                Value<double> volume = const Value.absent(),
-                Value<double?> loudnessGain = const Value.absent(),
+                Value<double> gain = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> libraryId = const Value.absent(),
                 Value<String?> relativePath = const Value.absent(),
@@ -9131,8 +9006,7 @@ class $$SoundsTableTableManager
                 filePath: filePath,
                 type: type,
                 color: color,
-                volume: volume,
-                loudnessGain: loudnessGain,
+                gain: gain,
                 createdAt: createdAt,
                 libraryId: libraryId,
                 relativePath: relativePath,
@@ -9157,8 +9031,7 @@ class $$SoundsTableTableManager
                 required String filePath,
                 Value<SoundType?> type = const Value.absent(),
                 Value<int?> color = const Value.absent(),
-                Value<double> volume = const Value.absent(),
-                Value<double?> loudnessGain = const Value.absent(),
+                Value<double> gain = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int?> libraryId = const Value.absent(),
                 Value<String?> relativePath = const Value.absent(),
@@ -9181,8 +9054,7 @@ class $$SoundsTableTableManager
                 filePath: filePath,
                 type: type,
                 color: color,
-                volume: volume,
-                loudnessGain: loudnessGain,
+                gain: gain,
                 createdAt: createdAt,
                 libraryId: libraryId,
                 relativePath: relativePath,
@@ -10482,7 +10354,6 @@ typedef $$PadSoundsTableCreateCompanionBuilder =
       required int padId,
       required int soundId,
       Value<int> sortOrder,
-      Value<double?> volume,
       Value<DateTime> addedAt,
       Value<int> rowid,
     });
@@ -10491,7 +10362,6 @@ typedef $$PadSoundsTableUpdateCompanionBuilder =
       Value<int> padId,
       Value<int> soundId,
       Value<int> sortOrder,
-      Value<double?> volume,
       Value<DateTime> addedAt,
       Value<int> rowid,
     });
@@ -10547,11 +10417,6 @@ class $$PadSoundsTableFilterComposer
   });
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get volume => $composableBuilder(
-    column: $table.volume,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10621,11 +10486,6 @@ class $$PadSoundsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get volume => $composableBuilder(
-    column: $table.volume,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get addedAt => $composableBuilder(
     column: $table.addedAt,
     builder: (column) => ColumnOrderings(column),
@@ -10689,9 +10549,6 @@ class $$PadSoundsTableAnnotationComposer
   });
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
-
-  GeneratedColumn<double> get volume =>
-      $composableBuilder(column: $table.volume, builder: (column) => column);
 
   GeneratedColumn<DateTime> get addedAt =>
       $composableBuilder(column: $table.addedAt, builder: (column) => column);
@@ -10774,14 +10631,12 @@ class $$PadSoundsTableTableManager
                 Value<int> padId = const Value.absent(),
                 Value<int> soundId = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
-                Value<double?> volume = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PadSoundsCompanion(
                 padId: padId,
                 soundId: soundId,
                 sortOrder: sortOrder,
-                volume: volume,
                 addedAt: addedAt,
                 rowid: rowid,
               ),
@@ -10790,14 +10645,12 @@ class $$PadSoundsTableTableManager
                 required int padId,
                 required int soundId,
                 Value<int> sortOrder = const Value.absent(),
-                Value<double?> volume = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PadSoundsCompanion.insert(
                 padId: padId,
                 soundId: soundId,
                 sortOrder: sortOrder,
-                volume: volume,
                 addedAt: addedAt,
                 rowid: rowid,
               ),

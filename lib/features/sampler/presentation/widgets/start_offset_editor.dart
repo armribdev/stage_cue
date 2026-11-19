@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/audio/gain.dart';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/transport_icon.dart';
@@ -81,14 +82,15 @@ class StartOffsetEditor extends StatefulWidget {
   final SoundFormMemory? memory;
   final int initialOffsetMs;
 
-  /// Volume d'écoute (0.0 → 1.0) : celui du son, pour que l'audition du point
-  /// d'entrée soit au niveau réel. Relu à chaque lecture.
-  final double volume;
+  /// Gain d'écoute (facteur linéaire) : celui du formulaire, pas encore
+  /// enregistré, pour que l'audition du point d'entrée soit au niveau réel. Relu
+  /// à chaque lecture.
+  final double gain;
 
-  /// Volume tel que montré (suit [volume], en glissant quand il change d'un
+  /// Gain tel que montré, en dB (suit [gain], en glissant quand il change d'un
   /// coup) : la waveform en est l'échelle, en phase avec le curseur du
   /// formulaire.
-  final ValueListenable<double> displayVolume;
+  final ValueListenable<double> displayGainDb;
 
   /// Notifié à chaque changement de valeur (drag, nudge, reset).
   final ValueChanged<int> onChanged;
@@ -99,10 +101,6 @@ class StartOffsetEditor extends StatefulWidget {
   /// cours.
   final bool autoPlay;
 
-  /// Gain de sonie réglé dans le formulaire (pas encore enregistré) ; `null` =
-  /// celui du son.
-  final double? loudnessGain;
-
   const StartOffsetEditor({
     super.key,
     required this.soundId,
@@ -111,9 +109,8 @@ class StartOffsetEditor extends StatefulWidget {
     this.waveformPending = false,
     this.memory,
     required this.initialOffsetMs,
-    required this.volume,
-    this.loudnessGain,
-    required this.displayVolume,
+    required this.gain,
+    required this.displayGainDb,
     required this.onChanged,
     this.autoPlay = false,
   });
@@ -215,7 +212,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor>
   @override
   void didUpdateWidget(StartOffsetEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Le volume suit en direct : `SoundEditForm` le répercute sur le lecteur.
+    // Le gain suit en direct : `SoundEditForm` le répercute sur le lecteur.
     if (oldWidget.autoPlay && !widget.autoPlay && _isPreviewing) {
       _notifier?.stopLibraryPreview();
     }
@@ -385,8 +382,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor>
     final ok = await notifier.toggleLibraryPreview(
       widget.soundId,
       from: _playhead,
-      volume: widget.volume,
-      loudnessGain: widget.loudnessGain,
+      gain: widget.gain,
     );
     if (ok || !reportFailure || !mounted) return;
     // Refus de pré-écoute au casque (jamais avalé) ou son indisponible.
@@ -532,13 +528,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor>
   /// Sans effet si l'aperçu s'est arrêté entre-temps (fin de piste).
   void _commitPlayheadSeek() {
     if (!_isPreviewing) return;
-    unawaited(
-      _notifier?.seekLibraryPreview(
-        widget.soundId,
-        _playhead,
-        volume: widget.volume,
-      ),
-    );
+    unawaited(_notifier?.seekLibraryPreview(widget.soundId, _playhead));
   }
 
   @override
@@ -727,7 +717,7 @@ class _StartOffsetEditorState extends State<StartOffsetEditor>
                             painter: _OffsetWaveformPainter(
                               bars: _bars,
                               fromBars: _morphFrom,
-                              volume: widget.displayVolume,
+                              gainDb: widget.displayGainDb,
                               offsetFraction: offsetFraction,
                               playheadFraction: playheadFraction,
                               skippedColor: scheme.onSurfaceVariant.withValues(
@@ -906,8 +896,9 @@ class _NudgeButton extends StatelessWidget {
 class _OffsetWaveformPainter extends CustomPainter {
   final List<double> bars;
 
-  /// Échelle de l'enveloppe (volume montré), écoutée comme `reveal` et `pulse`.
-  final ValueListenable<double> volume;
+  /// Échelle de l'enveloppe (gain montré, en dB), écoutée comme `reveal` et
+  /// `pulse`.
+  final ValueListenable<double> gainDb;
   final double offsetFraction;
   final double playheadFraction;
   final Color skippedColor;
@@ -937,7 +928,7 @@ class _OffsetWaveformPainter extends CustomPainter {
     required this.bars,
     required this.fromBars,
     required this.settled,
-    required this.volume,
+    required this.gainDb,
     required this.offsetFraction,
     required this.playheadFraction,
     required this.skippedColor,
@@ -950,7 +941,7 @@ class _OffsetWaveformPainter extends CustomPainter {
     required this.ghostColor,
     required this.reveal,
     required this.pulse,
-  }) : super(repaint: Listenable.merge([reveal, pulse, volume]));
+  }) : super(repaint: Listenable.merge([reveal, pulse, gainDb]));
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -979,7 +970,9 @@ class _OffsetWaveformPainter extends CustomPainter {
       final count = WaveformEnvelope.pointCountFor(track);
       if (count > 0) {
         // L'enveloppe stockée est normalisée au pic : on la met à l'échelle du
-        // volume pour montrer le niveau réellement restitué.
+        // gain pour montrer le niveau restitué. Un relèvement ne dépasse pas la
+        // pleine hauteur de la piste : au-delà de 0 dB la waveform reste pleine.
+        final scale = dbToGain(gainDb.value).clamp(0.0, 1.0).toDouble();
         final to = bars.isEmpty ? null : WaveformEnvelope.resample(bars, count);
         final from = fromBars.isEmpty
             ? null
@@ -997,7 +990,7 @@ class _OffsetWaveformPainter extends CustomPainter {
                               i / count * (_kRevealSweep - 1))
                           .clamp(0.0, 1.0),
                     ),
-        ].map((amp) => amp * volume.value).toList();
+        ].map((amp) => amp * scale).toList();
         final path = WaveformEnvelope.buildPath(amps, trackSize);
         // Même enveloppe remplie deux fois, découpée au point d'entrée : grisée
         // avant (sautée à la lecture), colorée après.
@@ -1107,7 +1100,7 @@ class _OffsetWaveformPainter extends CustomPainter {
       old.bars != bars ||
       old.fromBars != fromBars ||
       old.settled != settled ||
-      old.volume != volume ||
+      old.gainDb != gainDb ||
       old.keptColor != keptColor ||
       old.handleHovered != handleHovered ||
       old.ghostFraction != ghostFraction ||

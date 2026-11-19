@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/audio/gain.dart';
 import '../../../../core/autotag/auto_tag_analysis.dart';
 import '../../../../core/autotag/auto_tag_status.dart';
 import '../../../../core/logging/app_log.dart';
@@ -20,12 +21,12 @@ import 'color_swatch_picker.dart';
 import 'sound_edit_preload.dart';
 import 'sound_tags_section.dart';
 import 'sound_type_selector.dart';
-import 'sound_volume_field.dart';
+import 'sound_gain_field.dart';
 import 'start_offset_editor.dart';
 import '../../../../core/theme/stroke_icon.dart';
 
 /// Formulaire d'édition d'un son de la bibliothèque (nom, type, couleur,
-/// volume, point d'entrée, tags).
+/// gain, point d'entrée, tags).
 ///
 /// Partagé par la page mobile ([SoundDetailsScreen]) et le volet de droite de
 /// l'écran de gestion en mode scindé : un seul jeu de règles de sauvegarde.
@@ -126,11 +127,14 @@ class _SoundEditFormState extends State<SoundEditForm>
   // Ne sert qu'à afficher la croix « effacer » tant que le titre est focus.
   late final FocusNode _nameFocus = FocusNode()..addListener(_onNameFocus);
   late int? _colorValue;
-  late double _volume;
 
-  /// Volume montré par le curseur et la waveform de l'éditeur (voir
-  /// [VolumeGlide]) ; `_volume` reste la valeur du formulaire.
-  late final VolumeGlide _volumeGlide;
+  /// Gain du formulaire (facteur linéaire, décision 0045) : le curseur et
+  /// « Auto » le fixent, « Enregistrer » l'écrit.
+  late double _gain;
+
+  /// Gain, en dB, montré par le curseur et la waveform de l'éditeur (voir
+  /// [GainGlide]) ; `_gain` reste la valeur du formulaire.
+  late final GainGlide _gainGlide;
   late int _startOffsetMs;
   late SoundType? _type;
   late Uint8List? _waveform;
@@ -142,13 +146,7 @@ class _SoundEditFormState extends State<SoundEditForm>
   // Baseline = dernier état enregistré (ou chargé) ; sert à calculer `dirty`.
   late String _baseDisplayName;
   late int? _baseColorValue;
-  late double _baseVolume;
-
-  /// Gain de sonie du volume « auto » (décision 0044) : facteur séparé du
-  /// curseur, que « Auto » fixe et que « Enregistrer » écrit. `null` = pas de
-  /// mesure (facteur 1.0).
-  late double? _loudnessGain;
-  late double? _baseLoudnessGain;
+  late double _baseGain;
   late int _baseStartOffsetMs;
   late SoundType? _baseType;
   Set<int> _baseTagIds = <int>{};
@@ -177,7 +175,7 @@ class _SoundEditFormState extends State<SoundEditForm>
   bool _tagsFailed = false;
   bool _isSaving = false;
   bool _isDeleting = false;
-  bool _isMeasuringVolume = false;
+  bool _isMeasuringGain = false;
   bool _wasDirty = false;
 
   /// Reflète `Sound.isProcessed`, passé à `true` dès le premier enregistrement
@@ -198,18 +196,18 @@ class _SoundEditFormState extends State<SoundEditForm>
     _displayName = _baseDisplayName = sound.displayName;
     _nameController = TextEditingController(text: _displayName);
     _colorValue = _baseColorValue = sound.colorValue;
-    _volume = _baseVolume = sound.volume.clamp(0.0, 1.0);
-    _loudnessGain = _baseLoudnessGain = sound.loudnessGain;
-    final volumeFrom = widget.sectionMemory?.volume;
-    widget.sectionMemory?.volume = _volume;
-    // Le curseur et la waveform partent du volume du formulaire précédent et
+    _gain = _baseGain = sound.gain;
+    final gainDb = gainToDb(_gain);
+    final gainDbFrom = widget.sectionMemory?.gainDb;
+    widget.sectionMemory?.gainDb = gainDb;
+    // Le curseur et la waveform partent du gain du formulaire précédent et
     // glissent vers celui de ce son.
-    _volumeGlide = VolumeGlide(vsync: this, initial: volumeFrom ?? _volume);
-    if (volumeFrom != null && volumeFrom != _volume) {
+    _gainGlide = GainGlide(vsync: this, initialDb: gainDbFrom ?? gainDb);
+    if (gainDbFrom != null && gainDbFrom != gainDb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _volumeGlide.glideTo(
-          _volume,
+        _gainGlide.glideTo(
+          gainDb,
           instant: MediaQuery.maybeOf(context)?.disableAnimations ?? false,
         );
       });
@@ -328,7 +326,7 @@ class _SoundEditFormState extends State<SoundEditForm>
     if (controller != null && controller._save == save) {
       controller._save = null;
     }
-    _volumeGlide.dispose();
+    _gainGlide.dispose();
     _nameController.dispose();
     _nameFocus.dispose();
     super.dispose();
@@ -367,8 +365,7 @@ class _SoundEditFormState extends State<SoundEditForm>
   bool get _isDirty =>
       _displayName.trim() != _baseDisplayName.trim() ||
       _colorValue != _baseColorValue ||
-      _volume != _baseVolume ||
-      _loudnessGain != _baseLoudnessGain ||
+      _gain != _baseGain ||
       _startOffsetMs != _baseStartOffsetMs ||
       _type != _baseType ||
       _tagIds.length != _baseTagIds.length ||
@@ -414,8 +411,7 @@ class _SoundEditFormState extends State<SoundEditForm>
         updateColor: true,
         displayName: name,
         updateDisplayName: true,
-        volume: _volume,
-        loudnessGain: _loudnessGain != _baseLoudnessGain ? _loudnessGain : null,
+        gain: _gain,
         startOffsetMs: _startOffsetMs,
         isProcessed: true,
       );
@@ -435,8 +431,7 @@ class _SoundEditFormState extends State<SoundEditForm>
         if (_nameController.text != name) _nameController.text = name;
         _baseDisplayName = name;
         _baseColorValue = _colorValue;
-        _baseVolume = _volume;
-        _baseLoudnessGain = _loudnessGain;
+        _baseGain = _gain;
         _baseStartOffsetMs = _startOffsetMs;
         _baseType = _type;
         _baseTagIds = {..._tagIds};
@@ -618,40 +613,42 @@ class _SoundEditFormState extends State<SoundEditForm>
     );
   }
 
-  /// Change le volume du formulaire et le répercute en direct sur l'aperçu
+  /// Change le gain du formulaire et le répercute en direct sur l'aperçu
   /// bibliothèque en cours : celui du lecteur unique, que l'éditeur de point
   /// d'entrée partage avec le bouton de ligne.
   ///
   /// [glide] : valeur posée d'un coup (« Auto »), que le curseur et la waveform
-  /// atteignent en glissant ; sinon c'est un geste sur le curseur, suivi sans
-  /// retard.
-  void _setVolume(double value, {bool glide = false}) {
-    final volume = value.clamp(0.0, 1.0);
-    _update(() => _volume = volume);
+  /// atteignent en glissant ; sinon c'est un geste sur le curseur (en dB), suivi
+  /// sans retard.
+  void _setGain(double gain, {bool glide = false}) {
+    final gainDb = gainToDb(gain);
+    _update(() => _gain = gain);
     if (glide) {
-      _volumeGlide.glideTo(
-        volume,
+      _gainGlide.glideTo(
+        gainDb,
         instant: MediaQuery.maybeOf(context)?.disableAnimations ?? false,
       );
     } else {
-      _volumeGlide.jumpTo(volume);
+      _gainGlide.jumpTo(gainDb);
     }
-    widget.sectionMemory?.volume = volume;
-    widget.notifier?.setLibraryPreviewVolume(widget.sound.id, volume);
+    widget.sectionMemory?.gainDb = gainDb;
+    widget.notifier?.setLibraryPreviewGain(widget.sound.id, gain);
   }
 
-  /// Volume « auto » : mesure la sonie et le pic du fichier, mémorise le gain de
-  /// sonie qui la ramène à la cible (relevé ou atténué, décision 0044) et remet
-  /// le curseur à 100 % : le gain est un facteur séparé, le curseur reste le
-  /// réglage de l'opérateur. N'enregistre rien — passe par `_update`, donc le
-  /// formulaire devient « modifié » et l'opérateur peut ajuster avant de valider.
-  Future<void> _applyAutoVolume() async {
-    if (_isMeasuringVolume) return;
+  /// Geste sur le curseur : [db] est l'échelle du curseur, `_gain` le facteur.
+  void _onGainSlider(double db) => _setGain(dbToGain(db));
+
+  /// Gain « auto » : mesure la sonie et le pic du fichier, et fixe le gain qui la
+  /// ramène à la cible (relevé ou atténué, décision 0044). N'enregistre rien —
+  /// passe par `_update`, donc le formulaire devient « modifié » et l'opérateur
+  /// peut ajuster avant de valider.
+  Future<void> _applyAutoGain() async {
+    if (_isMeasuringGain) return;
     final notifier = widget.notifier;
     if (notifier == null) return;
-    setState(() => _isMeasuringVolume = true);
+    setState(() => _isMeasuringGain = true);
     try {
-      final gain = await notifier.computeAutoLoudnessGain(widget.sound);
+      final gain = await notifier.computeAutoGain(widget.sound);
       if (!mounted) return;
       if (gain == null) {
         showCopyableSnackBar(
@@ -660,15 +657,12 @@ class _SoundEditFormState extends State<SoundEditForm>
         );
         return;
       }
-      _update(() => _loudnessGain = gain);
-      // Le gain d'abord : `_setVolume` rafraîchit ensuite les voix de l'aperçu.
-      notifier.setLibraryPreviewLoudnessGain(widget.sound.id, gain);
-      _setVolume(1.0, glide: true);
+      _setGain(gain, glide: true);
     } catch (error) {
       if (!mounted) return;
       showCopyableSnackBar(context, 'Échec de la mesure : $error');
     } finally {
-      if (mounted) setState(() => _isMeasuringVolume = false);
+      if (mounted) setState(() => _isMeasuringGain = false);
     }
   }
 
@@ -698,14 +692,12 @@ class _SoundEditFormState extends State<SoundEditForm>
                       ),
                     ),
                     _section(
-                      'Volume par défaut',
-                      SoundVolumeField(
-                        volume: _volumeGlide,
-                        onChanged: _setVolume,
-                        isMeasuring: _isMeasuringVolume,
-                        onAuto: widget.notifier != null
-                            ? _applyAutoVolume
-                            : null,
+                      'Gain',
+                      SoundGainField(
+                        gainDb: _gainGlide,
+                        onChanged: _onGainSlider,
+                        isMeasuring: _isMeasuringGain,
+                        onAuto: widget.notifier != null ? _applyAutoGain : null,
                       ),
                     ),
                     _section('Point d\'entrée', _buildStartOffset()),
@@ -898,9 +890,8 @@ class _SoundEditFormState extends State<SoundEditForm>
       waveformPending: _waveformPending,
       memory: widget.sectionMemory,
       initialOffsetMs: _startOffsetMs,
-      volume: _volume,
-      loudnessGain: _loudnessGain,
-      displayVolume: _volumeGlide,
+      gain: _gain,
+      displayGainDb: _gainGlide,
       autoPlay: widget.autoPlayEntryPoint,
       onChanged: (ms) => _update(() => _startOffsetMs = ms),
     );

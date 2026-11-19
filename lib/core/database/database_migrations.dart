@@ -38,7 +38,8 @@ extension _AppDatabaseMigrations on AppDatabase {
     }
     if (from < 5) {
       await m.addColumn(sounds, sounds.color);
-      await m.addColumn(sounds, sounds.volume);
+      // `volume` s'ajoutait ici : la v50 l'a fondue dans `gain`, et un son d'avant
+      // la v5 n'avait de toute façon aucun volume réglé (défaut 1.0).
     }
     if (from < 6) {
       // Colonne NOT NULL depuis v40 : SQLite refuse un ADD COLUMN NOT NULL
@@ -150,20 +151,17 @@ extension _AppDatabaseMigrations on AppDatabase {
       // Règle : null = type inconnu (son Drive jamais téléchargé ou probe
       // raté) ; valeur non-null = type connu (probe réussi ou choix user).
       await m.alterTable(
-        TableMigration(
-          sounds,
-          columnTransformer: {
-            sounds.type: const CustomExpression<int>(
-              'CASE WHEN type_detected = 0 AND type_manually_set = 0'
-              ' THEN NULL ELSE type END',
-            ),
-            // `display_name` est NOT NULL depuis v40 : la copie vers la
-            // nouvelle table ne doit pas échouer sur un nom null/vide.
-            sounds.displayName: const CustomExpression<String>(
-              "COALESCE(NULLIF(TRIM(display_name), ''), title)",
-            ),
-          },
-        ),
+        await _soundsRecreation({
+          sounds.type: const CustomExpression<int>(
+            'CASE WHEN type_detected = 0 AND type_manually_set = 0'
+            ' THEN NULL ELSE type END',
+          ),
+          // `display_name` est NOT NULL depuis v40 : la copie vers la
+          // nouvelle table ne doit pas échouer sur un nom null/vide.
+          sounds.displayName: const CustomExpression<String>(
+            "COALESCE(NULLIF(TRIM(display_name), ''), title)",
+          ),
+        }),
       );
     }
     if (from < 24) {
@@ -261,25 +259,11 @@ extension _AppDatabaseMigrations on AppDatabase {
       await m.addColumn(sounds, sounds.waveformProbeGeneration);
     }
     if (from < 34) {
-      // Le volume passe du pad au couple (pad, son) : chaque son d'un pad a
-      // désormais son propre volume (override), au lieu d'un volume unique
-      // pour tout le pad. Backfill : chaque pad_sound hérite du volume actuel
-      // de son pad pour préserver le rendu audio existant ; null = suivre le
-      // volume par défaut du son. On garde-fou les deux étapes car un upgrade
-      // depuis < 10 crée déjà les tables au schéma courant (colonne présente,
-      // volume du pad absent).
-      if (!await _columnExists('pad_sounds', 'volume')) {
-        await m.addColumn(
-          padSounds,
-          padSounds.volume as GeneratedColumn<Object>,
-        );
-      }
+      // Le volume quittait le pad pour le couple (pad, son) ; la v50 a supprimé
+      // tout volume par son, donc il n'y a plus rien à y reporter : on retire
+      // seulement la colonne `volume` du pad (recréation de table SQLite). Gardé :
+      // un upgrade depuis < 10 crée déjà `pads` au schéma courant.
       if (await _columnExists('pads', 'volume')) {
-        await customStatement(
-          'UPDATE pad_sounds SET volume = '
-          '(SELECT p.volume FROM pads p WHERE p.id = pad_sounds.pad_id)',
-        );
-        // Supprime la colonne volume de pads (recréation de table SQLite).
         await m.alterTable(TableMigration(pads));
       }
     }
@@ -348,14 +332,11 @@ extension _AppDatabaseMigrations on AppDatabase {
       // ni pad_sounds ni sound_tags. Si les clés étrangères étaient un jour
       // activées, revalider cette étape.
       await m.alterTable(
-        TableMigration(
-          sounds,
-          columnTransformer: {
-            sounds.displayName: const CustomExpression<String>(
-              "COALESCE(NULLIF(TRIM(display_name), ''), title)",
-            ),
-          },
-        ),
+        await _soundsRecreation({
+          sounds.displayName: const CustomExpression<String>(
+            "COALESCE(NULLIF(TRIM(display_name), ''), title)",
+          ),
+        }),
       );
       // Index créé à la main (pas déclaré sur la table) : emporté par la
       // recréation, il faut le reposer.
@@ -434,16 +415,66 @@ extension _AppDatabaseMigrations on AppDatabase {
       // Les deux appels ci-dessus sont `reconcileTagCatalog`, coupé en deux par
       // `_ensureExtraTags` qui doit passer entre.
     }
-    if (from < 49) {
-      // Gain de sonie du volume « auto », séparé de `volume` (décision 0044).
-      // Null pour tous : aucun son existant ne change de niveau tout seul (null
-      // = facteur 1.0) ; le recalcul en masse le renseigne. Même garde que plus
-      // haut : un upgrade depuis < 40 passe par `alterTable`, qui recrée
-      // `sounds` au schéma courant — colonne déjà présente.
-      if (!await _columnExists('sounds', 'loudness_gain')) {
-        await m.addColumn(sounds, sounds.loudnessGain);
+    // v49 ajoutait `sounds.loudness_gain` (décision 0044) : la v50 la fond dans
+    // `gain`, donc un upgrade qui traverse les deux n'a rien à créer ici.
+    if (from < 50) {
+      // Un seul niveau par son (décision 0045) : `gain` remplace `volume` (0–1,
+      // réglage de l'utilisateur) et `loudness_gain` (gain auto, v49) —
+      // gain = volume × loudness_gain, donc chaque son garde exactement son
+      // niveau d'avant. Les volumes propres à un son dans un pad
+      // (`pad_sounds.volume`) disparaissent : le son y suit le gain de la
+      // bibliothèque. Chaque étape est gardée : un upgrade depuis < 40 passe par
+      // `alterTable`, qui recrée `sounds` au schéma courant (voir
+      // `_soundsRecreation`), et SQLite refuse un DROP COLUMN sur une colonne
+      // absente.
+      if (!await _columnExists('sounds', 'gain')) {
+        await m.addColumn(sounds, sounds.gain);
+      }
+      final hasVolume = await _columnExists('sounds', 'volume');
+      final hasLoudnessGain = await _columnExists('sounds', 'loudness_gain');
+      if (hasVolume) {
+        await customStatement(
+          'UPDATE sounds SET gain = volume'
+          '${hasLoudnessGain ? ' * COALESCE(loudness_gain, 1.0)' : ''}',
+        );
+        await customStatement('ALTER TABLE sounds DROP COLUMN volume');
+      }
+      if (hasLoudnessGain) {
+        await customStatement('ALTER TABLE sounds DROP COLUMN loudness_gain');
+      }
+      if (await _columnExists('pad_sounds', 'volume')) {
+        await customStatement('ALTER TABLE pad_sounds DROP COLUMN volume');
       }
     }
+  }
+
+  /// `TableMigration` de `sounds` pour une étape ancienne qui la recrée (v23,
+  /// v40). La table courante déclare `gain` (v50), que l'ancienne n'a pas
+  /// encore : sans lui la copie échouerait. Il est calculé depuis `volume` (×
+  /// `loudness_gain` s'il existe) pour que le niveau des sons survive à la
+  /// recréation ; sans `volume` (avant v5), `gain` prend son défaut. Si `gain`
+  /// existe déjà, la copie par nom suffit.
+  Future<TableMigration> _soundsRecreation(
+    Map<GeneratedColumn, Expression> transformer,
+  ) async {
+    if (await _columnExists('sounds', 'gain')) {
+      return TableMigration(sounds, columnTransformer: transformer);
+    }
+    final hasVolume = await _columnExists('sounds', 'volume');
+    final hasLoudnessGain = await _columnExists('sounds', 'loudness_gain');
+    return TableMigration(
+      sounds,
+      columnTransformer: {
+        ...transformer,
+        if (hasVolume)
+          sounds.gain: CustomExpression<double>(
+            hasLoudnessGain
+                ? 'volume * COALESCE(loudness_gain, 1.0)'
+                : 'volume',
+          ),
+      },
+      newColumns: [sounds.gain],
+    );
   }
 
   /// Vrai si la colonne [column] existe déjà sur la table [table] (PRAGMA).
@@ -494,7 +525,7 @@ extension _AppDatabaseMigrations on AppDatabase {
     // Migrer board_sounds + board_sound_settings → pads + pad_sounds
     final rows = await customSelect('''
       SELECT bs.board_id, bs.sound_id, bs.sort_order,
-             bss.display_name, bss.color, bss.volume
+             bss.display_name, bss.color
       FROM board_sounds bs
       LEFT JOIN board_sound_settings bss
         ON bss.board_id = bs.board_id AND bss.sound_id = bs.sound_id
@@ -510,12 +541,10 @@ extension _AppDatabaseMigrations on AppDatabase {
           sortOrder: Value(row.read<int>('sort_order')),
         ),
       );
-      // Le volume vit désormais sur le couple (pad, son) et non sur le pad.
       await into(padSounds).insert(
         PadSoundsCompanion.insert(
           padId: padId,
           soundId: row.read<int>('sound_id'),
-          volume: Value(row.read<double?>('volume')),
         ),
       );
     }
