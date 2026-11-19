@@ -152,10 +152,18 @@ class _KeyboardPadsViewState extends State<KeyboardPadsView> {
         );
         final keyboard = SingleChildScrollView(
           padding: padding,
-          child: Center(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [for (final row in kAzertyRows) _buildRow(row, unit)],
+          // Dans un défilement la hauteur n'est pas bornée : sans hauteur
+          // minimale, `Center` ne centrerait que horizontalement.
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: math.max(0, constraints.maxHeight - padding.vertical),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [for (final row in kAzertyRows) _buildRow(row, unit)],
+              ),
             ),
           ),
         );

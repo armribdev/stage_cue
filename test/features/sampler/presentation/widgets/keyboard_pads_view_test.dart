@@ -301,5 +301,30 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('ASSIGNER À Z'), findsNothing);
     });
+
+    testWidgets('le clavier est centré verticalement dans la vue', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        host(
+          pads: [_pad(1, 'Tonnerre')],
+          hotkeys: {1: _key('a')},
+          onTap: (_) {},
+        ),
+      );
+
+      // Cellules de la 1re rangée (« & ») et de la barre d'espace (« ␣ »).
+      Rect cell(String label) => tester.getRect(
+        find
+            .ancestor(of: find.text(label), matching: find.byType(SizedBox))
+            .first,
+      );
+      final view = tester.getRect(find.byType(KeyboardPadsView));
+      final topMargin = cell('&').top - view.top;
+      final bottomMargin = view.bottom - cell('␣').bottom;
+
+      expect(topMargin, greaterThan(40));
+      expect(topMargin, closeTo(bottomMargin, 1));
+    });
   });
 }
