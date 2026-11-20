@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -57,6 +59,27 @@ void main() {
 
     verifyNever(() => installer.downloadInstaller(any()));
     verifyNever(() => installer.launchInstallerSilently(any()));
+  });
+
+  testWidgets('s\'ouvre depuis le contexte de la navigatorKey (état de '
+      'SoundboardApp, au-dessus du MaterialApp)', (tester) async {
+    final navigatorKey = GlobalKey<NavigatorState>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigatorKey,
+        theme: AppTheme.darkTheme,
+        builder: (context, child) => AppToastHost(child: child!),
+        home: const Scaffold(body: SizedBox()),
+      ),
+    );
+
+    unawaited(runUpdateFlow(navigatorKey.currentContext!, info));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mise à jour disponible'), findsOneWidget);
+    await tester.tap(find.text('Plus tard'));
+    await tester.pumpAndSettle();
   });
 
   Widget host(AppUpdateInstaller installer, Future<void> Function() quitApp) =>

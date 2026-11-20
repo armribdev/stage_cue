@@ -50,6 +50,11 @@ class _SoundboardAppState extends State<SoundboardApp>
     with WindowListener, WidgetsBindingObserver {
   static bool get _isWindowsDesktop => !kIsWeb && Platform.isWindows;
 
+  /// Le `context` de ce State est **au-dessus** du `MaterialApp`, donc sans
+  /// Navigator : un dialogue ouvert depuis lui lève « Null check operator ».
+  /// Le contexte du Navigator, lui, est valide pour `showAppDialog`.
+  final _navigatorKey = GlobalKey<NavigatorState>();
+
   /// Bornes de la fenêtre avant passage en plein écran — `null` hors plein
   /// écran. Sert à restaurer taille/position exactes à la sortie.
   Rect? _boundsBeforeFullScreen;
@@ -154,7 +159,18 @@ class _SoundboardAppState extends State<SoundboardApp>
       'Version ${info.version} disponible',
       action: AppToastAction(
         label: 'Mettre à jour',
-        onPressed: () => unawaited(runUpdateFlow(context, info)),
+        onPressed: () {
+          final navigatorContext = _navigatorKey.currentContext;
+          if (navigatorContext == null) {
+            UpdateLog.warn(
+              'Mise à jour ${info.version} demandée mais aucun Navigator '
+              'disponible — dialogue non ouvert.',
+            );
+            return;
+          }
+          UpdateLog.info('Mise à jour ${info.version} demandée.');
+          unawaited(runUpdateFlow(navigatorContext, info));
+        },
       ),
       duration: const Duration(seconds: 10),
     );
@@ -432,6 +448,7 @@ class _SoundboardAppState extends State<SoundboardApp>
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Stage Cue - Soundboard',
       theme: AppTheme.darkTheme,
       builder: (context, child) {
