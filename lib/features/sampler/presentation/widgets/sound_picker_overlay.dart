@@ -298,7 +298,6 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   // ── Navigation clavier ────────────────────────────────────────────────────
   int _selectedIndex = 0;
-  int? _hoveredIndex;
 
   // ── Mode gestion (volet d'édition) ────────────────────────────────────────
   Sound? _editingSound;

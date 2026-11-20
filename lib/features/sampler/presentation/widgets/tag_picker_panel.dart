@@ -338,6 +338,9 @@ class _TagPickerPanelState extends State<TagPickerPanel> {
                             color:
                                 widget.categoryColors[filtered[i].categoryId],
                             active: i == _active,
+                            onHover: () {
+                              if (_active != i) setState(() => _active = i);
+                            },
                             onTap: () => _select(filtered[i]),
                           ),
                       ],
@@ -390,6 +393,10 @@ class _TagRow extends StatefulWidget {
 
   /// Ligne que validerait Entrée.
   final bool active;
+
+  /// Mouvement réel de la souris sur la ligne : elle devient la ligne active,
+  /// pour qu'il n'y ait jamais deux surbrillances (survol + clavier).
+  final VoidCallback onHover;
   final VoidCallback onTap;
 
   const _TagRow({
@@ -397,6 +404,7 @@ class _TagRow extends StatefulWidget {
     required this.tag,
     required this.color,
     required this.active,
+    required this.onHover,
     required this.onTap,
   });
 
@@ -405,8 +413,6 @@ class _TagRow extends StatefulWidget {
 }
 
 class _TagRowState extends State<_TagRow> {
-  bool _hovered = false;
-
   @override
   void didUpdateWidget(_TagRow oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -432,11 +438,11 @@ class _TagRowState extends State<_TagRow> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final highlighted = widget.active || _hovered;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      // `onHover` (mouvement) et non `onEnter` : une ligne qui défile sous une
+      // souris immobile (flèches) ne doit pas voler la sélection.
+      onHover: (_) => widget.onHover(),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
@@ -444,11 +450,7 @@ class _TagRowState extends State<_TagRow> {
           margin: const EdgeInsets.symmetric(horizontal: 4),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
           decoration: BoxDecoration(
-            color: widget.active
-                ? AppColors.accentSoft
-                : (highlighted
-                      ? scheme.onSurface.withAlpha(12)
-                      : Colors.transparent),
+            color: widget.active ? AppColors.accentSoft : Colors.transparent,
             borderRadius: AppRadius.radiusSm,
           ),
           child: Row(
@@ -462,7 +464,7 @@ class _TagRowState extends State<_TagRow> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
-                    color: highlighted
+                    color: widget.active
                         ? scheme.onSurface
                         : scheme.onSurface.withAlpha(214),
                   ),

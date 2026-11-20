@@ -151,65 +151,61 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
     return Material(
       key: _itemKey(index),
       color: bgColor ?? Colors.transparent,
-      child: InkWell(
-        canRequestFocus: false,
-        onTap: () {
-          setState(() => _selectedIndex = index);
-          switch (widget.mode) {
-            case QuickSearchMode():
-              // Mode Spectacle : un clic ne fait que sélectionner (un clic de
-              // trop ne doit pas sortir en salle) ; Entrée joue la sélection.
-              if (!widget.notifier.isLiveSessionActive) {
-                unawaited(_playQuickSearchSound(sound));
-              }
-            case MusicPickerMode(playNow: true):
-              unawaited(_playMusicNow(sound));
-            case MusicPickerMode():
-              unawaited(_enqueueMusic(sound));
-            case AmbiancePickerMode():
-              unawaited(_playAmbianceNow(sound));
-            case PadPickerMode():
-              unawaited(_togglePadSound(sound));
-            case LibraryMode():
-              unawaited(_prepareAndClose(sound));
-            case ManageMode():
-              unawaited(_handleManageTap(sound));
-            case PadVariantMode(padItem: final padItem):
-              _playPadVariant(padItem, index);
-          }
-        },
-        child: Container(
-          // Accent de 2 px sur les sons à traiter (transparent sinon, pour ne
-          // pas décaler les lignes) : se repère d'un coup d'œil en défilant.
-          decoration: BoxDecoration(
-            border: Border(
-              left: BorderSide(
-                width: 2,
-                color: _isManage && !sound.isProcessed
-                    ? scheme.primary
-                    : Colors.transparent,
+      child: _hoverSelectable(
+        index,
+        InkWell(
+          canRequestFocus: false,
+          hoverColor: _hoverMovesSelection ? Colors.transparent : null,
+          onTap: () {
+            setState(() => _selectedIndex = index);
+            switch (widget.mode) {
+              case QuickSearchMode():
+                // Mode Spectacle : un clic ne fait que sélectionner (un clic de
+                // trop ne doit pas sortir en salle) ; Entrée joue la sélection.
+                if (!widget.notifier.isLiveSessionActive) {
+                  unawaited(_playQuickSearchSound(sound));
+                }
+              case MusicPickerMode(playNow: true):
+                unawaited(_playMusicNow(sound));
+              case MusicPickerMode():
+                unawaited(_enqueueMusic(sound));
+              case AmbiancePickerMode():
+                unawaited(_playAmbianceNow(sound));
+              case PadPickerMode():
+                unawaited(_togglePadSound(sound));
+              case LibraryMode():
+                unawaited(_prepareAndClose(sound));
+              case ManageMode():
+                unawaited(_handleManageTap(sound));
+              case PadVariantMode(padItem: final padItem):
+                _playPadVariant(padItem, index);
+            }
+          },
+          child: Container(
+            // Accent de 2 px sur les sons à traiter (transparent sinon, pour ne
+            // pas décaler les lignes) : se repère d'un coup d'œil en défilant.
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  width: 2,
+                  color: _isManage && !sound.isProcessed
+                      ? scheme.primary
+                      : Colors.transparent,
+                ),
               ),
             ),
-          ),
-          padding: const EdgeInsets.fromLTRB(14, 0, 16, 0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SoundTypeAvatar(
-                type: sound.type,
-                colorValue: sound.colorValue,
-                radius: 14,
-                iconSize: 16,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: MouseRegion(
-                  onEnter: (_) => setState(() => _hoveredIndex = index),
-                  onExit: (_) {
-                    if (_hoveredIndex == index) {
-                      setState(() => _hoveredIndex = null);
-                    }
-                  },
+            padding: const EdgeInsets.fromLTRB(14, 0, 16, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SoundTypeAvatar(
+                  type: sound.type,
+                  colorValue: sound.colorValue,
+                  radius: 14,
+                  iconSize: 16,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -218,7 +214,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                         children: [
                           Flexible(
                             child: ScrollingTextSpan(
-                              animate: isSelected || _hoveredIndex == index,
+                              animate: isSelected,
                               span: buildHighlightedSpan(
                                 sound.displayName,
                                 _highlightTokens,
@@ -252,22 +248,40 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              _buildTrailing(
-                sound,
-                scheme,
-                onAir: onAir,
-                queued: queued,
-                onPad: onPad,
-                inBoard: inBoard,
-                isCurrentVariant: isCurrentVariant,
-                index: index,
-              ),
-            ],
+                const SizedBox(width: 8),
+                _buildTrailing(
+                  sound,
+                  scheme,
+                  onAir: onAir,
+                  queued: queued,
+                  onPad: onPad,
+                  inBoard: inBoard,
+                  isCurrentVariant: isCurrentVariant,
+                  index: index,
+                ),
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  /// `true` quand un mouvement de souris déplace la sélection : le survol et la
+  /// sélection clavier ne forment alors qu'une seule surbrillance. Pas en Mode
+  /// Spectacle, où un coup de souris involontaire ne doit pas changer la ligne
+  /// que jouerait Entrée (le survol reste alors celui, discret, du thème).
+  bool get _hoverMovesSelection => !widget.notifier.isLiveSessionActive;
+
+  /// `onHover` (mouvement) et non `onEnter` : une ligne qui défile sous une
+  /// souris immobile (flèches) ne doit pas voler la sélection.
+  Widget _hoverSelectable(int index, Widget child) {
+    if (!_hoverMovesSelection) return child;
+    return MouseRegion(
+      onHover: (_) {
+        if (_selectedIndex != index) setState(() => _selectedIndex = index);
+      },
+      child: child,
     );
   }
 
@@ -295,46 +309,42 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
           : isSelected
           ? scheme.primary.withValues(alpha: 0.10)
           : Colors.transparent,
-      child: InkWell(
-        canRequestFocus: false,
-        onTap: () {
-          setState(() => _selectedIndex = index);
-          if (_isQuickSearch && widget.notifier.isLiveSessionActive) return;
-          unawaited(_activateSavedMultipad(saved));
-        },
-        child: Container(
-          // Même gabarit que la ligne d'un son (filet de 2 px compris) : les
-          // avatars restent alignés d'une ligne à l'autre.
-          decoration: const BoxDecoration(
-            border: Border(
-              left: BorderSide(width: 2, color: Colors.transparent),
-            ),
-          ),
-          padding: const EdgeInsets.fromLTRB(14, 0, 16, 0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SoundTypeAvatar(
-                type: saved.commonType,
-                colorValue: saved.colorValue,
-                radius: 14,
-                iconSize: 16,
+      child: _hoverSelectable(
+        index,
+        InkWell(
+          canRequestFocus: false,
+          hoverColor: _hoverMovesSelection ? Colors.transparent : null,
+          onTap: () {
+            setState(() => _selectedIndex = index);
+            if (_isQuickSearch && widget.notifier.isLiveSessionActive) return;
+            unawaited(_activateSavedMultipad(saved));
+          },
+          child: Container(
+            // Même gabarit que la ligne d'un son (filet de 2 px compris) : les
+            // avatars restent alignés d'une ligne à l'autre.
+            decoration: const BoxDecoration(
+              border: Border(
+                left: BorderSide(width: 2, color: Colors.transparent),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: MouseRegion(
-                  onEnter: (_) => setState(() => _hoveredIndex = index),
-                  onExit: (_) {
-                    if (_hoveredIndex == index) {
-                      setState(() => _hoveredIndex = null);
-                    }
-                  },
+            ),
+            padding: const EdgeInsets.fromLTRB(14, 0, 16, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SoundTypeAvatar(
+                  type: saved.commonType,
+                  colorValue: saved.colorValue,
+                  radius: 14,
+                  iconSize: 16,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       ScrollingTextSpan(
-                        animate: isSelected || _hoveredIndex == index,
+                        animate: isSelected,
                         span: buildHighlightedSpan(
                           saved.name,
                           _highlightTokens,
@@ -354,31 +364,32 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              // Aperçu comme pour un son (sauf modèle vide, ou Mode Spectacle
-              // sans casque : il sortirait en salle).
-              if (!isEmpty && !widget.notifier.isRoomPreviewBlockedInLive) ...[
-                _buildPreviewButton(
-                  scheme,
-                  isPlaying: widget.notifier.savedMultipadPreviewIsPlaying(
-                    saved,
+                const SizedBox(width: 8),
+                // Aperçu comme pour un son (sauf modèle vide, ou Mode Spectacle
+                // sans casque : il sortirait en salle).
+                if (!isEmpty &&
+                    !widget.notifier.isRoomPreviewBlockedInLive) ...[
+                  _buildPreviewButton(
+                    scheme,
+                    isPlaying: widget.notifier.savedMultipadPreviewIsPlaying(
+                      saved,
+                    ),
+                    onPressed: () =>
+                        unawaited(_toggleSavedMultipadPreview(saved)),
                   ),
-                  onPressed: () =>
-                      unawaited(_toggleSavedMultipadPreview(saved)),
-                ),
-                const SizedBox(width: 4),
+                  const SizedBox(width: 4),
+                ],
+                // En gestion, comme un son : pas d'action en fin de ligne (la
+                // suppression est dans le volet d'édition).
+                if (!_isManage)
+                  _roundIconButton(
+                    scheme: scheme,
+                    icon: AppIcons.layers,
+                    iconColor: scheme.primary,
+                    onPressed: () => unawaited(_placeSavedMultipad(saved)),
+                  ),
               ],
-              // En gestion, comme un son : pas d'action en fin de ligne (la
-              // suppression est dans le volet d'édition).
-              if (!_isManage)
-                _roundIconButton(
-                  scheme: scheme,
-                  icon: AppIcons.layers,
-                  iconColor: scheme.primary,
-                  onPressed: () => unawaited(_placeSavedMultipad(saved)),
-                ),
-            ],
+            ),
           ),
         ),
       ),
