@@ -70,7 +70,6 @@ class AppPreferences extends ChangeNotifier {
   static const _keyConnectivityMode = 'connectivity_mode';
   static const _keyCueOutputDeviceId = 'cue_output_device_id';
   static const _keyWindowsFullScreen = 'windows_full_screen';
-  static const _keyLastUpdateCheckAt = 'last_update_check_at';
   static const _keyPadHotkeys = 'pad_hotkeys';
   static const _keyBoardView = 'board_view';
 
@@ -79,7 +78,6 @@ class AppPreferences extends ChangeNotifier {
   ConnectivityMode _connectivityMode = ConnectivityMode.offline;
   String? _cueOutputDeviceId;
   bool _isWindowsFullScreen = false;
-  DateTime? _lastUpdateCheckAt;
   // padId (local, cet appareil) → LogicalKeyboardKey.keyId. Volontairement
   // local-only (jamais dans le snapshot Drive, cf. décision projet) : un id
   // de pad n'est stable que tant qu'aucune synchro ne réimporte son board
@@ -110,11 +108,6 @@ class AppPreferences extends ChangeNotifier {
   /// l'observe et met la fenêtre en conformité (réglage Paramètres, F11), puis
   /// le rétablit à la réouverture de l'app.
   bool get isWindowsFullScreen => _isWindowsFullScreen;
-
-  /// Horodatage du dernier check de mise à jour **automatique** (lancement) —
-  /// sert à le limiter à une fois toutes les 6h. Le bouton manuel de Réglages
-  /// ignore ce throttle.
-  DateTime? get lastUpdateCheckAt => _lastUpdateCheckAt;
 
   /// Touches clavier assignées, par id de pad LOCAL (cet appareil), jamais
   /// synchronisé — voir le commentaire sur [_padHotkeys].
@@ -151,10 +144,6 @@ class AppPreferences extends ChangeNotifier {
         );
         _cueOutputDeviceId = data[_keyCueOutputDeviceId] as String?;
         _isWindowsFullScreen = (data[_keyWindowsFullScreen] as bool?) ?? false;
-        final lastUpdateCheckRaw = data[_keyLastUpdateCheckAt] as String?;
-        _lastUpdateCheckAt = lastUpdateCheckRaw == null
-            ? null
-            : DateTime.tryParse(lastUpdateCheckRaw);
         _boardView = BoardView.fromStorageKey(data[_keyBoardView] as String?);
         final hotkeysRaw = data[_keyPadHotkeys] as Map<String, dynamic>?;
         if (hotkeysRaw != null) {
@@ -239,13 +228,6 @@ class AppPreferences extends ChangeNotifier {
     await _save();
   }
 
-  /// Marque l'instant du dernier check automatique — pas de notification, un
-  /// throttle n'a pas besoin de reconstruire l'UI.
-  Future<void> markUpdateCheckedNow() async {
-    _lastUpdateCheckAt = DateTime.now();
-    await _save();
-  }
-
   /// Bascule le mode sans persistance (tests unitaires).
   @visibleForTesting
   void debugSetConnectivityMode(ConnectivityMode value) {
@@ -283,7 +265,6 @@ class AppPreferences extends ChangeNotifier {
         _keyConnectivityMode: _connectivityMode.storageKey,
         _keyCueOutputDeviceId: _cueOutputDeviceId,
         _keyWindowsFullScreen: _isWindowsFullScreen,
-        _keyLastUpdateCheckAt: _lastUpdateCheckAt?.toIso8601String(),
         _keyBoardView: _boardView.name,
         _keyPadHotkeys: {
           for (final entry in _padHotkeys.entries)

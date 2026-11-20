@@ -25,7 +25,7 @@ class AppUpdateChecker {
   Future<AppUpdateInfo?> checkForUpdate({
     required String currentVersion,
   }) async {
-    UpdateLog.checkStarted();
+    UpdateLog.checkStarted(currentVersion);
     final client = _http;
     final response = client == null
         ? await http.get(
@@ -50,7 +50,10 @@ class AppUpdateChecker {
         : tagName;
 
     if (!isNewerVersion(remoteVersion, currentVersion)) {
-      UpdateLog.upToDate(currentVersion);
+      UpdateLog.upToDate(
+        currentVersion: currentVersion,
+        latestVersion: remoteVersion,
+      );
       return null;
     }
 

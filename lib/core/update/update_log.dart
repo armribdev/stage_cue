@@ -18,10 +18,16 @@ class UpdateLog {
 
   static void warn(String message) => _emit(message, LogLevel.warn, level: 900);
 
-  static void checkStarted() => info('Vérification de mise à jour…');
+  static void checkStarted(String currentVersion) =>
+      info('Vérification de mise à jour (version installée $currentVersion)…');
 
-  static void upToDate(String currentVersion) =>
-      info('Déjà à jour (version $currentVersion).');
+  static void upToDate({
+    required String currentVersion,
+    required String latestVersion,
+  }) => info(
+    'Déjà à jour (installée $currentVersion, dernière release '
+    '$latestVersion).',
+  );
 
   static void newVersionFound({
     required String version,

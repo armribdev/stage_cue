@@ -91,6 +91,10 @@ class _SoundboardAppState extends State<SoundboardApp>
       // Pas de check update tant que l'audio est mort : on priorise le retry.
       if (_audioEngineError == null) {
         unawaited(_maybeCheckForUpdateOnLaunch());
+      } else {
+        UpdateLog.info(
+          'Vérification de mise à jour reportée : moteur audio HS.',
+        );
       }
     }
   }
@@ -118,24 +122,11 @@ class _SoundboardAppState extends State<SoundboardApp>
     }
   }
 
-  /// Limite le check automatique à une fois toutes les 6h (le bouton manuel
-  /// de Réglages l'ignore). Ne fait jamais qu'informer — jamais de
-  /// téléchargement ni d'installation sans clic explicite sur l'action du
-  /// toast (voir [runUpdateFlow]).
-  static const _updateCheckThrottle = Duration(hours: 6);
-
+  /// Vérifie la dernière release à chaque lancement (un seul appel GitHub). Ne
+  /// fait jamais qu'informer — jamais de téléchargement ni d'installation sans
+  /// clic explicite sur l'action du toast (voir [runUpdateFlow]).
   Future<void> _maybeCheckForUpdateOnLaunch() async {
-    // Avant le throttle : l'issue d'une installation doit être journalisée même
-    // si le dernier check date de moins de 6 h.
     unawaited(AppUpdateInstaller().reportPreviousInstall());
-
-    final prefs = widget.services.appPreferences;
-    final lastCheck = prefs.lastUpdateCheckAt;
-    if (lastCheck != null &&
-        DateTime.now().difference(lastCheck) < _updateCheckThrottle) {
-      return;
-    }
-    await prefs.markUpdateCheckedNow();
 
     AppUpdateInfo? update;
     try {
@@ -148,8 +139,16 @@ class _SoundboardAppState extends State<SoundboardApp>
       return;
     }
 
-    if (update == null || !mounted) return;
+    if (update == null) return;
+    if (!mounted) {
+      UpdateLog.warn(
+        'Version ${update.version} disponible mais l\'app n\'est plus affichée '
+        '— notification abandonnée.',
+      );
+      return;
+    }
     final info = update;
+    UpdateLog.info('Notification de la version ${info.version} affichée.');
     AppSnackBar.show(
       context,
       'Version ${info.version} disponible',
