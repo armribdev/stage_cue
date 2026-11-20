@@ -4,14 +4,17 @@ import 'package:flutter/material.dart';
 import '../../../../core/settings/app_preferences.dart';
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/layout_utils.dart';
 import '../widgets/animated_pill_wrap.dart';
+import '../widgets/app_form_dialog.dart';
 import '../widgets/app_modal.dart';
 import '../widgets/color_swatch_picker.dart';
 import '../../domain/entities/pad.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
 import '../widgets/pad_hotkey_field.dart';
+import '../widgets/pad_play_mode_selector.dart';
 import '../widgets/pad_sound_row.dart';
 import '../widgets/sound_picker_overlay.dart';
 import '../../../../core/theme/stroke_icon.dart';
@@ -132,6 +135,39 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
     setState(() {});
   }
 
+  /// Enregistre une copie du multipad dans la bibliothèque (décision 0051) :
+  /// nom, couleur, mode de lecture et sons, sans lien avec ce pad ensuite.
+  Future<void> _saveToLibrary() async {
+    // Couleur et mode de lecture s'écrivent sur le pad dès qu'on les change :
+    // `pad` est à jour. Le nom, lui, est débouncé — on part du champ affiché.
+    final pad = widget.padItem.pad;
+    final shownName = _displayNameController.text.trim();
+    final name = await AppTextInputDialog.show(
+      context,
+      title: 'Enregistrer dans la bibliothèque',
+      confirmLabel: 'Enregistrer',
+      initialValue: shownName.isEmpty ? null : shownName,
+      hint: widget.padItem.displayName,
+      icon: AppIcons.text,
+    );
+    final trimmed = name?.trim();
+    if (trimmed == null || trimmed.isEmpty || !mounted) return;
+    try {
+      await widget.notifier.saveMultipadToLibrary(pad, name: trimmed);
+    } catch (error) {
+      if (mounted) {
+        showCopyableSnackBar(context, 'Enregistrement impossible : $error');
+      }
+      return;
+    }
+    if (!mounted) return;
+    AppSnackBar.show(
+      context,
+      'Multipad « $trimmed » enregistré dans la bibliothèque.',
+      severity: AppToastSeverity.success,
+    );
+  }
+
   Future<void> _removeSound(int soundId) async {
     await widget.notifier.removeSoundFromPad(widget.padItem.pad.id, soundId);
     if (!mounted) return;
@@ -191,7 +227,7 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 8),
-            _PlayModeSelector(value: _playMode, onChanged: _updatePlayMode),
+            PadPlayModeSelector(value: _playMode, onChanged: _updatePlayMode),
           ],
 
           if (isNativeDesktopPlatform()) ...[
@@ -275,6 +311,19 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
               );
             },
           ),
+
+          // Un seul son : un pad ordinaire, rien à enregistrer comme modèle.
+          if (sounds.length > 1) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => unawaited(_saveToLibrary()),
+                icon: const StrokeIcon(AppIcons.library, size: AppIconSize.sm),
+                label: const Text('Enregistrer dans la bibliothèque'),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -329,36 +378,6 @@ class _PadDetailsScreenState extends State<PadDetailsScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ── Sélecteur de mode de lecture ──────────────────────────────────────────
-
-class _PlayModeSelector extends StatelessWidget {
-  final PadPlayMode value;
-  final ValueChanged<PadPlayMode> onChanged;
-
-  const _PlayModeSelector({required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return SegmentedButton<PadPlayMode>(
-      showSelectedIcon: false,
-      segments: const [
-        ButtonSegment(
-          value: PadPlayMode.random,
-          icon: StrokeIcon(AppIcons.shuffle, size: 16),
-          label: Text('Aléatoire'),
-        ),
-        ButtonSegment(
-          value: PadPlayMode.sequential,
-          icon: StrokeIcon(AppIcons.repeatOne, size: 16),
-          label: Text('Séquentiel'),
-        ),
-      ],
-      selected: {value},
-      onSelectionChanged: (s) => onChanged(s.first),
     );
   }
 }

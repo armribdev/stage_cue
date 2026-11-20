@@ -450,6 +450,33 @@ extension _AppDatabaseMigrations on AppDatabase {
         await m.addColumn(sounds, sounds.gainMeasureGeneration);
       }
     }
+    if (from < 52) {
+      // Multipads enregistrés dans la bibliothèque (décision 0051) : deux
+      // tables neuves, aucune donnée existante touchée. Les déclencheurs de
+      // cascade qui les concernent sont posés à chaque ouverture.
+      await m.createTable(savedMultipads);
+      await m.createTable(savedMultipadSounds);
+    }
+    if (from < 53) {
+      // Synchro Drive des multipads enregistrés (décision 0051) : bibliothèque
+      // propriétaire + traces de suppression. Un upgrade depuis < 52 vient de
+      // créer `saved_multipads` au schéma courant, colonne déjà présente.
+      if (!await _columnExists('saved_multipads', 'library_id')) {
+        await m.addColumn(savedMultipads, savedMultipads.libraryId);
+      }
+      await m.createTable(savedMultipadTombstones);
+      // Les modèles de la v52 n'avaient pas de bibliothèque : ils prennent celle
+      // de leur premier son qui en a une, pour être publiés. Sans son
+      // rattaché (ou local), le modèle reste local.
+      await customStatement('''
+        UPDATE saved_multipads SET library_id = (
+          SELECT s.library_id FROM saved_multipad_sounds m
+          INNER JOIN sounds s ON s.id = m.sound_id
+          WHERE m.multipad_id = saved_multipads.id AND s.library_id IS NOT NULL
+          ORDER BY m.sort_order LIMIT 1
+        ) WHERE library_id IS NULL
+      ''');
+    }
   }
 
   /// `TableMigration` de `sounds` pour une étape ancienne qui la recrée (v23,

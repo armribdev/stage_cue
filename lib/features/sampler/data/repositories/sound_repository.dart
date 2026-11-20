@@ -1,6 +1,7 @@
 import 'dart:io';
 import '../../../../core/audio/waveform_extractor.dart';
 import '../../domain/entities/pad.dart';
+import '../../domain/entities/saved_multipad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../domain/entities/watched_path.dart';
@@ -20,6 +21,7 @@ class SoundRepository {
   final LocalSoundBoardDataSource _soundBoardDataSource;
   final LocalTagDataSource _tagDataSource;
   final LocalPadDataSource _padDataSource;
+  final LocalSavedMultipadDataSource _savedMultipadDataSource;
 
   SoundRepository(
     this._soundDataSource,
@@ -27,6 +29,7 @@ class SoundRepository {
     this._soundBoardDataSource,
     this._tagDataSource,
     this._padDataSource,
+    this._savedMultipadDataSource,
   );
 
   factory SoundRepository.fromDatabase(db.AppDatabase database) {
@@ -35,12 +38,14 @@ class SoundRepository {
     final soundBoardDataSource = LocalSoundBoardDataSource(database);
     final tagDataSource = LocalTagDataSource(database);
     final padDataSource = LocalPadDataSource(database);
+    final savedMultipadDataSource = LocalSavedMultipadDataSource(database);
     return SoundRepository(
       soundDataSource,
       watchedPathDataSource,
       soundBoardDataSource,
       tagDataSource,
       padDataSource,
+      savedMultipadDataSource,
     );
   }
 
@@ -319,6 +324,44 @@ class SoundRepository {
   Future<void> duplicatePads(int sourceBoardId, int targetBoardId) async {
     await _padDataSource.duplicatePads(sourceBoardId, targetBoardId);
   }
+
+  // ── Multipads enregistrés ─────────────────────────────────────────────────
+
+  Future<List<SavedMultipad>> getSavedMultipads() =>
+      _savedMultipadDataSource.getAll();
+
+  /// Enregistre le multipad [pad] dans la bibliothèque sous [name] : copie de
+  /// ses sons (ordre compris), de sa couleur et de son mode de lecture.
+  ///
+  /// Le modèle prend la bibliothèque du plateau du pad : c'est elle qui le
+  /// synchronise (un plateau local donne un modèle local).
+  Future<int> saveMultipad(Pad pad, {required String name}) async =>
+      _savedMultipadDataSource.create(
+        name: name,
+        soundIds: [for (final sound in pad.sounds) sound.id],
+        colorValue: pad.colorValue,
+        playMode: pad.playMode,
+        libraryId: await _savedMultipadDataSource.libraryIdOfBoard(pad.boardId),
+      );
+
+  Future<void> updateSavedMultipad(
+    int id, {
+    String? name,
+    int? colorValue,
+    bool clearColor = false,
+    PadPlayMode? playMode,
+    List<int>? soundIds,
+  }) => _savedMultipadDataSource.update(
+    id,
+    name: name,
+    colorValue: colorValue,
+    clearColor: clearColor,
+    playMode: playMode,
+    soundIds: soundIds,
+  );
+
+  Future<void> deleteSavedMultipad(int id) =>
+      _savedMultipadDataSource.delete(id);
 
   Future<Set<int>> getSoundIdsInBoard(int boardId) async {
     return await _padDataSource.getSoundIdsInBoard(boardId);

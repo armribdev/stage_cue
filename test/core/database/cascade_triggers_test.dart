@@ -74,6 +74,56 @@ void main() {
     expect(await count('pads'), 3, reason: 'les pads eux-mêmes restent');
   });
 
+  test('supprimer un multipad enregistré ou un de ses sons retire les liens, '
+      'jamais les pads posés', () async {
+    await seed();
+    await database.customStatement(
+      "INSERT INTO saved_multipads (multipad_key, name) VALUES ('k1', 'M1'), "
+      "('k2', 'M2')",
+    );
+    await database.customStatement(
+      'INSERT INTO saved_multipad_sounds (multipad_id, sound_id) '
+      'VALUES (1, 1), (1, 2), (2, 1)',
+    );
+
+    await database.customStatement('DELETE FROM sounds WHERE id = 2');
+    expect(await count('saved_multipad_sounds', 'sound_id = 2'), 0);
+    expect(await count('saved_multipad_sounds'), 2);
+
+    await database.customStatement('DELETE FROM saved_multipads WHERE id = 1');
+    expect(await count('saved_multipad_sounds', 'multipad_id = 1'), 0);
+    expect(
+      await count('saved_multipad_sounds'),
+      1,
+      reason: 'celui du modèle 2',
+    );
+    expect(await count('pads'), 3);
+  });
+
+  test('retirer une bibliothèque rend ses multipads enregistrés locaux et '
+      'efface leurs traces de suppression', () async {
+    await database.customStatement(
+      "INSERT INTO libraries (name, local_root_path) "
+      "VALUES ('L1', '/l1'), ('L2', '/l2')",
+    );
+    await database.customStatement(
+      "INSERT INTO saved_multipads (multipad_key, name, library_id) "
+      "VALUES ('k1', 'M1', 1), ('k2', 'M2', 2)",
+    );
+    await database.customStatement(
+      "INSERT INTO saved_multipad_tombstones (multipad_key, library_id) "
+      "VALUES ('t1', 1), ('t2', 2)",
+    );
+
+    await database.customStatement('DELETE FROM libraries WHERE id = 1');
+
+    expect(await count('saved_multipads'), 2, reason: 'rien n\'est supprimé');
+    expect(await count('saved_multipads', 'library_id IS NULL'), 1);
+    expect(await count('saved_multipads', 'library_id = 2'), 1);
+    expect(await count('saved_multipad_tombstones'), 1);
+    expect(await count('saved_multipad_tombstones', 'library_id = 2'), 1);
+  });
+
   test('supprimer un tag retire ses liens et ses alias', () async {
     await seed();
     await database.customStatement(

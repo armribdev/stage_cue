@@ -16,7 +16,9 @@ class LibrarySnapshotStore {
 
   LibrarySnapshotStore(this._database);
 
-  /// Exporte le snapshot RACINE d'une bibliothèque : ses boards + pads. Les pads
+  /// Exporte le snapshot RACINE d'une bibliothèque : ses boards + pads, et ses
+  /// multipads enregistrés (avec les traces de leur suppression). Les pads et
+  /// les multipads enregistrés
   /// référencent leurs sons par `driveFileId` (identité forte, portable) avec
   /// repli sur `relativePath` (portable lui aussi) quand l'ID Drive manque — les
   /// sons eux-mêmes vivent dans les snapshots PAR DOSSIER, pas ici.
@@ -56,6 +58,29 @@ class LibrarySnapshotStore {
         WHERE b.library_id = $libraryId
           AND (s.drive_file_id IS NOT NULL OR s.relative_path IS NOT NULL)
       ''');
+      // Multipads enregistrés (décision 0051), même convention que les pads :
+      // sons par driveFileId et relativePath. Les modèles locaux
+      // (`library_id` null) ne voyagent pas. Les traces de suppression
+      // accompagnent les modèles : sans elles, un autre appareil les ramènerait.
+      await _database.customStatement('''
+        CREATE TABLE snap.saved_multipads AS
+        SELECT id, multipad_key, name, color, play_mode, created_at, updated_at
+        FROM saved_multipads WHERE library_id = $libraryId
+      ''');
+      await _database.customStatement('''
+        CREATE TABLE snap.saved_multipad_sounds AS
+        SELECT m.multipad_id, m.sort_order, s.drive_file_id, s.relative_path
+        FROM saved_multipad_sounds m
+        INNER JOIN saved_multipads sm ON sm.id = m.multipad_id
+        INNER JOIN sounds s ON s.id = m.sound_id
+        WHERE sm.library_id = $libraryId
+          AND (s.drive_file_id IS NOT NULL OR s.relative_path IS NOT NULL)
+      ''');
+      await _database.customStatement('''
+        CREATE TABLE snap.saved_multipad_tombstones AS
+        SELECT multipad_key, deleted_at FROM saved_multipad_tombstones
+        WHERE library_id = $libraryId
+      ''');
     } finally {
       await _detachSnapshot();
     }
@@ -81,8 +106,12 @@ class LibrarySnapshotStore {
       // ATTACH/DETACH doivent rester hors de la transaction Drift : un DETACH
       // avant COMMIT provoque « database snap is locked » sous SQLite.
       await _database.transaction(() async {
-        if (!await _snapHasTable('sound_boards')) return;
-        await _mergeBoards(libraryId);
+        if (await _snapHasTable('sound_boards')) await _mergeBoards(libraryId);
+        // Absent d'un snapshot publié par un appareil antérieur à la v53 : les
+        // modèles locaux restent alors intacts (la fusion est une union).
+        if (await _snapHasTable('saved_multipads')) {
+          await _mergeSavedMultipads(libraryId);
+        }
       });
     } finally {
       await _detachSnapshot();
@@ -239,31 +268,11 @@ class LibrarySnapshotStore {
       final driveFileId = row.read<String?>('drive_file_id');
       final relativePath = row.read<String?>('relative_path');
 
-      // Résout le son par identité forte (driveFileId), importé via les
-      // snapshots dossier ; à défaut par chemin portable (relativePath) — ainsi
-      // un pad n'est jamais perdu si l'ID Drive du son manque encore.
-      db.Sound? sound;
-      if (driveFileId != null) {
-        // Identité forte GLOBALE : `drive_file_id` est unique en base, toutes
-        // bibliothèques confondues. On ne scope PAS à `libraryId` — sinon un
-        // board d'une bibliothèque « invitée » ne pourrait pas se recâbler sur un
-        // son PARTAGÉ possédé par une autre bibliothèque (VUE PARTAGÉE).
-        sound = await (_database.select(
-          _database.sounds,
-        )..where((s) => s.driveFileId.equals(driveFileId))).getSingleOrNull();
-      }
-      if (sound == null && relativePath != null) {
-        final normalized = LibrarySoundPaths.normalizeRelativePath(
-          relativePath,
-        );
-        sound =
-            await (_database.select(_database.sounds)..where(
-                  (s) =>
-                      s.libraryId.equals(libraryId) &
-                      s.relativePath.equals(normalized),
-                ))
-                .getSingleOrNull();
-      }
+      final sound = await _resolveSnapshotSound(
+        libraryId: libraryId,
+        driveFileId: driveFileId,
+        relativePath: relativePath,
+      );
       if (sound == null) continue;
 
       await _database
@@ -274,6 +283,237 @@ class LibrarySnapshotStore {
               soundId: sound.id,
               sortOrder: Value(row.read<int>('sort_order')),
               addedAt: Value(row.read<DateTime>('added_at')),
+            ),
+          );
+    }
+  }
+
+  /// Résout un son référencé par un snapshot racine (pad, multipad enregistré)
+  /// vers le son local : par identité forte (driveFileId), importé via les
+  /// snapshots dossier ; à défaut par chemin portable (relativePath) — ainsi une
+  /// référence n'est jamais perdue si l'ID Drive du son manque encore. `null`
+  /// si le son n'existe pas (encore) localement.
+  Future<db.Sound?> _resolveSnapshotSound({
+    required int libraryId,
+    required String? driveFileId,
+    required String? relativePath,
+  }) async {
+    db.Sound? sound;
+    if (driveFileId != null) {
+      // Identité forte GLOBALE : `drive_file_id` est unique en base, toutes
+      // bibliothèques confondues. On ne scope PAS à `libraryId` — sinon un
+      // board d'une bibliothèque « invitée » ne pourrait pas se recâbler sur un
+      // son PARTAGÉ possédé par une autre bibliothèque (VUE PARTAGÉE).
+      sound = await (_database.select(
+        _database.sounds,
+      )..where((s) => s.driveFileId.equals(driveFileId))).getSingleOrNull();
+    }
+    if (sound == null && relativePath != null) {
+      final normalized = LibrarySoundPaths.normalizeRelativePath(relativePath);
+      sound =
+          await (_database.select(_database.sounds)..where(
+                (s) =>
+                    s.libraryId.equals(libraryId) &
+                    s.relativePath.equals(normalized),
+              ))
+              .getSingleOrNull();
+    }
+    return sound;
+  }
+
+  // ── Multipads enregistrés (décision 0051) ─────────────────────────────────
+  //
+  // Publiés avec le snapshot racine, comme les boards : leurs sons sont portés
+  // par `driveFileId` puis `relativePath` (jamais l'id local), donc résolus
+  // après les snapshots dossier. Fusion par clé portable `multipad_key`,
+  // dernier écrivain gagnant, sans purge : un modèle présent seulement en local
+  // reste. Seule exception, la suppression, qui voyage en pierre tombale — sans
+  // elle l'union ramènerait un modèle supprimé depuis un autre appareil.
+
+  Future<void> _mergeSavedMultipads(int libraryId) async {
+    if (await _snapHasTable('saved_multipad_tombstones')) {
+      await _applySnapshotTombstones(libraryId);
+    }
+
+    final members = <int, List<QueryRow>>{};
+    if (await _snapHasTable('saved_multipad_sounds')) {
+      final memberRows = await _database
+          .customSelect(
+            'SELECT * FROM snap.saved_multipad_sounds ORDER BY sort_order',
+          )
+          .get();
+      for (final row in memberRows) {
+        (members[row.read<int>('multipad_id')] ??= []).add(row);
+      }
+    }
+
+    final rows = await _database
+        .customSelect('SELECT * FROM snap.saved_multipads ORDER BY id')
+        .get();
+    for (final row in rows) {
+      final key = row.read<String?>('multipad_key');
+      if (key == null || key.isEmpty) continue;
+      final snapUpdatedAt = row.read<DateTime>('updated_at');
+
+      // Supprimé ici depuis (ou en même temps que) cette version : on ne le
+      // ressuscite pas. Modifié APRÈS la suppression, il revient et la trace tombe.
+      final tombstone = await (_database.select(
+        _database.savedMultipadTombstones,
+      )..where((t) => t.multipadKey.equals(key))).getSingleOrNull();
+      if (tombstone != null && !tombstone.deletedAt.isBefore(snapUpdatedAt)) {
+        continue;
+      }
+
+      final local = await (_database.select(
+        _database.savedMultipads,
+      )..where((m) => m.multipadKey.equals(key))).getSingleOrNull();
+      // Possédé par une AUTRE bibliothèque : on ne le duplique ni ne le
+      // confisque (même arbitrage que pour les boards).
+      if (local != null &&
+          local.libraryId != null &&
+          local.libraryId != libraryId) {
+        SyncLog.trace(
+          'multipad ${row.read<String>('name')} possédé par la bibliothèque '
+          '${local.libraryId} : fusion ignorée pour $libraryId',
+        );
+        continue;
+      }
+
+      final soundIds = await _resolveMultipadSounds(
+        libraryId,
+        members[row.read<int>('id')] ?? const [],
+      );
+
+      if (local == null) {
+        // Aucun son résolu (pas encore indexés) : un modèle sans son ne se pose
+        // nulle part. Rien n'est écrit, le prochain pull réessaie.
+        if (soundIds.isEmpty) {
+          SyncLog.trace(
+            'multipad ${row.read<String>('name')} : aucun son résolu, ignoré',
+          );
+          continue;
+        }
+        final id = await _database
+            .into(_database.savedMultipads)
+            .insert(
+              db.SavedMultipadsCompanion.insert(
+                multipadKey: key,
+                name: row.read<String>('name'),
+                color: Value(row.read<int?>('color')),
+                playMode: Value(PadPlayMode.values[row.read<int>('play_mode')]),
+                createdAt: Value(row.read<DateTime>('created_at')),
+                updatedAt: Value(snapUpdatedAt),
+                libraryId: Value(libraryId),
+              ),
+            );
+        await _replaceMultipadSounds(id, soundIds);
+        if (tombstone != null) {
+          await (_database.delete(
+            _database.savedMultipadTombstones,
+          )..where((t) => t.multipadKey.equals(key))).go();
+        }
+        continue;
+      }
+
+      // Rattachement indépendant de la fraîcheur, comme pour les boards : un
+      // modèle local sans propriétaire dont la clé est publiée ici lui appartient,
+      // sinon sa version plus récente ne serait jamais repoussée.
+      if (local.libraryId == null) {
+        await (_database.update(_database.savedMultipads)
+              ..where((m) => m.id.equals(local.id)))
+            .write(db.SavedMultipadsCompanion(libraryId: Value(libraryId)));
+      }
+      // Le distant gagne s'il est plus récent. Sans aucun son résolu on garde le
+      // local plutôt que de vider le modèle ; le prochain pull réessaie.
+      if (snapUpdatedAt.isAfter(local.updatedAt) && soundIds.isNotEmpty) {
+        await (_database.update(
+          _database.savedMultipads,
+        )..where((m) => m.id.equals(local.id))).write(
+          db.SavedMultipadsCompanion(
+            name: Value(row.read<String>('name')),
+            color: Value(row.read<int?>('color')),
+            playMode: Value(PadPlayMode.values[row.read<int>('play_mode')]),
+            updatedAt: Value(snapUpdatedAt),
+          ),
+        );
+        await _replaceMultipadSounds(local.id, soundIds);
+      }
+    }
+  }
+
+  /// Applique les suppressions publiées : la trace est conservée localement (pour
+  /// la republier à un troisième appareil) et supprime le modèle local qu'elle
+  /// vise, sauf s'il a été modifié après la suppression.
+  Future<void> _applySnapshotTombstones(int libraryId) async {
+    final rows = await _database
+        .customSelect('SELECT * FROM snap.saved_multipad_tombstones')
+        .get();
+    for (final row in rows) {
+      final key = row.read<String>('multipad_key');
+      final deletedAt = row.read<DateTime>('deleted_at');
+
+      final known = await (_database.select(
+        _database.savedMultipadTombstones,
+      )..where((t) => t.multipadKey.equals(key))).getSingleOrNull();
+      if (known == null || deletedAt.isAfter(known.deletedAt)) {
+        await _database
+            .into(_database.savedMultipadTombstones)
+            .insert(
+              db.SavedMultipadTombstonesCompanion.insert(
+                multipadKey: key,
+                libraryId: libraryId,
+                deletedAt: Value(deletedAt),
+              ),
+              mode: InsertMode.insertOrReplace,
+            );
+      }
+
+      final local = await (_database.select(
+        _database.savedMultipads,
+      )..where((m) => m.multipadKey.equals(key))).getSingleOrNull();
+      if (local == null) continue;
+      // Possédé par une autre bibliothèque : cette trace ne le concerne pas.
+      if (local.libraryId != null && local.libraryId != libraryId) continue;
+      if (deletedAt.isBefore(local.updatedAt)) continue;
+      await (_database.delete(
+        _database.savedMultipads,
+      )..where((m) => m.id.equals(local.id))).go();
+    }
+  }
+
+  /// Ids locaux des sons d'un multipad du snapshot, dans l'ordre, sans doublon ;
+  /// ceux qui n'existent pas localement sont ignorés.
+  Future<List<int>> _resolveMultipadSounds(
+    int libraryId,
+    List<QueryRow> memberRows,
+  ) async {
+    final ids = <int>[];
+    for (final row in memberRows) {
+      final sound = await _resolveSnapshotSound(
+        libraryId: libraryId,
+        driveFileId: row.read<String?>('drive_file_id'),
+        relativePath: row.read<String?>('relative_path'),
+      );
+      if (sound != null && !ids.contains(sound.id)) ids.add(sound.id);
+    }
+    return ids;
+  }
+
+  Future<void> _replaceMultipadSounds(
+    int multipadId,
+    List<int> soundIds,
+  ) async {
+    await (_database.delete(
+      _database.savedMultipadSounds,
+    )..where((s) => s.multipadId.equals(multipadId))).go();
+    for (var i = 0; i < soundIds.length; i++) {
+      await _database
+          .into(_database.savedMultipadSounds)
+          .insert(
+            db.SavedMultipadSoundsCompanion.insert(
+              multipadId: multipadId,
+              soundId: soundIds[i],
+              sortOrder: Value(i),
             ),
           );
     }

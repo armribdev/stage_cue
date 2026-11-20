@@ -281,6 +281,67 @@ class PadSounds extends Table {
   Set<Column> get primaryKey => {padId, soundId};
 }
 
+/// Multipad enregistré dans la bibliothèque : un modèle (nom, couleur, mode de
+/// lecture, liste ordonnée de sons) qu'on repose sur un plateau en pad
+/// ordinaire. C'est une COPIE : le pad posé et le modèle ne se suivent pas
+/// (décision 0051). Les sons ne sont pas dupliqués — seuls leurs ids sont
+/// référencés, donc gain et waveform restent ceux de la bibliothèque.
+class SavedMultipads extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// Identité stable et PORTABLE (UUID), pour reconnaître le même modèle d'un
+  /// appareil à l'autre quand ils seront synchronisés. Unique.
+  TextColumn get multipadKey => text()();
+  TextColumn get name => text()();
+  IntColumn get color => integer().nullable()();
+  IntColumn get playMode =>
+      intEnum<PadPlayMode>().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Dernière modification : arbitre la fusion « dernier écrivain gagne ».
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Bibliothèque Drive propriétaire (v53), celle du plateau d'où le modèle a
+  /// été enregistré ; null = modèle local, jamais synchronisé. Retirer la
+  /// bibliothèque le rend local (il n'est pas supprimé), comme une scène.
+  IntColumn get libraryId => integer().nullable().references(
+    Libraries,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {multipadKey},
+  ];
+}
+
+/// Trace de la suppression d'un multipad enregistré synchronisé (v53). Sans
+/// elle, un modèle supprimé sur un appareil reviendrait à la prochaine fusion du
+/// snapshot d'un autre (la fusion est une union). Publiée dans le snapshot
+/// racine ; un modèle plus récent que la trace la remplace (il a été modifié
+/// après la suppression).
+class SavedMultipadTombstones extends Table {
+  TextColumn get multipadKey => text()();
+  IntColumn get libraryId =>
+      integer().references(Libraries, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get deletedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {multipadKey};
+}
+
+class SavedMultipadSounds extends Table {
+  IntColumn get multipadId =>
+      integer().references(SavedMultipads, #id, onDelete: KeyAction.cascade)();
+  IntColumn get soundId =>
+      integer().references(Sounds, #id, onDelete: KeyAction.cascade)();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {multipadId, soundId};
+}
+
 class TagCategories extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();

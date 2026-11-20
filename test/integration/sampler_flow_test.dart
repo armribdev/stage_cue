@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show OrderingTerm, Value;
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,7 +22,7 @@ import 'package:stage_cue/core/settings/app_preferences.dart'
 import 'package:stage_cue/core/theme/app_icons.dart';
 import 'package:stage_cue/core/theme/app_theme.dart';
 import 'package:stage_cue/features/sampler/domain/entities/pad.dart'
-    show PadPlayMode;
+    show Pad, PadPlayMode;
 import 'package:stage_cue/features/sampler/presentation/screens/sampler_screen.dart';
 import '../support/find_stroke_icon.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/pad_item.dart'
@@ -410,6 +410,73 @@ void main() {
         expect(pads, hasLength(1));
         final padSounds = await database.select(database.padSounds).get();
         expect(padSounds, hasLength(1));
+      },
+    );
+
+    testDesktopWidgets(
+      'un multipad enregistré se trouve par son nom et se pose en copie, '
+      'sans lien avec le modèle (décision 0051)',
+      (tester) async {
+        await pumpSampler(tester);
+        final soundIds = [
+          await insertSound('grincement A'),
+          await insertSound('grincement B'),
+          await insertSound('grincement C'),
+        ];
+        // Un son isolé qui ne doit pas masquer le modèle ni le polluer.
+        await insertSound('tonnerre');
+        final savedId = await services.soundRepository.saveMultipad(
+          Pad(
+            id: -1,
+            boardId: -1,
+            sortOrder: 0,
+            createdAt: DateTime(2026),
+            colorValue: 0xFF336699,
+            playMode: PadPlayMode.sequential,
+            sounds: [
+              for (final id in soundIds.reversed)
+                (await services.soundRepository.getSoundById(id))!,
+            ],
+          ),
+          name: 'Porte qui grince',
+        );
+        await pumpSampler(tester);
+
+        await pressCtrl(tester, LogicalKeyboardKey.keyF);
+        await tester.enterText(find.byType(TextField), 'porte');
+        await flushIo(tester);
+        expect(
+          find.text('Multipad · 3 sons'),
+          findsOneWidget,
+          reason: 'le modèle est proposé, nommé « porte » dans la recherche',
+        );
+
+        await pressCtrl(tester, LogicalKeyboardKey.enter);
+        await flushIo(tester);
+
+        final pads = await database.select(database.pads).get();
+        expect(pads, hasLength(1));
+        final pad = pads.single;
+        expect(pad.name, 'Porte qui grince');
+        expect(pad.color, 0xFF336699);
+        expect(pad.playMode, dbe.PadPlayMode.sequential);
+        final padSounds = await (database.select(
+          database.padSounds,
+        )..orderBy([(s) => OrderingTerm(expression: s.sortOrder)])).get();
+        expect(
+          padSounds.map((s) => s.soundId),
+          soundIds.reversed.toList(),
+          reason: 'sons et ordre du modèle',
+        );
+
+        // Copie : retirer un son du pad ne touche pas au modèle.
+        await services.soundRepository.removeSoundFromPad(
+          pad.id,
+          soundIds.first,
+        );
+        final saved = (await services.soundRepository.getSavedMultipads())
+            .singleWhere((m) => m.id == savedId);
+        expect(saved.sounds, hasLength(3));
       },
     );
   });

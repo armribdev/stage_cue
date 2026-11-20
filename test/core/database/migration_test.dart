@@ -1225,6 +1225,101 @@ void main() {
     await database.close();
   });
 
+  test('une base v51 gagne les tables des multipads enregistrés, sans toucher '
+      'aux sons ni aux pads', () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    await database.customStatement(
+      "INSERT INTO sounds (title, file_path, display_name) "
+      "VALUES ('a', '/a.wav', 'a')",
+    );
+    await database.customStatement(
+      "INSERT INTO sound_boards (name) VALUES ('S1')",
+    );
+    await database.customStatement('INSERT INTO pads (board_id) VALUES (1)');
+    await database.customStatement(
+      'INSERT INTO pad_sounds (pad_id, sound_id) VALUES (1, 1)',
+    );
+    await database.customStatement('DROP TABLE saved_multipad_sounds');
+    await database.customStatement('DROP TABLE saved_multipads');
+    await database.customStatement('PRAGMA user_version = 51');
+    await database.close();
+
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    expect(
+      await columnsOf(database, 'saved_multipads'),
+      containsAll(['multipad_key', 'name', 'color', 'play_mode', 'updated_at']),
+    );
+    expect(
+      await columnsOf(database, 'saved_multipad_sounds'),
+      containsAll(['multipad_id', 'sound_id', 'sort_order']),
+    );
+    expect(await database.select(database.sounds).get(), hasLength(1));
+    expect(await database.select(database.padSounds).get(), hasLength(1));
+    await database.close();
+  });
+
+  test(
+    'une base v52 gagne library_id sur ses multipads enregistrés, pris sur '
+    'leur premier son rattaché, et la table des traces de suppression',
+    () async {
+      var database = db.AppDatabase.forTesting(NativeDatabase(file));
+      await database.customStatement(
+        "INSERT INTO libraries (name, local_root_path) VALUES ('L1', '/l1'), "
+        "('L2', '/l2')",
+      );
+      // Son 1 sans bibliothèque (legacy), 2 dans L1, 3 dans L2.
+      await database.customStatement(
+        "INSERT INTO sounds (title, file_path, display_name, library_id) VALUES "
+        "('a', '/a.wav', 'a', NULL), ('b', '/b.wav', 'b', 1), "
+        "('c', '/c.wav', 'c', 2)",
+      );
+      await database.customStatement(
+        "INSERT INTO saved_multipads (multipad_key, name) VALUES "
+        "('k1', 'premier son sans biblio'), ('k2', 'que des locaux')",
+      );
+      await database.customStatement(
+        'INSERT INTO saved_multipad_sounds (multipad_id, sound_id, sort_order) '
+        'VALUES (1, 1, 0), (1, 3, 1), (2, 1, 0)',
+      );
+      // Une base v52 n'a ni ces tables ni leurs déclencheurs (posés à
+      // l'ouverture, après la migration).
+      await database.customStatement(
+        'DROP TRIGGER trg_libraries_delete_saved_multipad_tombstones',
+      );
+      await database.customStatement(
+        'DROP TRIGGER trg_libraries_detach_saved_multipads',
+      );
+      await database.customStatement('DROP TABLE saved_multipad_tombstones');
+      await database.customStatement(
+        'ALTER TABLE saved_multipads DROP COLUMN library_id',
+      );
+      await database.customStatement('PRAGMA user_version = 52');
+      await database.close();
+
+      database = db.AppDatabase.forTesting(NativeDatabase(file));
+      expect(
+        await columnsOf(database, 'saved_multipads'),
+        contains('library_id'),
+      );
+      expect(
+        await columnsOf(database, 'saved_multipad_tombstones'),
+        containsAll(['multipad_key', 'library_id', 'deleted_at']),
+      );
+      final byName = {
+        for (final m in await database.select(database.savedMultipads).get())
+          m.name: m,
+      };
+      expect(
+        byName['premier son sans biblio']!.libraryId,
+        2,
+        reason:
+            'le premier son rattaché à une bibliothèque (le 3) donne la sienne',
+      );
+      expect(byName['que des locaux']!.libraryId, isNull);
+      await database.close();
+    },
+  );
+
   test('une base v39 garde le volume de ses sons en gain à travers la '
       'recréation de sounds (v40)', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));

@@ -29,6 +29,7 @@ import '../../data/repositories/library_repository.dart'
 import '../../data/repositories/sound_repository.dart';
 import '../../domain/entities/library.dart';
 import '../../domain/entities/pad.dart';
+import '../../domain/entities/saved_multipad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/sound_board.dart';
 import '../../domain/entities/tag_category_with_tags.dart';

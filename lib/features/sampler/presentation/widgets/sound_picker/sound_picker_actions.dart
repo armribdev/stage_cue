@@ -10,9 +10,18 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
   // ── Actions ───────────────────────────────────────────────────────────────
 
   Future<void> _onSubmit() async {
+    final multipads = _multipadResults;
     final shown = _shownResults(_results);
-    if (shown.isEmpty) return;
-    final index = _clampSelectedIndex(shown.length);
+    final rowCount = multipads.length + shown.length;
+    if (rowCount == 0) return;
+    final row = _clampSelectedIndex(rowCount);
+    if (row < multipads.length) {
+      await _placeSavedMultipad(multipads[row]);
+      return;
+    }
+    // Les modèles n'existent que dans les modes qui posent un pad : pour les
+    // autres, `index` est l'indice du son, comme avant leur ajout.
+    final index = row - multipads.length;
     final sound = shown[index];
     switch (widget.mode) {
       case QuickSearchMode():
@@ -91,9 +100,23 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
   }
 
   Future<void> _prepareSelectedAndClose() async {
+    final multipads = _multipadResults;
     final shown = _shownResults(_results);
-    if (shown.isEmpty) return;
-    await _prepareAndClose(shown[_clampSelectedIndex(shown.length)]);
+    final rowCount = multipads.length + shown.length;
+    if (rowCount == 0) return;
+    final row = _clampSelectedIndex(rowCount);
+    if (row < multipads.length) {
+      await _placeSavedMultipad(multipads[row]);
+      return;
+    }
+    await _prepareAndClose(shown[row - multipads.length]);
+  }
+
+  /// Pose une copie du multipad enregistré sur le plateau (décision 0051) et
+  /// ferme : même résultat qu'un son préparé, le pad créé est mis en évidence.
+  Future<void> _placeSavedMultipad(SavedMultipad saved) async {
+    final result = await widget.notifier.placeSavedMultipadOnBoard(saved);
+    if (mounted) Navigator.of(context).pop(result);
   }
 
   // Music picker
@@ -168,7 +191,7 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
     final draftIds = mode.draftSelectedIds;
     if (draftIds != null) {
       draftIds.add(sound.id);
-      await widget.notifier.updateDraftPadSounds(mode.draftPadId!, draftIds);
+      await _commitSelection(mode, draftIds);
       if (!mounted) return;
       setState(_syncPadSoundIds);
       return;
@@ -183,12 +206,23 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
     mode.onPadUpdated?.call();
   }
 
+  /// Répercute la liste d'ids modifiée : sur le rappel de l'appelant pour une
+  /// sélection libre, sinon sur le pad brouillon du plateau.
+  Future<void> _commitSelection(PadPickerMode mode, List<int> ids) async {
+    final onChanged = mode.onSelectionChanged;
+    if (onChanged != null) {
+      onChanged();
+      return;
+    }
+    await widget.notifier.updateDraftPadSounds(mode.draftPadId!, ids);
+  }
+
   Future<void> _removePadSound(Sound sound, PadPickerMode mode) async {
     if (!_padSoundIds.contains(sound.id)) return;
     final draftIds = mode.draftSelectedIds;
     if (draftIds != null) {
       draftIds.remove(sound.id);
-      await widget.notifier.updateDraftPadSounds(mode.draftPadId!, draftIds);
+      await _commitSelection(mode, draftIds);
       if (!mounted) return;
       setState(_syncPadSoundIds);
       return;

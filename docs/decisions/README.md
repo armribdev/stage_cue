@@ -72,5 +72,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0048](0048-marque-de-mesure-du-gain-auto-et-rattrapage-explicite.md) | Marque de mesure du gain auto (`gain_measure_generation`, v51) : les sons anciens se rattrapent à la demande, jamais en silence | acceptée (précise 0044) |
 | [0049](0049-rattrapage-des-waveforms-et-recalcul-de-maintenance-debug.md) | Rattrapage de fond des waveforms (sans jamais écrire de gain) et recalcul de maintenance au choix, réservé au debug | acceptée (corrige 0048 sur la waveform) |
 | [0050](0050-vue-clavier-du-board-azerty.md) | Vue clavier d'un board : une vue parmi d'autres, disposition AZERTY | acceptée |
+| [0051](0051-multipads-enregistres-dans-la-bibliotheque-par-copie.md) | Multipads enregistrés dans la bibliothèque, par copie (v52, synchro v53) : un modèle qu'on repose en pad ordinaire, sans lien | acceptée |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

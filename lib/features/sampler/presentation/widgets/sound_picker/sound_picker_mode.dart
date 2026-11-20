@@ -35,21 +35,33 @@ final class AmbiancePickerMode extends SoundPickerMode {
   const AmbiancePickerMode();
 }
 
-/// Sélecteur de sons pour un pad existant ou un nouveau pad brouillon.
+/// Sélecteur de sons pour un pad existant, un nouveau pad brouillon, ou une
+/// simple liste d'ids ([onSelectionChanged], ex. l'éditeur d'un multipad
+/// enregistré, qui n'a pas de pad).
 final class PadPickerMode extends SoundPickerMode {
   final int? padId;
   final int? draftPadId;
+
+  /// Liste d'ids modifiée en place par le sélecteur (brouillon, ou sélection
+  /// libre quand [onSelectionChanged] est fourni).
   final List<int>? draftSelectedIds;
   final VoidCallback? onPadUpdated;
+
+  /// Appelé après chaque ajout ou retrait dans [draftSelectedIds], à la place
+  /// de la mise à jour du pad brouillon.
+  final VoidCallback? onSelectionChanged;
 
   const PadPickerMode({
     this.padId,
     this.draftPadId,
     this.draftSelectedIds,
     this.onPadUpdated,
+    this.onSelectionChanged,
   }) : assert(
-         padId != null || draftPadId != null,
-         'padId ou draftPadId requis',
+         padId != null ||
+             draftPadId != null ||
+             (draftSelectedIds != null && onSelectionChanged != null),
+         'padId, draftPadId ou une sélection avec rappel requis',
        );
 }
 

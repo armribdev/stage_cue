@@ -175,6 +175,56 @@ extension _SoundPickerSearch on _SoundPickerOverlayState {
     return [for (final e in scored) e.$1];
   }
 
+  /// Multipads enregistrés à proposer en tête de liste (décision 0051), seulement
+  /// dans les modes qui posent un pad sur le plateau. Mêmes filtres que les
+  /// sons, appliqués à l'ensemble de leurs sons : un modèle n'est proposé que si
+  /// tous les siens sont visibles ici (périmètre du plateau, type, hors-ligne).
+  /// Recherche-éclair sans requête : rien (le parcours ne montre que favoris et
+  /// récents) ; bibliothèque sans requête : tous, par nom. Un modèle sans son ne
+  /// se pose pas, donc n'est jamais proposé.
+  List<SavedMultipad> get _multipadResults {
+    if (!(_isQuickSearch || _isLibrary) || _loading || _awaitingLocalIds) {
+      return const [];
+    }
+    if (_favoritesOnly || (_isQuickSearch && _query.isEmpty)) return const [];
+    final tokens = _normalizedTokens;
+    final q = normalizeForSearch(_query);
+    final typeFilter = _effectiveTypeFilter;
+    final scored = <(SavedMultipad, int)>[];
+    for (final saved in _savedMultipads) {
+      if (saved.sounds.isEmpty) continue;
+      if (typeFilter != null && !saved.hasOnlyType(typeFilter)) continue;
+      if (!saved.sounds.every(_matchesBoardScope)) continue;
+      if (_effectiveLocalOnly && !saved.sounds.every(_isLocal)) continue;
+
+      final name = normalizeForSearch(saved.name);
+      var total = 0;
+      if (q.isNotEmpty) {
+        // Un mot du nom par mot cherché, comme pour le titre d'un son (sans
+        // l'appoint des tags : un modèle n'en porte pas).
+        final queries = tokens.isEmpty ? [q] : tokens;
+        var allMatch = true;
+        for (final token in queries) {
+          final score = fuzzyMatchScore(name, token);
+          if (score == null) {
+            allMatch = false;
+            break;
+          }
+          total += score;
+        }
+        if (!allMatch) continue;
+      }
+      scored.add((saved, total));
+    }
+    scored.sort((a, b) => b.$2.compareTo(a.$2));
+    return [for (final entry in scored) entry.$1];
+  }
+
+  /// Nombre de lignes de la liste : multipads enregistrés d'abord, puis les sons
+  /// [shown]. Un indice de ligne inférieur à `_multipadResults.length` désigne un
+  /// modèle, sinon le son d'indice `ligne - nombre de modèles`.
+  int _rowCount(List<Sound> shown) => _multipadResults.length + shown.length;
+
   /// Mode parcours : favoris + récents uniquement (QuickSearch, requête vide).
   List<Sound> _shownResults(List<Sound> results) {
     final isBrowse = _isQuickSearch && _query.isEmpty && !_favoritesOnly;

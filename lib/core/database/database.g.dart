@@ -4757,6 +4757,1083 @@ class PadSoundsCompanion extends UpdateCompanion<PadSound> {
   }
 }
 
+class $SavedMultipadsTable extends SavedMultipads
+    with TableInfo<$SavedMultipadsTable, SavedMultipad> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SavedMultipadsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _multipadKeyMeta = const VerificationMeta(
+    'multipadKey',
+  );
+  @override
+  late final GeneratedColumn<String> multipadKey = GeneratedColumn<String>(
+    'multipad_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _colorMeta = const VerificationMeta('color');
+  @override
+  late final GeneratedColumn<int> color = GeneratedColumn<int>(
+    'color',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<PadPlayMode, int> playMode =
+      GeneratedColumn<int>(
+        'play_mode',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<PadPlayMode>($SavedMultipadsTable.$converterplayMode);
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _libraryIdMeta = const VerificationMeta(
+    'libraryId',
+  );
+  @override
+  late final GeneratedColumn<int> libraryId = GeneratedColumn<int>(
+    'library_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES libraries (id) ON DELETE SET NULL',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    multipadKey,
+    name,
+    color,
+    playMode,
+    createdAt,
+    updatedAt,
+    libraryId,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'saved_multipads';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SavedMultipad> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('multipad_key')) {
+      context.handle(
+        _multipadKeyMeta,
+        multipadKey.isAcceptableOrUnknown(
+          data['multipad_key']!,
+          _multipadKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_multipadKeyMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('color')) {
+      context.handle(
+        _colorMeta,
+        color.isAcceptableOrUnknown(data['color']!, _colorMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('library_id')) {
+      context.handle(
+        _libraryIdMeta,
+        libraryId.isAcceptableOrUnknown(data['library_id']!, _libraryIdMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {multipadKey},
+  ];
+  @override
+  SavedMultipad map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SavedMultipad(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      multipadKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}multipad_key'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      color: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color'],
+      ),
+      playMode: $SavedMultipadsTable.$converterplayMode.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}play_mode'],
+        )!,
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      libraryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}library_id'],
+      ),
+    );
+  }
+
+  @override
+  $SavedMultipadsTable createAlias(String alias) {
+    return $SavedMultipadsTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<PadPlayMode, int, int> $converterplayMode =
+      const EnumIndexConverter<PadPlayMode>(PadPlayMode.values);
+}
+
+class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
+  final int id;
+
+  /// Identité stable et PORTABLE (UUID), pour reconnaître le même modèle d'un
+  /// appareil à l'autre quand ils seront synchronisés. Unique.
+  final String multipadKey;
+  final String name;
+  final int? color;
+  final PadPlayMode playMode;
+  final DateTime createdAt;
+
+  /// Dernière modification : arbitre la fusion « dernier écrivain gagne ».
+  final DateTime updatedAt;
+
+  /// Bibliothèque Drive propriétaire (v53), celle du plateau d'où le modèle a
+  /// été enregistré ; null = modèle local, jamais synchronisé. Retirer la
+  /// bibliothèque le rend local (il n'est pas supprimé), comme une scène.
+  final int? libraryId;
+  const SavedMultipad({
+    required this.id,
+    required this.multipadKey,
+    required this.name,
+    this.color,
+    required this.playMode,
+    required this.createdAt,
+    required this.updatedAt,
+    this.libraryId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['multipad_key'] = Variable<String>(multipadKey);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || color != null) {
+      map['color'] = Variable<int>(color);
+    }
+    {
+      map['play_mode'] = Variable<int>(
+        $SavedMultipadsTable.$converterplayMode.toSql(playMode),
+      );
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || libraryId != null) {
+      map['library_id'] = Variable<int>(libraryId);
+    }
+    return map;
+  }
+
+  SavedMultipadsCompanion toCompanion(bool nullToAbsent) {
+    return SavedMultipadsCompanion(
+      id: Value(id),
+      multipadKey: Value(multipadKey),
+      name: Value(name),
+      color: color == null && nullToAbsent
+          ? const Value.absent()
+          : Value(color),
+      playMode: Value(playMode),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      libraryId: libraryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(libraryId),
+    );
+  }
+
+  factory SavedMultipad.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SavedMultipad(
+      id: serializer.fromJson<int>(json['id']),
+      multipadKey: serializer.fromJson<String>(json['multipadKey']),
+      name: serializer.fromJson<String>(json['name']),
+      color: serializer.fromJson<int?>(json['color']),
+      playMode: $SavedMultipadsTable.$converterplayMode.fromJson(
+        serializer.fromJson<int>(json['playMode']),
+      ),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      libraryId: serializer.fromJson<int?>(json['libraryId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'multipadKey': serializer.toJson<String>(multipadKey),
+      'name': serializer.toJson<String>(name),
+      'color': serializer.toJson<int?>(color),
+      'playMode': serializer.toJson<int>(
+        $SavedMultipadsTable.$converterplayMode.toJson(playMode),
+      ),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'libraryId': serializer.toJson<int?>(libraryId),
+    };
+  }
+
+  SavedMultipad copyWith({
+    int? id,
+    String? multipadKey,
+    String? name,
+    Value<int?> color = const Value.absent(),
+    PadPlayMode? playMode,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Value<int?> libraryId = const Value.absent(),
+  }) => SavedMultipad(
+    id: id ?? this.id,
+    multipadKey: multipadKey ?? this.multipadKey,
+    name: name ?? this.name,
+    color: color.present ? color.value : this.color,
+    playMode: playMode ?? this.playMode,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    libraryId: libraryId.present ? libraryId.value : this.libraryId,
+  );
+  SavedMultipad copyWithCompanion(SavedMultipadsCompanion data) {
+    return SavedMultipad(
+      id: data.id.present ? data.id.value : this.id,
+      multipadKey: data.multipadKey.present
+          ? data.multipadKey.value
+          : this.multipadKey,
+      name: data.name.present ? data.name.value : this.name,
+      color: data.color.present ? data.color.value : this.color,
+      playMode: data.playMode.present ? data.playMode.value : this.playMode,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      libraryId: data.libraryId.present ? data.libraryId.value : this.libraryId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavedMultipad(')
+          ..write('id: $id, ')
+          ..write('multipadKey: $multipadKey, ')
+          ..write('name: $name, ')
+          ..write('color: $color, ')
+          ..write('playMode: $playMode, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('libraryId: $libraryId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    multipadKey,
+    name,
+    color,
+    playMode,
+    createdAt,
+    updatedAt,
+    libraryId,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SavedMultipad &&
+          other.id == this.id &&
+          other.multipadKey == this.multipadKey &&
+          other.name == this.name &&
+          other.color == this.color &&
+          other.playMode == this.playMode &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.libraryId == this.libraryId);
+}
+
+class SavedMultipadsCompanion extends UpdateCompanion<SavedMultipad> {
+  final Value<int> id;
+  final Value<String> multipadKey;
+  final Value<String> name;
+  final Value<int?> color;
+  final Value<PadPlayMode> playMode;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int?> libraryId;
+  const SavedMultipadsCompanion({
+    this.id = const Value.absent(),
+    this.multipadKey = const Value.absent(),
+    this.name = const Value.absent(),
+    this.color = const Value.absent(),
+    this.playMode = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.libraryId = const Value.absent(),
+  });
+  SavedMultipadsCompanion.insert({
+    this.id = const Value.absent(),
+    required String multipadKey,
+    required String name,
+    this.color = const Value.absent(),
+    this.playMode = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.libraryId = const Value.absent(),
+  }) : multipadKey = Value(multipadKey),
+       name = Value(name);
+  static Insertable<SavedMultipad> custom({
+    Expression<int>? id,
+    Expression<String>? multipadKey,
+    Expression<String>? name,
+    Expression<int>? color,
+    Expression<int>? playMode,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? libraryId,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (multipadKey != null) 'multipad_key': multipadKey,
+      if (name != null) 'name': name,
+      if (color != null) 'color': color,
+      if (playMode != null) 'play_mode': playMode,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (libraryId != null) 'library_id': libraryId,
+    });
+  }
+
+  SavedMultipadsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? multipadKey,
+    Value<String>? name,
+    Value<int?>? color,
+    Value<PadPlayMode>? playMode,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int?>? libraryId,
+  }) {
+    return SavedMultipadsCompanion(
+      id: id ?? this.id,
+      multipadKey: multipadKey ?? this.multipadKey,
+      name: name ?? this.name,
+      color: color ?? this.color,
+      playMode: playMode ?? this.playMode,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      libraryId: libraryId ?? this.libraryId,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (multipadKey.present) {
+      map['multipad_key'] = Variable<String>(multipadKey.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (color.present) {
+      map['color'] = Variable<int>(color.value);
+    }
+    if (playMode.present) {
+      map['play_mode'] = Variable<int>(
+        $SavedMultipadsTable.$converterplayMode.toSql(playMode.value),
+      );
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (libraryId.present) {
+      map['library_id'] = Variable<int>(libraryId.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavedMultipadsCompanion(')
+          ..write('id: $id, ')
+          ..write('multipadKey: $multipadKey, ')
+          ..write('name: $name, ')
+          ..write('color: $color, ')
+          ..write('playMode: $playMode, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('libraryId: $libraryId')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SavedMultipadSoundsTable extends SavedMultipadSounds
+    with TableInfo<$SavedMultipadSoundsTable, SavedMultipadSound> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SavedMultipadSoundsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _multipadIdMeta = const VerificationMeta(
+    'multipadId',
+  );
+  @override
+  late final GeneratedColumn<int> multipadId = GeneratedColumn<int>(
+    'multipad_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES saved_multipads (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _soundIdMeta = const VerificationMeta(
+    'soundId',
+  );
+  @override
+  late final GeneratedColumn<int> soundId = GeneratedColumn<int>(
+    'sound_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES sounds (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [multipadId, soundId, sortOrder];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'saved_multipad_sounds';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SavedMultipadSound> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('multipad_id')) {
+      context.handle(
+        _multipadIdMeta,
+        multipadId.isAcceptableOrUnknown(data['multipad_id']!, _multipadIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_multipadIdMeta);
+    }
+    if (data.containsKey('sound_id')) {
+      context.handle(
+        _soundIdMeta,
+        soundId.isAcceptableOrUnknown(data['sound_id']!, _soundIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_soundIdMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {multipadId, soundId};
+  @override
+  SavedMultipadSound map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SavedMultipadSound(
+      multipadId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}multipad_id'],
+      )!,
+      soundId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sound_id'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+    );
+  }
+
+  @override
+  $SavedMultipadSoundsTable createAlias(String alias) {
+    return $SavedMultipadSoundsTable(attachedDatabase, alias);
+  }
+}
+
+class SavedMultipadSound extends DataClass
+    implements Insertable<SavedMultipadSound> {
+  final int multipadId;
+  final int soundId;
+  final int sortOrder;
+  const SavedMultipadSound({
+    required this.multipadId,
+    required this.soundId,
+    required this.sortOrder,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['multipad_id'] = Variable<int>(multipadId);
+    map['sound_id'] = Variable<int>(soundId);
+    map['sort_order'] = Variable<int>(sortOrder);
+    return map;
+  }
+
+  SavedMultipadSoundsCompanion toCompanion(bool nullToAbsent) {
+    return SavedMultipadSoundsCompanion(
+      multipadId: Value(multipadId),
+      soundId: Value(soundId),
+      sortOrder: Value(sortOrder),
+    );
+  }
+
+  factory SavedMultipadSound.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SavedMultipadSound(
+      multipadId: serializer.fromJson<int>(json['multipadId']),
+      soundId: serializer.fromJson<int>(json['soundId']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'multipadId': serializer.toJson<int>(multipadId),
+      'soundId': serializer.toJson<int>(soundId),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+    };
+  }
+
+  SavedMultipadSound copyWith({
+    int? multipadId,
+    int? soundId,
+    int? sortOrder,
+  }) => SavedMultipadSound(
+    multipadId: multipadId ?? this.multipadId,
+    soundId: soundId ?? this.soundId,
+    sortOrder: sortOrder ?? this.sortOrder,
+  );
+  SavedMultipadSound copyWithCompanion(SavedMultipadSoundsCompanion data) {
+    return SavedMultipadSound(
+      multipadId: data.multipadId.present
+          ? data.multipadId.value
+          : this.multipadId,
+      soundId: data.soundId.present ? data.soundId.value : this.soundId,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavedMultipadSound(')
+          ..write('multipadId: $multipadId, ')
+          ..write('soundId: $soundId, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(multipadId, soundId, sortOrder);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SavedMultipadSound &&
+          other.multipadId == this.multipadId &&
+          other.soundId == this.soundId &&
+          other.sortOrder == this.sortOrder);
+}
+
+class SavedMultipadSoundsCompanion extends UpdateCompanion<SavedMultipadSound> {
+  final Value<int> multipadId;
+  final Value<int> soundId;
+  final Value<int> sortOrder;
+  final Value<int> rowid;
+  const SavedMultipadSoundsCompanion({
+    this.multipadId = const Value.absent(),
+    this.soundId = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SavedMultipadSoundsCompanion.insert({
+    required int multipadId,
+    required int soundId,
+    this.sortOrder = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : multipadId = Value(multipadId),
+       soundId = Value(soundId);
+  static Insertable<SavedMultipadSound> custom({
+    Expression<int>? multipadId,
+    Expression<int>? soundId,
+    Expression<int>? sortOrder,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (multipadId != null) 'multipad_id': multipadId,
+      if (soundId != null) 'sound_id': soundId,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SavedMultipadSoundsCompanion copyWith({
+    Value<int>? multipadId,
+    Value<int>? soundId,
+    Value<int>? sortOrder,
+    Value<int>? rowid,
+  }) {
+    return SavedMultipadSoundsCompanion(
+      multipadId: multipadId ?? this.multipadId,
+      soundId: soundId ?? this.soundId,
+      sortOrder: sortOrder ?? this.sortOrder,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (multipadId.present) {
+      map['multipad_id'] = Variable<int>(multipadId.value);
+    }
+    if (soundId.present) {
+      map['sound_id'] = Variable<int>(soundId.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavedMultipadSoundsCompanion(')
+          ..write('multipadId: $multipadId, ')
+          ..write('soundId: $soundId, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SavedMultipadTombstonesTable extends SavedMultipadTombstones
+    with TableInfo<$SavedMultipadTombstonesTable, SavedMultipadTombstone> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SavedMultipadTombstonesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _multipadKeyMeta = const VerificationMeta(
+    'multipadKey',
+  );
+  @override
+  late final GeneratedColumn<String> multipadKey = GeneratedColumn<String>(
+    'multipad_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _libraryIdMeta = const VerificationMeta(
+    'libraryId',
+  );
+  @override
+  late final GeneratedColumn<int> libraryId = GeneratedColumn<int>(
+    'library_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES libraries (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [multipadKey, libraryId, deletedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'saved_multipad_tombstones';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SavedMultipadTombstone> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('multipad_key')) {
+      context.handle(
+        _multipadKeyMeta,
+        multipadKey.isAcceptableOrUnknown(
+          data['multipad_key']!,
+          _multipadKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_multipadKeyMeta);
+    }
+    if (data.containsKey('library_id')) {
+      context.handle(
+        _libraryIdMeta,
+        libraryId.isAcceptableOrUnknown(data['library_id']!, _libraryIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_libraryIdMeta);
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {multipadKey};
+  @override
+  SavedMultipadTombstone map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SavedMultipadTombstone(
+      multipadKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}multipad_key'],
+      )!,
+      libraryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}library_id'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SavedMultipadTombstonesTable createAlias(String alias) {
+    return $SavedMultipadTombstonesTable(attachedDatabase, alias);
+  }
+}
+
+class SavedMultipadTombstone extends DataClass
+    implements Insertable<SavedMultipadTombstone> {
+  final String multipadKey;
+  final int libraryId;
+  final DateTime deletedAt;
+  const SavedMultipadTombstone({
+    required this.multipadKey,
+    required this.libraryId,
+    required this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['multipad_key'] = Variable<String>(multipadKey);
+    map['library_id'] = Variable<int>(libraryId);
+    map['deleted_at'] = Variable<DateTime>(deletedAt);
+    return map;
+  }
+
+  SavedMultipadTombstonesCompanion toCompanion(bool nullToAbsent) {
+    return SavedMultipadTombstonesCompanion(
+      multipadKey: Value(multipadKey),
+      libraryId: Value(libraryId),
+      deletedAt: Value(deletedAt),
+    );
+  }
+
+  factory SavedMultipadTombstone.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SavedMultipadTombstone(
+      multipadKey: serializer.fromJson<String>(json['multipadKey']),
+      libraryId: serializer.fromJson<int>(json['libraryId']),
+      deletedAt: serializer.fromJson<DateTime>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'multipadKey': serializer.toJson<String>(multipadKey),
+      'libraryId': serializer.toJson<int>(libraryId),
+      'deletedAt': serializer.toJson<DateTime>(deletedAt),
+    };
+  }
+
+  SavedMultipadTombstone copyWith({
+    String? multipadKey,
+    int? libraryId,
+    DateTime? deletedAt,
+  }) => SavedMultipadTombstone(
+    multipadKey: multipadKey ?? this.multipadKey,
+    libraryId: libraryId ?? this.libraryId,
+    deletedAt: deletedAt ?? this.deletedAt,
+  );
+  SavedMultipadTombstone copyWithCompanion(
+    SavedMultipadTombstonesCompanion data,
+  ) {
+    return SavedMultipadTombstone(
+      multipadKey: data.multipadKey.present
+          ? data.multipadKey.value
+          : this.multipadKey,
+      libraryId: data.libraryId.present ? data.libraryId.value : this.libraryId,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavedMultipadTombstone(')
+          ..write('multipadKey: $multipadKey, ')
+          ..write('libraryId: $libraryId, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(multipadKey, libraryId, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SavedMultipadTombstone &&
+          other.multipadKey == this.multipadKey &&
+          other.libraryId == this.libraryId &&
+          other.deletedAt == this.deletedAt);
+}
+
+class SavedMultipadTombstonesCompanion
+    extends UpdateCompanion<SavedMultipadTombstone> {
+  final Value<String> multipadKey;
+  final Value<int> libraryId;
+  final Value<DateTime> deletedAt;
+  final Value<int> rowid;
+  const SavedMultipadTombstonesCompanion({
+    this.multipadKey = const Value.absent(),
+    this.libraryId = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SavedMultipadTombstonesCompanion.insert({
+    required String multipadKey,
+    required int libraryId,
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : multipadKey = Value(multipadKey),
+       libraryId = Value(libraryId);
+  static Insertable<SavedMultipadTombstone> custom({
+    Expression<String>? multipadKey,
+    Expression<int>? libraryId,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (multipadKey != null) 'multipad_key': multipadKey,
+      if (libraryId != null) 'library_id': libraryId,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SavedMultipadTombstonesCompanion copyWith({
+    Value<String>? multipadKey,
+    Value<int>? libraryId,
+    Value<DateTime>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return SavedMultipadTombstonesCompanion(
+      multipadKey: multipadKey ?? this.multipadKey,
+      libraryId: libraryId ?? this.libraryId,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (multipadKey.present) {
+      map['multipad_key'] = Variable<String>(multipadKey.value);
+    }
+    if (libraryId.present) {
+      map['library_id'] = Variable<int>(libraryId.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavedMultipadTombstonesCompanion(')
+          ..write('multipadKey: $multipadKey, ')
+          ..write('libraryId: $libraryId, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $TagCategoriesTable extends TagCategories
     with TableInfo<$TagCategoriesTable, TagCategory> {
   @override
@@ -6386,6 +7463,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $WatchedPathsTable watchedPaths = $WatchedPathsTable(this);
   late final $PadsTable pads = $PadsTable(this);
   late final $PadSoundsTable padSounds = $PadSoundsTable(this);
+  late final $SavedMultipadsTable savedMultipads = $SavedMultipadsTable(this);
+  late final $SavedMultipadSoundsTable savedMultipadSounds =
+      $SavedMultipadSoundsTable(this);
+  late final $SavedMultipadTombstonesTable savedMultipadTombstones =
+      $SavedMultipadTombstonesTable(this);
   late final $TagCategoriesTable tagCategories = $TagCategoriesTable(this);
   late final $TagItemsTable tagItems = $TagItemsTable(this);
   late final $SoundTagsTable soundTags = $SoundTagsTable(this);
@@ -6404,6 +7486,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     watchedPaths,
     pads,
     padSounds,
+    savedMultipads,
+    savedMultipadSounds,
+    savedMultipadTombstones,
     tagCategories,
     tagItems,
     soundTags,
@@ -6474,6 +7559,36 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('pad_sounds', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'libraries',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('saved_multipads', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'saved_multipads',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('saved_multipad_sounds', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'sounds',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('saved_multipad_sounds', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'libraries',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('saved_multipad_tombstones', kind: UpdateKind.delete),
+      ],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -6634,6 +7749,55 @@ final class $$LibrariesTableReferences
     ).filter((f) => f.libraryId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_soundBoardsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SavedMultipadsTable, List<SavedMultipad>>
+  _savedMultipadsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.savedMultipads,
+    aliasName: $_aliasNameGenerator(
+      db.libraries.id,
+      db.savedMultipads.libraryId,
+    ),
+  );
+
+  $$SavedMultipadsTableProcessedTableManager get savedMultipadsRefs {
+    final manager = $$SavedMultipadsTableTableManager(
+      $_db,
+      $_db.savedMultipads,
+    ).filter((f) => f.libraryId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_savedMultipadsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SavedMultipadTombstonesTable,
+    List<SavedMultipadTombstone>
+  >
+  _savedMultipadTombstonesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.savedMultipadTombstones,
+        aliasName: $_aliasNameGenerator(
+          db.libraries.id,
+          db.savedMultipadTombstones.libraryId,
+        ),
+      );
+
+  $$SavedMultipadTombstonesTableProcessedTableManager
+  get savedMultipadTombstonesRefs {
+    final manager = $$SavedMultipadTombstonesTableTableManager(
+      $_db,
+      $_db.savedMultipadTombstones,
+    ).filter((f) => f.libraryId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _savedMultipadTombstonesRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -6811,6 +7975,57 @@ class $$LibrariesTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> savedMultipadsRefs(
+    Expression<bool> Function($$SavedMultipadsTableFilterComposer f) f,
+  ) {
+    final $$SavedMultipadsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.savedMultipads,
+      getReferencedColumn: (t) => t.libraryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SavedMultipadsTableFilterComposer(
+            $db: $db,
+            $table: $db.savedMultipads,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> savedMultipadTombstonesRefs(
+    Expression<bool> Function($$SavedMultipadTombstonesTableFilterComposer f) f,
+  ) {
+    final $$SavedMultipadTombstonesTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.savedMultipadTombstones,
+          getReferencedColumn: (t) => t.libraryId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SavedMultipadTombstonesTableFilterComposer(
+                $db: $db,
+                $table: $db.savedMultipadTombstones,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 }
@@ -7056,6 +8271,58 @@ class $$LibrariesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> savedMultipadsRefs<T extends Object>(
+    Expression<T> Function($$SavedMultipadsTableAnnotationComposer a) f,
+  ) {
+    final $$SavedMultipadsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.savedMultipads,
+      getReferencedColumn: (t) => t.libraryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SavedMultipadsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.savedMultipads,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> savedMultipadTombstonesRefs<T extends Object>(
+    Expression<T> Function($$SavedMultipadTombstonesTableAnnotationComposer a)
+    f,
+  ) {
+    final $$SavedMultipadTombstonesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.savedMultipadTombstones,
+          getReferencedColumn: (t) => t.libraryId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SavedMultipadTombstonesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.savedMultipadTombstones,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$LibrariesTableTableManager
@@ -7076,6 +8343,8 @@ class $$LibrariesTableTableManager
             bool folderMembershipsRefs,
             bool soundsRefs,
             bool soundBoardsRefs,
+            bool savedMultipadsRefs,
+            bool savedMultipadTombstonesRefs,
           })
         > {
   $$LibrariesTableTableManager(_$AppDatabase db, $LibrariesTable table)
@@ -7163,6 +8432,8 @@ class $$LibrariesTableTableManager
                 folderMembershipsRefs = false,
                 soundsRefs = false,
                 soundBoardsRefs = false,
+                savedMultipadsRefs = false,
+                savedMultipadTombstonesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -7171,6 +8442,8 @@ class $$LibrariesTableTableManager
                     if (folderMembershipsRefs) db.folderMemberships,
                     if (soundsRefs) db.sounds,
                     if (soundBoardsRefs) db.soundBoards,
+                    if (savedMultipadsRefs) db.savedMultipads,
+                    if (savedMultipadTombstonesRefs) db.savedMultipadTombstones,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -7259,6 +8532,48 @@ class $$LibrariesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (savedMultipadsRefs)
+                        await $_getPrefetchedData<
+                          Library,
+                          $LibrariesTable,
+                          SavedMultipad
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LibrariesTableReferences
+                              ._savedMultipadsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LibrariesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).savedMultipadsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.libraryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (savedMultipadTombstonesRefs)
+                        await $_getPrefetchedData<
+                          Library,
+                          $LibrariesTable,
+                          SavedMultipadTombstone
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LibrariesTableReferences
+                              ._savedMultipadTombstonesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LibrariesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).savedMultipadTombstonesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.libraryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -7284,6 +8599,8 @@ typedef $$LibrariesTableProcessedTableManager =
         bool folderMembershipsRefs,
         bool soundsRefs,
         bool soundBoardsRefs,
+        bool savedMultipadsRefs,
+        bool savedMultipadTombstonesRefs,
       })
     >;
 typedef $$LibraryFoldersTableCreateCompanionBuilder =
@@ -8378,6 +9695,33 @@ final class $$SoundsTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $SavedMultipadSoundsTable,
+    List<SavedMultipadSound>
+  >
+  _savedMultipadSoundsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.savedMultipadSounds,
+        aliasName: $_aliasNameGenerator(
+          db.sounds.id,
+          db.savedMultipadSounds.soundId,
+        ),
+      );
+
+  $$SavedMultipadSoundsTableProcessedTableManager get savedMultipadSoundsRefs {
+    final manager = $$SavedMultipadSoundsTableTableManager(
+      $_db,
+      $_db.savedMultipadSounds,
+    ).filter((f) => f.soundId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _savedMultipadSoundsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$SoundTagsTable, List<SoundTag>>
   _soundTagsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.soundTags,
@@ -8592,6 +9936,31 @@ class $$SoundsTableFilterComposer
           }) => $$PadSoundsTableFilterComposer(
             $db: $db,
             $table: $db.padSounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> savedMultipadSoundsRefs(
+    Expression<bool> Function($$SavedMultipadSoundsTableFilterComposer f) f,
+  ) {
+    final $$SavedMultipadSoundsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.savedMultipadSounds,
+      getReferencedColumn: (t) => t.soundId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SavedMultipadSoundsTableFilterComposer(
+            $db: $db,
+            $table: $db.savedMultipadSounds,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -8980,6 +10349,32 @@ class $$SoundsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> savedMultipadSoundsRefs<T extends Object>(
+    Expression<T> Function($$SavedMultipadSoundsTableAnnotationComposer a) f,
+  ) {
+    final $$SavedMultipadSoundsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.savedMultipadSounds,
+          getReferencedColumn: (t) => t.soundId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SavedMultipadSoundsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.savedMultipadSounds,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> soundTagsRefs<T extends Object>(
     Expression<T> Function($$SoundTagsTableAnnotationComposer a) f,
   ) {
@@ -9048,6 +10443,7 @@ class $$SoundsTableTableManager
             bool libraryId,
             bool folderId,
             bool padSoundsRefs,
+            bool savedMultipadSoundsRefs,
             bool soundTagsRefs,
             bool soundAutoTagsRefs,
           })
@@ -9174,6 +10570,7 @@ class $$SoundsTableTableManager
                 libraryId = false,
                 folderId = false,
                 padSoundsRefs = false,
+                savedMultipadSoundsRefs = false,
                 soundTagsRefs = false,
                 soundAutoTagsRefs = false,
               }) {
@@ -9181,6 +10578,7 @@ class $$SoundsTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (padSoundsRefs) db.padSounds,
+                    if (savedMultipadSoundsRefs) db.savedMultipadSounds,
                     if (soundTagsRefs) db.soundTags,
                     if (soundAutoTagsRefs) db.soundAutoTags,
                   ],
@@ -9246,6 +10644,27 @@ class $$SoundsTableTableManager
                                 table,
                                 p0,
                               ).padSoundsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.soundId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (savedMultipadSoundsRefs)
+                        await $_getPrefetchedData<
+                          Sound,
+                          $SoundsTable,
+                          SavedMultipadSound
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SoundsTableReferences
+                              ._savedMultipadSoundsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SoundsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).savedMultipadSoundsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.soundId == item.id,
@@ -9318,6 +10737,7 @@ typedef $$SoundsTableProcessedTableManager =
         bool libraryId,
         bool folderId,
         bool padSoundsRefs,
+        bool savedMultipadSoundsRefs,
         bool soundTagsRefs,
         bool soundAutoTagsRefs,
       })
@@ -10825,6 +12245,1190 @@ typedef $$PadSoundsTableProcessedTableManager =
       (PadSound, $$PadSoundsTableReferences),
       PadSound,
       PrefetchHooks Function({bool padId, bool soundId})
+    >;
+typedef $$SavedMultipadsTableCreateCompanionBuilder =
+    SavedMultipadsCompanion Function({
+      Value<int> id,
+      required String multipadKey,
+      required String name,
+      Value<int?> color,
+      Value<PadPlayMode> playMode,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int?> libraryId,
+    });
+typedef $$SavedMultipadsTableUpdateCompanionBuilder =
+    SavedMultipadsCompanion Function({
+      Value<int> id,
+      Value<String> multipadKey,
+      Value<String> name,
+      Value<int?> color,
+      Value<PadPlayMode> playMode,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int?> libraryId,
+    });
+
+final class $$SavedMultipadsTableReferences
+    extends BaseReferences<_$AppDatabase, $SavedMultipadsTable, SavedMultipad> {
+  $$SavedMultipadsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LibrariesTable _libraryIdTable(_$AppDatabase db) =>
+      db.libraries.createAlias(
+        $_aliasNameGenerator(db.savedMultipads.libraryId, db.libraries.id),
+      );
+
+  $$LibrariesTableProcessedTableManager? get libraryId {
+    final $_column = $_itemColumn<int>('library_id');
+    if ($_column == null) return null;
+    final manager = $$LibrariesTableTableManager(
+      $_db,
+      $_db.libraries,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_libraryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SavedMultipadSoundsTable,
+    List<SavedMultipadSound>
+  >
+  _savedMultipadSoundsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.savedMultipadSounds,
+        aliasName: $_aliasNameGenerator(
+          db.savedMultipads.id,
+          db.savedMultipadSounds.multipadId,
+        ),
+      );
+
+  $$SavedMultipadSoundsTableProcessedTableManager get savedMultipadSoundsRefs {
+    final manager = $$SavedMultipadSoundsTableTableManager(
+      $_db,
+      $_db.savedMultipadSounds,
+    ).filter((f) => f.multipadId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _savedMultipadSoundsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$SavedMultipadsTableFilterComposer
+    extends Composer<_$AppDatabase, $SavedMultipadsTable> {
+  $$SavedMultipadsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get multipadKey => $composableBuilder(
+    column: $table.multipadKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<PadPlayMode, PadPlayMode, int> get playMode =>
+      $composableBuilder(
+        column: $table.playMode,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LibrariesTableFilterComposer get libraryId {
+    final $$LibrariesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.libraryId,
+      referencedTable: $db.libraries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LibrariesTableFilterComposer(
+            $db: $db,
+            $table: $db.libraries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> savedMultipadSoundsRefs(
+    Expression<bool> Function($$SavedMultipadSoundsTableFilterComposer f) f,
+  ) {
+    final $$SavedMultipadSoundsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.savedMultipadSounds,
+      getReferencedColumn: (t) => t.multipadId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SavedMultipadSoundsTableFilterComposer(
+            $db: $db,
+            $table: $db.savedMultipadSounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SavedMultipadsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SavedMultipadsTable> {
+  $$SavedMultipadsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get multipadKey => $composableBuilder(
+    column: $table.multipadKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get playMode => $composableBuilder(
+    column: $table.playMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LibrariesTableOrderingComposer get libraryId {
+    final $$LibrariesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.libraryId,
+      referencedTable: $db.libraries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LibrariesTableOrderingComposer(
+            $db: $db,
+            $table: $db.libraries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SavedMultipadsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SavedMultipadsTable> {
+  $$SavedMultipadsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get multipadKey => $composableBuilder(
+    column: $table.multipadKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get color =>
+      $composableBuilder(column: $table.color, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<PadPlayMode, int> get playMode =>
+      $composableBuilder(column: $table.playMode, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$LibrariesTableAnnotationComposer get libraryId {
+    final $$LibrariesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.libraryId,
+      referencedTable: $db.libraries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LibrariesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.libraries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> savedMultipadSoundsRefs<T extends Object>(
+    Expression<T> Function($$SavedMultipadSoundsTableAnnotationComposer a) f,
+  ) {
+    final $$SavedMultipadSoundsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.savedMultipadSounds,
+          getReferencedColumn: (t) => t.multipadId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SavedMultipadSoundsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.savedMultipadSounds,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$SavedMultipadsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SavedMultipadsTable,
+          SavedMultipad,
+          $$SavedMultipadsTableFilterComposer,
+          $$SavedMultipadsTableOrderingComposer,
+          $$SavedMultipadsTableAnnotationComposer,
+          $$SavedMultipadsTableCreateCompanionBuilder,
+          $$SavedMultipadsTableUpdateCompanionBuilder,
+          (SavedMultipad, $$SavedMultipadsTableReferences),
+          SavedMultipad,
+          PrefetchHooks Function({bool libraryId, bool savedMultipadSoundsRefs})
+        > {
+  $$SavedMultipadsTableTableManager(
+    _$AppDatabase db,
+    $SavedMultipadsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SavedMultipadsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SavedMultipadsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SavedMultipadsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> multipadKey = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int?> color = const Value.absent(),
+                Value<PadPlayMode> playMode = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int?> libraryId = const Value.absent(),
+              }) => SavedMultipadsCompanion(
+                id: id,
+                multipadKey: multipadKey,
+                name: name,
+                color: color,
+                playMode: playMode,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                libraryId: libraryId,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String multipadKey,
+                required String name,
+                Value<int?> color = const Value.absent(),
+                Value<PadPlayMode> playMode = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int?> libraryId = const Value.absent(),
+              }) => SavedMultipadsCompanion.insert(
+                id: id,
+                multipadKey: multipadKey,
+                name: name,
+                color: color,
+                playMode: playMode,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                libraryId: libraryId,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SavedMultipadsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({libraryId = false, savedMultipadSoundsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (savedMultipadSoundsRefs) db.savedMultipadSounds,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (libraryId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.libraryId,
+                                    referencedTable:
+                                        $$SavedMultipadsTableReferences
+                                            ._libraryIdTable(db),
+                                    referencedColumn:
+                                        $$SavedMultipadsTableReferences
+                                            ._libraryIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (savedMultipadSoundsRefs)
+                        await $_getPrefetchedData<
+                          SavedMultipad,
+                          $SavedMultipadsTable,
+                          SavedMultipadSound
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SavedMultipadsTableReferences
+                              ._savedMultipadSoundsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SavedMultipadsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).savedMultipadSoundsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.multipadId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$SavedMultipadsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SavedMultipadsTable,
+      SavedMultipad,
+      $$SavedMultipadsTableFilterComposer,
+      $$SavedMultipadsTableOrderingComposer,
+      $$SavedMultipadsTableAnnotationComposer,
+      $$SavedMultipadsTableCreateCompanionBuilder,
+      $$SavedMultipadsTableUpdateCompanionBuilder,
+      (SavedMultipad, $$SavedMultipadsTableReferences),
+      SavedMultipad,
+      PrefetchHooks Function({bool libraryId, bool savedMultipadSoundsRefs})
+    >;
+typedef $$SavedMultipadSoundsTableCreateCompanionBuilder =
+    SavedMultipadSoundsCompanion Function({
+      required int multipadId,
+      required int soundId,
+      Value<int> sortOrder,
+      Value<int> rowid,
+    });
+typedef $$SavedMultipadSoundsTableUpdateCompanionBuilder =
+    SavedMultipadSoundsCompanion Function({
+      Value<int> multipadId,
+      Value<int> soundId,
+      Value<int> sortOrder,
+      Value<int> rowid,
+    });
+
+final class $$SavedMultipadSoundsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $SavedMultipadSoundsTable,
+          SavedMultipadSound
+        > {
+  $$SavedMultipadSoundsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $SavedMultipadsTable _multipadIdTable(_$AppDatabase db) =>
+      db.savedMultipads.createAlias(
+        $_aliasNameGenerator(
+          db.savedMultipadSounds.multipadId,
+          db.savedMultipads.id,
+        ),
+      );
+
+  $$SavedMultipadsTableProcessedTableManager get multipadId {
+    final $_column = $_itemColumn<int>('multipad_id')!;
+
+    final manager = $$SavedMultipadsTableTableManager(
+      $_db,
+      $_db.savedMultipads,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_multipadIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SoundsTable _soundIdTable(_$AppDatabase db) => db.sounds.createAlias(
+    $_aliasNameGenerator(db.savedMultipadSounds.soundId, db.sounds.id),
+  );
+
+  $$SoundsTableProcessedTableManager get soundId {
+    final $_column = $_itemColumn<int>('sound_id')!;
+
+    final manager = $$SoundsTableTableManager(
+      $_db,
+      $_db.sounds,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_soundIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SavedMultipadSoundsTableFilterComposer
+    extends Composer<_$AppDatabase, $SavedMultipadSoundsTable> {
+  $$SavedMultipadSoundsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$SavedMultipadsTableFilterComposer get multipadId {
+    final $$SavedMultipadsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.multipadId,
+      referencedTable: $db.savedMultipads,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SavedMultipadsTableFilterComposer(
+            $db: $db,
+            $table: $db.savedMultipads,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SoundsTableFilterComposer get soundId {
+    final $$SoundsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.soundId,
+      referencedTable: $db.sounds,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundsTableFilterComposer(
+            $db: $db,
+            $table: $db.sounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SavedMultipadSoundsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SavedMultipadSoundsTable> {
+  $$SavedMultipadSoundsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$SavedMultipadsTableOrderingComposer get multipadId {
+    final $$SavedMultipadsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.multipadId,
+      referencedTable: $db.savedMultipads,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SavedMultipadsTableOrderingComposer(
+            $db: $db,
+            $table: $db.savedMultipads,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SoundsTableOrderingComposer get soundId {
+    final $$SoundsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.soundId,
+      referencedTable: $db.sounds,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundsTableOrderingComposer(
+            $db: $db,
+            $table: $db.sounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SavedMultipadSoundsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SavedMultipadSoundsTable> {
+  $$SavedMultipadSoundsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  $$SavedMultipadsTableAnnotationComposer get multipadId {
+    final $$SavedMultipadsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.multipadId,
+      referencedTable: $db.savedMultipads,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SavedMultipadsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.savedMultipads,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SoundsTableAnnotationComposer get soundId {
+    final $$SoundsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.soundId,
+      referencedTable: $db.sounds,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SoundsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.sounds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SavedMultipadSoundsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SavedMultipadSoundsTable,
+          SavedMultipadSound,
+          $$SavedMultipadSoundsTableFilterComposer,
+          $$SavedMultipadSoundsTableOrderingComposer,
+          $$SavedMultipadSoundsTableAnnotationComposer,
+          $$SavedMultipadSoundsTableCreateCompanionBuilder,
+          $$SavedMultipadSoundsTableUpdateCompanionBuilder,
+          (SavedMultipadSound, $$SavedMultipadSoundsTableReferences),
+          SavedMultipadSound,
+          PrefetchHooks Function({bool multipadId, bool soundId})
+        > {
+  $$SavedMultipadSoundsTableTableManager(
+    _$AppDatabase db,
+    $SavedMultipadSoundsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SavedMultipadSoundsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SavedMultipadSoundsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$SavedMultipadSoundsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> multipadId = const Value.absent(),
+                Value<int> soundId = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SavedMultipadSoundsCompanion(
+                multipadId: multipadId,
+                soundId: soundId,
+                sortOrder: sortOrder,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int multipadId,
+                required int soundId,
+                Value<int> sortOrder = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SavedMultipadSoundsCompanion.insert(
+                multipadId: multipadId,
+                soundId: soundId,
+                sortOrder: sortOrder,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SavedMultipadSoundsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({multipadId = false, soundId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (multipadId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.multipadId,
+                                referencedTable:
+                                    $$SavedMultipadSoundsTableReferences
+                                        ._multipadIdTable(db),
+                                referencedColumn:
+                                    $$SavedMultipadSoundsTableReferences
+                                        ._multipadIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+                    if (soundId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.soundId,
+                                referencedTable:
+                                    $$SavedMultipadSoundsTableReferences
+                                        ._soundIdTable(db),
+                                referencedColumn:
+                                    $$SavedMultipadSoundsTableReferences
+                                        ._soundIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SavedMultipadSoundsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SavedMultipadSoundsTable,
+      SavedMultipadSound,
+      $$SavedMultipadSoundsTableFilterComposer,
+      $$SavedMultipadSoundsTableOrderingComposer,
+      $$SavedMultipadSoundsTableAnnotationComposer,
+      $$SavedMultipadSoundsTableCreateCompanionBuilder,
+      $$SavedMultipadSoundsTableUpdateCompanionBuilder,
+      (SavedMultipadSound, $$SavedMultipadSoundsTableReferences),
+      SavedMultipadSound,
+      PrefetchHooks Function({bool multipadId, bool soundId})
+    >;
+typedef $$SavedMultipadTombstonesTableCreateCompanionBuilder =
+    SavedMultipadTombstonesCompanion Function({
+      required String multipadKey,
+      required int libraryId,
+      Value<DateTime> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$SavedMultipadTombstonesTableUpdateCompanionBuilder =
+    SavedMultipadTombstonesCompanion Function({
+      Value<String> multipadKey,
+      Value<int> libraryId,
+      Value<DateTime> deletedAt,
+      Value<int> rowid,
+    });
+
+final class $$SavedMultipadTombstonesTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $SavedMultipadTombstonesTable,
+          SavedMultipadTombstone
+        > {
+  $$SavedMultipadTombstonesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LibrariesTable _libraryIdTable(_$AppDatabase db) =>
+      db.libraries.createAlias(
+        $_aliasNameGenerator(
+          db.savedMultipadTombstones.libraryId,
+          db.libraries.id,
+        ),
+      );
+
+  $$LibrariesTableProcessedTableManager get libraryId {
+    final $_column = $_itemColumn<int>('library_id')!;
+
+    final manager = $$LibrariesTableTableManager(
+      $_db,
+      $_db.libraries,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_libraryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SavedMultipadTombstonesTableFilterComposer
+    extends Composer<_$AppDatabase, $SavedMultipadTombstonesTable> {
+  $$SavedMultipadTombstonesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get multipadKey => $composableBuilder(
+    column: $table.multipadKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LibrariesTableFilterComposer get libraryId {
+    final $$LibrariesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.libraryId,
+      referencedTable: $db.libraries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LibrariesTableFilterComposer(
+            $db: $db,
+            $table: $db.libraries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SavedMultipadTombstonesTableOrderingComposer
+    extends Composer<_$AppDatabase, $SavedMultipadTombstonesTable> {
+  $$SavedMultipadTombstonesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get multipadKey => $composableBuilder(
+    column: $table.multipadKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LibrariesTableOrderingComposer get libraryId {
+    final $$LibrariesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.libraryId,
+      referencedTable: $db.libraries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LibrariesTableOrderingComposer(
+            $db: $db,
+            $table: $db.libraries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SavedMultipadTombstonesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SavedMultipadTombstonesTable> {
+  $$SavedMultipadTombstonesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get multipadKey => $composableBuilder(
+    column: $table.multipadKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  $$LibrariesTableAnnotationComposer get libraryId {
+    final $$LibrariesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.libraryId,
+      referencedTable: $db.libraries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LibrariesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.libraries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SavedMultipadTombstonesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SavedMultipadTombstonesTable,
+          SavedMultipadTombstone,
+          $$SavedMultipadTombstonesTableFilterComposer,
+          $$SavedMultipadTombstonesTableOrderingComposer,
+          $$SavedMultipadTombstonesTableAnnotationComposer,
+          $$SavedMultipadTombstonesTableCreateCompanionBuilder,
+          $$SavedMultipadTombstonesTableUpdateCompanionBuilder,
+          (SavedMultipadTombstone, $$SavedMultipadTombstonesTableReferences),
+          SavedMultipadTombstone,
+          PrefetchHooks Function({bool libraryId})
+        > {
+  $$SavedMultipadTombstonesTableTableManager(
+    _$AppDatabase db,
+    $SavedMultipadTombstonesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SavedMultipadTombstonesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$SavedMultipadTombstonesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$SavedMultipadTombstonesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> multipadKey = const Value.absent(),
+                Value<int> libraryId = const Value.absent(),
+                Value<DateTime> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SavedMultipadTombstonesCompanion(
+                multipadKey: multipadKey,
+                libraryId: libraryId,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String multipadKey,
+                required int libraryId,
+                Value<DateTime> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SavedMultipadTombstonesCompanion.insert(
+                multipadKey: multipadKey,
+                libraryId: libraryId,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SavedMultipadTombstonesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({libraryId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (libraryId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.libraryId,
+                                referencedTable:
+                                    $$SavedMultipadTombstonesTableReferences
+                                        ._libraryIdTable(db),
+                                referencedColumn:
+                                    $$SavedMultipadTombstonesTableReferences
+                                        ._libraryIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SavedMultipadTombstonesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SavedMultipadTombstonesTable,
+      SavedMultipadTombstone,
+      $$SavedMultipadTombstonesTableFilterComposer,
+      $$SavedMultipadTombstonesTableOrderingComposer,
+      $$SavedMultipadTombstonesTableAnnotationComposer,
+      $$SavedMultipadTombstonesTableCreateCompanionBuilder,
+      $$SavedMultipadTombstonesTableUpdateCompanionBuilder,
+      (SavedMultipadTombstone, $$SavedMultipadTombstonesTableReferences),
+      SavedMultipadTombstone,
+      PrefetchHooks Function({bool libraryId})
     >;
 typedef $$TagCategoriesTableCreateCompanionBuilder =
     TagCategoriesCompanion Function({
@@ -12806,6 +15410,15 @@ class $AppDatabaseManager {
   $$PadsTableTableManager get pads => $$PadsTableTableManager(_db, _db.pads);
   $$PadSoundsTableTableManager get padSounds =>
       $$PadSoundsTableTableManager(_db, _db.padSounds);
+  $$SavedMultipadsTableTableManager get savedMultipads =>
+      $$SavedMultipadsTableTableManager(_db, _db.savedMultipads);
+  $$SavedMultipadSoundsTableTableManager get savedMultipadSounds =>
+      $$SavedMultipadSoundsTableTableManager(_db, _db.savedMultipadSounds);
+  $$SavedMultipadTombstonesTableTableManager get savedMultipadTombstones =>
+      $$SavedMultipadTombstonesTableTableManager(
+        _db,
+        _db.savedMultipadTombstones,
+      );
   $$TagCategoriesTableTableManager get tagCategories =>
       $$TagCategoriesTableTableManager(_db, _db.tagCategories);
   $$TagItemsTableTableManager get tagItems =>

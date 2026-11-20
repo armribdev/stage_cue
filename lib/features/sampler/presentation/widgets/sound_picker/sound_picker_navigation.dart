@@ -13,9 +13,9 @@ extension _SoundPickerNavigation on _SoundPickerOverlayState {
       count == 0 ? 0 : _selectedIndex.clamp(0, count - 1);
 
   void _moveSelection(int delta) {
-    final shown = _shownResults(_results);
-    if (shown.isEmpty) return;
-    final next = (_selectedIndex + delta).clamp(0, shown.length - 1);
+    final count = _rowCount(_shownResults(_results));
+    if (count == 0) return;
+    final next = (_selectedIndex + delta).clamp(0, count - 1);
     if (next == _selectedIndex) return;
 
     final policy = delta < 0

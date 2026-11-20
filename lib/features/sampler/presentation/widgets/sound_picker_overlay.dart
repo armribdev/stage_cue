@@ -13,11 +13,13 @@ import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/string_utils.dart';
 import '../../../../core/utils/title_tag_matcher.dart';
 import '../../data/repositories/sound_repository.dart';
+import '../../domain/entities/saved_multipad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../providers/sampler_provider.dart';
 import '../providers/sound_search_index.dart';
+import '../screens/saved_multipads_screen.dart';
 import '../screens/sound_details_screen.dart';
 import '../utils/quick_search_prepare.dart';
 import '../utils/sound_type_ui.dart';
@@ -142,6 +144,27 @@ class SoundPickerOverlay extends StatefulWidget {
     return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
   }
 
+  /// Choix de sons pour une liste d'ids sans pad (éditeur d'un multipad
+  /// enregistré) : [selectedIds] est modifiée en place, [onChanged] est appelé
+  /// après chaque ajout ou retrait.
+  static Future<void> showForSelection(
+    BuildContext context, {
+    required SamplerNotifier notifier,
+    required List<int> selectedIds,
+    required VoidCallback onChanged,
+  }) {
+    final mobile = _isMobile(context);
+    final w = SoundPickerOverlay._(
+      notifier: notifier,
+      mode: PadPickerMode(
+        draftSelectedIds: selectedIds,
+        onSelectionChanged: onChanged,
+      ),
+      isFullPage: mobile,
+    );
+    return mobile ? _showPage<void>(context, w) : _showDialog<void>(context, w);
+  }
+
   /// Parcours bibliothèque — ajoute un son au plateau et renvoie le pad créé/trouvé.
   static Future<QuickSearchPrepareResult?> showForLibrary(
     BuildContext context, {
@@ -235,6 +258,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   // ── Données ───────────────────────────────────────────────────────────────
   List<Sound> _all = const [];
+
+  /// Multipads enregistrés (décision 0051), proposés en tête de liste dans les
+  /// modes qui posent un pad sur le plateau (recherche-éclair, bibliothèque).
+  List<SavedMultipad> _savedMultipads = const [];
   bool _loading = true;
   List<TagCategoryWithTags> _tagCatalog = const [];
 
@@ -509,6 +536,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   /// liste (les slots du pad), seuls les tags et le catalogue l'intéressent.
   void _adoptSnapshot(SoundSearchSnapshot snapshot) {
     if (!_isPadVariant) _all = snapshot.sounds;
+    _savedMultipads = snapshot.savedMultipads;
     _tagCatalog = snapshot.tagCatalog;
     _soundTags = snapshot.tagsBySound;
     if (_isQuickSearch) _localIds = snapshot.locallyAvailableSoundIds;
@@ -562,7 +590,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
     final shown = _loading || _awaitingLocalIds
         ? const <Sound>[]
         : _shownResults(_results);
-    final selectedIndex = _clampSelectedIndex(shown.length);
+    final selectedIndex = _clampSelectedIndex(_rowCount(shown));
 
     final shortcuts = <ShortcutActivator, VoidCallback>{
       // maybePop (et non pop) : respecte le PopScope du mode gestion, qui
@@ -604,7 +632,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
               _buildFilterDivider(scheme),
             ],
             Expanded(child: results),
-            _buildHints(scheme, shown.isNotEmpty),
+            _buildHints(scheme, _rowCount(shown) > 0),
             if (_isManage && !_isPadVariant) _buildQueueBar(scheme),
           ],
         ),
@@ -686,7 +714,7 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
                               _buildFilterDivider(scheme),
                             ],
                             Flexible(child: results),
-                            _buildHints(scheme, shown.isNotEmpty),
+                            _buildHints(scheme, _rowCount(shown) > 0),
                           ],
                         ),
                       ),

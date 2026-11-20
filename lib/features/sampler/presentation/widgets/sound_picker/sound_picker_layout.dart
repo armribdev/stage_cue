@@ -174,6 +174,20 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
               style: const TextStyle(fontSize: 17),
             ),
           ),
+          // Gestion de la bibliothèque : accès aux multipads enregistrés
+          // (décision 0051), à renommer, modifier ou supprimer.
+          if (_isManage)
+            ExcludeFocus(
+              child: IconButton(
+                tooltip: 'Multipads enregistrés',
+                icon: const StrokeIcon(AppIcons.layers),
+                onPressed: () => unawaited(
+                  SavedMultipadsScreen.open(context, notifier: widget.notifier),
+                ),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
         ],
       ),
     );

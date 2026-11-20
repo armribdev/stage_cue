@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../../../core/sync/local_availability_probe.dart' as probe;
 import '../../data/repositories/library_repository.dart';
 import '../../data/repositories/sound_repository.dart';
+import '../../domain/entities/saved_multipad.dart';
 import '../../domain/entities/sound.dart';
 import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
@@ -12,6 +13,10 @@ class SoundSearchSnapshot {
   final List<Sound> sounds;
   final Map<int, List<TagItem>> tagsBySound;
   final List<TagCategoryWithTags> tagCatalog;
+
+  /// Multipads enregistrés (décision 0051), par nom : le sélecteur les propose
+  /// à côté des sons.
+  final List<SavedMultipad> savedMultipads;
 
   /// Sons dont le fichier est présent localement (filtre hors-ligne).
   final Set<int> locallyAvailableSoundIds;
@@ -23,6 +28,7 @@ class SoundSearchSnapshot {
     required this.sounds,
     required this.tagsBySound,
     required this.tagCatalog,
+    required this.savedMultipads,
     required this.locallyAvailableSoundIds,
     required this.probedAt,
   });
@@ -31,6 +37,7 @@ class SoundSearchSnapshot {
     sounds: next,
     tagsBySound: tagsBySound,
     tagCatalog: tagCatalog,
+    savedMultipads: savedMultipads,
     locallyAvailableSoundIds: locallyAvailableSoundIds,
     probedAt: probedAt,
   );
@@ -106,6 +113,7 @@ class SoundSearchIndex {
       _repository.getAllSounds(),
       _repository.getTagsForAllSounds(),
       _repository.getTagCatalog(),
+      _repository.getSavedMultipads(),
     ]);
     final sounds = results[0] as List<Sound>;
 
@@ -119,6 +127,7 @@ class SoundSearchIndex {
       sounds: sounds,
       tagsBySound: results[1] as Map<int, List<TagItem>>,
       tagCatalog: results[2] as List<TagCategoryWithTags>,
+      savedMultipads: results[3] as List<SavedMultipad>,
       locallyAvailableSoundIds: probeIsFresh
           ? previous.locallyAvailableSoundIds
           : await _probeLocalAvailability(sounds),

@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart';
 import '../../../../core/database/database.dart' as db;
 import '../../../../core/database/sounds.dart' as db_sounds;
-import '../../domain/entities/sound.dart' as domain;
 import '../../domain/entities/pad.dart' as domain_pad;
+import 'sound_query_row.dart';
 
 class LocalPadDataSource {
   final db.AppDatabase _database;
@@ -24,29 +24,6 @@ class LocalPadDataSource {
       _database.pads,
     )..where((p) => p.id.equals(padId))).getSingleOrNull();
     if (pad != null) await _touchBoard(pad.boardId);
-  }
-
-  domain.Sound _rowToSound(QueryRow row) {
-    final typeValue = row.read<int?>('type');
-    return domain.Sound(
-      id: row.read<int>('id'),
-      title: row.read<String>('title'),
-      displayName: row.read<String>('display_name'),
-      filePath: row.read<String>('file_path'),
-      type: switch (typeValue) {
-        0 => domain.SoundType.soundEffect,
-        1 => domain.SoundType.music,
-        2 => domain.SoundType.ambiance,
-        _ => null,
-      },
-      colorValue: row.read<int?>('color'),
-      gain: row.read<double>('gain'),
-      createdAt: row.read<DateTime>('created_at'),
-      libraryId: row.read<int?>('library_id'),
-      relativePath: row.read<String?>('relative_path'),
-      contentHash: row.read<String?>('content_hash'),
-      waveform: row.read<Uint8List?>('waveform'),
-    );
   }
 
   /// Nombre de pads (toutes scènes confondues) qui utilisent le son [soundId].
@@ -80,9 +57,7 @@ class LocalPadDataSource {
       final soundRows = await _database
           .customSelect(
             '''
-        SELECT s.id, s.title, s.display_name, s.file_path, s.type,
-               s.color, s.gain, s.created_at,
-               s.library_id, s.relative_path, s.content_hash, s.waveform
+        SELECT $kPlayableSoundColumns
         FROM pad_sounds ps
         INNER JOIN sounds s ON s.id = ps.sound_id
         WHERE ps.pad_id = ?
@@ -108,7 +83,7 @@ class LocalPadDataSource {
               ? domain_pad.PadPlayMode.random
               : domain_pad.PadPlayMode.sequential,
           createdAt: padRow.read<DateTime>('created_at'),
-          sounds: soundRows.map(_rowToSound).toList(),
+          sounds: soundRows.map(soundFromQueryRow).toList(),
         ),
       );
     }

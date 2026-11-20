@@ -25,6 +25,7 @@ import '../../domain/entities/sound.dart' as domain;
 export 'local_sound_board_datasource.dart';
 export 'local_watched_path_datasource.dart';
 export 'local_pad_datasource.dart';
+export 'local_saved_multipad_datasource.dart';
 
 part 'local_sound_crud.dart';
 part 'local_sound_indexing.dart';

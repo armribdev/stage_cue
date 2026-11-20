@@ -22,6 +22,9 @@ part 'database_tag_seed.dart';
     WatchedPaths,
     Pads,
     PadSounds,
+    SavedMultipads,
+    SavedMultipadSounds,
+    SavedMultipadTombstones,
     TagCategories,
     TagItems,
     SoundTags,
@@ -35,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 51;
+  int get schemaVersion => 53;
 
   @override
   MigrationStrategy get migration {
@@ -107,12 +110,15 @@ class AppDatabase extends _$AppDatabase {
       ('sound_boards', 'pads', 'board_id'),
       ('pads', 'pad_sounds', 'pad_id'),
       ('sounds', 'pad_sounds', 'sound_id'),
+      ('saved_multipads', 'saved_multipad_sounds', 'multipad_id'),
+      ('sounds', 'saved_multipad_sounds', 'sound_id'),
       ('sounds', 'sound_tags', 'sound_id'),
       ('sounds', 'sound_auto_tags', 'sound_id'),
       ('tags', 'sound_tags', 'tag_id'),
       ('tags', 'sound_auto_tags', 'tag_id'),
       ('tags', 'tag_aliases', 'tag_id'),
       ('libraries', 'library_folders', 'library_id'),
+      ('libraries', 'saved_multipad_tombstones', 'library_id'),
       ('libraries', 'folder_memberships', 'library_id'),
       ('library_folders', 'folder_memberships', 'folder_id'),
     ];
@@ -127,6 +133,12 @@ class AppDatabase extends _$AppDatabase {
       'CREATE TRIGGER IF NOT EXISTS trg_libraries_detach_sound_boards '
       'AFTER DELETE ON libraries BEGIN '
       'UPDATE sound_boards SET library_id = NULL WHERE library_id = OLD.id; END',
+    );
+    await customStatement(
+      'CREATE TRIGGER IF NOT EXISTS trg_libraries_detach_saved_multipads '
+      'AFTER DELETE ON libraries BEGIN '
+      'UPDATE saved_multipads SET library_id = NULL WHERE library_id = OLD.id; '
+      'END',
     );
   }
 
@@ -143,6 +155,9 @@ class AppDatabase extends _$AppDatabase {
           'OR folder_id NOT IN (SELECT id FROM library_folders)',
       'DELETE FROM pads WHERE board_id NOT IN (SELECT id FROM sound_boards)',
       'DELETE FROM pad_sounds WHERE pad_id NOT IN (SELECT id FROM pads) '
+          'OR sound_id NOT IN (SELECT id FROM sounds)',
+      'DELETE FROM saved_multipad_sounds '
+          'WHERE multipad_id NOT IN (SELECT id FROM saved_multipads) '
           'OR sound_id NOT IN (SELECT id FROM sounds)',
       'DELETE FROM sound_tags WHERE sound_id NOT IN (SELECT id FROM sounds) '
           'OR tag_id NOT IN (SELECT id FROM tags)',

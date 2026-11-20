@@ -97,6 +97,48 @@ extension SamplerLibraryQueries on SamplerNotifier {
     await loadBoards();
   }
 
+  // ── Multipads enregistrés (décision 0051) ─────────────────────────────────
+
+  Future<List<SavedMultipad>> loadSavedMultipads() =>
+      _repository.getSavedMultipads();
+
+  /// Enregistre une copie du multipad [pad] dans la bibliothèque. Le pad du
+  /// plateau n'est pas lié au modèle créé : les deux évoluent séparément.
+  Future<void> saveMultipadToLibrary(Pad pad, {required String name}) async {
+    await _repository.saveMultipad(pad, name: name);
+    invalidateSearchIndex();
+    AppLog.info(
+      'Multipad enregistré dans la bibliothèque (${pad.sounds.length} sons).',
+    );
+  }
+
+  Future<void> updateSavedMultipad(
+    int id, {
+    String? name,
+    int? colorValue,
+    bool clearColor = false,
+    PadPlayMode? playMode,
+    List<int>? soundIds,
+  }) async {
+    await _repository.updateSavedMultipad(
+      id,
+      name: name,
+      colorValue: colorValue,
+      clearColor: clearColor,
+      playMode: playMode,
+      soundIds: soundIds,
+    );
+    invalidateSearchIndex();
+  }
+
+  /// Supprime le modèle. Les pads déjà posés sur un plateau restent : ce sont
+  /// des copies.
+  Future<void> deleteSavedMultipad(int id) async {
+    await _repository.deleteSavedMultipad(id);
+    invalidateSearchIndex();
+    AppLog.info('Multipad enregistré supprimé de la bibliothèque.');
+  }
+
   // ── Tags ──────────────────────────────────────────────────────────────────
 
   Future<List<TagCategoryWithTags>> loadTagCatalog() async {

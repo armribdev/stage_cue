@@ -423,6 +423,42 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     return result;
   }
 
+  /// Pose une copie du multipad enregistré [saved] en fin de dernière ligne du
+  /// plateau : nom, couleur, mode de lecture et sons du modèle, sans lien avec
+  /// lui ensuite (décision 0051). Toujours un nouveau pad — poser deux fois le
+  /// même modèle donne deux pads. Le pad créé est rendu pour être mis en
+  /// évidence.
+  Future<QuickSearchPrepareResult> placeSavedMultipadOnBoard(
+    SavedMultipad saved,
+  ) async {
+    final boardId = _activeBoardId;
+    if (boardId == null || saved.sounds.isEmpty) {
+      return const QuickSearchPrepareResult.none();
+    }
+
+    final placement = computeLastRowAppendPlacement([
+      for (final item in _state.pads)
+        if (!item.isDraft) item.pad,
+    ], forceNewRow: _forceNewRowOnNextQuickAdd);
+    _forceNewRowOnNextQuickAdd = false;
+
+    final padId = await _repository.createPadWithSettings(
+      boardId: boardId,
+      soundIds: [for (final sound in saved.sounds) sound.id],
+      name: saved.name,
+      colorValue: saved.colorValue,
+      playMode: saved.playMode,
+      rowIndex: placement.rowIndex,
+      sortOrder: placement.globalSortOrder,
+    );
+    await loadSounds(boardId: boardId, silent: true);
+
+    final padItem = findPadItemById(padId);
+    if (padItem == null) return const QuickSearchPrepareResult.none();
+    _maybeAutoDownloadPad(padItem);
+    return QuickSearchPrepareResult.highlight(padId);
+  }
+
   int? beginDraftPad({required int rowIndex}) {
     final boardId = _activeBoardId;
     if (boardId == null) return null;

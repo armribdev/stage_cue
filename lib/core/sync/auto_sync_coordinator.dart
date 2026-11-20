@@ -316,7 +316,8 @@ class AutoSyncCoordinator {
     // - `libraries` : révision mise à jour après un push ;
     // - `library_folders` : révision et sonde de manifest par nœud, écrites par
     //   le pull lui-même. Ces deux tables ne voyagent dans aucun snapshot (les
-    //   exports portent sur `sounds`, `sound_boards` et `pads`), donc une
+    //   exports portent sur `sounds`, `sound_boards`, `pads` et les multipads
+    //   enregistrés), donc une
     //   écriture qui ne touche qu'elles n'a par construction rien à pousser.
     const bookkeepingTables = {'libraries', 'library_folders'};
     final touchesUserData = updates.any(

@@ -16,7 +16,8 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
       return _buildLoadingSkeleton();
     }
 
-    if (shown.isEmpty) {
+    final multipads = _multipadResults;
+    if (shown.isEmpty && multipads.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(24),
         child: Center(
@@ -46,13 +47,22 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
               controller: _scrollController,
               itemExtent: _itemExtent,
               padding: EdgeInsets.zero,
-              itemCount: shown.length,
-              itemBuilder: (context, index) => _buildItem(
-                shown[index],
-                index,
-                index == selectedIndex,
-                scheme,
-              ),
+              itemCount: multipads.length + shown.length,
+              // Multipads enregistrés d'abord ; l'indice de ligne reste global
+              // (sélection, clés, survol), celui du son en est décalé.
+              itemBuilder: (context, index) => index < multipads.length
+                  ? _buildSavedMultipadItem(
+                      multipads[index],
+                      index,
+                      index == selectedIndex,
+                      scheme,
+                    )
+                  : _buildItem(
+                      shown[index - multipads.length],
+                      index,
+                      index == selectedIndex,
+                      scheme,
+                    ),
             ),
           ),
         ),
@@ -253,6 +263,86 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                 inBoard: inBoard,
                 isCurrentVariant: isCurrentVariant,
                 index: index,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Ligne d'un multipad enregistré (décision 0051) : même gabarit qu'un son
+  /// (avatar du type commun, nom surligné), sous-titre « Multipad · N sons » et
+  /// le ⧉ de fin de ligne qui pose une copie sur le plateau. Un clic pose aussi,
+  /// sauf en Mode Spectacle où il ne fait que sélectionner (Entrée pose), comme
+  /// pour la lecture d'un son en recherche-éclair.
+  Widget _buildSavedMultipadItem(
+    SavedMultipad saved,
+    int index,
+    bool isSelected,
+    ColorScheme scheme,
+  ) {
+    final count = saved.sounds.length;
+    return Material(
+      key: _itemKey(index),
+      color: isSelected
+          ? scheme.primary.withValues(alpha: 0.10)
+          : Colors.transparent,
+      child: InkWell(
+        canRequestFocus: false,
+        onTap: () {
+          setState(() => _selectedIndex = index);
+          if (_isQuickSearch && widget.notifier.isLiveSessionActive) return;
+          unawaited(_placeSavedMultipad(saved));
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SoundTypeAvatar(
+                type: saved.commonType,
+                colorValue: saved.colorValue,
+                radius: 14,
+                iconSize: 16,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: MouseRegion(
+                  onEnter: (_) => setState(() => _hoveredIndex = index),
+                  onExit: (_) {
+                    if (_hoveredIndex == index) {
+                      setState(() => _hoveredIndex = null);
+                    }
+                  },
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ScrollingTextSpan(
+                        animate: isSelected || _hoveredIndex == index,
+                        span: buildHighlightedSpan(
+                          saved.name,
+                          _highlightTokens,
+                        ),
+                      ),
+                      Text(
+                        'Multipad · $count son${count > 1 ? 's' : ''}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _roundIconButton(
+                scheme: scheme,
+                icon: AppIcons.layers,
+                iconColor: scheme.primary,
+                onPressed: () => unawaited(_placeSavedMultipad(saved)),
               ),
             ],
           ),
