@@ -30,6 +30,17 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
   Widget _buildEditPane(ColorScheme scheme, List<Sound> shown) {
     final sound = _editingSound;
     final mode = _manageMode;
+    final multipad = _editingMultipad;
+    if (multipad != null) {
+      return SavedMultipadEditForm(
+        key: ValueKey('multipad-${multipad.id}'),
+        notifier: widget.notifier,
+        saved: multipad,
+        onDirtyChanged: (dirty) => setState(() => _editDirty = dirty),
+        onSaved: () => unawaited(_afterMultipadSave()),
+        onDeleted: () => unawaited(_afterMultipadDelete()),
+      );
+    }
     if (sound == null || mode == null) {
       return Center(
         child: Column(
@@ -44,7 +55,7 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
             Text(
               _unprocessedOnly && _unprocessedCount == 0
                   ? 'Tous les sons sont traités'
-                  : 'Sélectionnez un son pour le modifier',
+                  : 'Sélectionnez un son ou un multipad pour le modifier',
               style: TextStyle(color: scheme.onSurfaceVariant),
             ),
           ],
@@ -174,20 +185,6 @@ extension _SoundPickerLayout on _SoundPickerOverlayState {
               style: const TextStyle(fontSize: 17),
             ),
           ),
-          // Gestion de la bibliothèque : accès aux multipads enregistrés
-          // (décision 0051), à renommer, modifier ou supprimer.
-          if (_isManage)
-            ExcludeFocus(
-              child: IconButton(
-                tooltip: 'Multipads enregistrés',
-                icon: const StrokeIcon(AppIcons.layers),
-                onPressed: () => unawaited(
-                  SavedMultipadsScreen.open(context, notifier: widget.notifier),
-                ),
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
         ],
       ),
     );

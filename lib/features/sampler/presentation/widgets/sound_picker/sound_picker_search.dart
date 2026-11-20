@@ -175,24 +175,32 @@ extension _SoundPickerSearch on _SoundPickerOverlayState {
     return [for (final e in scored) e.$1];
   }
 
-  /// Multipads enregistrés à proposer en tête de liste (décision 0051), seulement
-  /// dans les modes qui posent un pad sur le plateau. Mêmes filtres que les
+  /// Multipads enregistrés à proposer en tête de liste (décision 0051), dans les
+  /// modes qui posent un pad sur le plateau et dans la gestion de la
+  /// bibliothèque (où on les modifie et les supprime). Mêmes filtres que les
   /// sons, appliqués à l'ensemble de leurs sons : un modèle n'est proposé que si
   /// tous les siens sont visibles ici (périmètre du plateau, type, hors-ligne).
   /// Recherche-éclair sans requête : rien (le parcours ne montre que favoris et
-  /// récents) ; bibliothèque sans requête : tous, par nom. Un modèle sans son ne
-  /// se pose pas, donc n'est jamais proposé.
+  /// récents) ; bibliothèque et gestion sans requête : tous, par nom. Un modèle
+  /// sans son ne se pose pas, donc n'est proposé qu'en gestion (à compléter ou
+  /// supprimer). La file de traitement et le filtre de dossier source ne
+  /// parlent que de sons : aucun modèle.
   List<SavedMultipad> get _multipadResults {
-    if (!(_isQuickSearch || _isLibrary) || _loading || _awaitingLocalIds) {
+    if (!(_isQuickSearch || _isLibrary || _isManage) ||
+        _loading ||
+        _awaitingLocalIds) {
       return const [];
     }
     if (_favoritesOnly || (_isQuickSearch && _query.isEmpty)) return const [];
+    if (_isManage && (_unprocessedOnly || _sourceFolderFilter != null)) {
+      return const [];
+    }
     final tokens = _normalizedTokens;
     final q = normalizeForSearch(_query);
     final typeFilter = _effectiveTypeFilter;
     final scored = <(SavedMultipad, int)>[];
     for (final saved in _savedMultipads) {
-      if (saved.sounds.isEmpty) continue;
+      if (saved.sounds.isEmpty && !_isManage) continue;
       if (typeFilter != null && !saved.hasOnlyType(typeFilter)) continue;
       if (!saved.sounds.every(_matchesBoardScope)) continue;
       if (_effectiveLocalOnly && !saved.sounds.every(_isLocal)) continue;

@@ -19,7 +19,7 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../../domain/entities/tag_item.dart';
 import '../providers/sampler_provider.dart';
 import '../providers/sound_search_index.dart';
-import '../screens/saved_multipads_screen.dart';
+import '../screens/saved_multipad_details_screen.dart';
 import '../screens/sound_details_screen.dart';
 import '../utils/quick_search_prepare.dart';
 import '../utils/sound_type_ui.dart';
@@ -27,6 +27,7 @@ import '../utils/title_tag_proposals.dart';
 import 'app_form_dialog.dart';
 import 'color_dot.dart';
 import 'key_cap.dart';
+import 'saved_multipad_edit_form.dart';
 import 'scrolling_text.dart';
 import 'sound_edit_form.dart';
 import 'sound_edit_pane.dart';
@@ -260,7 +261,8 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
   List<Sound> _all = const [];
 
   /// Multipads enregistrés (décision 0051), proposés en tête de liste dans les
-  /// modes qui posent un pad sur le plateau (recherche-éclair, bibliothèque).
+  /// modes qui posent un pad sur le plateau (recherche-éclair, bibliothèque) et
+  /// en gestion de la bibliothèque.
   List<SavedMultipad> _savedMultipads = const [];
   bool _loading = true;
   List<TagCategoryWithTags> _tagCatalog = const [];
@@ -300,6 +302,10 @@ class _SoundPickerOverlayState extends State<SoundPickerOverlay> {
 
   // ── Mode gestion (volet d'édition) ────────────────────────────────────────
   Sound? _editingSound;
+
+  /// Multipad enregistré ouvert dans le volet (exclusif avec [_editingSound]) :
+  /// même volet, même gestion des modifications non enregistrées ([_editDirty]).
+  SavedMultipad? _editingMultipad;
   bool _editDirty = false;
   final _editController = SoundEditFormController();
 

@@ -8,7 +8,6 @@ import '../../../../core/autotag/auto_tag_analysis.dart';
 import '../../../../core/autotag/auto_tag_status.dart';
 import '../../../../core/logging/app_log.dart';
 import '../../../../core/theme/app_icons.dart';
-import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/title_tag_matcher.dart';
 import '../../data/repositories/sound_repository.dart';
@@ -18,6 +17,7 @@ import '../../domain/entities/tag_category_with_tags.dart';
 import '../providers/sampler_provider.dart';
 import 'app_form_dialog.dart';
 import 'color_swatch_picker.dart';
+import 'edit_form_parts.dart';
 import 'sound_edit_preload.dart';
 import 'sound_tags_section.dart';
 import 'sound_type_selector.dart';
@@ -124,8 +124,6 @@ class _SoundEditFormState extends State<SoundEditForm>
     with SingleTickerProviderStateMixin {
   late String _displayName;
   late final TextEditingController _nameController;
-  // Ne sert qu'à afficher la croix « effacer » tant que le titre est focus.
-  late final FocusNode _nameFocus = FocusNode()..addListener(_onNameFocus);
   late int? _colorValue;
 
   /// Gain du formulaire (facteur linéaire, décision 0045) : le curseur et
@@ -332,12 +330,7 @@ class _SoundEditFormState extends State<SoundEditForm>
     }
     _gainGlide.dispose();
     _nameController.dispose();
-    _nameFocus.dispose();
     super.dispose();
-  }
-
-  void _onNameFocus() {
-    if (mounted) setState(() {});
   }
 
   Future<void> _loadTags() async {
@@ -587,38 +580,6 @@ class _SoundEditFormState extends State<SoundEditForm>
     widget.onDeleted?.call();
   }
 
-  Widget _buildDelete(ColorScheme scheme) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            'Met le fichier à la corbeille Google Drive et le retire de tous '
-            'vos appareils et de vos pads.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-        ),
-        const SizedBox(width: 12),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(64, 36),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-          ),
-          onPressed: _isDeleting || _isSaving ? null : _delete,
-          icon: _isDeleting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const StrokeIcon(AppIcons.delete, size: AppIconSize.sm),
-          label: const Text('Supprimer…'),
-        ),
-      ],
-    );
-  }
-
   /// Change le gain du formulaire et le répercute en direct sur l'aperçu
   /// bibliothèque en cours : celui du lecteur unique, que l'éditeur de point
   /// d'entrée partage avec le bouton de ligne.
@@ -679,116 +640,95 @@ class _SoundEditFormState extends State<SoundEditForm>
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 20),
-                    _section(
-                      'Couleur par défaut',
-                      ColorSwatchPicker(
-                        value: _colorValue,
-                        onChanged: (v) => _update(() => _colorValue = v),
-                      ),
-                    ),
-                    _section(
-                      'Gain',
-                      SoundGainField(
-                        gainDb: _gainGlide,
-                        onChanged: _onGainSlider,
-                        isMeasuring: _isMeasuringGain,
-                        onAuto: widget.notifier != null ? _applyAutoGain : null,
-                      ),
-                    ),
-                    _section('Point d\'entrée', _buildStartOffset()),
-                    _section(
-                      'Tags',
-                      SoundTagsSection(
-                        tagCatalog: widget.tagCatalog,
-                        selectedTagIds: _tagIds,
-                        autoTags: _autoTags,
-                        titleMatches: _titleMatches,
-                        tagsLoaded: _tagsLoaded,
-                        memory: widget.sectionMemory,
-                        tagsFailed: _tagsFailed,
-                        hasAnalysis: widget.autoTag != null,
-                        analysisStatus: _analysisStatus,
-                        analysisRequested: _analysisRequested,
-                        onTagAdded: (id) => _update(() => _tagIds.add(id)),
-                        onTagRemoved: (id) => _update(() => _tagIds.remove(id)),
-                        onStartAnalysis: _startAnalysis,
-                      ),
-                      isLast: !_canDelete,
-                    ),
-                    if (_canDelete)
-                      _section(
-                        'Suppression',
-                        _buildDelete(scheme),
-                        isLast: true,
-                      ),
-                  ],
-                ),
-              ),
-            ),
+    return EditFormShell(
+      content: [
+        _buildHeader(),
+        const SizedBox(height: 20),
+        EditFormSection(
+          label: 'Couleur par défaut',
+          child: ColorSwatchPicker(
+            value: _colorValue,
+            onChanged: (v) => _update(() => _colorValue = v),
           ),
         ),
-        Container(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-          decoration: BoxDecoration(
-            border: Border(top: AppElevation.border(scheme)),
+        EditFormSection(
+          label: 'Gain',
+          child: SoundGainField(
+            gainDb: _gainGlide,
+            onChanged: _onGainSlider,
+            isMeasuring: _isMeasuringGain,
+            onAuto: widget.notifier != null ? _applyAutoGain : null,
           ),
-          // Barre pleine largeur du volet (comme son filet) : les boutons
-          // collent aux bords au lieu de flotter au milieu de la colonne.
-          child: Row(
-            children: [
-              if (_isProcessed)
-                TextButton(
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(64, 42),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    foregroundColor: scheme.onSurfaceVariant,
-                  ),
-                  onPressed: _isSaving ? null : _markUnprocessed,
-                  child: const Text('Marquer non traité'),
-                ),
-              const Spacer(),
-              if (widget.onSkip != null) ...[
-                TextButton(
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(64, 42),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                  ),
-                  onPressed: _isSaving ? null : widget.onSkip,
-                  child: const Text('Passer'),
-                ),
-                const SizedBox(width: 8),
-              ],
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(64, 42),
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                ),
-                onPressed: _canSave ? _save : null,
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(_saveLabel),
-              ),
-            ],
+        ),
+        EditFormSection(label: 'Point d\'entrée', child: _buildStartOffset()),
+        EditFormSection(
+          label: 'Tags',
+          isLast: !_canDelete,
+          child: SoundTagsSection(
+            tagCatalog: widget.tagCatalog,
+            selectedTagIds: _tagIds,
+            autoTags: _autoTags,
+            titleMatches: _titleMatches,
+            tagsLoaded: _tagsLoaded,
+            memory: widget.sectionMemory,
+            tagsFailed: _tagsFailed,
+            hasAnalysis: widget.autoTag != null,
+            analysisStatus: _analysisStatus,
+            analysisRequested: _analysisRequested,
+            onTagAdded: (id) => _update(() => _tagIds.add(id)),
+            onTagRemoved: (id) => _update(() => _tagIds.remove(id)),
+            onStartAnalysis: _startAnalysis,
           ),
+        ),
+        if (_canDelete)
+          EditFormSection(
+            label: 'Suppression',
+            isLast: true,
+            child: EditFormDelete(
+              message:
+                  'Met le fichier à la corbeille Google Drive et le retire de '
+                  'tous vos appareils et de vos pads.',
+              busy: _isDeleting || _isSaving,
+              onPressed: _delete,
+            ),
+          ),
+      ],
+      footer: [
+        if (_isProcessed)
+          TextButton(
+            style: TextButton.styleFrom(
+              minimumSize: const Size(64, 42),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              foregroundColor: scheme.onSurfaceVariant,
+            ),
+            onPressed: _isSaving ? null : _markUnprocessed,
+            child: const Text('Marquer non traité'),
+          ),
+        const Spacer(),
+        if (widget.onSkip != null) ...[
+          TextButton(
+            style: TextButton.styleFrom(
+              minimumSize: const Size(64, 42),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+            ),
+            onPressed: _isSaving ? null : widget.onSkip,
+            child: const Text('Passer'),
+          ),
+          const SizedBox(width: 8),
+        ],
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(64, 42),
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+          ),
+          onPressed: _canSave ? _save : null,
+          child: _isSaving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(_saveLabel),
         ),
       ],
     );
@@ -796,31 +736,8 @@ class _SoundEditFormState extends State<SoundEditForm>
 
   String get _saveLabel => _isProcessed ? 'Enregistrer' : 'Valider';
 
-  /// Une section = libellé en petites capitales + contenu, puis un séparateur
-  /// (direction « Console Linear » : pas de `Card` autour d'une section).
-  Widget _section(String label, Widget child, {bool isLast = false}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label.toUpperCase(), style: AppTextStyles.sectionLabel(context)),
-        const SizedBox(height: 8),
-        child,
-        if (!isLast) ...[
-          const SizedBox(height: 16),
-          const Divider(height: 1),
-          const SizedBox(height: 16),
-        ],
-      ],
-    );
-  }
-
   Widget _buildHeader() {
     final scheme = Theme.of(context).colorScheme;
-    const titleStyle = TextStyle(
-      fontSize: 18,
-      fontWeight: FontWeight.w700,
-      letterSpacing: AppTypography.titleLetterSpacing,
-    );
     return Row(
       children: [
         // L'avatar est le sélecteur du type de son.
@@ -830,53 +747,16 @@ class _SoundEditFormState extends State<SoundEditForm>
           onChanged: (type) => _update(() => _type = type),
         ),
         const SizedBox(width: 6),
+        // Le titre est le nom affiché, éditable en place. Champ vidé : le titre
+        // du fichier (en indice) est ce qui sera enregistré, voir
+        // `_resolvedName`.
         Expanded(
-          // Le titre est le nom affiché, éditable en place. Une seule ligne :
-          // l'en-tête garde la même hauteur quel que soit le titre, sinon tout
-          // le formulaire se décale d'un son à l'autre. Champ vidé : le titre
-          // du fichier (en indice) est ce qui sera enregistré, voir
-          // `_resolvedName`.
-          child: TextField(
+          child: EditFormTitleField(
             controller: _nameController,
-            focusNode: _nameFocus,
+            hintText: widget.sound.title,
             onChanged: (v) => _update(() => _displayName = v),
-            maxLines: 1,
-            style: titleStyle,
-            // Aucun cadre, même au focus : le thème global donne aux champs un
-            // fond et un contour, ici on veut un simple texte éditable.
-            decoration: InputDecoration(
-              isCollapsed: true,
-              filled: false,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              hintText: widget.sound.title,
-              hintStyle: titleStyle.copyWith(
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
-              ),
-            ),
           ),
         ),
-        // Croix « tout effacer » tant que le titre est focus : le champ vidé
-        // retombe sur le titre du fichier à l'enregistrement (`_resolvedName`).
-        // TextFieldTapRegion : sur desktop, un appui hors du champ lui retire le
-        // focus dès le pointeur-bas, donc la croix disparaîtrait avant le
-        // relâchement. ExcludeFocus : le clic ne doit pas non plus prendre le
-        // focus au champ.
-        if (_nameFocus.hasFocus && _nameController.text.isNotEmpty)
-          TextFieldTapRegion(
-            child: ExcludeFocus(
-              child: IconButton(
-                tooltip: 'Effacer le nom',
-                icon: const StrokeIcon(AppIcons.close, size: AppIconSize.sm),
-                color: scheme.onSurfaceVariant,
-                onPressed: () {
-                  _nameController.clear();
-                  _update(() => _displayName = '');
-                },
-              ),
-            ),
-          ),
         if (widget.notifier != null) ...[
           const SizedBox(width: 8),
           IconButton(

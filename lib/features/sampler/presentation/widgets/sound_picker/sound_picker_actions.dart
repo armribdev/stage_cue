@@ -16,11 +16,11 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
     if (rowCount == 0) return;
     final row = _clampSelectedIndex(rowCount);
     if (row < multipads.length) {
-      await _placeSavedMultipad(multipads[row]);
+      await _activateSavedMultipad(multipads[row]);
       return;
     }
-    // Les modèles n'existent que dans les modes qui posent un pad : pour les
-    // autres, `index` est l'indice du son, comme avant leur ajout.
+    // Les modèles n'existent que dans les modes qui posent un pad et en
+    // gestion : pour les autres, `index` est l'indice du son, comme avant.
     final index = row - multipads.length;
     final sound = shown[index];
     switch (widget.mode) {
@@ -106,17 +106,69 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
     if (rowCount == 0) return;
     final row = _clampSelectedIndex(rowCount);
     if (row < multipads.length) {
-      await _placeSavedMultipad(multipads[row]);
+      await _activateSavedMultipad(multipads[row]);
       return;
     }
     await _prepareAndClose(shown[row - multipads.length]);
   }
+
+  /// Clic / Entrée sur un multipad enregistré : en gestion on le modifie, sinon
+  /// on en pose une copie sur le plateau.
+  Future<void> _activateSavedMultipad(SavedMultipad saved) =>
+      _isManage ? _editSavedMultipad(saved) : _placeSavedMultipad(saved);
 
   /// Pose une copie du multipad enregistré sur le plateau (décision 0051) et
   /// ferme : même résultat qu'un son préparé, le pad créé est mis en évidence.
   Future<void> _placeSavedMultipad(SavedMultipad saved) async {
     final result = await widget.notifier.placeSavedMultipadOnBoard(saved);
     if (mounted) Navigator.of(context).pop(result);
+  }
+
+  /// Gestion : large écran, le modèle s'édite dans le volet de droite comme un
+  /// son. Étroit : page d'édition poussée par-dessus la liste. Le nom, le type
+  /// commun ou la liste des sons ont pu changer : on relit l'index.
+  Future<void> _editSavedMultipad(SavedMultipad saved) async {
+    if (_isSplitLayout) {
+      await _editMultipadInPane(saved);
+      return;
+    }
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) =>
+            SavedMultipadDetailsScreen(notifier: widget.notifier, saved: saved),
+      ),
+    );
+    if (mounted) await _adoptRefreshedSnapshot();
+  }
+
+  Future<void> _editMultipadInPane(SavedMultipad saved) async {
+    if (_editingMultipad?.id == saved.id) return;
+    if (_editDirty && !await _confirmDiscardEdits()) return;
+    if (!mounted) return;
+    setState(() {
+      _editingMultipad = saved;
+      _editingSound = null;
+      _editDirty = false;
+    });
+  }
+
+  /// Après l'enregistrement du multipad ouvert dans le volet : l'index porte son
+  /// nouveau nom et ses nouveaux sons.
+  Future<void> _afterMultipadSave() => _adoptRefreshedSnapshot();
+
+  /// Après la suppression du multipad ouvert dans le volet : le formulaire n'a
+  /// plus d'objet, on le vide et on borne la sélection à la liste raccourcie.
+  Future<void> _afterMultipadDelete() async {
+    setState(() {
+      _editingMultipad = null;
+      _editDirty = false;
+    });
+    await _adoptRefreshedSnapshot(refresh: false);
+    if (!mounted) return;
+    final count = _rowCount(_shownResults(_results));
+    if (_selectedIndex >= count) {
+      setState(() => _selectedIndex = count == 0 ? 0 : count - 1);
+    }
   }
 
   // Music picker
@@ -276,6 +328,7 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
     if (!mounted) return;
     setState(() {
       _editingSound = sound;
+      _editingMultipad = null;
       _editDirty = false;
     });
   }
@@ -283,7 +336,9 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
   Future<bool> _confirmDiscardEdits() => AppConfirmDialog.show(
     context,
     title: 'Abandonner les modifications',
-    message: 'Les modifications de ce son ne sont pas enregistrées.',
+    message: _editingMultipad != null
+        ? 'Les modifications de ce multipad ne sont pas enregistrées.'
+        : 'Les modifications de ce son ne sont pas enregistrées.',
     confirmLabel: 'Abandonner',
     isDestructive: true,
   );

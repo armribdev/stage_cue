@@ -275,7 +275,8 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
   /// (avatar du type commun, nom surligné), sous-titre « Multipad · N sons » et
   /// le ⧉ de fin de ligne qui pose une copie sur le plateau. Un clic pose aussi,
   /// sauf en Mode Spectacle où il ne fait que sélectionner (Entrée pose), comme
-  /// pour la lecture d'un son en recherche-éclair.
+  /// pour la lecture d'un son en recherche-éclair. En gestion, un clic ouvre
+  /// l'édition du modèle (volet de droite comme pour un son, ou page sur mobile).
   Widget _buildSavedMultipadItem(
     SavedMultipad saved,
     int index,
@@ -283,9 +284,14 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
     ColorScheme scheme,
   ) {
     final count = saved.sounds.length;
+    final isEmpty = count == 0;
+    // Modèle affiché dans le volet d'édition (mode gestion scindé).
+    final isEditing = _isSplitLayout && _editingMultipad?.id == saved.id;
     return Material(
       key: _itemKey(index),
-      color: isSelected
+      color: isEditing
+          ? scheme.primaryContainer.withValues(alpha: isSelected ? 0.55 : 0.35)
+          : isSelected
           ? scheme.primary.withValues(alpha: 0.10)
           : Colors.transparent,
       child: InkWell(
@@ -293,10 +299,17 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         onTap: () {
           setState(() => _selectedIndex = index);
           if (_isQuickSearch && widget.notifier.isLiveSessionActive) return;
-          unawaited(_placeSavedMultipad(saved));
+          unawaited(_activateSavedMultipad(saved));
         },
         child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          // Même gabarit que la ligne d'un son (filet de 2 px compris) : les
+          // avatars restent alignés d'une ligne à l'autre.
+          decoration: const BoxDecoration(
+            border: Border(
+              left: BorderSide(width: 2, color: Colors.transparent),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(14, 0, 16, 0),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -327,10 +340,14 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                         ),
                       ),
                       Text(
-                        'Multipad · $count son${count > 1 ? 's' : ''}',
+                        isEmpty
+                            ? 'Multipad · aucun son, à compléter ou supprimer'
+                            : 'Multipad · $count son${count > 1 ? 's' : ''}',
                         style: TextStyle(
                           fontSize: 12,
-                          color: scheme.onSurfaceVariant,
+                          color: isEmpty
+                              ? scheme.error
+                              : scheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -338,12 +355,15 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                 ),
               ),
               const SizedBox(width: 8),
-              _roundIconButton(
-                scheme: scheme,
-                icon: AppIcons.layers,
-                iconColor: scheme.primary,
-                onPressed: () => unawaited(_placeSavedMultipad(saved)),
-              ),
+              // En gestion, comme un son : rien en fin de ligne (la suppression
+              // est dans le volet d'édition).
+              if (!_isManage)
+                _roundIconButton(
+                  scheme: scheme,
+                  icon: AppIcons.layers,
+                  iconColor: scheme.primary,
+                  onPressed: () => unawaited(_placeSavedMultipad(saved)),
+                ),
             ],
           ),
         ),
