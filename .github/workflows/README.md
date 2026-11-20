@@ -14,6 +14,16 @@ Le workflow [`release.yml`](release.yml) compile Stage Cue sur **Android, iOS, m
 - **Manuel** : onglet **Actions** → *Release* → *Run workflow*.
   → les builds tournent et les artefacts sont téléchargeables depuis la page du run (pas de Release créée, car pas de tag).
 
+- **Reconstruire une release existante** (binaires manquants) sans déplacer son tag : créer une branche depuis le tag, y ajouter le correctif nécessaire, la pousser, puis lancer *Run workflow* sur cette branche avec `tag` = `vX.Y.Z` (l'installeur Windows prend ce numéro, le pubspec est vérifié). Joindre ensuite les artefacts à la release avec `gh release upload vX.Y.Z <fichiers>`, puis supprimer la branche et le run.
+
+## ONNX Runtime (Linux et Windows)
+
+`flutter_onnxruntime` télécharge ONNX Runtime depuis `github.com/microsoft/onnxruntime`, dépôt qui renvoie 404 depuis mi-novembre 2026. Les jobs Linux et Windows lancent donc [`tool/fetch_onnxruntime.sh`](../../tool/fetch_onnxruntime.sh) avant `flutter build` : il installe le paquet NuGet officiel (SHA-256 vérifié) là où le plugin le cherche, ce qui lui fait sauter son téléchargement.
+
+- Si une mise à jour de `flutter_onnxruntime` change la version attendue, le script s'arrête en l'indiquant : mettre à jour `plugin_version`, `nuget_version` et `nupkg_sha256` en tête du script.
+- Un build local propre (`flutter clean`) échoue pour la même raison : lancer `bash tool/fetch_onnxruntime.sh windows` (ou `linux`) après `flutter pub get`, avec `cmake` dans le PATH.
+- À retirer quand le plugin récupère ONNX Runtime ailleurs que sur GitHub.
+
 ## Artefacts produits
 
 | Plateforme | Fichier                       | Installable tel quel ?                       |

@@ -25,6 +25,27 @@ nuget_version="1.28.0"
 nupkg_sha256="769d1d3ea8ab6cd69f737c9dd4d4462aa4ad0ccfa106eaf506efc40d7bead5db"
 nupkg_url="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${nuget_version}/microsoft.ml.onnxruntime.${nuget_version}.nupkg"
 
+# Garde-fou : le dossier à remplir porte la version qu'attend le plugin. Si une
+# mise à jour de flutter_onnxruntime (pubspec.lock) la change, on s'arrête ici
+# avec la marche à suivre, plutôt que de laisser le plugin retenter GitHub et
+# échouer sur « extraction directory doesn't exist ».
+plugin_root="$(grep -A1 '"name": "flutter_onnxruntime"' .dart_tool/package_config.json \
+  | sed -n 's|.*"rootUri": "file://\(.*\)",|\1|p' || true)"
+plugin_root="${plugin_root#/}"            # file:///C:/… -> C:/…
+case "$plugin_root" in [A-Za-z]:*) ;; *) plugin_root="/$plugin_root" ;; esac
+plugin_cmake="$plugin_root/$os/CMakeLists.txt"
+if [ ! -f "$plugin_cmake" ]; then
+  echo "CMakeLists.txt du plugin introuvable ($plugin_cmake) : lancer 'flutter pub get' à la racine du dépôt avant ce script." >&2
+  exit 1
+fi
+wanted="$(sed -n 's/^ *set(ONNXRUNTIME_VERSION "\([0-9][0-9.]*\)").*/\1/p' "$plugin_cmake" | head -n1)"
+if [ "$wanted" != "$plugin_version" ]; then
+  echo "flutter_onnxruntime attend ONNX Runtime '${wanted:-?}', ce script prépare '${plugin_version}'." >&2
+  echo "Mettre à jour plugin_version, nuget_version et nupkg_sha256 en tête de $0" >&2
+  echo "(SHA-256 : celui du .nupkg téléchargé depuis nupkg_url, via sha256sum)." >&2
+  exit 1
+fi
+
 case "$os" in
   linux)
     plugin_build="build/linux/x64/release/plugins/flutter_onnxruntime"
