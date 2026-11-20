@@ -436,24 +436,17 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
       );
     }
 
-    // Recherche rapide : pas de libellé de type, l'avatar l'indique déjà.
+    // Pas de libellé de type : l'avatar l'indique déjà.
     return Row(
       children: [
-        if (!_isQuickSearch)
+        if (_isLibrary && inBoard)
           Text(
-            _typeLabel(sound.type),
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-          ),
-        if (_isLibrary && inBoard) ...[
-          const SizedBox(width: 6),
-          Text(
-            '· sur le plateau',
+            'Sur le plateau',
             style: TextStyle(
               fontSize: 12,
               color: scheme.primary.withValues(alpha: 0.8),
             ),
           ),
-        ],
         if (_isQuickSearch && _localIds != null && !_isLocal(sound)) ...[
           StrokeIcon(
             AppIcons.cloud,

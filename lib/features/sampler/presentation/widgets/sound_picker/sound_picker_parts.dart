@@ -136,8 +136,6 @@ extension _SoundPickerParts on _SoundPickerOverlayState {
       ),
     );
   }
-
-  String _typeLabel(SoundType? type) => type?.label ?? 'Non classé';
 }
 
 /// Touche de clavier d'un pied d'aide : hairline, mono, discrète — une touche

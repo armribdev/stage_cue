@@ -575,20 +575,6 @@ class _SoundLibraryScreenState extends State<SoundLibraryScreen> {
                                 ],
                               ),
                             ],
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                Text(
-                                  'Type: ${sound.typeDisplayLabel}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
                           ],
                         ),
                         trailing: SoundPickerActionButtons(

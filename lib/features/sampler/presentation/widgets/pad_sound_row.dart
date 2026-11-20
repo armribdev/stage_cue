@@ -137,21 +137,12 @@ class _PadSoundRowState extends State<PadSoundRow> {
       );
     }
 
-    return Row(
-      children: [
-        Text(
-          widget.sound.typeDisplayLabel,
-          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-        ),
-        if (!isLocal) ...[
-          const SizedBox(width: 6),
-          StrokeIcon(
-            AppIcons.cloud,
-            size: AppIconSize.sm,
-            color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-          ),
-        ],
-      ],
+    // Pas de libellé de type : l'avatar l'indique déjà.
+    if (isLocal) return const SizedBox.shrink();
+    return StrokeIcon(
+      AppIcons.cloud,
+      size: AppIconSize.sm,
+      color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
     );
   }
 

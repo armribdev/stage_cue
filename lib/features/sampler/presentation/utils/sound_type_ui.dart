@@ -35,13 +35,11 @@ extension SoundTypeUi on SoundType {
       };
 }
 
-/// Filtre par type et libellé d'affichage (sons Drive non encore téléchargés exclus).
+/// Filtre par type (sons Drive non encore téléchargés exclus).
 extension SoundClassificationUi on Sound {
   bool get isClassifiedForTypeFilter => type != null;
 
   bool matchesSoundType(SoundType filter) => type == filter;
-
-  String get typeDisplayLabel => type?.label ?? 'Non classé';
 }
 
 /// Avatar circulaire avec l'icône du type de son — la "jaquette" du son.
