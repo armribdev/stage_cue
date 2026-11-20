@@ -25,7 +25,8 @@ class LocalSavedMultipadDataSource {
   Future<List<SavedMultipad>> getAll() async {
     final multipadRows = await _database
         .customSelect(
-          'SELECT id, name, color, play_mode FROM saved_multipads '
+          'SELECT id, name, color, play_mode, last_played_at '
+          'FROM saved_multipads '
           'ORDER BY name COLLATE NOCASE, id',
         )
         .get();
@@ -56,8 +57,23 @@ class LocalSavedMultipadDataSource {
               ? domain_pad.PadPlayMode.random
               : domain_pad.PadPlayMode.sequential,
           sounds: soundsByMultipad[row.read<int>('id')] ?? const [],
+          lastPlayedAt: row.read<DateTime?>('last_played_at'),
         ),
     ];
+  }
+
+  /// Enregistre l'instant de dernière lecture (tri par récence). Écriture
+  /// **muette**, comme `LocalSoundCrud.markPlayed` : `customUpdate` sans
+  /// `updates` n'émet aucun événement `tableUpdates` (pas de push Drive pour une
+  /// annotation locale) et `updated_at` n'est pas touché (arbitre de fusion).
+  Future<void> markPlayed(int id, {DateTime? at}) async {
+    await _database.customUpdate(
+      'UPDATE saved_multipads SET last_played_at = ? WHERE id = ?',
+      variables: [
+        Variable.withDateTime(at ?? DateTime.now()),
+        Variable.withInt(id),
+      ],
+    );
   }
 
   /// Bibliothèque Drive du plateau [boardId], `null` pour un plateau local ou

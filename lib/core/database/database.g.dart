@@ -4853,6 +4853,17 @@ class $SavedMultipadsTable extends SavedMultipads
       'REFERENCES libraries (id) ON DELETE SET NULL',
     ),
   );
+  static const VerificationMeta _lastPlayedAtMeta = const VerificationMeta(
+    'lastPlayedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastPlayedAt = GeneratedColumn<DateTime>(
+    'last_played_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4863,6 +4874,7 @@ class $SavedMultipadsTable extends SavedMultipads
     createdAt,
     updatedAt,
     libraryId,
+    lastPlayedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4922,6 +4934,15 @@ class $SavedMultipadsTable extends SavedMultipads
         libraryId.isAcceptableOrUnknown(data['library_id']!, _libraryIdMeta),
       );
     }
+    if (data.containsKey('last_played_at')) {
+      context.handle(
+        _lastPlayedAtMeta,
+        lastPlayedAt.isAcceptableOrUnknown(
+          data['last_played_at']!,
+          _lastPlayedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4969,6 +4990,10 @@ class $SavedMultipadsTable extends SavedMultipads
         DriftSqlType.int,
         data['${effectivePrefix}library_id'],
       ),
+      lastPlayedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_played_at'],
+      ),
     );
   }
 
@@ -4999,6 +5024,12 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
   /// été enregistré ; null = modèle local, jamais synchronisé. Retirer la
   /// bibliothèque le rend local (il n'est pas supprimé), comme une scène.
   final int? libraryId;
+
+  /// Dernière lecture depuis la recherche-éclair (v54), pour le parcours des
+  /// récents. Annotation locale, comme `sounds.last_played_at` : absente du
+  /// snapshot, et écrite sans toucher `updated_at` (sinon chaque lecture
+  /// gagnerait la fusion « dernier écrivain gagne » sur les autres appareils).
+  final DateTime? lastPlayedAt;
   const SavedMultipad({
     required this.id,
     required this.multipadKey,
@@ -5008,6 +5039,7 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
     required this.createdAt,
     required this.updatedAt,
     this.libraryId,
+    this.lastPlayedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5028,6 +5060,9 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
     if (!nullToAbsent || libraryId != null) {
       map['library_id'] = Variable<int>(libraryId);
     }
+    if (!nullToAbsent || lastPlayedAt != null) {
+      map['last_played_at'] = Variable<DateTime>(lastPlayedAt);
+    }
     return map;
   }
 
@@ -5045,6 +5080,9 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
       libraryId: libraryId == null && nullToAbsent
           ? const Value.absent()
           : Value(libraryId),
+      lastPlayedAt: lastPlayedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastPlayedAt),
     );
   }
 
@@ -5064,6 +5102,7 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       libraryId: serializer.fromJson<int?>(json['libraryId']),
+      lastPlayedAt: serializer.fromJson<DateTime?>(json['lastPlayedAt']),
     );
   }
   @override
@@ -5080,6 +5119,7 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'libraryId': serializer.toJson<int?>(libraryId),
+      'lastPlayedAt': serializer.toJson<DateTime?>(lastPlayedAt),
     };
   }
 
@@ -5092,6 +5132,7 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<int?> libraryId = const Value.absent(),
+    Value<DateTime?> lastPlayedAt = const Value.absent(),
   }) => SavedMultipad(
     id: id ?? this.id,
     multipadKey: multipadKey ?? this.multipadKey,
@@ -5101,6 +5142,7 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     libraryId: libraryId.present ? libraryId.value : this.libraryId,
+    lastPlayedAt: lastPlayedAt.present ? lastPlayedAt.value : this.lastPlayedAt,
   );
   SavedMultipad copyWithCompanion(SavedMultipadsCompanion data) {
     return SavedMultipad(
@@ -5114,6 +5156,9 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       libraryId: data.libraryId.present ? data.libraryId.value : this.libraryId,
+      lastPlayedAt: data.lastPlayedAt.present
+          ? data.lastPlayedAt.value
+          : this.lastPlayedAt,
     );
   }
 
@@ -5127,7 +5172,8 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
           ..write('playMode: $playMode, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('libraryId: $libraryId')
+          ..write('libraryId: $libraryId, ')
+          ..write('lastPlayedAt: $lastPlayedAt')
           ..write(')'))
         .toString();
   }
@@ -5142,6 +5188,7 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
     createdAt,
     updatedAt,
     libraryId,
+    lastPlayedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -5154,7 +5201,8 @@ class SavedMultipad extends DataClass implements Insertable<SavedMultipad> {
           other.playMode == this.playMode &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.libraryId == this.libraryId);
+          other.libraryId == this.libraryId &&
+          other.lastPlayedAt == this.lastPlayedAt);
 }
 
 class SavedMultipadsCompanion extends UpdateCompanion<SavedMultipad> {
@@ -5166,6 +5214,7 @@ class SavedMultipadsCompanion extends UpdateCompanion<SavedMultipad> {
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int?> libraryId;
+  final Value<DateTime?> lastPlayedAt;
   const SavedMultipadsCompanion({
     this.id = const Value.absent(),
     this.multipadKey = const Value.absent(),
@@ -5175,6 +5224,7 @@ class SavedMultipadsCompanion extends UpdateCompanion<SavedMultipad> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.libraryId = const Value.absent(),
+    this.lastPlayedAt = const Value.absent(),
   });
   SavedMultipadsCompanion.insert({
     this.id = const Value.absent(),
@@ -5185,6 +5235,7 @@ class SavedMultipadsCompanion extends UpdateCompanion<SavedMultipad> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.libraryId = const Value.absent(),
+    this.lastPlayedAt = const Value.absent(),
   }) : multipadKey = Value(multipadKey),
        name = Value(name);
   static Insertable<SavedMultipad> custom({
@@ -5196,6 +5247,7 @@ class SavedMultipadsCompanion extends UpdateCompanion<SavedMultipad> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? libraryId,
+    Expression<DateTime>? lastPlayedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -5206,6 +5258,7 @@ class SavedMultipadsCompanion extends UpdateCompanion<SavedMultipad> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (libraryId != null) 'library_id': libraryId,
+      if (lastPlayedAt != null) 'last_played_at': lastPlayedAt,
     });
   }
 
@@ -5218,6 +5271,7 @@ class SavedMultipadsCompanion extends UpdateCompanion<SavedMultipad> {
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int?>? libraryId,
+    Value<DateTime?>? lastPlayedAt,
   }) {
     return SavedMultipadsCompanion(
       id: id ?? this.id,
@@ -5228,6 +5282,7 @@ class SavedMultipadsCompanion extends UpdateCompanion<SavedMultipad> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       libraryId: libraryId ?? this.libraryId,
+      lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
     );
   }
 
@@ -5260,6 +5315,9 @@ class SavedMultipadsCompanion extends UpdateCompanion<SavedMultipad> {
     if (libraryId.present) {
       map['library_id'] = Variable<int>(libraryId.value);
     }
+    if (lastPlayedAt.present) {
+      map['last_played_at'] = Variable<DateTime>(lastPlayedAt.value);
+    }
     return map;
   }
 
@@ -5273,7 +5331,8 @@ class SavedMultipadsCompanion extends UpdateCompanion<SavedMultipad> {
           ..write('playMode: $playMode, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('libraryId: $libraryId')
+          ..write('libraryId: $libraryId, ')
+          ..write('lastPlayedAt: $lastPlayedAt')
           ..write(')'))
         .toString();
   }
@@ -12256,6 +12315,7 @@ typedef $$SavedMultipadsTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int?> libraryId,
+      Value<DateTime?> lastPlayedAt,
     });
 typedef $$SavedMultipadsTableUpdateCompanionBuilder =
     SavedMultipadsCompanion Function({
@@ -12267,6 +12327,7 @@ typedef $$SavedMultipadsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int?> libraryId,
+      Value<DateTime?> lastPlayedAt,
     });
 
 final class $$SavedMultipadsTableReferences
@@ -12369,6 +12430,11 @@ class $$SavedMultipadsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<DateTime> get lastPlayedAt => $composableBuilder(
+    column: $table.lastPlayedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$LibrariesTableFilterComposer get libraryId {
     final $$LibrariesTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -12462,6 +12528,11 @@ class $$SavedMultipadsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get lastPlayedAt => $composableBuilder(
+    column: $table.lastPlayedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LibrariesTableOrderingComposer get libraryId {
     final $$LibrariesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -12517,6 +12588,11 @@ class $$SavedMultipadsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastPlayedAt => $composableBuilder(
+    column: $table.lastPlayedAt,
+    builder: (column) => column,
+  );
 
   $$LibrariesTableAnnotationComposer get libraryId {
     final $$LibrariesTableAnnotationComposer composer = $composerBuilder(
@@ -12606,6 +12682,7 @@ class $$SavedMultipadsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int?> libraryId = const Value.absent(),
+                Value<DateTime?> lastPlayedAt = const Value.absent(),
               }) => SavedMultipadsCompanion(
                 id: id,
                 multipadKey: multipadKey,
@@ -12615,6 +12692,7 @@ class $$SavedMultipadsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 libraryId: libraryId,
+                lastPlayedAt: lastPlayedAt,
               ),
           createCompanionCallback:
               ({
@@ -12626,6 +12704,7 @@ class $$SavedMultipadsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int?> libraryId = const Value.absent(),
+                Value<DateTime?> lastPlayedAt = const Value.absent(),
               }) => SavedMultipadsCompanion.insert(
                 id: id,
                 multipadKey: multipadKey,
@@ -12635,6 +12714,7 @@ class $$SavedMultipadsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 libraryId: libraryId,
+                lastPlayedAt: lastPlayedAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(

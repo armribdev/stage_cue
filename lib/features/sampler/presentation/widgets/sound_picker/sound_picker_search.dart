@@ -180,8 +180,9 @@ extension _SoundPickerSearch on _SoundPickerOverlayState {
   /// bibliothèque (où on les modifie et les supprime). Mêmes filtres que les
   /// sons, appliqués à l'ensemble de leurs sons : un modèle n'est proposé que si
   /// tous les siens sont visibles ici (périmètre du plateau, type, hors-ligne).
-  /// Recherche-éclair sans requête : rien (le parcours ne montre que favoris et
-  /// récents) ; bibliothèque et gestion sans requête : tous, par nom. Un modèle
+  /// Recherche-éclair sans requête : seulement ceux déjà joués (le parcours ne
+  /// montre que favoris et récents), du plus récent au plus ancien — un modèle
+  /// n'a pas de favori ; bibliothèque et gestion sans requête : tous, par nom. Un modèle
   /// sans son ne se pose pas, donc n'est proposé qu'en gestion (à compléter ou
   /// supprimer). La file de traitement et le filtre de dossier source ne
   /// parlent que de sons : aucun modèle.
@@ -191,7 +192,8 @@ extension _SoundPickerSearch on _SoundPickerOverlayState {
         _awaitingLocalIds) {
       return const [];
     }
-    if (_favoritesOnly || (_isQuickSearch && _query.isEmpty)) return const [];
+    if (_favoritesOnly) return const [];
+    final isBrowse = _isQuickSearch && _query.isEmpty;
     if (_isManage && (_unprocessedOnly || _sourceFolderFilter != null)) {
       return const [];
     }
@@ -201,6 +203,7 @@ extension _SoundPickerSearch on _SoundPickerOverlayState {
     final scored = <(SavedMultipad, int)>[];
     for (final saved in _savedMultipads) {
       if (saved.sounds.isEmpty && !_isManage) continue;
+      if (isBrowse && saved.lastPlayedAt == null) continue;
       if (typeFilter != null && !saved.hasOnlyType(typeFilter)) continue;
       if (!saved.sounds.every(_matchesBoardScope)) continue;
       if (_effectiveLocalOnly && !saved.sounds.every(_isLocal)) continue;
@@ -223,6 +226,11 @@ extension _SoundPickerSearch on _SoundPickerOverlayState {
         if (!allMatch) continue;
       }
       scored.add((saved, total));
+    }
+    if (isBrowse) {
+      // Même plafond que les sons du parcours (`_shownResults`).
+      scored.sort((a, b) => b.$1.lastPlayedAt!.compareTo(a.$1.lastPlayedAt!));
+      return [for (final entry in scored.take(25)) entry.$1];
     }
     scored.sort((a, b) => b.$2.compareTo(a.$2));
     return [for (final entry in scored) entry.$1];

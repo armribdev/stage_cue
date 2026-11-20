@@ -41,6 +41,16 @@ class SoundSearchSnapshot {
     locallyAvailableSoundIds: locallyAvailableSoundIds,
     probedAt: probedAt,
   );
+
+  SoundSearchSnapshot withSavedMultipads(List<SavedMultipad> next) =>
+      SoundSearchSnapshot(
+        sounds: sounds,
+        tagsBySound: tagsBySound,
+        tagCatalog: tagCatalog,
+        savedMultipads: next,
+        locallyAvailableSoundIds: locallyAvailableSoundIds,
+        probedAt: probedAt,
+      );
 }
 
 /// Cache mémoire de la bibliothèque pour la recherche de sons.
@@ -101,6 +111,20 @@ class SoundSearchIndex {
     final next = List<Sound>.from(snapshot.sounds);
     next[index] = update(next[index]);
     _current = snapshot.withSounds(next);
+  }
+
+  /// Pendant de [patchSound] pour un multipad enregistré (dernière lecture).
+  void patchSavedMultipad(
+    int multipadId,
+    SavedMultipad Function(SavedMultipad saved) update,
+  ) {
+    final snapshot = _current;
+    if (snapshot == null) return;
+    final index = snapshot.savedMultipads.indexWhere((m) => m.id == multipadId);
+    if (index < 0) return;
+    final next = List<SavedMultipad>.from(snapshot.savedMultipads);
+    next[index] = update(next[index]);
+    _current = snapshot.withSavedMultipads(next);
   }
 
   /// Jette l'instantané : le prochain accès repart de la base (changement de

@@ -473,7 +473,20 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
   Future<bool> playSavedMultipadFromQuickSearch(SavedMultipad saved) async {
     final sound = _pickSavedMultipadSound(saved);
     if (sound == null) return false;
-    return playSoundFromQuickSearch(sound.id);
+    final ok = await playSoundFromQuickSearch(sound.id);
+    if (ok) _markSavedMultipadPlayed(saved.id);
+    return ok;
+  }
+
+  /// Lecture réelle (jamais l'aperçu) : le modèle entre dans les récents. Index
+  /// patché en mémoire plutôt qu'invalidé, comme [_markPlayed].
+  void _markSavedMultipadPlayed(int id) {
+    unawaited(_repository.markSavedMultipadPlayed(id));
+    final playedAt = DateTime.now();
+    _searchIndex.patchSavedMultipad(
+      id,
+      (saved) => saved.copyWith(lastPlayedAt: playedAt),
+    );
   }
 
   /// Vrai si l'aperçu en cours est celui d'un des sons de [saved].

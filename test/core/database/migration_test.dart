@@ -1320,6 +1320,29 @@ void main() {
     },
   );
 
+  test('une base v53 gagne last_played_at sur ses multipads enregistrés, '
+      'à null, sans toucher leurs données', () async {
+    var database = db.AppDatabase.forTesting(NativeDatabase(file));
+    await database.customStatement(
+      "INSERT INTO saved_multipads (multipad_key, name) VALUES ('k1', 'Pas')",
+    );
+    await database.customStatement(
+      'ALTER TABLE saved_multipads DROP COLUMN last_played_at',
+    );
+    await database.customStatement('PRAGMA user_version = 53');
+    await database.close();
+
+    database = db.AppDatabase.forTesting(NativeDatabase(file));
+    expect(
+      await columnsOf(database, 'saved_multipads'),
+      contains('last_played_at'),
+    );
+    final rows = await database.select(database.savedMultipads).get();
+    expect(rows.single.name, 'Pas');
+    expect(rows.single.lastPlayedAt, isNull);
+    await database.close();
+  });
+
   test('une base v39 garde le volume de ses sons en gain à travers la '
       'recréation de sounds (v40)', () async {
     var database = db.AppDatabase.forTesting(NativeDatabase(file));

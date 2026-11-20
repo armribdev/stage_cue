@@ -363,6 +363,9 @@ class SoundRepository {
   Future<void> deleteSavedMultipad(int id) =>
       _savedMultipadDataSource.delete(id);
 
+  Future<void> markSavedMultipadPlayed(int id) =>
+      _savedMultipadDataSource.markPlayed(id);
+
   Future<Set<int>> getSoundIdsInBoard(int boardId) async {
     return await _padDataSource.getSoundIdsInBoard(boardId);
   }

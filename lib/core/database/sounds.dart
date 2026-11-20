@@ -310,6 +310,12 @@ class SavedMultipads extends Table {
     onDelete: KeyAction.setNull,
   )();
 
+  /// Dernière lecture depuis la recherche-éclair (v54), pour le parcours des
+  /// récents. Annotation locale, comme `sounds.last_played_at` : absente du
+  /// snapshot, et écrite sans toucher `updated_at` (sinon chaque lecture
+  /// gagnerait la fusion « dernier écrivain gagne » sur les autres appareils).
+  DateTimeColumn get lastPlayedAt => dateTime().nullable()();
+
   @override
   List<Set<Column>> get uniqueKeys => [
     {multipadKey},

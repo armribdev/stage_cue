@@ -477,6 +477,14 @@ extension _AppDatabaseMigrations on AppDatabase {
         ) WHERE library_id IS NULL
       ''');
     }
+    if (from < 54) {
+      // Dernière lecture d'un multipad enregistré (récents de la
+      // recherche-éclair). Null pour tous. Un upgrade depuis < 52 vient de créer
+      // `saved_multipads` au schéma courant, colonne déjà présente.
+      if (!await _columnExists('saved_multipads', 'last_played_at')) {
+        await m.addColumn(savedMultipads, savedMultipads.lastPlayedAt);
+      }
+    }
   }
 
   /// `TableMigration` de `sounds` pour une étape ancienne qui la recrée (v23,

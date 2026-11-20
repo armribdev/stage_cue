@@ -13,13 +13,27 @@ class SavedMultipad {
   final PadPlayMode playMode;
   final List<Sound> sounds;
 
+  /// Dernière lecture depuis la recherche-éclair (annotation locale, comme
+  /// `Sound.lastPlayedAt`) : fait entrer le modèle dans les récents.
+  final DateTime? lastPlayedAt;
+
   const SavedMultipad({
     required this.id,
     required this.name,
     this.colorValue,
     this.playMode = PadPlayMode.random,
     this.sounds = const [],
+    this.lastPlayedAt,
   });
+
+  SavedMultipad copyWith({DateTime? lastPlayedAt}) => SavedMultipad(
+    id: id,
+    name: name,
+    colorValue: colorValue,
+    playMode: playMode,
+    sounds: sounds,
+    lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
+  );
 
   /// Vrai si tous les sons sont du [type] demandé (filtre de la recherche).
   /// Un modèle sans son ne correspond à aucun type.
