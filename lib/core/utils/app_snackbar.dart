@@ -35,6 +35,34 @@ class AppToast {
   final Duration duration;
 }
 
+/// Notification **permanente** : reste affichée tant que son propriétaire ne la
+/// retire pas (pas de durée, pas de survol qui compte). Vit dans son propre
+/// emplacement, sous le toast éphémère : un « Message copié » ne l'efface pas.
+///
+/// Sert aux opérations longues dont on suit l'avancement (mise à jour). Le
+/// propriétaire la remplace à chaque changement d'état en réaffectant
+/// [AppToastController.persistent].
+class AppPersistentToast {
+  const AppPersistentToast({
+    required this.message,
+    this.severity = AppToastSeverity.info,
+    this.showsProgress = false,
+    this.progress,
+    this.dismissible = false,
+  });
+
+  final String message;
+  final AppToastSeverity severity;
+
+  /// Affiche une barre de progression ; [progress] (0 à 1) `null` ⇒ indéterminée.
+  final bool showsProgress;
+  final double? progress;
+
+  /// Montre une croix de fermeture (état final, ex. échec) ; sinon seul le
+  /// propriétaire peut la retirer.
+  final bool dismissible;
+}
+
 /// État du toast courant : un seul à la fois, un nouveau remplace l'ancien.
 ///
 /// Il porte aussi la **fermeture garantie** après [AppToast.duration], via un
@@ -54,6 +82,14 @@ class AppToastController extends ChangeNotifier {
 
   /// Toast actuellement affiché, `null` si aucun.
   AppToast? get current => _current;
+
+  /// Notification permanente affichée sous le toast éphémère, `null` si aucune.
+  final ValueNotifier<AppPersistentToast?> persistent = ValueNotifier(null);
+
+  /// Hauteur occupée en bas de l'écran par un pied de page fixe (la régie
+  /// musique), que les notifications doivent enjamber plutôt que recouvrir.
+  /// Publiée par ce pied de page, jamais déduite ici.
+  final ValueNotifier<double> bottomInset = ValueNotifier(0);
 
   /// Affiche un toast en remplaçant le courant. Retourne le toast créé.
   AppToast show(
@@ -117,6 +153,8 @@ class AppToastController extends ChangeNotifier {
   @override
   void dispose() {
     _timer?.cancel();
+    persistent.dispose();
+    bottomInset.dispose();
     super.dispose();
   }
 }

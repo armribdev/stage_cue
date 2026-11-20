@@ -7,6 +7,7 @@ import 'package:stage_cue/core/theme/app_theme.dart';
 import 'package:stage_cue/core/update/app_update_info.dart';
 import 'package:stage_cue/core/update/app_update_installer.dart';
 import 'package:stage_cue/core/update/update_flow.dart';
+import 'package:stage_cue/core/utils/app_snackbar.dart';
 import 'package:stage_cue/core/utils/app_toast_host.dart';
 
 class _MockInstaller extends Mock implements AppUpdateInstaller {}
@@ -23,6 +24,10 @@ void main() {
       ),
     );
   });
+
+  // Le contrôleur de notifications est global : on retire la notification
+  // permanente laissée par un test.
+  tearDown(() => AppSnackBar.controller.persistent.value = null);
 
   const info = AppUpdateInfo(
     version: '0.2.0',
@@ -104,7 +109,7 @@ void main() {
   const installerPath = r'C:\Temp\StageCue-Setup.exe';
 
   testWidgets(
-    'Installer télécharge, lance, affiche l\'installation dans le dialogue puis quitte',
+    'Installer télécharge, lance, affiche l\'installation dans la notification puis quitte',
     (tester) async {
       final installer = _MockInstaller();
       var quit = 0;
@@ -132,8 +137,12 @@ void main() {
         ),
       ).called(1);
       verify(() => installer.launchInstallerSilently(installerPath)).called(1);
-      // L'état d'installation vit dans le dialogue, pas dans un toast.
-      expect(find.text('Installation en cours'), findsOneWidget);
+      // L'état d'installation vit dans la notification permanente, sans dialogue
+      // (on laisse finir la sortie animée de la confirmation).
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.textContaining('Installation en cours'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
       expect(quit, 0);
 
       await tester.pump(const Duration(seconds: 2));
@@ -142,7 +151,7 @@ void main() {
   );
 
   testWidgets(
-    'échec du téléchargement → erreur dans le dialogue, sans quitter',
+    'échec du téléchargement → erreur dans la notification, sans quitter',
     (tester) async {
       final installer = _MockInstaller();
       var quit = 0;
@@ -159,42 +168,92 @@ void main() {
       await tester.tap(find.text('Installer'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Échec du téléchargement'), findsOneWidget);
+      expect(find.textContaining('Échec du téléchargement'), findsOneWidget);
       expect(find.textContaining('réseau coupé'), findsOneWidget);
       verifyNever(() => installer.launchInstallerSilently(any()));
 
-      await tester.tap(find.text('Fermer'));
+      await tester.tap(find.byType(IconButton));
       await tester.pumpAndSettle();
-      expect(find.text('Échec du téléchargement'), findsNothing);
+      expect(find.textContaining('Échec du téléchargement'), findsNothing);
       expect(quit, 0);
     },
   );
 
-  testWidgets('échec du lancement → erreur dans le dialogue, sans quitter', (
+  testWidgets(
+    'échec du lancement → erreur dans la notification, sans quitter',
+    (tester) async {
+      final installer = _MockInstaller();
+      var quit = 0;
+      when(
+        () => installer.downloadInstaller(
+          any(),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).thenAnswer((_) async => installerPath);
+      when(
+        () => installer.launchInstallerSilently(any()),
+      ).thenThrow(Exception('accès refusé'));
+
+      await tester.pumpWidget(host(installer, () async => quit++));
+      await tester.tap(find.text('check'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Installer'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Échec de l\'installation'), findsOneWidget);
+      expect(find.textContaining('accès refusé'), findsOneWidget);
+      await tester.tap(find.byType(IconButton));
+      await tester.pumpAndSettle();
+      expect(quit, 0);
+    },
+  );
+
+  testWidgets('le téléchargement affiche sa progression sans bloquer l\'app', (
     tester,
   ) async {
     final installer = _MockInstaller();
-    var quit = 0;
+    final download = Completer<String>();
+    late void Function(int, int?) report;
     when(
       () => installer.downloadInstaller(
         any(),
         onProgress: any(named: 'onProgress'),
       ),
-    ).thenAnswer((_) async => installerPath);
-    when(
-      () => installer.launchInstallerSilently(any()),
-    ).thenThrow(Exception('accès refusé'));
+    ).thenAnswer((invocation) {
+      report =
+          invocation.namedArguments[#onProgress] as void Function(int, int?);
+      return download.future;
+    });
 
-    await tester.pumpWidget(host(installer, () async => quit++));
+    await tester.pumpWidget(host(installer, () async {}));
     await tester.tap(find.text('check'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Installer'));
-    await tester.pumpAndSettle();
+    // Pas de `pumpAndSettle` : tant que la taille est inconnue, la barre est
+    // indéterminée et s'anime sans fin.
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('Échec de l\'installation'), findsOneWidget);
-    expect(find.textContaining('accès refusé'), findsOneWidget);
-    await tester.tap(find.text('Fermer'));
+    report(25, 100);
+    await tester.pump();
+
+    final bar = tester.widget<LinearProgressIndicator>(
+      find.byType(LinearProgressIndicator),
+    );
+    expect(bar.value, 0.25);
+    expect(
+      find.textContaining('Téléchargement de la version 0.2.0'),
+      findsOneWidget,
+    );
+    // Pas de barrière modale : le reste de l'app reste cliquable.
+    expect(find.byType(AlertDialog), findsNothing);
+
+    // Un second déclenchement pendant le téléchargement est ignoré.
+    await tester.tap(find.text('check'));
     await tester.pumpAndSettle();
-    expect(quit, 0);
+    expect(find.text('Mise à jour disponible'), findsNothing);
+
+    download.completeError(Exception('annulé'));
+    await tester.pumpAndSettle();
   });
 }

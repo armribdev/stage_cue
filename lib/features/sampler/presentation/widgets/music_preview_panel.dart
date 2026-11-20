@@ -15,6 +15,7 @@ import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/stroke_icon.dart';
 import '../../../../core/theme/transport_icon.dart';
 import '../../../../core/theme/app_tokens.dart';
+import '../../../../core/utils/app_snackbar.dart';
 import '../../../../core/utils/sound_color_utils.dart';
 import '../../domain/entities/sound.dart';
 import '../providers/sampler_provider.dart';
@@ -199,6 +200,14 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
 
   @override
   void dispose() {
+    // Les notifications ne doivent plus enjamber une régie qui n'est plus là.
+    // Différé : le toast se reconstruit, ce qui est interdit en plein démontage.
+    final inset = AppSnackBar.controller.bottomInset;
+    final reported = _lastReportedOccupiedHeight;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Un autre panneau a pu publier sa hauteur entre-temps : ne pas l'écraser.
+      if (inset.value == reported) inset.value = 0;
+    });
     _expandController.dispose();
     _transitionProgressController?.dispose();
     _transitionBlinkController?.dispose();
@@ -361,7 +370,21 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
   void _notifyOccupiedHeight(double height) {
     if ((height - _lastReportedOccupiedHeight).abs() < 0.5) return;
     _lastReportedOccupiedHeight = height;
+    AppSnackBar.controller.bottomInset.value = height;
     widget.onOccupiedHeightChanged?.call(height);
+  }
+
+  final GlobalKey _desktopPanelKey = GlobalKey();
+
+  /// `AnimatedSize` change de taille sans reconstruire son parent : on relit la
+  /// hauteur finale à la fin de l'animation. `onEnd` part en pleine phase
+  /// d'animation, où la taille n'est pas lisible : on attend la fin du frame.
+  void _measureDesktopPanel() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final size = _desktopPanelKey.currentContext?.size;
+      if (size != null) _notifyOccupiedHeight(size.height);
+    });
   }
 
   _MusicRegieDrawer _buildRegieDrawer({
@@ -414,13 +437,18 @@ class _MusicPreviewPanelState extends State<MusicPreviewPanel>
   }
 
   Widget _buildDesktopPanel(double panelWidth) {
-    return SizedBox(
-      width: panelWidth,
-      child: AnimatedSize(
-        duration: _drawerSnapDuration,
-        curve: _drawerSnapCurve,
-        alignment: Alignment.topCenter,
-        child: _buildRegieDrawer(isAdvanced: widget.isAdvanced),
+    return _ReportSize(
+      onChange: (size) => _notifyOccupiedHeight(size.height),
+      child: SizedBox(
+        key: _desktopPanelKey,
+        width: panelWidth,
+        child: AnimatedSize(
+          duration: _drawerSnapDuration,
+          curve: _drawerSnapCurve,
+          alignment: Alignment.topCenter,
+          onEnd: _measureDesktopPanel,
+          child: _buildRegieDrawer(isAdvanced: widget.isAdvanced),
+        ),
       ),
     );
   }

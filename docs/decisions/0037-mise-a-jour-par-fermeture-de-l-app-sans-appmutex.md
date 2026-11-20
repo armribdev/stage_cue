@@ -9,7 +9,7 @@ La mise à jour v0.2.0 → v0.3.0 n'a rien installé, sans la moindre trace. L'a
 
 ## Décision
 
-Plus d'`AppMutex` ni de mutex côté app. Après avoir lancé l'installeur, `runUpdateFlow` ferme l'app lui-même (`windowManager.close()`, 2 s plus tard) ; si elle tient encore des fichiers, le Restart Manager d'Inno la ferme (`CloseApplications=force`). La relance est une entrée `[Run]` explicite (`skipifnotsilent`), `RestartApplications=no`. L'installeur écrit son journal (`/LOG`) dans `%TEMP%\stagecue_update\install.log` ; au lancement suivant `reportPreviousInstall` en journalise l'issue dans `StageCue.Update` (cause comprise en cas d'échec) et efface le dossier. Téléchargement, installation et erreurs s'affichent dans un seul dialogue, jamais dans un toast.
+Plus d'`AppMutex` ni de mutex côté app. Après avoir lancé l'installeur, `runUpdateFlow` ferme l'app lui-même (`windowManager.close()`, 2 s plus tard) ; si elle tient encore des fichiers, le Restart Manager d'Inno la ferme (`CloseApplications=force`). La relance est une entrée `[Run]` explicite (`skipifnotsilent`), `RestartApplications=no`. L'installeur écrit son journal (`/LOG`) dans `%TEMP%\stagecue_update\install.log` ; au lancement suivant `reportPreviousInstall` en journalise l'issue dans `StageCue.Update` (cause comprise en cas d'échec) et efface le dossier. Téléchargement, installation et erreurs s'affichent dans un seul dialogue, jamais dans un toast. *(Amendé par [0052](0052-notification-permanente-pour-la-mise-a-jour.md) : la progression vit désormais dans une notification permanente, plus dans un dialogue.)*
 
 ## Alternatives écartées
 

@@ -73,5 +73,6 @@ Fichier `NNNN-titre-court.md`, numéroté séquentiellement. Voir [template.md](
 | [0049](0049-rattrapage-des-waveforms-et-recalcul-de-maintenance-debug.md) | Rattrapage de fond des waveforms (sans jamais écrire de gain) et recalcul de maintenance au choix, réservé au debug | acceptée (corrige 0048 sur la waveform) |
 | [0050](0050-vue-clavier-du-board-azerty.md) | Vue clavier d'un board : une vue parmi d'autres, disposition AZERTY | acceptée |
 | [0051](0051-multipads-enregistres-dans-la-bibliotheque-par-copie.md) | Multipads enregistrés dans la bibliothèque, par copie (v52, synchro v53) : un modèle qu'on repose en pad ordinaire, sans lien | acceptée |
+| [0052](0052-notification-permanente-pour-la-mise-a-jour.md) | Notification permanente (avec barre de progression) pour la mise à jour, toasts au-dessus de la régie, copie réservée au debug | acceptée (amende 0037 et 0033) |
 
 Les entrées 0001 à 0006 consignent rétroactivement des décisions **antérieures**, confirmées par un audit du système de synchronisation (juillet 2026) ; les entrées 0007 à 0012 découlent des correctifs issus de ce même audit.

@@ -3,14 +3,19 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stage_cue/core/theme/app_theme.dart';
+import 'package:stage_cue/core/theme/stroke_icon.dart';
 import 'package:stage_cue/core/utils/app_snackbar.dart';
 import 'package:stage_cue/core/utils/app_toast_host.dart';
 
 /// Fenêtre de test : `MaterialApp` avec l'hôte de toasts, comme `app.dart`.
-Widget _app({Widget? home, bool disableAnimations = false}) => MaterialApp(
+Widget _app({
+  Widget? home,
+  bool disableAnimations = false,
+  bool allowCopy = true,
+}) => MaterialApp(
   theme: AppTheme.darkTheme,
   builder: (context, child) {
-    final host = AppToastHost(child: child!);
+    final host = AppToastHost(allowCopy: allowCopy, child: child!);
     return disableAnimations
         ? MediaQuery(
             data: MediaQuery.of(context).copyWith(disableAnimations: true),
@@ -19,6 +24,12 @@ Widget _app({Widget? home, bool disableAnimations = false}) => MaterialApp(
         : host;
   },
   home: home ?? const Scaffold(body: SizedBox.expand()),
+);
+
+/// Icône portant ce libellé d'accessibilité (la sémantique n'est pas activée
+/// dans les tests, `bySemanticsLabel` ne trouverait rien).
+Finder _iconLabeled(String label) => find.byWidgetPredicate(
+  (widget) => widget is StrokeIcon && widget.semanticLabel == label,
 );
 
 BuildContext _context(WidgetTester tester) =>
@@ -43,7 +54,11 @@ void _show(
 void main() {
   // Le contrôleur est global : on referme tout toast resté en suspens pour que
   // son `Timer` ne fuie pas d'un test à l'autre.
-  tearDown(() => AppSnackBar.controller.dismissCurrent());
+  tearDown(() {
+    AppSnackBar.controller.dismissCurrent();
+    AppSnackBar.controller.persistent.value = null;
+    AppSnackBar.controller.bottomInset.value = 0;
+  });
 
   testWidgets('un toast en remplace un autre au lieu de s\'empiler', (
     tester,
@@ -256,5 +271,85 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
     expect(find.text('Survolé'), findsNothing);
+  });
+
+  testWidgets('allowCopy: false (release) : le message n\'est plus copiable', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app(allowCopy: false));
+
+    _show(tester, 'Erreur détaillée', copyable: true);
+    await tester.pump();
+
+    expect(find.text('Erreur détaillée'), findsOneWidget);
+    expect(_iconLabeled('Copier le message'), findsNothing);
+    AppSnackBar.controller.dismissCurrent();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('la notification permanente survit au toast éphémère', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app());
+
+    AppSnackBar.controller.persistent.value = const AppPersistentToast(
+      message: 'Téléchargement',
+      showsProgress: true,
+      progress: 0.5,
+    );
+    await tester.pump();
+    _show(tester, 'Éphémère', duration: const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(find.text('Téléchargement'), findsOneWidget);
+    expect(find.text('Éphémère'), findsOneWidget);
+    final bar = tester.widget<LinearProgressIndicator>(
+      find.byType(LinearProgressIndicator),
+    );
+    expect(bar.value, 0.5);
+    // Seule la croix du toast éphémère : la permanente n'est pas fermable.
+    expect(_iconLabeled('Fermer'), findsOneWidget);
+
+    await tester.binding.delayed(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Éphémère'), findsNothing);
+    expect(find.text('Téléchargement'), findsOneWidget);
+    expect(_iconLabeled('Fermer'), findsNothing);
+  });
+
+  testWidgets('une notification permanente dismissible se ferme à la croix', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app());
+
+    AppSnackBar.controller.persistent.value = const AppPersistentToast(
+      message: 'Échec',
+      severity: AppToastSeverity.error,
+      dismissible: true,
+    );
+    await tester.pump();
+    await tester.tap(_iconLabeled('Fermer'));
+    await tester.pump();
+
+    expect(AppSnackBar.controller.persistent.value, isNull);
+    expect(find.text('Échec'), findsNothing);
+  });
+
+  testWidgets('bottomInset remonte les notifications au-dessus de la régie', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app());
+
+    _show(tester, 'Toast');
+    await tester.pumpAndSettle(const Duration(milliseconds: 50));
+    final before = tester.getBottomLeft(find.text('Toast')).dy;
+
+    AppSnackBar.controller.bottomInset.value = 120;
+    await tester.pump();
+    final after = tester.getBottomLeft(find.text('Toast')).dy;
+
+    expect(before - after, 120);
+    AppSnackBar.controller.dismissCurrent();
+    await tester.pumpAndSettle();
   });
 }
