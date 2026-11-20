@@ -5,6 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:stage_cue/core/audio/cue_audio_service.dart';
 import 'package:stage_cue/core/settings/app_preferences.dart';
 import 'package:stage_cue/features/sampler/domain/entities/pad.dart';
+import 'package:stage_cue/features/sampler/domain/entities/saved_multipad.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound.dart';
 import 'package:stage_cue/features/sampler/domain/entities/sound_board.dart';
 import 'package:stage_cue/features/sampler/domain/usecases/load_sounds_usecase.dart';
@@ -507,6 +508,65 @@ void main() {
       // slots restent needsDownload → non éligibles
 
       expect(n.debugPickSoundIndex(padItem), 0);
+    });
+  });
+
+  // ── Multipad enregistré joué en recherche-éclair ─────────────────────────
+
+  group('debugPickSavedMultipadSound — modèle enregistré', () {
+    SavedMultipad saved(
+      List<Sound> sounds, {
+      PadPlayMode playMode = PadPlayMode.random,
+    }) => SavedMultipad(id: 7, name: 'Pas', playMode: playMode, sounds: sounds);
+
+    test('sans son → null', () {
+      final n = _notifierForPlayback();
+      expect(n.debugPickSavedMultipadSound(saved(const [])), isNull);
+    });
+
+    test('sequential : dans l\'ordre, puis reboucle', () {
+      final n = _notifierForPlayback();
+      final model = saved([
+        _sound(10),
+        _sound(11),
+        _sound(12),
+      ], playMode: PadPlayMode.sequential);
+
+      final ids = [
+        for (var i = 0; i < 4; i++) n.debugPickSavedMultipadSound(model)?.id,
+      ];
+      expect(ids, [10, 11, 12, 10]);
+    });
+
+    test('random : ne rejoue pas un son avant d\'avoir tout parcouru', () {
+      final n = _notifierForPlayback();
+      final model = saved([_sound(10), _sound(11), _sound(12)]);
+
+      final firstRound = <int?>{
+        for (var i = 0; i < 3; i++) n.debugPickSavedMultipadSound(model)?.id,
+      };
+      expect(firstRound, {10, 11, 12});
+    });
+
+    test('session live : ignore le mode et prend le son le moins joué', () {
+      final n = _notifierForPlayback()
+        ..debugTreatReadyAvailabilityAsEligible = true;
+      final padItem = PadItem(
+        pad: _multipad(1, [_sound(10), _sound(11), _sound(12)]),
+      );
+      final model = saved([
+        _sound(10),
+        _sound(11),
+        _sound(12),
+      ], playMode: PadPlayMode.sequential);
+
+      n.startLiveSession();
+      n.debugMarkPlayedAt(padItem, 0);
+      n.debugMarkPlayedAt(padItem, 2);
+
+      for (var i = 0; i < 40; i++) {
+        expect(n.debugPickSavedMultipadSound(model)?.id, 11);
+      }
     });
   });
 

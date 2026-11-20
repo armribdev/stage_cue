@@ -106,16 +106,42 @@ extension _SoundPickerActions on _SoundPickerOverlayState {
     if (rowCount == 0) return;
     final row = _clampSelectedIndex(rowCount);
     if (row < multipads.length) {
-      await _activateSavedMultipad(multipads[row]);
+      // Comme pour un son, « préparer » pose toujours (jamais ne joue).
+      final saved = multipads[row];
+      await (_isManage
+          ? _editSavedMultipad(saved)
+          : _placeSavedMultipad(saved));
       return;
     }
     await _prepareAndClose(shown[row - multipads.length]);
   }
 
-  /// Clic / Entrée sur un multipad enregistré : en gestion on le modifie, sinon
-  /// on en pose une copie sur le plateau.
-  Future<void> _activateSavedMultipad(SavedMultipad saved) =>
-      _isManage ? _editSavedMultipad(saved) : _placeSavedMultipad(saved);
+  /// Clic / Entrée sur un multipad enregistré : en gestion on le modifie, en
+  /// recherche-éclair on le joue (comme un son), sinon on en pose une copie sur
+  /// le plateau.
+  Future<void> _activateSavedMultipad(SavedMultipad saved) {
+    if (_isManage) return _editSavedMultipad(saved);
+    if (_isQuickSearch) return _playQuickSearchSavedMultipad(saved);
+    return _placeSavedMultipad(saved);
+  }
+
+  /// Joue le son que le multipad désigne à ce tour, puis ferme ; en cas d'échec
+  /// on reste ouvert pour lire le message (voir [_playQuickSearchSound]).
+  Future<void> _playQuickSearchSavedMultipad(SavedMultipad saved) async {
+    final ok = await widget.notifier.playSavedMultipadFromQuickSearch(saved);
+    if (!mounted) return;
+    if (!ok) {
+      _showPreviewFailureToast();
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _toggleSavedMultipadPreview(SavedMultipad saved) async {
+    final ok = await widget.notifier.toggleSavedMultipadPreview(saved);
+    if (!mounted || ok) return;
+    _showPreviewFailureToast();
+  }
 
   /// Pose une copie du multipad enregistré sur le plateau (décision 0051) et
   /// ferme : même résultat qu'un son préparé, le pad créé est mis en évidence.

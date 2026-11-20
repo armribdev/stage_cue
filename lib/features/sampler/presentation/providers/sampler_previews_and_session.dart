@@ -366,6 +366,11 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
   @visibleForTesting
   int debugPickSoundIndex(PadItem padItem) => _pickSoundIndex(padItem);
 
+  /// Choix du son d'un multipad enregistré (voir [_pickSavedMultipadSound]).
+  @visibleForTesting
+  Sound? debugPickSavedMultipadSound(SavedMultipad saved) =>
+      _pickSavedMultipadSound(saved);
+
   Future<QuickSearchPrepareResult> prepareSoundFromQuickSearch(
     int soundId,
   ) async {
@@ -421,6 +426,69 @@ extension SamplerPreviewsAndSession on SamplerNotifier {
     }
 
     return result;
+  }
+
+  /// Son que [saved] joue à ce tour, selon son mode de lecture — comme un pad :
+  /// aléatoire sans répétition jusqu'à épuisement, ou dans l'ordre. En Mode
+  /// Spectacle, le mode est ignoré au profit du son le moins joué de la session
+  /// (décision 0014). `null` pour un modèle sans son.
+  Sound? _pickSavedMultipadSound(SavedMultipad saved) {
+    final sounds = saved.sounds;
+    if (sounds.isEmpty) return null;
+    if (sounds.length == 1) return sounds.first;
+
+    if (_isLiveSessionActive) {
+      int countOf(Sound s) => _sessionPlayCounts[s.id] ?? 0;
+      final min = sounds.map(countOf).reduce((a, b) => a < b ? a : b);
+      final lowest = sounds.where((s) => countOf(s) == min).toList();
+      return lowest[_random.nextInt(lowest.length)];
+    }
+
+    switch (saved.playMode) {
+      case PadPlayMode.random:
+        final played = _savedMultipadPlayedIds.putIfAbsent(saved.id, () => {});
+        var available = sounds.where((s) => !played.contains(s.id)).toList();
+        if (available.isEmpty) {
+          played.clear();
+          available = sounds;
+        }
+        final picked = available[_random.nextInt(available.length)];
+        played.add(picked.id);
+        return picked;
+      case PadPlayMode.sequential:
+        // Suit le dernier son joué dans la liste courante (et non un indice) :
+        // une édition du modèle ne décale pas le curseur. Aucun son joué → 0.
+        final last = sounds.indexWhere(
+          (s) => s.id == _savedMultipadLastSoundId[saved.id],
+        );
+        final picked = sounds[(last + 1) % sounds.length];
+        _savedMultipadLastSoundId[saved.id] = picked.id;
+        return picked;
+    }
+  }
+
+  /// Clic / Entrée sur un multipad en recherche-éclair : joue pour de vrai le
+  /// son que le modèle désigne à ce tour, par la voie de son type — exactement
+  /// comme [playSoundFromQuickSearch], sans rien poser sur le plateau.
+  Future<bool> playSavedMultipadFromQuickSearch(SavedMultipad saved) async {
+    final sound = _pickSavedMultipadSound(saved);
+    if (sound == null) return false;
+    return playSoundFromQuickSearch(sound.id);
+  }
+
+  /// Vrai si l'aperçu en cours est celui d'un des sons de [saved].
+  bool savedMultipadPreviewIsPlaying(SavedMultipad saved) =>
+      saved.sounds.any((s) => libraryPreviewIsPlaying(s.id));
+
+  /// Bascule play/pause de l'aperçu d'un multipad : un aperçu déjà chargé de
+  /// l'un de ses sons est mis en pause / repris, sinon le son désigné à ce tour
+  /// est écouté (lecteur d'aperçu unique, voir [toggleLibraryPreview]).
+  Future<bool> toggleSavedMultipadPreview(SavedMultipad saved) async {
+    final current = _libraryPreviewSoundId;
+    final loaded = current != null && saved.sounds.any((s) => s.id == current);
+    final soundId = loaded ? current : _pickSavedMultipadSound(saved)?.id;
+    if (soundId == null) return false;
+    return toggleLibraryPreview(soundId);
   }
 
   /// Pose une copie du multipad enregistré [saved] en fin de dernière ligne du

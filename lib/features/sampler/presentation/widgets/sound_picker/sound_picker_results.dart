@@ -273,9 +273,10 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
 
   /// Ligne d'un multipad enregistré (décision 0051) : même gabarit qu'un son
   /// (avatar du type commun, nom surligné), sous-titre « Multipad · N sons » et
-  /// le ⧉ de fin de ligne qui pose une copie sur le plateau. Un clic pose aussi,
-  /// sauf en Mode Spectacle où il ne fait que sélectionner (Entrée pose), comme
-  /// pour la lecture d'un son en recherche-éclair. En gestion, un clic ouvre
+  /// un ▶ d'aperçu et le ⧉ de fin de ligne qui pose une copie sur le plateau.
+  /// Un clic joue en recherche-éclair (selon le mode de lecture du modèle),
+  /// pose ailleurs ; en Mode Spectacle il ne fait que sélectionner (Entrée
+  /// joue), comme pour un son. En gestion, un clic ouvre
   /// l'édition du modèle (volet de droite comme pour un son, ou page sur mobile).
   Widget _buildSavedMultipadItem(
     SavedMultipad saved,
@@ -355,8 +356,21 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
                 ),
               ),
               const SizedBox(width: 8),
-              // En gestion, comme un son : rien en fin de ligne (la suppression
-              // est dans le volet d'édition).
+              // Aperçu comme pour un son (sauf modèle vide, ou Mode Spectacle
+              // sans casque : il sortirait en salle).
+              if (!isEmpty && !widget.notifier.isRoomPreviewBlockedInLive) ...[
+                _buildPreviewButton(
+                  scheme,
+                  isPlaying: widget.notifier.savedMultipadPreviewIsPlaying(
+                    saved,
+                  ),
+                  onPressed: () =>
+                      unawaited(_toggleSavedMultipadPreview(saved)),
+                ),
+                const SizedBox(width: 4),
+              ],
+              // En gestion, comme un son : pas d'action en fin de ligne (la
+              // suppression est dans le volet d'édition).
               if (!_isManage)
                 _roundIconButton(
                   scheme: scheme,
@@ -453,8 +467,11 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
 
   /// Bouton d'aperçu play/pause d'une ligne : lecteur d'aperçu unique, depuis le
   /// point d'entrée du son, jamais sur la voie live (au casque s'il y en a un).
-  Widget _buildPreviewButton(Sound sound, ColorScheme scheme) {
-    final isPlaying = widget.notifier.libraryPreviewIsPlaying(sound.id);
+  Widget _buildPreviewButton(
+    ColorScheme scheme, {
+    required bool isPlaying,
+    required VoidCallback onPressed,
+  }) {
     return Tooltip(
       message: isPlaying ? 'Pause' : 'Aperçu depuis le point d\'entrée',
       child: _roundIconButton(
@@ -464,7 +481,7 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
         // Pas de fond au survol : l'icône s'éclaircit à peine.
         hoverIconColor: Color.lerp(scheme.primary, scheme.onSurface, 0.35),
         flat: true,
-        onPressed: () => unawaited(_toggleLibraryPreview(sound)),
+        onPressed: onPressed,
       ),
     );
   }
@@ -524,7 +541,11 @@ extension _SoundPickerResults on _SoundPickerOverlayState {
       children: [
         if (playedMark != null) ...[playedMark, const SizedBox(width: 4)],
         if (hasPreview) ...[
-          _buildPreviewButton(sound, scheme),
+          _buildPreviewButton(
+            scheme,
+            isPlaying: widget.notifier.libraryPreviewIsPlaying(sound.id),
+            onPressed: () => unawaited(_toggleLibraryPreview(sound)),
+          ),
           const SizedBox(width: 4),
         ],
         action,

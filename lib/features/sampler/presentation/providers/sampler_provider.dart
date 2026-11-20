@@ -120,6 +120,13 @@ class SamplerNotifier extends ChangeNotifier {
   /// lectures : le bouton « Tout arrêter » les coupe, contrairement à l'aperçu.
   final Map<int, PadItem> _offStageSfxPads = {};
 
+  /// Tour de rôle des multipads enregistrés joués depuis la recherche-éclair
+  /// (modèle → sons déjà tirés pour l'aléatoire sans répétition, modèle →
+  /// dernier son joué pour le séquentiel). Mémoire de session : un modèle n'a
+  /// pas de pad, donc pas de `PadItem` pour porter ce curseur.
+  final Map<int, Set<int>> _savedMultipadPlayedIds = {};
+  final Map<int, int> _savedMultipadLastSoundId = {};
+
   /// Lecteur d'aperçu unique (play/pause, un son à la fois), indépendant des
   /// pads, de la régie et du bouton « Tout arrêter » : il ne se pilote que par
   /// ses propres boutons (voir `toggleLibraryPreview`).
