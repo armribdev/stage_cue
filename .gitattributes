@@ -1,0 +1,2 @@
+# Les scripts shell doivent rester en LF même quand core.autocrlf=true (Windows).
+*.sh text eol=lf

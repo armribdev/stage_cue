@@ -1,12 +1,20 @@
 name: Release
 
 # Déclencheurs : push d'un tag "v*" (ex. v1.0.0) → build + GitHub Release,
-# ou lancement manuel depuis l'onglet Actions.
+# ou lancement manuel depuis l'onglet Actions. Un lancement manuel peut
+# reconstruire une release existante : on le lance sur une branche portant le
+# code de ce tag, avec `tag` = ce tag. Pas de GitHub Release créée dans ce cas :
+# les artefacts du run sont à joindre à la main (`gh release upload`).
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag reconstruit (ex. v0.5.0) : fixe la version de l'installeur et vérifie le pubspec"
+        required: false
+        type: string
 
 # Version de Flutter partagée par tous les jobs (alignée sur le dev local).
 env:
@@ -30,9 +38,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Comparer le tag au pubspec.yaml
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || inputs.tag != ''
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
         run: |
           pubspec_version=$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml | head -n1)
           if [ "${TAG#v}" != "$pubspec_version" ]; then
@@ -199,6 +207,11 @@ jobs:
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
 
+      # github.com/microsoft/onnxruntime renvoie 404 : le plugin ne peut plus
+      # télécharger ONNX Runtime lui-même (voir tool/fetch_onnxruntime.sh).
+      - name: Install ONNX Runtime (NuGet)
+        run: tool/fetch_onnxruntime.sh linux
+
       - name: Build Linux (release)
         run: >
           flutter build linux --release
@@ -238,6 +251,12 @@ jobs:
       - name: Codegen (Drift / build_runner)
         run: dart run build_runner build --delete-conflicting-outputs
 
+      # github.com/microsoft/onnxruntime renvoie 404 : le plugin ne peut plus
+      # télécharger ONNX Runtime lui-même (voir tool/fetch_onnxruntime.sh).
+      - name: Install ONNX Runtime (NuGet)
+        run: tool/fetch_onnxruntime.sh windows
+        shell: bash
+
       # MSVC 14.51 (VS 18) du runner transforme en erreur l'usage de
       # <experimental/coroutine> par permission_handler_windows. La macro CL
       # (lue automatiquement par cl.exe) rétablit le comportement « warning ».
@@ -259,14 +278,15 @@ jobs:
         run: choco install innosetup --no-progress -y
         shell: pwsh
 
-      # AppVersion dérivé du tag (vX.Y.Z -> X.Y.Z) sur un push de tag ; figé à
-      # 0.0.0-dev pour un déclenchement manuel (workflow_dispatch), où aucun
-      # tag n'existe encore — l'installeur reste alors utilisable pour tester
-      # la CI sans polluer le numéro de version des vraies releases.
+      # AppVersion dérivé du tag (vX.Y.Z -> X.Y.Z) : celui du push, ou l'entrée
+      # `tag` d'une reconstruction manuelle. Sans tag (workflow_dispatch simple),
+      # figé à 0.0.0-dev — l'installeur reste utilisable pour tester la CI sans
+      # polluer le numéro de version des vraies releases.
       - name: Build Windows installer (Inno Setup)
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
         run: |
-          $ver = "${{ github.ref_name }}" -replace '^v', ''
-          if ("${{ github.ref_type }}" -ne "tag") { $ver = "0.0.0-dev" }
+          $ver = if ($env:TAG) { $env:TAG -replace '^v', '' } else { "0.0.0-dev" }
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$ver" windows\installer\stage_cue.iss
         shell: pwsh
 
