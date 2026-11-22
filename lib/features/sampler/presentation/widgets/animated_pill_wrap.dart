@@ -316,6 +316,12 @@ class AnimatedRevealColumn extends StatefulWidget {
 }
 
 class _AnimatedRevealColumnState extends State<AnimatedRevealColumn> {
+  // Une ligne refermée reste dans la liste, sans enfant ([Reveal] ne garde rien
+  // dans l'arbre), au lieu d'en être retirée : retirer décalerait les indices
+  // des lignes suivantes, que le `ReorderableListView` reprend par clé globale.
+  // Réactiver ainsi un sous-arbre qui porte une infobulle ouverte (souris restée
+  // sur « Retirer ») fait lever « _RenderLayoutBuilder was mutated ». Revenir
+  // avec la même clé la rouvre.
   late List<_Slot> _slots = [
     for (final e in widget.entries)
       _Slot(e.key, e.child, visible: true, appear: false),
@@ -325,11 +331,6 @@ class _AnimatedRevealColumnState extends State<AnimatedRevealColumn> {
   void didUpdateWidget(AnimatedRevealColumn oldWidget) {
     super.didUpdateWidget(oldWidget);
     _slots = _mergeSlots(_slots, widget.entries);
-  }
-
-  void _drop(Key key) {
-    if (!mounted) return;
-    setState(() => _slots.removeWhere((s) => s.key == key && !s.visible));
   }
 
   /// Traduit un déplacement de la liste complète (lignes en fermeture
@@ -350,7 +351,6 @@ class _AnimatedRevealColumnState extends State<AnimatedRevealColumn> {
       key: ValueKey(slot.key),
       visible: slot.visible,
       appear: slot.appear,
-      onHidden: () => _drop(slot.key),
       child: IgnorePointer(ignoring: !slot.visible, child: slot.child),
     );
 

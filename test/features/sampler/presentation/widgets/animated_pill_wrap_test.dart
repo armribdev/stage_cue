@@ -2,6 +2,7 @@
 // pas à la première image ; une pastille retirée garde sa place le temps de sa
 // disparition et ne réagit plus au toucher.
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stage_cue/features/sampler/presentation/widgets/animated_pill_wrap.dart';
@@ -229,5 +230,70 @@ void main() {
 
       expect(moves, [(0, 2)]);
     });
+
+    testWidgets(
+      'un retrait sous la souris, infobulle affichée, ne casse pas le layout',
+      (tester) async {
+        // La souris reste sur le « Retirer » de la première ligne : à la fin de
+        // la fermeture, les lignes suivantes changent d'indice (la liste
+        // réordonnable les reprend par clé globale). Une infobulle encore
+        // ouverte dans l'une d'elles se réactivait en plein layout.
+        final ids = ValueNotifier<List<String>>(['a', 'b', 'c']);
+        addTearDown(ids.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              // Le formulaire réel vit dans un LayoutBuilder (volet scindé).
+              body: LayoutBuilder(
+                builder: (context, _) => ValueListenableBuilder(
+                  valueListenable: ids,
+                  builder: (context, value, _) => AnimatedRevealColumn(
+                    onReorder: (_, _) {},
+                    entries: [
+                      for (final id in value)
+                        PillEntry(
+                          ValueKey(id),
+                          Row(
+                            children: [
+                              Expanded(child: Text(id)),
+                              IconButton(
+                                tooltip: 'Retirer',
+                                onPressed: () => ids.value = [
+                                  for (final other in value)
+                                    if (other != id) other,
+                                ],
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        await mouse.addPointer(location: Offset.zero);
+        addTearDown(mouse.removePointer);
+        final spot = tester.getCenter(find.byTooltip('Retirer').first);
+        await mouse.moveTo(spot);
+        await tester.pump(const Duration(seconds: 1));
+        await mouse.down(spot);
+        await mouse.up();
+        // Souris immobile (micro-mouvements pour que le survol se remette à
+        // jour) pendant que les lignes glissent sous elle.
+        for (var i = 0; i < 40; i++) {
+          await tester.pump(const Duration(milliseconds: 16));
+          await mouse.moveTo(spot + Offset(i.isEven ? 0.5 : 0, 0));
+        }
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('a'), findsNothing);
+        expect(find.text('b'), findsOneWidget);
+      },
+    );
   });
 }
